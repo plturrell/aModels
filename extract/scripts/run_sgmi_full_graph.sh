@@ -13,18 +13,18 @@ mkdir -p "${LOG_DIR}"
 target_url=${1:-http://localhost:19080/graph}
 
 json_tables=(
-  "${DATA_ROOT}/JSON_with_changes.json"
+  "${DATA_ROOT}/json_with_changes.json"
 )
 
 hive_ddls=(
-  "${DATA_ROOT}/HIVE DDLS/sgmisit_all_tables_statement.hql"
-  "${DATA_ROOT}/HIVE DDLS/sgmisitetl_all_tables_statement.hql"
-  "${DATA_ROOT}/HIVE DDLS/sgmisitstg_all_tables_statement.hql"
-  "${DATA_ROOT}/HIVE DDLS/sgmisit_view.hql"
+  "${DATA_ROOT}/hive-ddl/sgmisit_all_tables_statement.hql"
+  "${DATA_ROOT}/hive-ddl/sgmisitetl_all_tables_statement.hql"
+  "${DATA_ROOT}/hive-ddl/sgmisitstg_all_tables_statement.hql"
+  "${DATA_ROOT}/hive-ddl/sgmisit_view.hql"
 )
 
 controlm_files=(
-  "${DATA_ROOT}/SGMI-controlm/catalyst migration prod 640.xml"
+  "${DATA_ROOT}/sgmi-controlm/catalyst migration prod 640.xml"
 )
 
 default_view_store="${REPO_ROOT}/agenticAiETH_layer4_AgentFlow/store"

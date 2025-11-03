@@ -40,7 +40,7 @@ The `training/` directory contains training datasets and process artifacts for m
   - Hive DDL files for database schema extraction
   - Pipeline metamodel definitions (Control-M, Hive, JSON)
   - Execution scripts for process understanding
-  - Annotated JSON dataset (`JSON_with_changes.json`) for process learning
+  - Annotated JSON dataset (`json_with_changes.json`) for process learning
   - See `training/sgmi/README.md` for detailed documentation
 
 This data is used to train process understanding models that can extract schemas, understand workflows, and learn from Control-M job definitions.

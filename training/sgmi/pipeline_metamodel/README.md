@@ -8,4 +8,4 @@ Artifacts:
 - `sgmi_hive_pipeline.hql` – representative Hive DDL snippet for table metadata extraction.
 - `sgmi_controlm_pipeline.xml` – Control-M job definition showing schedule metadata, IN/OUT conditions, and ODATE handling.
 
-Use these in automation/tests instead of the original files in `SGMI-controlm/` or `HIVE DDLS/` when you just need a functional smoke test.
+Use these in automation/tests instead of the original files in `sgmi-controlm/` or `hive-ddl/` when you just need a functional smoke test.
