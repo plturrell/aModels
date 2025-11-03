@@ -32,6 +32,19 @@ GitHub enforces a 2 GB limit per release asset, so the actual model binaries n
 
 > **Note:** Model weights and tokenizers are stored via GitHub Releases using the chunked artifacts above. Run `git lfs install` only if you plan to host sub-2 GB files via LFS; larger files must be shipped through releases.
 
+## Training Data
+
+The `training/` directory contains training datasets and process artifacts for model training:
+
+- **`training/sgmi/`**: SGMI (SAP Global Manufacturing Intelligence) training data
+  - Hive DDL files for database schema extraction
+  - Pipeline metamodel definitions (Control-M, Hive, JSON)
+  - Execution scripts for process understanding
+  - Annotated JSON dataset (`JSON_with_changes.json`) for process learning
+  - See `training/sgmi/README.md` for detailed documentation
+
+This data is used to train process understanding models that can extract schemas, understand workflows, and learn from Control-M job definitions.
+
 ## Stage 3: Search and Graph Services
 
 The `stage3/search/` folder contains the Layer 4 search microservices, and `stage3/graph/` holds the GPU-accelerated graph components. Treat them like read-only exports—each directory keeps its original README and build scripts. Deploy them to your GPU infrastructure as separate services or integrate them into CI as needed.
