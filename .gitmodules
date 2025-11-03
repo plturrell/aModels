@@ -1,3 +1,27 @@
 [submodule "third_party/go-llama.cpp"]
 	path = third_party/go-llama.cpp
 	url = https://github.com/go-skynet/go-llama.cpp.git
+[submodule "third_party/arrow"]
+	path = third_party/arrow
+	url = https://github.com/apache/arrow.git
+[submodule "third_party/go-arrow"]
+	path = third_party/go-arrow
+	url = https://github.com/apache/arrow-go.git
+[submodule "third_party/elasticsearch"]
+	path = third_party/elasticsearch
+	url = https://github.com/elastic/elasticsearch.git
+[submodule "third_party/Glean"]
+	path = third_party/Glean
+	url = https://github.com/facebookincubator/Glean.git
+[submodule "third_party/go-hdb"]
+	path = third_party/go-hdb
+	url = https://github.com/SAP/go-hdb.git
+[submodule "third_party/langchain"]
+	path = third_party/langchain
+	url = https://github.com/langchain-ai/langchain.git
+[submodule "third_party/langflow"]
+	path = third_party/langflow
+	url = https://github.com/langflow-ai/langflow.git
+[submodule "third_party/langgraph"]
+	path = third_party/langgraph
+	url = https://github.com/langchain-ai/langgraph.git
