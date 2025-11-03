@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('redis-set').addEventListener('click', redisSet);
   document.getElementById('redis-get').addEventListener('click', redisGet);
   document.getElementById('chat-send').addEventListener('click', chatSend);
+  document.getElementById('open-browser').addEventListener('click', openBrowser);
 });
 
 async function getBase() {
@@ -39,6 +40,17 @@ async function runTelemetry() {
     statusEl.textContent = `Telemetry: ${JSON.stringify(json).slice(0, 400)}...`;
   } catch (e) {
     statusEl.textContent = `Error: ${e}`;
+  }
+}
+
+async function openBrowser() {
+  const { browserUrl } = await chrome.storage.sync.get(['browserUrl']);
+  const url = browserUrl || 'http://localhost:8070';
+  try {
+    await chrome.tabs.create({ url });
+  } catch (e) {
+    // Fallback: try window.open
+    window.open(url, '_blank');
   }
 }
 
