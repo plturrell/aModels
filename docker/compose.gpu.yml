@@ -28,6 +28,12 @@ services:
             - capabilities: ["gpu"]
     runtime: nvidia
 
+  gateway:
+    environment:
+      - LOCALAI_URL=http://localai:8080
+    depends_on:
+      - localai
+
   # If you have a GPU-accelerated search inference server, add it here
   # search-inference:
   #   image: yourorg/search-inference:gpu

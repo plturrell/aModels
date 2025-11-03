@@ -15,6 +15,7 @@ EXTRACT_URL = os.getenv("EXTRACT_URL", "http://localhost:9002")
 DATA_URL = os.getenv("DATA_URL", "http://localhost:9003")
 OPENSEARCH_URL = os.getenv("OPENSEARCH_URL", "http://localhost:9200")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localhost:8081")
 
 client = httpx.AsyncClient(timeout=30.0)
 
@@ -71,6 +72,12 @@ async def healthz() -> Dict[str, Any]:
         statuses["redis"] = "ok" if pong else "error:pong=false"
     except Exception as e:
         statuses["redis"] = f"error:{e}"
+    # LocalAI health (OpenAI-compatible /models)
+    try:
+        r = await client.get(f"{LOCALAI_URL}/v1/models")
+        statuses["localai"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
+    except Exception as e:
+        statuses["localai"] = f"error:{e}"
     return statuses
 
 
@@ -144,6 +151,19 @@ async def opensearch_search(payload: Dict[str, Any]) -> Any:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except httpx.RequestError as e:
         raise HTTPException(status_code=502, detail=f"OpenSearch error: {e}")
+
+
+@app.post("/localai/chat")
+async def localai_chat(payload: Dict[str, Any]) -> Any:
+    # payload expects: { model: string, messages: [ {role, content}, ... ] }
+    try:
+        r = await client.post(f"{LOCALAI_URL}/v1/chat/completions", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"LocalAI error: {e}")
 
 
 @app.get("/redis/get")

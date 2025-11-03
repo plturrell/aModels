@@ -27,6 +27,15 @@
       <button id="redis-set" style="margin-left:6px">Redis Set</button>
       <button id="redis-get" style="margin-left:6px">Redis Get</button>
     </div>
+    <hr/>
+    <div>
+      <label for="chat-prompt">LocalAI Prompt</label>
+      <textarea id="chat-prompt" rows="3" style="width:100%" placeholder="Ask something..."></textarea>
+      <div style="margin-top:6px">
+        <input id="chat-model" type="text" placeholder="model (e.g., gpt-3.5-turbo)" style="width:60%" />
+        <button id="chat-send" style="margin-left:6px">Send</button>
+      </div>
+    </div>
     <div id="status" style="margin-top:8px;color:#0b67ff"></div>
     <script src="popup.js"></script>
   </body>
