@@ -1,0 +1,874 @@
+{
+  "domains": {
+    "0x3579-VectorProcessingAgent": {
+      "name": "Vector Processing Agent",
+      "layer": "layer1",
+      "team": "DataTeam",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://127.0.0.1:8081/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 60
+      },
+      "agent_id": "0x3579",
+      "attention_weights": {
+        "vector_operations": 0.95,
+        "embeddings": 0.9,
+        "similarity": 0.85
+      },
+      "max_tokens": 256,
+      "temperature": 0.3,
+      "tags": [
+        "vector",
+        "embedding",
+        "similarity",
+        "data"
+      ],
+      "keywords": [
+        "vector",
+        "embedding",
+        "similarity",
+        "cosine",
+        "dimension",
+        "tensor"
+      ]
+    },
+    "0x5678-SQLAgent": {
+      "name": "SQL Agent",
+      "layer": "layer1",
+      "team": "DataTeam",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0x5678",
+      "attention_weights": {
+        "sql_queries": 0.95,
+        "database_ops": 0.9,
+        "optimization": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.2,
+      "tags": [
+        "sql",
+        "database",
+        "query",
+        "data"
+      ],
+      "keywords": [
+        "sql",
+        "query",
+        "select",
+        "database",
+        "table",
+        "join",
+        "where"
+      ],
+      "backend_type": "gguf"
+    },
+    "0x9753-AIPreparationAgent": {
+      "name": "AI Preparation Agent",
+      "layer": "layer1",
+      "team": "DataTeam",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0x9753",
+      "attention_weights": {
+        "data_preparation": 0.9,
+        "feature_engineering": 0.85,
+        "preprocessing": 0.8
+      },
+      "max_tokens": 512,
+      "temperature": 0.3,
+      "tags": [
+        "ai",
+        "preparation",
+        "preprocessing",
+        "data"
+      ],
+      "keywords": [
+        "prepare",
+        "preprocess",
+        "feature",
+        "normalize",
+        "clean",
+        "transform"
+      ],
+      "backend_type": "gguf"
+    },
+    "0xA1B2-DataProcessAgent": {
+      "name": "Data Process Agent",
+      "layer": "layer1",
+      "team": "DataTeam",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0xA1B2",
+      "attention_weights": {
+        "data_processing": 0.9,
+        "etl": 0.85,
+        "pipeline": 0.8
+      },
+      "max_tokens": 512,
+      "temperature": 0.3,
+      "tags": [
+        "data",
+        "processing",
+        "etl",
+        "pipeline"
+      ],
+      "keywords": [
+        "process",
+        "etl",
+        "pipeline",
+        "extract",
+        "transform",
+        "load"
+      ],
+      "backend_type": "gguf"
+    },
+    "0xC3D4-StandardizationAgent": {
+      "name": "Standardization Agent",
+      "layer": "layer1",
+      "team": "DataTeam",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0xC3D4",
+      "attention_weights": {
+        "standardization": 0.95,
+        "normalization": 0.9,
+        "validation": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.2,
+      "tags": [
+        "standardization",
+        "normalization",
+        "validation",
+        "data"
+      ],
+      "keywords": [
+        "standardize",
+        "normalize",
+        "validate",
+        "format",
+        "schema",
+        "conform"
+      ],
+      "backend_type": "gguf"
+    },
+    "0x9ABC-AgentProcessAgent": {
+      "name": "Agent Process Agent",
+      "layer": "layer1",
+      "team": "FoundationTeam",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0x9ABC",
+      "attention_weights": {
+        "agent_management": 0.95,
+        "process_control": 0.9,
+        "lifecycle": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.2,
+      "tags": [
+        "agent",
+        "process",
+        "management",
+        "lifecycle"
+      ],
+      "keywords": [
+        "agent",
+        "process",
+        "manage",
+        "lifecycle",
+        "spawn",
+        "terminate",
+        "monitor"
+      ],
+      "backend_type": "gguf"
+    },
+    "0xB10C-BlockchainAgent": {
+      "name": "Blockchain Agent",
+      "layer": "layer1",
+      "team": "FoundationTeam",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0xB10C",
+      "attention_weights": {
+        "blockchain_ops": 0.95,
+        "transactions": 0.9,
+        "consensus": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.2,
+      "tags": [
+        "blockchain",
+        "transaction",
+        "consensus",
+        "ledger"
+      ],
+      "keywords": [
+        "blockchain",
+        "transaction",
+        "block",
+        "consensus",
+        "ledger",
+        "hash",
+        "mine"
+      ],
+      "backend_type": "gguf"
+    },
+    "0xDEF0-OrchestratorAgent": {
+      "name": "Orchestrator Agent",
+      "layer": "layer1",
+      "team": "FoundationTeam",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0xDEF0",
+      "attention_weights": {
+        "orchestration": 0.95,
+        "coordination": 0.9,
+        "workflow": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.3,
+      "tags": [
+        "orchestration",
+        "coordination",
+        "workflow",
+        "management"
+      ],
+      "keywords": [
+        "orchestrate",
+        "coordinate",
+        "workflow",
+        "manage",
+        "schedule",
+        "route"
+      ],
+      "backend_type": "gguf"
+    },
+    "0xE6A7-SmartContractAgent": {
+      "name": "Smart Contract Agent",
+      "layer": "layer1",
+      "team": "FoundationTeam",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0xE6A7",
+      "attention_weights": {
+        "smart_contracts": 0.95,
+        "deployment": 0.9,
+        "execution": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.2,
+      "tags": [
+        "contract",
+        "smart-contract",
+        "solidity",
+        "deployment"
+      ],
+      "keywords": [
+        "contract",
+        "solidity",
+        "deploy",
+        "execute",
+        "call",
+        "function",
+        "abi"
+      ],
+      "backend_type": "gguf"
+    },
+    "0x1234-QAValidationAgent": {
+      "name": "QA Validation Agent",
+      "layer": "layer2",
+      "team": "QualityControl",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0x1234",
+      "attention_weights": {
+        "validation": 0.95,
+        "testing": 0.9,
+        "quality": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.2,
+      "tags": [
+        "qa",
+        "validation",
+        "testing",
+        "quality"
+      ],
+      "keywords": [
+        "validate",
+        "test",
+        "quality",
+        "check",
+        "verify",
+        "assert"
+      ],
+      "backend_type": "gguf"
+    },
+    "0x7E21-AuditAgent": {
+      "name": "Audit Agent",
+      "layer": "layer2",
+      "team": "QualityControl",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0x7E21",
+      "attention_weights": {
+        "audit": 0.95,
+        "compliance": 0.9,
+        "trail": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.2,
+      "tags": [
+        "audit",
+        "compliance",
+        "trail",
+        "security"
+      ],
+      "keywords": [
+        "audit",
+        "compliance",
+        "trail",
+        "log",
+        "track",
+        "record",
+        "verify"
+      ],
+      "backend_type": "gguf"
+    },
+    "0x8642-QualityControlAgent": {
+      "name": "Quality Control Agent",
+      "layer": "layer2",
+      "team": "QualityControl",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0x8642",
+      "attention_weights": {
+        "quality_control": 0.95,
+        "standards": 0.9,
+        "metrics": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.2,
+      "tags": [
+        "quality",
+        "control",
+        "standards",
+        "metrics"
+      ],
+      "keywords": [
+        "quality",
+        "control",
+        "standard",
+        "metric",
+        "measure",
+        "assess"
+      ],
+      "backend_type": "gguf"
+    },
+    "0xCT00-ControlTowerAgent": {
+      "name": "Control Tower Agent",
+      "layer": "layer2",
+      "team": "QualityControl",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0xCT00",
+      "attention_weights": {
+        "monitoring": 0.95,
+        "oversight": 0.9,
+        "control": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.2,
+      "tags": [
+        "control",
+        "monitoring",
+        "oversight",
+        "management"
+      ],
+      "keywords": [
+        "control",
+        "monitor",
+        "oversee",
+        "manage",
+        "supervise",
+        "track"
+      ],
+      "backend_type": "gguf"
+    },
+    "0xD4C5-RiskControllerAgent": {
+      "name": "Risk Controller Agent",
+      "layer": "layer2",
+      "team": "QualityControl",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0xD4C5",
+      "attention_weights": {
+        "risk_assessment": 0.95,
+        "mitigation": 0.9,
+        "control": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.2,
+      "tags": [
+        "risk",
+        "control",
+        "assessment",
+        "mitigation"
+      ],
+      "keywords": [
+        "risk",
+        "assess",
+        "mitigate",
+        "control",
+        "exposure",
+        "threat"
+      ],
+      "backend_type": "gguf"
+    },
+    "0xE5F6-CalcValidationAgent": {
+      "name": "Calculation Validation Agent",
+      "layer": "layer2",
+      "team": "QualityControl",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0xE5F6",
+      "attention_weights": {
+        "calculation": 0.95,
+        "validation": 0.9,
+        "accuracy": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.1,
+      "tags": [
+        "calculation",
+        "validation",
+        "accuracy",
+        "math"
+      ],
+      "keywords": [
+        "calculate",
+        "validate",
+        "compute",
+        "math",
+        "formula",
+        "accuracy"
+      ],
+      "backend_type": "gguf"
+    },
+    "0xG0V1-GovernanceAgent": {
+      "name": "Governance Agent",
+      "layer": "layer2",
+      "team": "QualityControl",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0xG0V1",
+      "attention_weights": {
+        "governance": 0.95,
+        "policy": 0.9,
+        "compliance": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.2,
+      "tags": [
+        "governance",
+        "policy",
+        "compliance",
+        "rules"
+      ],
+      "keywords": [
+        "govern",
+        "policy",
+        "rule",
+        "comply",
+        "regulate",
+        "enforce"
+      ],
+      "backend_type": "gguf"
+    },
+    "0x5D1A-SubledgerAgent": {
+      "name": "Subledger Agent",
+      "layer": "layer3",
+      "team": "FinanceOperations",
+      "backend_type": "hf-transformers",
+      "model_name": "granite-4.0",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://127.0.0.1:8082/v1/chat/completions",
+        "model_name": "granite-4.0"
+      },
+      "fallback_model": "phi-3.5-mini",
+      "agent_id": "0x5D1A",
+      "attention_weights": {
+        "accounting": 0.95,
+        "subledger": 0.9,
+        "reconciliation": 0.85
+      },
+      "max_tokens": 2000,
+      "temperature": 0.2,
+      "tags": [
+        "accounting",
+        "subledger",
+        "ledger",
+        "finance"
+      ],
+      "keywords": [
+        "subledger",
+        "ledger",
+        "account",
+        "journal",
+        "entry",
+        "balance",
+        "reconcile",
+        "GL"
+      ]
+    },
+    "0xG2B-GemmaAssistant": {
+      "name": "Gemma 2B Assistant",
+      "layer": "layer4",
+      "team": "FoundationTeam",
+      "backend_type": "hf-transformers",
+      "model_name": "gemma-2b-it",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://127.0.0.1:8083/v1/chat/completions",
+        "model_name": "gemma-2b-it",
+        "timeout_seconds": 180
+      },
+      "fallback_model": "phi-3.5-mini",
+      "agent_id": "0xG2B",
+      "attention_weights": {
+        "assistant": 0.9,
+        "general_reasoning": 0.85,
+        "summarization": 0.8
+      },
+      "max_tokens": 1024,
+      "temperature": 0.2,
+      "tags": [
+        "gemma",
+        "assistant",
+        "google"
+      ],
+      "keywords": [
+        "gemma",
+        "google",
+        "assistant",
+        "summary",
+        "explain"
+      ]
+    },
+    "0x71A2-TreasuryAgent": {
+      "name": "Treasury Agent",
+      "layer": "layer3",
+      "team": "FinanceOperations",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0x71A2",
+      "attention_weights": {
+        "treasury": 0.95,
+        "cash_management": 0.9,
+        "liquidity": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.3,
+      "tags": [
+        "treasury",
+        "cash",
+        "liquidity",
+        "finance"
+      ],
+      "keywords": [
+        "treasury",
+        "cash",
+        "liquidity",
+        "payment",
+        "funding",
+        "capital"
+      ],
+      "backend_type": "gguf"
+    },
+    "0x8F32-InvoiceLangAgent": {
+      "name": "Invoice Language Agent",
+      "layer": "layer3",
+      "team": "FinanceOperations",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0x8F32",
+      "attention_weights": {
+        "invoice_processing": 0.95,
+        "nlp": 0.9,
+        "extraction": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.3,
+      "tags": [
+        "invoice",
+        "nlp",
+        "extraction",
+        "finance"
+      ],
+      "keywords": [
+        "invoice",
+        "bill",
+        "extract",
+        "parse",
+        "amount",
+        "vendor"
+      ],
+      "backend_type": "gguf"
+    },
+    "0x92C8-InvestorRelationsAgent": {
+      "name": "Investor Relations Agent",
+      "layer": "layer3",
+      "team": "FinanceOperations",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0x92C8",
+      "attention_weights": {
+        "investor_relations": 0.9,
+        "reporting": 0.85,
+        "communication": 0.8
+      },
+      "max_tokens": 512,
+      "temperature": 0.4,
+      "tags": [
+        "investor",
+        "relations",
+        "reporting",
+        "communication"
+      ],
+      "keywords": [
+        "investor",
+        "shareholder",
+        "report",
+        "disclosure",
+        "communicate",
+        "stakeholder"
+      ],
+      "backend_type": "gguf"
+    },
+    "0xA7D2-TradeReconAgent": {
+      "name": "Trade Reconciliation Agent",
+      "layer": "layer3",
+      "team": "FinanceOperations",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0xA7D2",
+      "attention_weights": {
+        "reconciliation": 0.95,
+        "trade_matching": 0.9,
+        "settlement": 0.85
+      },
+      "max_tokens": 512,
+      "temperature": 0.2,
+      "tags": [
+        "trade",
+        "reconciliation",
+        "settlement",
+        "matching"
+      ],
+      "keywords": [
+        "trade",
+        "reconcile",
+        "match",
+        "settle",
+        "confirm",
+        "break"
+      ],
+      "backend_type": "gguf"
+    },
+    "0xF3C0-ESGFinanceAgent": {
+      "name": "ESG Finance Agent",
+      "layer": "layer3",
+      "team": "FinanceOperations",
+      "backend_type": "hf-transformers",
+      "model_name": "granite-4.0",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://127.0.0.1:8082/v1/chat/completions",
+        "model_name": "granite-4.0"
+      },
+      "fallback_model": "phi-3.5-mini",
+      "agent_id": "0xF3C0",
+      "attention_weights": {
+        "esg_metrics": 0.9,
+        "sustainability": 0.85,
+        "reporting": 0.8
+      },
+      "max_tokens": 2000,
+      "temperature": 0.3,
+      "tags": [
+        "esg",
+        "sustainability",
+        "finance",
+        "reporting"
+      ],
+      "keywords": [
+        "esg",
+        "sustainability",
+        "environmental",
+        "social",
+        "governance",
+        "carbon"
+      ]
+    },
+    "0xN135-NewsIntelligenceAgent": {
+      "name": "News Intelligence Agent",
+      "layer": "layer3",
+      "team": "FinanceOperations",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "agent_id": "0xN135",
+      "attention_weights": {
+        "news_analysis": 0.9,
+        "sentiment": 0.85,
+        "intelligence": 0.8
+      },
+      "max_tokens": 512,
+      "temperature": 0.5,
+      "tags": [
+        "news",
+        "intelligence",
+        "sentiment",
+        "analysis"
+      ],
+      "keywords": [
+        "news",
+        "article",
+        "sentiment",
+        "analyze",
+        "intelligence",
+        "market"
+      ],
+      "backend_type": "gguf"
+    },
+    "0xBR0W-BrowserAnalysisAgent": {
+      "name": "Browser Analysis Agent",
+      "layer": "layer4",
+      "team": "BrowserTeam",
+      "model_path": "../agenticAiETH_layer4_Models/gemma-7b-q4_k_m.gguf",
+      "agent_id": "0xBR0W",
+      "attention_weights": {
+        "web_analysis": 0.95,
+        "content_extraction": 0.9,
+        "page_understanding": 0.85
+      },
+      "max_tokens": 1024,
+      "temperature": 0.3,
+      "tags": [
+        "browser",
+        "web",
+        "analysis",
+        "extraction",
+        "scraping"
+      ],
+      "keywords": [
+        "extract",
+        "scrape",
+        "navigate",
+        "click",
+        "webpage",
+        "browser",
+        "html",
+        "dom",
+        "content",
+        "page",
+        "website"
+      ],
+      "backend_type": "gguf"
+    },
+    "general": {
+      "name": "General Assistant",
+      "layer": "general",
+      "team": "General",
+      "model_path": "",
+      "agent_id": "general",
+      "attention_weights": {},
+      "max_tokens": 1024,
+      "temperature": 0.7,
+      "tags": [
+        "general",
+        "conversation",
+        "qa"
+      ],
+      "keywords": [],
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "transformers_config": {
+        "endpoint": "http://127.0.0.1:8081/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      }
+    },
+    "0xG7B-Gemma7BAssistant": {
+      "name": "Gemma 7B Assistant",
+      "layer": "layer4",
+      "team": "FoundationTeam",
+      "backend_type": "hf-transformers",
+      "model_name": "gemma-7b-it",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://127.0.0.1:8084/v1/chat/completions",
+        "model_name": "gemma-7b-it",
+        "timeout_seconds": 180
+      },
+      "fallback_model": "phi-3.5-mini",
+      "enabled_env_var": "ENABLE_GEMMA7B",
+      "agent_id": "0xG7B",
+      "attention_weights": {
+        "assistant": 0.9,
+        "general_reasoning": 0.88,
+        "summarization": 0.82
+      },
+      "max_tokens": 2048,
+      "temperature": 0.2,
+      "tags": [
+        "gemma",
+        "assistant",
+        "google",
+        "7b"
+      ],
+      "keywords": [
+        "gemma",
+        "google",
+        "assistant",
+        "summary",
+        "explain",
+        "7b"
+      ]
+    }
+  },
+  "default_domain": "general",
+  "layer_mapping": {
+    "layer1": {
+      "DataTeam": [
+        "0x3579-VectorProcessingAgent",
+        "0x5678-SQLAgent",
+        "0x9753-AIPreparationAgent",
+        "0xA1B2-DataProcessAgent",
+        "0xC3D4-StandardizationAgent"
+      ],
+      "FoundationTeam": [
+        "0x9ABC-AgentProcessAgent",
+        "0xB10C-BlockchainAgent",
+        "0xDEF0-OrchestratorAgent",
+        "0xE6A7-SmartContractAgent"
+      ]
+    },
+    "layer2": {
+      "QualityControl": [
+        "0x1234-QAValidationAgent",
+        "0x7E21-AuditAgent",
+        "0x8642-QualityControlAgent",
+        "0xCT00-ControlTowerAgent",
+        "0xD4C5-RiskControllerAgent",
+        "0xE5F6-CalcValidationAgent",
+        "0xG0V1-GovernanceAgent"
+      ]
+    },
+    "layer3": {
+      "FinanceOperations": [
+        "0x5D1A-SubledgerAgent",
+        "0x71A2-TreasuryAgent",
+        "0x8F32-InvoiceLangAgent",
+        "0x92C8-InvestorRelationsAgent",
+        "0xA7D2-TradeReconAgent",
+        "0xF3C0-ESGFinanceAgent",
+        "0xN135-NewsIntelligenceAgent"
+      ]
+    },
+    "layer4": {
+      "BrowserTeam": [
+        "0xBR0W-BrowserAnalysisAgent"
+      ],
+      "VisionTeam": [],
+      "FoundationTeam": [
+        "0xG2B-GemmaAssistant"
+      ]
+    }
+  }
+}

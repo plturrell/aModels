@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package localai.v1;
+
+option go_package = "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/api/localai/v1;localaiv1";
+
+message ChatMessage {
+  string role = 1;
+  string content = 2;
+}
+
+message ChatCompletionRequest {
+  repeated ChatMessage messages = 1;
+  string model = 2;
+  double temperature = 3;
+  int32 max_tokens = 4;
+}
+
+message ChatCompletionResponse {
+  string content = 1;
+  int32 tokens_used = 2;
+  string finish_reason = 3;
+}
+
+service ChatService {
+  rpc ChatCompletion(ChatCompletionRequest) returns (ChatCompletionResponse);
+}

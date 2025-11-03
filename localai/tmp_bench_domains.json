@@ -1,0 +1,42 @@
+{
+  "domains": {
+    "vaultgemma": {
+      "name": "VaultGemma Benchmark",
+      "layer": "benchmark",
+      "team": "bench",
+      "backend_type": "vaultgemma",
+      "model_path": "../agenticAiETH_layer4_Models/vaultgemm/vaultgemma-transformers-1b-v1",
+      "agent_id": "bench-vault",
+      "max_tokens": 256,
+      "temperature": 0.2,
+      "tags": ["benchmark"],
+      "keywords": []
+    },
+    "phi-gguf": {
+      "name": "Phi Mini GGUF Benchmark",
+      "layer": "benchmark",
+      "team": "bench",
+      "backend_type": "gguf",
+      "model_path": "../agenticAiETH_layer4_Models/phi/phi-3-pytorch-phi-3.5-mini-instruct-v2-q4_0.gguf",
+      "agent_id": "bench-phi",
+      "max_tokens": 256,
+      "temperature": 0.2,
+      "tags": ["benchmark"],
+      "keywords": []
+    },
+    "granite-gguf": {
+      "name": "Granite GGUF Benchmark",
+      "layer": "benchmark",
+      "team": "bench",
+      "backend_type": "gguf",
+      "model_path": "../agenticAiETH_layer4_Models/granite/granite-4.0-transformers-granite-q4_0.gguf",
+      "agent_id": "bench-granite",
+      "max_tokens": 256,
+      "temperature": 0.2,
+      "tags": ["benchmark"],
+      "keywords": []
+    }
+  },
+  "default_domain": "vaultgemma",
+  "layer_mapping": {}
+}

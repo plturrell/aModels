@@ -8,3 +8,8 @@ Key entry points:
 - `scripts/profile_rt_inference.py`
 
 Refer to `docs/` inside this tree for detailed setup and operations guidance.
+
+## Stage 2: Models and LocalAI
+
+The `models/` directory contains lightweight metadata/checkpoints (large weight files ignored by `.gitignore`).
+The `localai/` directory mirrors the Go-based inference server for hosting quantized models.

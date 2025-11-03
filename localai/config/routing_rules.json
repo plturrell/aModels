@@ -1,0 +1,410 @@
+{
+  "rules": [
+    {
+      "id": "rule_sql_queries",
+      "name": "SQL Query Routing",
+      "description": "Route SQL-related queries to SQL Agent",
+      "priority": 100,
+      "conditions": [
+        {
+          "type": "query_content",
+          "field": "contains_sql",
+          "operator": "equals",
+          "value": true,
+          "negate": false,
+          "description": "Query contains SQL keywords"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "0x5678-SQLAgent",
+          "parameters": {
+            "reason": "SQL query detected"
+          },
+          "description": "Route to SQL Agent"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "domain_routing",
+        "tags": ["sql", "database", "query"]
+      }
+    },
+    {
+      "id": "rule_vector_queries",
+      "name": "Vector Processing Routing",
+      "description": "Route vector-related queries to Vector Processing Agent",
+      "priority": 100,
+      "conditions": [
+        {
+          "type": "query_content",
+          "field": "contains_vector",
+          "operator": "equals",
+          "value": true,
+          "negate": false,
+          "description": "Query contains vector keywords"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "0x3579-VectorProcessingAgent",
+          "parameters": {
+            "reason": "Vector processing query detected"
+          },
+          "description": "Route to Vector Processing Agent"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "domain_routing",
+        "tags": ["vector", "embedding", "similarity"]
+      }
+    },
+    {
+      "id": "rule_blockchain_queries",
+      "name": "Blockchain Query Routing",
+      "description": "Route blockchain-related queries to Blockchain Agent",
+      "priority": 100,
+      "conditions": [
+        {
+          "type": "query_content",
+          "field": "contains_blockchain",
+          "operator": "equals",
+          "value": true,
+          "negate": false,
+          "description": "Query contains blockchain keywords"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "0xB10C-BlockchainAgent",
+          "parameters": {
+            "reason": "Blockchain query detected"
+          },
+          "description": "Route to Blockchain Agent"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "domain_routing",
+        "tags": ["blockchain", "transaction", "smart_contract"]
+      }
+    },
+    {
+      "id": "rule_complex_queries",
+      "name": "Complex Query Routing",
+      "description": "Route complex queries to more capable models",
+      "priority": 90,
+      "conditions": [
+        {
+          "type": "complexity",
+          "field": "score",
+          "operator": "greater_than",
+          "value": 0.7,
+          "negate": false,
+          "description": "Query complexity score is high"
+        },
+        {
+          "type": "complexity",
+          "field": "requires_reasoning",
+          "operator": "equals",
+          "value": true,
+          "negate": false,
+          "description": "Query requires complex reasoning"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "0xDEF0-OrchestratorAgent",
+          "parameters": {
+            "reason": "Complex query requiring orchestration"
+          },
+          "description": "Route to Orchestrator Agent for complex queries"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "complexity_routing",
+        "tags": ["complex", "reasoning", "orchestration"]
+      }
+    },
+    {
+      "id": "rule_financial_queries",
+      "name": "Financial Query Routing",
+      "description": "Route financial queries to appropriate financial agents",
+      "priority": 95,
+      "conditions": [
+        {
+          "type": "query_content",
+          "field": "content",
+          "operator": "contains",
+          "value": "financial",
+          "negate": false,
+          "description": "Query contains financial keywords"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "0x5D1A-SubledgerAgent",
+          "parameters": {
+            "reason": "Financial query detected"
+          },
+          "description": "Route to Subledger Agent for financial queries"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "domain_routing",
+        "tags": ["financial", "accounting", "subledger"]
+      }
+    },
+    {
+      "id": "rule_high_load",
+      "name": "High Load Routing",
+      "description": "Route queries to less loaded models during high load",
+      "priority": 80,
+      "conditions": [
+        {
+          "type": "load",
+          "field": "system_load",
+          "operator": "greater_than",
+          "value": 0.8,
+          "negate": false,
+          "description": "System load is high"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "general",
+          "parameters": {
+            "reason": "High load - using general model"
+          },
+          "description": "Route to general model during high load"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "load_balancing",
+        "tags": ["load", "performance", "scaling"]
+      }
+    },
+    {
+      "id": "rule_business_hours",
+      "name": "Business Hours Routing",
+      "description": "Use different routing during business hours",
+      "priority": 70,
+      "conditions": [
+        {
+          "type": "time",
+          "field": "is_business_hours",
+          "operator": "equals",
+          "value": true,
+          "negate": false,
+          "description": "Current time is during business hours"
+        }
+      ],
+      "actions": [
+        {
+          "type": "add_metadata",
+          "target": "business_hours",
+          "parameters": {
+            "value": "true"
+          },
+          "description": "Add business hours metadata"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "time_based",
+        "tags": ["business_hours", "time", "scheduling"]
+      }
+    },
+    {
+      "id": "rule_weekend_routing",
+      "name": "Weekend Routing",
+      "description": "Use simplified routing during weekends",
+      "priority": 60,
+      "conditions": [
+        {
+          "type": "time",
+          "field": "is_weekend",
+          "operator": "equals",
+          "value": true,
+          "negate": false,
+          "description": "Current time is weekend"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "general",
+          "parameters": {
+            "reason": "Weekend - using general model"
+          },
+          "description": "Route to general model during weekends"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "time_based",
+        "tags": ["weekend", "time", "scheduling"]
+      }
+    },
+    {
+      "id": "rule_expert_queries",
+      "name": "Expert Query Routing",
+      "description": "Route expert-level queries to specialized models",
+      "priority": 85,
+      "conditions": [
+        {
+          "type": "complexity",
+          "field": "technical_level",
+          "operator": "equals",
+          "value": "expert",
+          "negate": false,
+          "description": "Query requires expert-level knowledge"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "0xDEF0-OrchestratorAgent",
+          "parameters": {
+            "reason": "Expert query - using orchestrator"
+          },
+          "description": "Route expert queries to orchestrator"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "complexity_routing",
+        "tags": ["expert", "technical", "specialized"]
+      }
+    },
+    {
+      "id": "rule_data_processing",
+      "name": "Data Processing Routing",
+      "description": "Route data processing queries to Data Process Agent",
+      "priority": 90,
+      "conditions": [
+        {
+          "type": "query_content",
+          "field": "content",
+          "operator": "contains",
+          "value": "data processing",
+          "negate": false,
+          "description": "Query contains data processing keywords"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "0xA1B2-DataProcessAgent",
+          "parameters": {
+            "reason": "Data processing query detected"
+          },
+          "description": "Route to Data Process Agent"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "domain_routing",
+        "tags": ["data", "processing", "etl"]
+      }
+    },
+    {
+      "id": "rule_quality_control",
+      "name": "Quality Control Routing",
+      "description": "Route quality control queries to appropriate agents",
+      "priority": 85,
+      "conditions": [
+        {
+          "type": "query_content",
+          "field": "content",
+          "operator": "contains",
+          "value": "quality",
+          "negate": false,
+          "description": "Query contains quality keywords"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "0x8642-QualityControlAgent",
+          "parameters": {
+            "reason": "Quality control query detected"
+          },
+          "description": "Route to Quality Control Agent"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "domain_routing",
+        "tags": ["quality", "control", "validation"]
+      }
+    }
+  ],
+  "default_domain": "general",
+  "fallback_domain": "general",
+  "load_balancing": {
+    "enabled": true,
+    "strategy": "weighted",
+    "health_check": true,
+    "max_retries": 3,
+    "retry_delay_ms": 1000,
+    "circuit_breaker": true,
+    "failure_threshold": 0.5
+  },
+  "performance": {
+    "cache_enabled": true,
+    "cache_ttl": "1h",
+    "max_concurrency": 100,
+    "request_timeout": "1m",
+    "response_timeout": "2m",
+    "rate_limit_enabled": true,
+    "rate_limit_rps": 100
+  },
+  "monitoring": {
+    "enabled": true,
+    "metrics_enabled": true,
+    "logging_enabled": true,
+    "alerting_enabled": true,
+    "metrics_interval": "1m",
+    "log_level": "info",
+    "alert_thresholds": {
+      "error_rate": 0.05,
+      "latency": 5000,
+      "throughput": 1000
+    }
+  },
+  "version": "1.0.0",
+  "last_updated": "2024-01-15T10:00:00Z"
+}

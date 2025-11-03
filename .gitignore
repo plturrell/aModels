@@ -12,8 +12,11 @@ checkpoints/
 build/
 dist/
 tmp/
+.gocache/
 *.pt
 *.bin
 *.sqlite
+localai/logs/
+localai/tmp/
 
 .gocache/
