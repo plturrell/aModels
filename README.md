@@ -3,16 +3,16 @@
 This repository contains the AgenticAI Layer 4 training project, exported from the mono-repo so it can be managed independently on GPU infrastructure.
 
 Key entry points:
-- `scripts/train_relational_transformer.py`
-- `scripts/eval_relational_transformer.py`
-- `scripts/profile_rt_inference.py`
+- `tools/scripts/train_relational_transformer.py`
+- `tools/scripts/eval_relational_transformer.py`
+- `tools/scripts/profile_rt_inference.py`
 
 Refer to `docs/` inside this tree for detailed setup and operations guidance.
 
 ## Stage 2: Models and LocalAI
 
 The `models/` directory contains lightweight metadata/checkpoints (large weight files ignored by `.gitignore`).
-The `localai/` directory mirrors the Go-based inference server for hosting quantized models.
+The `services/localai/` directory contains the Go-based inference server for hosting quantized models.
 
 ### Publishing Weights via GitHub Releases
 
@@ -32,22 +32,39 @@ GitHub enforces a 2 GB limit per release asset, so the actual model binaries n
 
 > **Note:** Model weights and tokenizers are stored via GitHub Releases using the chunked artifacts above. Run `git lfs install` only if you plan to host sub-2 GB files via LFS; larger files must be shipped through releases.
 
+## Repository Structure
+
+The repository is organized into clear architectural layers:
+
+- **`services/`** - All microservices (agentflow, extract, gateway, hana, localai, postgres, browser)
+- **`data/`** - All data organized by purpose:
+  - `training/` - Training datasets (SGMI, etc.)
+  - `evaluation/` - Evaluation datasets (ARC-AGI, HellaSwag, etc.)
+- **`models/`** - Model metadata and checkpoints
+- **`infrastructure/`** - Deployment configs (docker, third_party, cron)
+- **`tools/`** - Development tools (scripts, cmd, helpers)
+- **`testing/`** - Testing code (benchmarks, tests)
+- **`docs/`** - Documentation
+- **`legacy/`** - Legacy/read-only code (stage3, search)
+
+See [docs/architecture.md](docs/architecture.md) for detailed architecture documentation and [SERVICES.md](SERVICES.md) for the service registry.
+
 ## Training Data
 
-The `training/` directory contains training datasets and process artifacts for model training:
+The `data/training/` directory contains training datasets and process artifacts for model training:
 
-- **`training/sgmi/`**: SGMI (SAP Global Manufacturing Intelligence) training data
+- **`data/training/sgmi/`**: SGMI (SAP Global Manufacturing Intelligence) training data
   - Hive DDL files for database schema extraction
   - Pipeline metamodel definitions (Control-M, Hive, JSON)
   - Execution scripts for process understanding
   - Annotated JSON dataset (`json_with_changes.json`) for process learning
-  - See `training/sgmi/README.md` for detailed documentation
+  - See `data/training/sgmi/README.md` for detailed documentation
 
 This data is used to train process understanding models that can extract schemas, understand workflows, and learn from Control-M job definitions.
 
-## Stage 3: Search and Graph Services
+## Legacy Code
 
-The `stage3/search/` folder contains the Layer 4 search microservices, and `stage3/graph/` holds the GPU-accelerated graph components. Treat them like read-only exports—each directory keeps its original README and build scripts. Deploy them to your GPU infrastructure as separate services or integrate them into CI as needed.
+The `legacy/stage3/` directory contains legacy search and graph services from Layer 4 Stage 3. This code is **read-only** and maintained for reference only. See `legacy/README.md` for details.
 
 ## GPU Quickstart (Brev)
 
@@ -61,10 +78,10 @@ cd aModels
 python3 tools/download_model_assets.py --tag weights-v1 --repo plturrell/aModels --output-dir .
 
 # 2. Build the containers (graph + LocalAI + search services + Elasticsearch + training shell)
-docker compose -f docker/brev/docker-compose.yml build
+docker compose -f infrastructure/docker/brev/docker-compose.yml build
 
 # 3. Launch them – Brev automatically exposes the GPU to the containers
-docker compose -f docker/brev/docker-compose.yml up
+docker compose -f infrastructure/docker/brev/docker-compose.yml up
 
 # The graph API listens on :8080, LocalAI VaultGemma on :8081,
 # Elasticsearch on :9200, search inference on :8090,
@@ -73,8 +90,8 @@ docker compose -f docker/brev/docker-compose.yml up
 
 # 4. To run training jobs inside the prepared CUDA/Go/Python environment:
 #    (in a new terminal)
-# docker compose -f docker/brev/docker-compose.yml exec trainer bash
-# python scripts/train_relational_transformer.py --config configs/rt.yaml --mode pretrain ...
+# docker compose -f infrastructure/docker/brev/docker-compose.yml exec trainer bash
+# python tools/scripts/train_relational_transformer.py --config configs/rt.yaml --mode pretrain ...
 
 ### Optional: fetch Gemma weights from Kaggle
 
@@ -92,7 +109,7 @@ mount it.
 ```
 
 Notes:
-- Elasticsearch may require a smaller heap on small GPUs/hosts. You can export `ES_JAVA_OPTS="-Xms512m -Xmx512m"` before `docker compose up` or adjust it in `docker/brev/docker-compose.yml`.
+- Elasticsearch may require a smaller heap on small GPUs/hosts. You can export `ES_JAVA_OPTS="-Xms512m -Xmx512m"` before `docker compose up` or adjust it in `infrastructure/docker/brev/docker-compose.yml`.
 - The search service uses SQLite by default and Redis cache is optional; if no Redis is configured it falls back to in-memory cache.
 - The AgentSDK catalog/watch features are disabled in this standalone repo.
 
@@ -101,7 +118,7 @@ Notes:
 To run the lightweight gateway stack with a GPU-accelerated LocalAI container:
 
 ```bash
-cd docker
+cd infrastructure/docker
 # Base services + GPU override (enables the LocalAI CUDA service)
 docker compose -f compose.yml -f compose.gpu.yml --profile gpu up --build
 ```
