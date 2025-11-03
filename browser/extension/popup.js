@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('run-search').addEventListener('click', runSearch);
   document.getElementById('redis-set').addEventListener('click', redisSet);
   document.getElementById('redis-get').addEventListener('click', redisGet);
+  document.getElementById('chat-send').addEventListener('click', chatSend);
 });
 
 async function getBase() {
@@ -36,6 +37,36 @@ async function runTelemetry() {
     const res = await fetch(`${base}/telemetry/recent`);
     const json = await res.json();
     statusEl.textContent = `Telemetry: ${JSON.stringify(json).slice(0, 400)}...`;
+  } catch (e) {
+    statusEl.textContent = `Error: ${e}`;
+  }
+}
+
+async function chatSend() {
+  const statusEl = document.getElementById('status');
+  const promptEl = document.getElementById('chat-prompt');
+  const modelEl = document.getElementById('chat-model');
+  const content = (promptEl.value || '').trim();
+  const model = (modelEl.value || 'gpt-3.5-turbo').trim();
+  if (!content) {
+    statusEl.textContent = 'Enter a prompt';
+    return;
+  }
+  statusEl.textContent = 'Sending prompt...';
+  const base = await getBase();
+  try {
+    const res = await fetch(`${base}/localai/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        messages: [ { role: 'user', content } ]
+      })
+    });
+    const json = await res.json();
+    // OpenAI-compatible response: choices[0].message.content
+    const msg = json && json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content ? json.choices[0].message.content : JSON.stringify(json).slice(0, 400);
+    statusEl.textContent = `LocalAI: ${msg}`;
   } catch (e) {
     statusEl.textContent = `Error: ${e}`;
   }
