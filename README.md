@@ -35,3 +35,49 @@ GitHub enforces a 2 GB limit per release asset, so the actual model binaries n
 ## Stage 3: Search and Graph Services
 
 The `stage3/search/` folder contains the Layer 4 search microservices, and `stage3/graph/` holds the GPU-accelerated graph components. Treat them like read-only exports—each directory keeps its original README and build scripts. Deploy them to your GPU infrastructure as separate services or integrate them into CI as needed.
+
+## GPU Quickstart (Brev)
+
+The repo ships with starter Docker assets so you can test the graph runtime and LocalAI on a Brev GPU workspace:
+
+```bash
+# 1. Clone the repo and restore heavy model assets (Stage 2)
+git clone https://github.com/plturrell/aModels.git
+cd aModels/dist/aModels-training
+python3 tools/download_model_assets.py --tag weights-v1 --repo plturrell/aModels --output-dir .
+
+# 2. Build the containers (graph + LocalAI + search services + Elasticsearch + training shell)
+docker compose -f docker/brev/docker-compose.yml build
+
+# 3. Launch them – Brev automatically exposes the GPU to the containers
+docker compose -f docker/brev/docker-compose.yml up
+
+# The graph API listens on :8080, LocalAI VaultGemma on :8081,
+# Elasticsearch on :9200, search inference on :8090,
+# the Python helper service on :8091, and the trainer container
+# idles so you can exec into it.
+
+# 4. To run training jobs inside the prepared CUDA/Go/Python environment:
+#    (in a new terminal)
+# docker compose -f docker/brev/docker-compose.yml exec trainer bash
+# python scripts/train_relational_transformer.py --config configs/rt.yaml --mode pretrain ...
+
+### Optional: fetch Gemma weights from Kaggle
+
+Instead of (or in addition to) the GitHub release artifacts you can pull Gemma GGUF weights straight
+from Kaggle. Save a new API token in your Kaggle account, export the credentials, and run:
+
+```bash
+export KAGGLE_USERNAME="your_username"
+export KAGGLE_KEY="your_kaggle_key"
+./tools/fetch_kaggle_gemma.sh                # downloads to ./models by default
+```
+
+The script will place `gemma-2b-gguf.tar.gz` in the models directory so the LocalAI container can
+mount it.
+```
+
+Both Dockerfiles (`stage3/graph/Dockerfile` and `localai/Dockerfile`) clone the upstream
+`agenticAiETH` mono-repo inside the build stage to satisfy `go.mod` replace directives. If you
+already have those modules vendored locally you can override the `UPSTREAM_REPO` build-arg to point
+at your mirror.

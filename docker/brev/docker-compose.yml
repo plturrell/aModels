@@ -1,0 +1,118 @@
+version: "3.9"
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    container_name: elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms4g -Xmx4g
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+
+  graph:
+    build:
+      context: ../..
+      dockerfile: dist/aModels-training/stage3/graph/Dockerfile
+    image: amodels/graph-server:latest
+    container_name: graph-server
+    restart: unless-stopped
+    environment:
+      - GRAPH_CONFIG=/workspace/config/graph.yaml
+    volumes:
+      - ../../configs:/workspace/config:ro
+      - ../../artifacts/model-release:/workspace/assets:ro
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
+
+  localai:
+    build:
+      context: ../..
+      dockerfile: dist/aModels-training/localai/Dockerfile
+    image: amodels/localai:latest
+    container_name: localai
+    restart: unless-stopped
+    environment:
+      - MODELS_DIR=/models
+    volumes:
+      - ../../models:/models:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
+
+  search-inference:
+    build:
+      context: ../..
+      dockerfile: dist/aModels-training/stage3/search/search-inference/Dockerfile
+    image: amodels/search-inference:latest
+    container_name: search-inference
+    restart: unless-stopped
+    environment:
+      - SEARCH_CONFIG=/workspace/config/search-inference.yaml
+      - ELASTICSEARCH_HOST=http://elasticsearch:9200
+    volumes:
+      - ../../stage3/search/search-inference/config:/workspace/config:ro
+      - ../../models:/workspace/models:ro
+    ports:
+      - "8090:8090"
+    depends_on:
+      - localai
+      - elasticsearch
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
+
+  search-python:
+    build:
+      context: ../..
+      dockerfile: dist/aModels-training/stage3/search/python_service/Dockerfile
+    image: amodels/search-python-service:latest
+    container_name: search-python
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ../../stage3/search/python_service:/workspace:ro
+      - ../../models:/workspace/models:ro
+    ports:
+      - "8091:8091"
+    depends_on:
+      - search-inference
+
+  trainer:
+    build:
+      context: ../..
+      dockerfile: dist/aModels-training/training/Dockerfile
+    image: amodels/training-base:latest
+    container_name: training-shell
+    restart: unless-stopped
+    command: ["sleep", "infinity"]
+    working_dir: /workspace
+    volumes:
+      - ../..:/workspace
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
+
+networks:
+  default:
+    driver: bridge
+
+volumes:
+  esdata:
