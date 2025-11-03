@@ -1,6 +1,6 @@
 module github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract
 
-go 1.25.3
+go 1.23
 
 require (
 	github.com/Chahine-tech/sql-parser-go v0.0.0-20250711162409-da324d384ca3

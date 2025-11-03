@@ -1,16 +1,16 @@
 # Build stage
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
-WORKDIR /app/agenticAiETH_layer4_Extract
+WORKDIR /app/extract
 
 # Copy go.mod
-COPY agenticAiETH_layer4_Extract/go.mod .
+COPY extract/go.mod .
 
-# Download dependencies (this will be a no-op for now)
+# Download dependencies
 RUN go mod download
 
 # Copy the rest of the source code
-COPY agenticAiETH_layer4_Extract/ .
+COPY extract/ .
 
 # Build the application
 RUN go build -o /server ./main.go
@@ -25,7 +25,7 @@ WORKDIR /app
 
 # Copy the built executable and helper scripts from the builder stage
 COPY --from=builder /server ./server
-COPY --from=builder /app/agenticAiETH_layer4_Extract/scripts ./scripts
+COPY --from=builder /app/extract/scripts ./scripts
 
 # Install Python dependencies required by the helper scripts
 RUN pip3 install --no-cache-dir -r ./scripts/requirements.txt
