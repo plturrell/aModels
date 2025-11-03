@@ -1,0 +1,4 @@
+# Relational Transformer main schedule
+0 2 * * * /usr/bin/env bash /Users/user/Library/CloudStorage/Dropbox/agenticAiETH/agenticAiETH_layer4_Training/scripts/run_rt_main_schedule.sh >> /Users/user/Library/CloudStorage/Dropbox/agenticAiETH/agenticAiETH_layer4_Training/logs/rt_main_schedule.log 2>&1
+# Archive cleanup (weekly on Sunday)
+30 3 * * 0 RETENTION_DAYS=60 /usr/bin/env bash /Users/user/Library/CloudStorage/Dropbox/agenticAiETH/agenticAiETH_layer4_Training/scripts/cleanup_rt_archives.sh >> /Users/user/Library/CloudStorage/Dropbox/agenticAiETH/agenticAiETH_layer4_Training/logs/rt_archive_cleanup.log 2>&1

@@ -1,0 +1,47 @@
+﻿"Measure/
+Dimension",Attribute Name,Status,Attribute / Hierarchy,Remarks,Data Source,"Logics - For Insight
+JustAsk - 
+For Client use LE_ID
+For Client Group replace LE_ID with U_PID
+For Sector replace LE_ID with DD_Sec",Measure Value - For insight,"Data Level
+Client ","Data Level
+Client Group ","Data Level
+Net-Zero Sector",Part of Jan Release,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Period,Yes,Attribute,,PAPM,View PERIOD as per PaPM against LE_ID,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,LE ID,Yes,Attribute,,PAPM,View LE_ID as per PaPM,,Yes,,,,,Fact,3VF_CE_EIM_CarbonEmission_DAC_V02,,,,,,,,,,,,,,,,,,,,,,
+Dimension,LE Name,Yes,Attribute,,PAPM,View LE_NAME as per PaPM against LE_ID,,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Ultimate Parent ID,Yes,Attribute,,PAPM,View U_PID as per PaPM against LE_ID.,,,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Ultimate Parent Name,Yes,Attribute,,PAPM,View U_PNAME as per PaPM against LE_ID.,,,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Net-Zero Sector,Yes,Attribute,,PAPM,View DD_SEC as per PaPM Table against LE_ID,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Measurement Unit,Yes,Attribute,,PAPM,View EUNIT as per PaPM Table against LE_ID.,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Measure,Financed Emission,Yes,Measures,Direct values,PAPM,View ATT_EMI as per PaPM Table against LE_ID.,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Measure,Financed Emission Scope 1 & 2,Yes,Measures,Direct values,PAPM,View FEMISSION_S12 as per PaPM Table against LE_ID.,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Measure,Financed Emission Scope 3,Yes,Measures,Direct values,PAPM,View F_EMISSION_S3 as per PaPM Table against LE_ID.,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Measure,Sectorwise Physical Intensity,Yes,Measures,Direct values,PAPM,View average of the EMI_INTENSITY as per PaPM Table as per the DD_SEC (sector) of the LE_ID.,Average,,,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Measure,Client Physical Intensity,Yes,Measures,Direct values,PAPM,View EMI_INTENSITY_CP as per PaPM Table against LE_ID.,,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Measure,Revenue,Yes,Measures,Direct values,PAPM,View TR_YTD as per PaPM Table against LE_ID.,,Yes - Average to be considered,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Measure,PE Assets,Yes,Measures,Direct values,PAPM,View PE_ASS as per PaPM Table against LE_ID.,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Measure,RWA,Yes,Measures,Direct values,PAPM,View RWA_ASS as per PaPM Table against LE_ID.,,Yes - Average to be considered,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Client Domicile - Location,Yes,Attribute,,PAPM,View CD_LOCATION as per PAPM Table against LE_ID,,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Latest CRG,Yes,Attribute,,PAPM,View L_CRG as per PaPM against LE_ID.,,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Measure,Attribution Factor,Yes,Measures,Direct values,PAPM,View ATTR_FACTOR as per PaPM Table against LE_ID.,,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Measure,Attributed Production,Yes,Measures,Direct values,PAPM,View ATT_PROD as per PaPM Table against LE_ID.,,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Measure,EVIC,Yes,Measures,Direct values,PAPM,View EVIC as per PaPM Table against LE_ID.,,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Value Chain Sector Level,Yes,Attribute,,PAPM,View VAL_CH as per PaPM Table against LE_ID.,,,,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,FoL - Region,Yes,Hierarchy,,Country Hierarchy1,View REGION_NAME as per Country Hierarchy against FOL_LOC.,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,FoL - Region Cluster,Yes,Hierarchy,,Country Hierarchy1,View REGION_CLUSTER as per Country Hierarchy against FOL_LOC.,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Ultimate Parent Location - Region,Yes,Hierarchy,,Country Hierarchy2,View REGION_NAME as per Country Hierarchy against U_PLOC.,,,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Ultimate Parent Location - Region Cluster,Yes,Hierarchy,,Country Hierarchy2,View REGION_CLUSTER as per Country Hierarchy against U_PLOC.,,,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Management Product Desc - L1,Yes,Hierarchy,,Product Hierarchy,View MANAGEMENT_PRODUCT_DESC_L1 as per Product Hiearrchy against L5_MPF_DES,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Management Product Desc - L2,Yes,Hierarchy,,Product Hierarchy,View MANAGEMENT_PRODUCT_DESC_L2 as per Product Hiearrchy against L5_MPF_DES,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Management Product Desc - L3,Yes,Hierarchy,,Product Hierarchy,View MANAGEMENT_PRODUCT_DESC_L3 as per Product Hiearrchy against L5_MPF_DES,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Management Product Desc - L4,Yes,Hierarchy,,Product Hierarchy,View MANAGEMENT_PRODUCT_DESC_L4 as per Product Hiearrchy against L5_MPF_DES,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Client Segment Category,Yes,Hierarchy,,Segment Hierarchy,View Client Segment Category as per Segment Hierarchy against C_SUBSEGMENT.,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Client Segment Key Category,Yes,Hierarchy,,Segment Hierarchy,View Client Segment Key Category as per Segment Hierarchy against C_SUBSEGMENT.,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Client Segment Sub Category,Yes,Hierarchy,,Segment Hierarchy,View Client Segment Sub Category as per Segment Hierarchy against C_SUBSEGMENT.,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Client Segment,Yes,Hierarchy,,Segment Hierarchy,View Client Segment as per Segment Hierarchy against C_SUBSEGMENT.,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Reporting Prod Desc L1,Yes,Attribute,,Product Mapping,View Reporting_Prod_Desc_L1 as per Product Mapping File against L5_MPF_DES,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Reporting Prod Desc L2,Yes,Attribute,,Product Mapping,View Reporting_Prod_Desc_L2 as per Product Mapping File against L5_MPF_DES,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Reporting Prod Desc L3,Yes,Attribute,,Product Mapping,View Reporting_Prod_Desc_L3 as per Product Mapping File against L5_MPF_DES,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Reporting Prod Desc L4,Yes,Attribute,,Product Mapping,View Reporting_Prod_Desc_L4 as per Product Mapping File against L5_MPF_DES,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,
+Dimension,Maturity Bucket,Yes,Attribute,,PAPM,View MB_DES as per PAPM against LE_ID.,,Yes,Yes,Yes,,,,,,,,,,,,,,,,,,,,,,,,,,

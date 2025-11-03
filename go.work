@@ -1,0 +1,12 @@
+go 1.25.3
+
+use (
+	.
+	../agenticAiETH_layer4
+	../agenticAiETH_layer4_AgentSDK
+	../third_party/go-arrow
+	./models/glove
+	./models/sentencepiece
+)
+
+replace github.com/apache/arrow/go/v16 v16.0.0 => ../third_party/go-arrow

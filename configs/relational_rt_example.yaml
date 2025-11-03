@@ -1,0 +1,76 @@
+tables:
+  - name: carbon_emission
+    path: data/scb-data/carbon_emission_data.csv
+    format: csv
+    primary_key: LE_ID
+  - name: client_analytics
+    path: data/scb-data/client_analytics_data.csv
+    format: csv
+    primary_key: LE_ID
+    foreign_keys:
+      - parent_table: carbon_emission
+        parent_column: LE_ID
+        child_column: LE_ID
+        role: emission_to_client
+  - name: transactions
+    path: data/scb-data/transactions_data.csv
+    format: csv
+    primary_key: LE_ID
+    foreign_keys:
+      - parent_table: carbon_emission
+        parent_column: LE_ID
+        child_column: LE_ID
+
+targets:
+  - table: carbon_emission
+    column: Financed_Emission
+
+context:
+  max_cells: 64
+  schema_seed: 1234
+  width_bound: 4
+  temporal_lookback_hours: 24
+  include_text: false
+  allow_temporal_leakage: false
+  random_seed: 13
+
+training:
+  amp: false
+  grad_clip: 1.0
+  loss_scale: 1024
+  dynamic_loss_scale: true
+  link_loss_weight: 0.1
+  ablate_column: false
+  ablate_feature: false
+  ablate_neighbor: false
+  ablate_temporal: false
+  ablate_full: false
+  batch_size: 2
+  mask_probability: 0.1
+  pretrain_learning_rate: 0.001
+  pretrain_weight_decay: 0.01
+  pretrain_steps: 200
+  fine_tune_learning_rate: 0.00005
+  fine_tune_weight_decay: 0.0
+  fine_tune_steps: 80
+  max_grad_norm: 1.0
+  num_workers: 0
+  device: cpu
+  steps:
+    pretrain: 200
+    fine_tune: 80
+
+model:
+  text_encoder: sentence-transformers/all-MiniLM-L6-v2
+  hidden_dim: 128
+  num_layers: 4
+  num_heads: 4
+  mlp_hidden_dim: 512
+  value_dim: 384
+  schema_dim: 384
+  temporal_dim: 5
+  role_dim: 64
+  dropout: 0.1
+
+zero_shot:
+  num_examples: 3
