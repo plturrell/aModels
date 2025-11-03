@@ -44,10 +44,14 @@ aModels is a microservices-based training and inference platform for AgenticAI L
 ### 1. Services (`services/`)
 All microservices grouped together for clear visibility:
 - `agentflow/` - Workflow orchestration
+- `browser/` - Layer4 browser automation
 - `extract/` - Data extraction service
 - `gateway/` - Unified HTTP gateway
+- `graph/` - GPU-accelerated graph computation (LangGraph-Go)
 - `hana/` - SAP HANA integration
 - `localai/` - AI inference server
+- `postgres/` - PostgreSQL telemetry and gRPC service
+- `search/` - Intelligent search and discovery platform
 - `postgres/` - PostgreSQL service
 - `browser/` - Browser automation
 

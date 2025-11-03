@@ -36,7 +36,7 @@ GitHub enforces a 2 GB limit per release asset, so the actual model binaries n
 
 The repository is organized into clear architectural layers:
 
-- **`services/`** - All microservices (agentflow, extract, gateway, hana, localai, postgres, browser)
+- **`services/`** - All microservices (agentflow, extract, gateway, graph, hana, localai, postgres, browser, search)
 - **`data/`** - All data organized by purpose:
   - `training/` - Training datasets (SGMI, etc.)
   - `evaluation/` - Evaluation datasets (ARC-AGI, HellaSwag, etc.)
@@ -45,7 +45,7 @@ The repository is organized into clear architectural layers:
 - **`tools/`** - Development tools (scripts, cmd, helpers)
 - **`testing/`** - Testing code (benchmarks, tests)
 - **`docs/`** - Documentation
-- **`legacy/`** - Legacy/read-only code (stage3, search)
+- **`pkg/`** - Shared internal packages (catalog, ds, learn, lnn, localai, mathvec, methods, models, preprocess, registry, rng, sap, textnorm, vision)
 
 See [docs/architecture.md](docs/architecture.md) for detailed architecture documentation and [SERVICES.md](SERVICES.md) for the service registry.
 
@@ -62,9 +62,15 @@ The `data/training/` directory contains training datasets and process artifacts 
 
 This data is used to train process understanding models that can extract schemas, understand workflows, and learn from Control-M job definitions.
 
-## Legacy Code
+## Shared Packages
 
-The `legacy/stage3/` directory contains legacy search and graph services from Layer 4 Stage 3. This code is **read-only** and maintained for reference only. See `legacy/README.md` for details.
+The `pkg/` directory contains shared internal Go packages used across services:
+- **`catalog/`** - Flight catalog management
+- **`localai/`** - LocalAI client adapters and calibration
+- **`methods/`** - Core methods (MCTS, Arc-MCTS, symbolic, fractal, LNN)
+- **`sap/`** - SAP HANA client utilities
+- **`vision/`** - Vision model clients (DeepSeek)
+- And more - see `pkg/` for the complete list
 
 ## GPU Quickstart (Brev)
 

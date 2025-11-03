@@ -13,6 +13,8 @@ This repository contains the following microservices and components:
 | **hana** | 8070 | Go | SAP HANA database integration | ✅ Active |
 | **agentflow** | 8001 | Go/Python | LangFlow workflow orchestration | ✅ Active |
 | **browser** | 8070 | Go | Layer4 browser automation service | ✅ Active |
+| **graph** | 8081 | Go | GPU-accelerated graph computation service | ✅ Active |
+| **search** | 9200 | Java | Intelligent search and discovery platform | ✅ Active |
 
 ## Service Details
 
@@ -58,6 +60,18 @@ This repository contains the following microservices and components:
 - **Tech**: Go (Chromium automation)
 - **Features**: Web automation, page interaction, content extraction
 
+### Graph (`graph/`)
+- **Purpose**: GPU-accelerated graph computation and LangGraph-Go port
+- **Endpoints**: `/run`, `/agent/catalog`, `/extract/graph`, `/postgres/operations`
+- **Tech**: Go (LangGraph runtime, Arrow Flight, HANA integration)
+- **Features**: Graph execution, checkpointing, agent orchestration, Flight integration
+
+### Search (`search/`)
+- **Purpose**: Intelligent search and discovery platform with AI-powered search
+- **Endpoints**: `/search`, `/qa`, `/embeddings`, `/inference`
+- **Tech**: Java (Elasticsearch-based, modular architecture)
+- **Features**: Hybrid search (keyword + semantic), QA, embeddings, inference, x-pack extensions
+
 ## Service Dependencies
 
 ```
@@ -67,7 +81,9 @@ gateway
   ├── postgres
   ├── localai
   ├── hana
-  └── browser
+  ├── browser
+  ├── graph
+  └── search
 
 agentflow
   ├── localai
@@ -100,6 +116,8 @@ All services expose health endpoints:
 - HANA: `GET http://localhost:8070/healthz`
 - AgentFlow: Via gateway `/agentflow/run`
 - Browser: Via gateway `/browser/health`
+- Graph: `GET http://localhost:8081/agent/catalog`
+- Search: `GET http://localhost:9200/_search`
 
 ## Development
 
