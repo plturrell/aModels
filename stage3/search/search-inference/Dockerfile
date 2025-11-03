@@ -19,17 +19,15 @@ ENV GOWORK=off
 RUN go mod tidy
 RUN cd cmd/search-server && go build -o /workspace/build/search-inference .
 
-FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
+FROM alpine:3.22
 
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 
 WORKDIR /workspace
 
-# Install SQLite runtime libraries
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libsqlite3-0 \
-    && rm -rf /var/lib/apt/lists/*
+# Install SQLite runtime libraries and certs
+RUN apk add --no-cache sqlite-libs ca-certificates && update-ca-certificates
 
 COPY --from=builder /workspace/build/search-inference /usr/local/bin/search-inference
 

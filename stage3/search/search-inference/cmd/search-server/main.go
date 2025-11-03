@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"log"
@@ -48,7 +47,7 @@ func main() {
 	modelPath := flag.String("model", "../agenticAiETH_layer4_Training/models/vaultgemma-transformers-1b-v1", "Path to baseline VaultGemma model")
 	localAIURL := flag.String("localai", "", "LocalAI base URL")
 	localAIKey := flag.String("localai-key", "", "LocalAI API key")
-	port := flag.String("port", "7070", "HTTP server port")
+    port := flag.String("port", "8090", "HTTP server port")
 	hanaDSN := flag.String("hana-dsn", hanaDefault, "SAP HANA DSN for canonical storage")
 	privacyLevel := flag.String("privacy-level", privacyDefault, "Privacy level (low|medium|high)")
 	esAddrs := flag.String("es-addrs", esAddrDefault, "Comma-separated Elasticsearch addresses")
@@ -153,9 +152,8 @@ func main() {
 
 	flightAddr := strings.TrimSpace(os.Getenv("AGENTSDK_FLIGHT_ADDR"))
 	searchService.SetFlightAddr(flightAddr)
-	// Catalog watching disabled - AgentSDK not available in standalone aModels repo
-	var catalogWatcher interface{} = nil
-	if flightAddr != "" {
+    // Catalog watching disabled - AgentSDK not available in standalone aModels repo
+    if flightAddr != "" {
 		log.Printf("ℹ️  Catalog watching disabled (AgentSDK not available). AGENTSDK_FLIGHT_ADDR will be ignored.")
 	}
 
@@ -261,13 +259,17 @@ func handleAgentCatalogStats(service *search.SearchService) http.HandlerFunc {
 func convertCatalog(cat flightcatalog.Catalog) search.AgentCatalog {
 	suites := make([]search.AgentSuite, 0, len(cat.Suites))
 	for _, suite := range cat.Suites {
-		suites = append(suites, search.AgentSuite{
+        var attachedAt time.Time
+        if t, err := time.Parse(time.RFC3339, suite.AttachedAt); err == nil {
+            attachedAt = t
+        }
+        suites = append(suites, search.AgentSuite{
 			Name:           suite.Name,
 			ToolNames:      append([]string(nil), suite.ToolNames...),
 			ToolCount:      int(suite.ToolCount),
 			Implementation: suite.Implementation,
 			Version:        suite.Version,
-			AttachedAt:     suite.AttachedAt,
+            AttachedAt:     attachedAt,
 		})
 	}
 
@@ -286,7 +288,7 @@ func convertCatalog(cat flightcatalog.Catalog) search.AgentCatalog {
 
 func logCatalogEvent(source string, enrichment interface{}) {
 	// Catalog logging disabled - catalogprompt not available
-	if e, ok := enrichment.(interface{ Stats() interface{} }); ok {
+    if _, ok := enrichment.(interface{ Stats() interface{} }); ok {
 		log.Printf("[catalog:%s] enrichment stats available", source)
 	} else {
 		log.Printf("[catalog:%s] catalog event (enrichment disabled)", source)
