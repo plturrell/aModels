@@ -17,6 +17,10 @@ artifacts/
 *.pt
 *.bin
 *.sqlite
+*.zip
+*.7z
+*.tar.gz
+*.jar
 localai/logs/
 localai/tmp/
 

@@ -1,0 +1,3265 @@
+{
+  "SGM_E_GBL_CDP_BATCH_PRD" : {
+    "Type" : "SimpleFolder",
+    "ControlmServer" : "P_E_CTMS07",
+    "SiteStandard" : "SGMI_PROD",
+    "SGM_GBL_DATHSKP" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_DATHSKP",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_DATHSKP",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_housekeeping_run.sh",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "28" ],
+        "ToTime" : ">",
+        "FromTime" : "0800",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_1" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_DATHSKP-TO-SGM_GBL_FLHSKP"
+        } ]
+      }
+    },
+    "SGM_GBL_DMYRMIEARLY" : {
+      "Type" : "Job:Dummy",
+      "DaysKeepActive" : "1",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_DMYRMIEARLY",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "6", "7", "8", "9" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_0" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_RMISTGEARLY-TO-SGM_GBL_DMYRMIEARLY"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_RMISTGEARLY-TO-SGM_GBL_DMYRMIEARLY"
+        } ]
+      }
+    },
+    "SGM_GBL_FLHSKP" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_DATHSKP",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_FLHSKP",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_archival_sgmi.sh",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "28" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_1" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_DATHSKP-TO-SGM_GBL_FLHSKP"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_DATHSKP-TO-SGM_GBL_FLHSKP"
+        } ]
+      }
+    },
+    "SGM_GBL_FNDPLPPRAMN9" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_FNDPLPPRAMN9",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_FNDPLPPRAMN9",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_fnd_plp.sh %%daily_monthly_flag FND:PLP %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_PRA"
+      }, {
+        "workspace" : "WS9"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "10", "11", "9" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_STGPRAMN9_FW-TO-SGM_GBL_FNDPLPPRAMN9"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_FNDPLPPRAMN9-TO-SGM_GBL_OUTPRAMN9"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_STGPRAMN9_FW-TO-SGM_GBL_FNDPLPPRAMN9"
+        } ]
+      }
+    },
+    "SGM_GBL_MFUFNDPLP" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_MFUFNDPLP",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_MFUFNDPLP",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_fnd_plp.sh %%daily_monthly_flag FND:PLP %%system %%country",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "MFU"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "10" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_4" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_MFUSTG-TO-SGM_GBL_MFUFNDPLP"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_MFUSTG-TO-SGM_GBL_MFUFNDPLP"
+        } ]
+      }
+    },
+    "SGM_GBL_MFUSTG" : {
+      "Type" : "Job:Command",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_MFUSTG",
+      "Confirm" : true,
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_MFUSTG",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/sgmi_stg_MFU.sh",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      } ],
+      "Rerun" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "10" ],
+        "ToTime" : ">",
+        "FromTime" : "0800",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_1" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_MFUSTG-TO-SGM_GBL_MFUFNDPLP"
+        } ]
+      }
+    },
+    "SGM_GBL_OUTPRAMN9" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_OUTPRAMN9",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_OUTPRAMN9",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_tableau_out_refresh.sh %%daily_monthly_flag OUT %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_PRA"
+      }, {
+        "workspace" : "WS9"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "10", "11", "9" ],
+        "FromTime" : "1830",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_FNDPLPPRAMN9-TO-SGM_GBL_OUTPRAMN9"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_FNDPLPPRAMN9-TO-SGM_GBL_OUTPRAMN9"
+        } ]
+      }
+    },
+    "SGM_GBL_PRADMY7" : {
+      "Type" : "Job:Dummy",
+      "DaysKeepActive" : "1",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRADMY7",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "10", "11", "9" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_0" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRASTGMN7_FW-TO-SGM_GBL_PRADMY7"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRASTGMN7_FW-TO-SGM_GBL_PRADMY7"
+        } ]
+      }
+    },
+    "SGM_GBL_PRADMY7A" : {
+      "Type" : "Job:Dummy",
+      "DaysKeepActive" : "1",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRADMY7A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_0" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFLCPYFW7A_FW-TO-SGM_GBL_PRADMY7A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFLCPYFW7A_FW-TO-SGM_GBL_PRADMY7A"
+        } ]
+      }
+    },
+    "SGM_GBL_PRADMY9" : {
+      "Type" : "Job:Dummy",
+      "DaysKeepActive" : "1",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRADMY9",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "10", "11", "9" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_0" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_STGPRAMN9_FW-TO-SGM_GBL_PRADMY9"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_STGPRAMN9_FW-TO-SGM_GBL_PRADMY9"
+        } ]
+      }
+    },
+    "SGM_GBL_PRADMY9A" : {
+      "Type" : "Job:Dummy",
+      "DaysKeepActive" : "1",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRADMY9A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_0" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFLCPYFW9A_FW-TO-SGM_GBL_PRADMY9A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFLCPYFW9A_FW-TO-SGM_GBL_PRADMY9A"
+        } ]
+      }
+    },
+    "SGM_GBL_PRAFLCPYFW7A_FW" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRASTGMN7_FW_FILE_COPY_ADJ",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_filewatcher_adj.sh %%daily_monthly_flag STG %%system %%country %%workspace %%NEXT_SCH",
+      "Variables" : [ {
+        "workspace" : "WS7"
+      }, {
+        "NEXT_SCH" : "%%$NEXT"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "country" : "ALL"
+      }, {
+        "system" : "BCRS_PRA"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26" ],
+        "ToTime" : ">",
+        "FromTime" : "1000",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_6" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "IfBase:Folder:CompletionStatus_7" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "2",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_GBL_PRAFLCPYFW7A_FW-TO-SGM_GBL_PRASTG7A"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "IfBase:Folder:CompletionStatus_8" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "0",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_GBL_PRAFLCPYFW7A_FW-TO-SGM_GBL_PRADMY7A"
+        }
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFLCPYFW7A_FW-TO-SGM_GBL_PRADMY7A"
+        }, {
+          "Event" : "SGM_GBL_PRAFLCPYFW7A_FW-TO-SGM_GBL_PRASTG7A"
+        } ]
+      }
+    },
+    "SGM_GBL_PRAFLCPYFW9A_FW" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRAFLCPYFW9A_FW",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_filewatcher_adj.sh %%daily_monthly_flag STG %%system %%country %%workspace %%NEXT_SCH",
+      "Variables" : [ {
+        "workspace" : "WS9"
+      }, {
+        "NEXT_SCH" : "%%$NEXT"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "country" : "ALL"
+      }, {
+        "system" : "BCRS_PRA"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26" ],
+        "ToTime" : ">",
+        "FromTime" : "1100",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_6" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "IfBase:Folder:CompletionStatus_7" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "2",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_GBL_PRAFLCPYFW9A_FW-TO-SGM_GBL_PRASTG9A"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "IfBase:Folder:CompletionStatus_8" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "0",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_GBL_PRAFLCPYFW9A_FW-TO-SGM_GBL_PRADMY9A"
+        }
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFLCPYFW9A_FW-TO-SGM_GBL_PRADMY9A"
+        }, {
+          "Event" : "SGM_GBL_PRAFLCPYFW9A_FW-TO-SGM_GBL_PRASTG9A"
+        } ]
+      }
+    },
+    "SGM_GBL_PRAFNDPLP7A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAFNDPLPMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRAFNDPLP7A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_fnd_plp.sh %%daily_monthly_flag FND:PLP %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_PRA"
+      }, {
+        "workspace" : "WS7"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRASTG7A-TO-SGM_GBL_PRAFNDPLP7A"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFNDPLP7A-TO-SGM_GBL_PRAOUT7A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRASTG7A-TO-SGM_GBL_PRAFNDPLP7A"
+        } ]
+      }
+    },
+    "SGM_GBL_PRAFNDPLP9A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_FNDPLPPRAMN9",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRAFNDPLP9A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_fnd_plp.sh %%daily_monthly_flag FND:PLP %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_PRA"
+      }, {
+        "workspace" : "WS9"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRASTG9A-TO-SGM_GBL_PRAFNDPLP9A"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFNDPLP9A-TO-SGM_GBL_PRAOUT9A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRASTG9A-TO-SGM_GBL_PRAFNDPLP9A"
+        } ]
+      }
+    },
+    "SGM_GBL_PRAFNDPLPMN7" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAFNDPLPMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRAFNDPLPMN7",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_fnd_plp.sh %%daily_monthly_flag FND:PLP %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_PRA"
+      }, {
+        "workspace" : "WS7"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "10", "11", "9" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRASTGMN7_FW-TO-SGM_GBL_PRAFNDPLPMN7"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFNDPLPMN7-TO-SGM_GBL_PRAOUTMN7"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRASTGMN7_FW-TO-SGM_GBL_PRAFNDPLPMN7"
+        } ]
+      }
+    },
+    "SGM_GBL_PRAOUT7A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAOUTMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRAOUT7A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_tableau_out_refresh.sh %%daily_monthly_flag OUT %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_PRA"
+      }, {
+        "workspace" : "WS7"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26" ],
+        "FromTime" : "1830",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFNDPLP7A-TO-SGM_GBL_PRAOUT7A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFNDPLP7A-TO-SGM_GBL_PRAOUT7A"
+        } ]
+      }
+    },
+    "SGM_GBL_PRAOUT9A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_OUTPRAMN9",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRAOUT9A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_tableau_out_refresh.sh %%daily_monthly_flag OUT %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_PRA"
+      }, {
+        "workspace" : "WS9"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26" ],
+        "FromTime" : "1830",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFNDPLP9A-TO-SGM_GBL_PRAOUT9A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFNDPLP9A-TO-SGM_GBL_PRAOUT9A"
+        } ]
+      }
+    },
+    "SGM_GBL_PRAOUTMN7" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAOUTMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRAOUTMN7",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_tableau_out_refresh.sh %%daily_monthly_flag OUT %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_PRA"
+      }, {
+        "workspace" : "WS7"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "10", "11", "9" ],
+        "FromTime" : "1830",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFNDPLPMN7-TO-SGM_GBL_PRAOUTMN7"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFNDPLPMN7-TO-SGM_GBL_PRAOUTMN7"
+        } ]
+      }
+    },
+    "SGM_GBL_PRASTG7A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAFNDPLPMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRASTG7A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_ingestion.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_PRA"
+      }, {
+        "workspace" : "WS7"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFLCPYFW7A_FW-TO-SGM_GBL_PRASTG7A"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRASTG7A-TO-SGM_GBL_PRAFNDPLP7A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFLCPYFW7A_FW-TO-SGM_GBL_PRASTG7A"
+        } ]
+      }
+    },
+    "SGM_GBL_PRASTG9A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRASTG9A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_ingestion.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "Variables" : [ {
+        "workspace" : "WS9"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "country" : "ALL"
+      }, {
+        "system" : "BCRS_PRA"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFLCPYFW9A_FW-TO-SGM_GBL_PRASTG9A"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRASTG9A-TO-SGM_GBL_PRAFNDPLP9A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRAFLCPYFW9A_FW-TO-SGM_GBL_PRASTG9A"
+        } ]
+      }
+    },
+    "SGM_GBL_PRASTGEARLY17" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRASTGEARLY17",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace %%NEXT_SCH",
+      "Variables" : [ {
+        "workspace" : "WS17"
+      }, {
+        "NEXT_SCH" : "%%$NEXT"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "ME"
+      }, {
+        "country" : "ALL"
+      }, {
+        "system" : "BCRS_PRA"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "5", "6", "7", "8" ],
+        "ToTime" : ">",
+        "FromTime" : "0800",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_6" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "IfBase:Folder:CompletionStatus_7" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "2",
+        "Action:SetToOK_0" : {
+          "Type" : "Action:SetToOK"
+        }
+      }
+    },
+    "SGM_GBL_PRASTGMN7_FW" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_PRASTGMN7_FW",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace %%NEXT_SCH",
+      "Variables" : [ {
+        "workspace" : "WS7"
+      }, {
+        "NEXT_SCH" : "%%$NEXT"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "country" : "ALL"
+      }, {
+        "system" : "BCRS_PRA"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "10", "11", "9" ],
+        "ToTime" : ">",
+        "FromTime" : "0800",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_6" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "IfBase:Folder:CompletionStatus_7" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "2",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_GBL_PRASTGMN7_FW-TO-SGM_GBL_PRAFNDPLPMN7"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "IfBase:Folder:CompletionStatus_8" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "0",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_GBL_PRASTGMN7_FW-TO-SGM_GBL_PRADMY7"
+        }
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_PRASTGMN7_FW-TO-SGM_GBL_PRADMY7"
+        }, {
+          "Event" : "SGM_GBL_PRASTGMN7_FW-TO-SGM_GBL_PRAFNDPLPMN7"
+        } ]
+      }
+    },
+    "SGM_GBL_RMIDMYMM" : {
+      "Type" : "Job:Dummy",
+      "DaysKeepActive" : "1",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_RMIDMYMM",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "15", "16", "17", "18", "19", "20" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_0" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_RMISTGMN-TO-SGM_GBL_RMIDMYMM"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_RMISTGMN-TO-SGM_GBL_RMIDMYMM"
+        } ]
+      }
+    },
+    "SGM_GBL_RMIFNDPLPEARLY" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_RMIFNDPLPEARLY",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_RMIFNDPLPEARLY",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_fnd_plp.sh %%daily_monthly_flag FND %%system %%country",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "SG"
+      }, {
+        "daily_monthly_flag" : "ME"
+      }, {
+        "system" : "RMI"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "6", "7", "8", "9" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_4" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_RMISTGEARLY-TO-SGM_GBL_RMIFNDPLPEARLY"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_RMISTGEARLY-TO-SGM_GBL_RMIFNDPLPEARLY"
+        } ]
+      }
+    },
+    "SGM_GBL_RMIFNDPLPMN" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_RMIFNDPLPMN",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_RMIFNDPLPMN",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_fnd_plp.sh %%daily_monthly_flag FND %%system %%country",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "SG"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "RMI"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "15", "16", "17", "18", "19", "20" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_4" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_RMISTGMN-TO-SGM_GBL_RMIFNDPLPMN"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_RMISTGMN-TO-SGM_GBL_RMIFNDPLPMN"
+        } ]
+      }
+    },
+    "SGM_GBL_RMISTGEARLY" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_RMISTGEARLY",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_rmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%NEXT_SCH",
+      "Variables" : [ {
+        "NEXT_SCH" : "%%$NEXT"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "ME"
+      }, {
+        "country" : "SG"
+      }, {
+        "system" : "RMI"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "6", "7", "8", "9" ],
+        "ToTime" : ">",
+        "FromTime" : "0800",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "IfBase:Folder:CompletionStatus_6" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "2",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_GBL_RMISTGEARLY-TO-SGM_GBL_RMIFNDPLPEARLY"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "IfBase:Folder:CompletionStatus_7" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "0",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_GBL_RMISTGEARLY-TO-SGM_GBL_DMYRMIEARLY"
+        }
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_RMISTGEARLY-TO-SGM_GBL_DMYRMIEARLY"
+        }, {
+          "Event" : "SGM_GBL_RMISTGEARLY-TO-SGM_GBL_RMIFNDPLPEARLY"
+        } ]
+      }
+    },
+    "SGM_GBL_RMISTGMN" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_RMISTGMN",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_rmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%NEXT_SCH",
+      "Variables" : [ {
+        "NEXT_SCH" : "%%$NEXT"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "country" : "SG"
+      }, {
+        "system" : "RMI"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "15", "16", "17", "18", "19", "20" ],
+        "ToTime" : ">",
+        "FromTime" : "0800",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "IfBase:Folder:CompletionStatus_6" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "2",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_GBL_RMISTGMN-TO-SGM_GBL_RMIFNDPLPMN"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "IfBase:Folder:CompletionStatus_7" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "0",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_GBL_RMISTGMN-TO-SGM_GBL_RMIDMYMM"
+        }
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_RMISTGMN-TO-SGM_GBL_RMIDMYMM"
+        }, {
+          "Event" : "SGM_GBL_RMISTGMN-TO-SGM_GBL_RMIFNDPLPMN"
+        } ]
+      }
+    },
+    "SGM_GBL_STGPRAMN9_FW" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_STGPRAMN9_FW",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace %%NEXT_SCH",
+      "Variables" : [ {
+        "workspace" : "WS9"
+      }, {
+        "NEXT_SCH" : "%%$NEXT"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "country" : "ALL"
+      }, {
+        "system" : "BCRS_PRA"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "10", "11", "9" ],
+        "ToTime" : ">",
+        "FromTime" : "1000",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_6" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "IfBase:Folder:CompletionStatus_7" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "2",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_GBL_STGPRAMN9_FW-TO-SGM_GBL_FNDPLPPRAMN9"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "IfBase:Folder:CompletionStatus_8" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "0",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_GBL_STGPRAMN9_FW-TO-SGM_GBL_PRADMY9"
+        }
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_STGPRAMN9_FW-TO-SGM_GBL_PRADMY9"
+        }, {
+          "Event" : "SGM_GBL_STGPRAMN9_FW-TO-SGM_GBL_FNDPLPPRAMN9"
+        } ]
+      }
+    },
+    "SGM_GBL_TABLUDATFULLREF" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "tableau_24months_refresh",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_TABLUDATFULLREF",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/tableau_24months_refresh.sh %%job_group",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "job_group" : "OUT_LOAD"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "1" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_2" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_UPDREPDT-TO-SGM_GBL_TABLUDATFULLREF"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_UPDREPDT-TO-SGM_GBL_TABLUDATFULLREF"
+        } ]
+      }
+    },
+    "SGM_GBL_UPDREPDT" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_UPDREPDT",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_GBL_UPDREPDT",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_refresh_current_reporting_period.sh",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "1" ],
+        "ToTime" : ">",
+        "FromTime" : "0800",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_1" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_GBL_UPDREPDT-TO-SGM_GBL_TABLUDATFULLREF"
+        } ]
+      }
+    },
+    "SGM_SG_NDDMY29" : {
+      "Type" : "Job:Dummy",
+      "DaysKeepActive" : "1",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDDMY29",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "11", "12" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_0" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTGMN29_FW-TO-SGM_SG_NDDMY29"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTGMN29_FW-TO-SGM_SG_NDDMY29"
+        } ]
+      }
+    },
+    "SGM_SG_NDDMY29A" : {
+      "Type" : "Job:Dummy",
+      "DaysKeepActive" : "1",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDDMY29A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "20", "21", "22" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_0" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFLCPYFW29A_FW-TO-SGM_SG_NDDMY29A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFLCPYFW29A_FW-TO-SGM_SG_NDDMY29A"
+        } ]
+      }
+    },
+    "SGM_SG_NDDMY36" : {
+      "Type" : "Job:Dummy",
+      "DaysKeepActive" : "1",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDDMY36",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "11", "12" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_0" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTGMN36_FW-TO-SGM_SG_NDDMY36"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTGMN36_FW-TO-SGM_SG_NDDMY36"
+        } ]
+      }
+    },
+    "SGM_SG_NDDMY36A" : {
+      "Type" : "Job:Dummy",
+      "DaysKeepActive" : "1",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDDMY36A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "20", "21", "22" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_0" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFLCPYFW36A_FW-TO-SGM_SG_NDDMY36A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFLCPYFW36A_FW-TO-SGM_SG_NDDMY36A"
+        } ]
+      }
+    },
+    "SGM_SG_NDFLCPYFW29A_FW" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDFLCPYFW29A_FW",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_filewatcher_adj.sh %%daily_monthly_flag STG %%system %%country %%workspace %%NEXT_SCH",
+      "Variables" : [ {
+        "workspace" : "WS29"
+      }, {
+        "NEXT_SCH" : "%%$NEXT"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "country" : "SG"
+      }, {
+        "system" : "BCRS_ND"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "20", "21", "22" ],
+        "ToTime" : ">",
+        "FromTime" : "0800",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_6" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "IfBase:Folder:CompletionStatus_7" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "2",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_NDFLCPYFW29A_FW-TO-SGM_SG_NDSTG29A"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "IfBase:Folder:CompletionStatus_8" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "0",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_NDFLCPYFW29A_FW-TO-SGM_SG_NDDMY29A"
+        }
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFLCPYFW29A_FW-TO-SGM_SG_NDDMY29A"
+        }, {
+          "Event" : "SGM_SG_NDFLCPYFW29A_FW-TO-SGM_SG_NDSTG29A"
+        } ]
+      }
+    },
+    "SGM_SG_NDFLCPYFW36A_FW" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDFLCPYFW36A_FW",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_filewatcher_adj.sh %%daily_monthly_flag STG %%system %%country %%workspace %%NEXT_SCH",
+      "Variables" : [ {
+        "workspace" : "WS36"
+      }, {
+        "NEXT_SCH" : "%%$NEXT"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "country" : "SG"
+      }, {
+        "system" : "BCRS_ND"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "20", "21", "22" ],
+        "ToTime" : ">",
+        "FromTime" : "1000",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_6" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "IfBase:Folder:CompletionStatus_7" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "2",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_NDFLCPYFW36A_FW-TO-SGM_SG_NDSTG36A"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "IfBase:Folder:CompletionStatus_8" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "0",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_NDFLCPYFW36A_FW-TO-SGM_SG_NDDMY36A"
+        }
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFLCPYFW36A_FW-TO-SGM_SG_NDDMY36A"
+        }, {
+          "Event" : "SGM_SG_NDFLCPYFW36A_FW-TO-SGM_SG_NDSTG36A"
+        } ]
+      }
+    },
+    "SGM_SG_NDFNDPLP29A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAFNDPLPMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDFNDPLP29A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_fnd_plp.sh %%daily_monthly_flag FND:PLP %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "SG"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_ND"
+      }, {
+        "workspace" : "WS29"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "20", "21", "22" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTG29A-TO-SGM_SG_NDFNDPLP29A"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFNDPLP29A-TO-SGM_SG_NDOUT29A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTG29A-TO-SGM_SG_NDFNDPLP29A"
+        } ]
+      }
+    },
+    "SGM_SG_NDFNDPLP36A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAFNDPLPMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDFNDPLP36A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_fnd_plp.sh %%daily_monthly_flag FND:PLP %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "SG"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_ND"
+      }, {
+        "workspace" : "WS36"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "20", "21", "22" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTG36A-TO-SGM_SG_NDFNDPLP36A"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFNDPLP36A-TO-SGM_SG_NDOUT36A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTG36A-TO-SGM_SG_NDFNDPLP36A"
+        } ]
+      }
+    },
+    "SGM_SG_NDFNDPLPMN29" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAFNDPLPMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDFNDPLPMN29",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_fnd_plp.sh %%daily_monthly_flag FND:PLP %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "SG"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_ND"
+      }, {
+        "workspace" : "WS29"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "11", "12" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTGMN29_FW-TO-SGM_SG_NDFNDPLPMN29"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFNDPLPMN29-TO-SGM_SG_NDOUTMN29"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTGMN29_FW-TO-SGM_SG_NDFNDPLPMN29"
+        } ]
+      }
+    },
+    "SGM_SG_NDFNDPLPMN36" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAFNDPLPMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDFNDPLPMN36",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_fnd_plp.sh %%daily_monthly_flag FND:PLP %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "SG"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_ND"
+      }, {
+        "workspace" : "WS36"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "11", "12" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTGMN36_FW-TO-SGM_SG_NDFNDPLPMN36"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFNDPLPMN36-TO-SGM_SG_NDOUTMN36"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTGMN36_FW-TO-SGM_SG_NDFNDPLPMN36"
+        } ]
+      }
+    },
+    "SGM_SG_NDOUT29A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAOUTMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDOUT29A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_tableau_out_refresh.sh %%daily_monthly_flag OUT %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "SG"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_ND"
+      }, {
+        "workspace" : "WS29"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "20", "21", "22" ],
+        "FromTime" : "1830",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFNDPLP29A-TO-SGM_SG_NDOUT29A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFNDPLP29A-TO-SGM_SG_NDOUT29A"
+        } ]
+      }
+    },
+    "SGM_SG_NDOUT36A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAOUTMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDOUT36A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_tableau_out_refresh.sh %%daily_monthly_flag OUT %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "SG"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_ND"
+      }, {
+        "workspace" : "WS36"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "20", "21", "22" ],
+        "FromTime" : "1830",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFNDPLP36A-TO-SGM_SG_NDOUT36A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFNDPLP36A-TO-SGM_SG_NDOUT36A"
+        } ]
+      }
+    },
+    "SGM_SG_NDOUTMN29" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAOUTMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDOUTMN29",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_tableau_out_refresh.sh %%daily_monthly_flag OUT %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "SG"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_ND"
+      }, {
+        "workspace" : "WS29"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "11", "12" ],
+        "FromTime" : "1830",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFNDPLPMN29-TO-SGM_SG_NDOUTMN29"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFNDPLPMN29-TO-SGM_SG_NDOUTMN29"
+        } ]
+      }
+    },
+    "SGM_SG_NDOUTMN36" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAOUTMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDOUTMN36",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_tableau_out_refresh.sh %%daily_monthly_flag OUT %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "SG"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_ND"
+      }, {
+        "workspace" : "WS36"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "11", "12" ],
+        "FromTime" : "1830",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFNDPLPMN36-TO-SGM_SG_NDOUTMN36"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFNDPLPMN36-TO-SGM_SG_NDOUTMN36"
+        } ]
+      }
+    },
+    "SGM_SG_NDSTG29A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAFNDPLPMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDSTG29A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_ingestion.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "SG"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_ND"
+      }, {
+        "workspace" : "WS29"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "20", "21", "22" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFLCPYFW29A_FW-TO-SGM_SG_NDSTG29A"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTG29A-TO-SGM_SG_NDFNDPLP29A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFLCPYFW29A_FW-TO-SGM_SG_NDSTG29A"
+        } ]
+      }
+    },
+    "SGM_SG_NDSTG36A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAFNDPLPMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDSTG36A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_ingestion.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "SG"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_ND"
+      }, {
+        "workspace" : "WS36"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "20", "21", "22" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFLCPYFW36A_FW-TO-SGM_SG_NDSTG36A"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTG36A-TO-SGM_SG_NDFNDPLP36A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDFLCPYFW36A_FW-TO-SGM_SG_NDSTG36A"
+        } ]
+      }
+    },
+    "SGM_SG_NDSTGMN29_FW" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDSTGMN29_FW",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace %%NEXT_SCH",
+      "Variables" : [ {
+        "workspace" : "WS29"
+      }, {
+        "NEXT_SCH" : "%%$NEXT"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "country" : "SG"
+      }, {
+        "system" : "BCRS_ND"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "11", "12" ],
+        "ToTime" : ">",
+        "FromTime" : "0800",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_6" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "IfBase:Folder:CompletionStatus_7" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "2",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_NDSTGMN29_FW-TO-SGM_SG_NDFNDPLPMN29"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "IfBase:Folder:CompletionStatus_8" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "0",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_NDSTGMN29_FW-TO-SGM_SG_NDDMY29"
+        }
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTGMN29_FW-TO-SGM_SG_NDDMY29"
+        }, {
+          "Event" : "SGM_SG_NDSTGMN29_FW-TO-SGM_SG_NDFNDPLPMN29"
+        } ]
+      }
+    },
+    "SGM_SG_NDSTGMN36_FW" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_NDSTGMN36_FW",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace %%NEXT_SCH",
+      "Variables" : [ {
+        "workspace" : "WS36"
+      }, {
+        "NEXT_SCH" : "%%$NEXT"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "country" : "SG"
+      }, {
+        "system" : "BCRS_ND"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "11", "12" ],
+        "ToTime" : ">",
+        "FromTime" : "1000",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_6" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "IfBase:Folder:CompletionStatus_7" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "2",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_NDSTGMN36_FW-TO-SGM_SG_NDFNDPLPMN36"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "IfBase:Folder:CompletionStatus_8" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "0",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_NDSTGMN36_FW-TO-SGM_SG_NDDMY36"
+        }
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_NDSTGMN36_FW-TO-SGM_SG_NDDMY36"
+        }, {
+          "Event" : "SGM_SG_NDSTGMN36_FW-TO-SGM_SG_NDFNDPLPMN36"
+        } ]
+      }
+    },
+    "SGM_SG_RCDMY42" : {
+      "Type" : "Job:Dummy",
+      "DaysKeepActive" : "1",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCDMY42",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "12", "13" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_0" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTGMN42-TO-SGM_SG_RCDMY42"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTGMN42-TO-SGM_SG_RCDMY42"
+        } ]
+      }
+    },
+    "SGM_SG_RCDMY42A" : {
+      "Type" : "Job:Dummy",
+      "DaysKeepActive" : "1",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCDMY42A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "22", "23", "24", "25", "26" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_0" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFLCPYFW42A_FW-TO-SGM_SG_RCDMY42A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFLCPYFW42A_FW-TO-SGM_SG_RCDMY42A"
+        } ]
+      }
+    },
+    "SGM_SG_RCDMY43" : {
+      "Type" : "Job:Dummy",
+      "DaysKeepActive" : "1",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCDMY43",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "12", "13" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_0" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTGMN43-TO-SGM_SG_RCDMY43"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTGMN43-TO-SGM_SG_RCDMY43"
+        } ]
+      }
+    },
+    "SGM_SG_RCDMY43A" : {
+      "Type" : "Job:Dummy",
+      "DaysKeepActive" : "1",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCDMY43A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "22", "23", "24", "25", "26" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_0" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFLCPYFW43A_FW-TO-SGM_SG_RCDMY43A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFLCPYFW43A_FW-TO-SGM_SG_RCDMY43A"
+        } ]
+      }
+    },
+    "SGM_SG_RCFLCPYFW42A_FW" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "WS42 File rename job for ADJ run",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_filewatcher_adj.sh %%daily_monthly_flag STG %%system %%country %%workspace %%NEXT_SCH",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "system" : "BCRS_RC"
+      }, {
+        "country" : "ALL"
+      }, {
+        "workspace" : "WS42"
+      }, {
+        "NEXT_SCH" : "%%$NEXT"
+      }, {
+        "daily_monthly_flag" : "MM"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "22", "23", "24", "25", "26" ],
+        "ToTime" : ">",
+        "FromTime" : "0800",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_6" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "IfBase:Folder:CompletionStatus_7" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "0",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_RCFLCPYFW42A_FW-TO-SGM_SG_RCDMY42A"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "IfBase:Folder:CompletionStatus_8" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "2",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_RCFLCPYFW42A_FW-TO-SGM_SG_RCSTG42A"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFLCPYFW42A_FW-TO-SGM_SG_RCDMY42A"
+        }, {
+          "Event" : "SGM_SG_RCFLCPYFW42A_FW-TO-SGM_SG_RCSTG42A"
+        } ]
+      }
+    },
+    "SGM_SG_RCFLCPYFW43A_FW" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCFLCPYFW43A_FW",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_filewatcher_adj.sh %%daily_monthly_flag STG %%system %%country %%workspace %%NEXT_SCH",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "workspace" : "WS43"
+      }, {
+        "NEXT_SCH" : "%%$NEXT"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "country" : "ALL"
+      }, {
+        "system" : "BCRS_RC"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "22", "23", "24", "25", "26" ],
+        "ToTime" : ">",
+        "FromTime" : "1000",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_6" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "IfBase:Folder:CompletionStatus_7" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "2",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_RCFLCPYFW43A_FW-TO-SGM_SG_RCSTG43A"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "IfBase:Folder:CompletionStatus_8" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "0",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_RCFLCPYFW43A_FW-TO-SGM_SG_RCDMY43A"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFLCPYFW43A_FW-TO-SGM_SG_RCDMY43A"
+        }, {
+          "Event" : "SGM_SG_RCFLCPYFW43A_FW-TO-SGM_SG_RCSTG43A"
+        } ]
+      }
+    },
+    "SGM_SG_RCFNDPLP42A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_FNDPLPPRAMAINWS7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCFNDPLP42A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_fnd_plp.sh %%daily_monthly_flag FND:PLP %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_RC"
+      }, {
+        "workspace" : "WS42"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "22", "23", "24", "25", "26" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTG42A-TO-SGM_SG_RCFNDPLP42A"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFNDPLP42A-TO-SGM_SG_RCOUT42A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTG42A-TO-SGM_SG_RCFNDPLP42A"
+        } ]
+      }
+    },
+    "SGM_SG_RCFNDPLP43A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_FNDPLPPRAMAINWS7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCFNDPLP43A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_fnd_plp.sh %%daily_monthly_flag FND:PLP %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_RC"
+      }, {
+        "workspace" : "WS43"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "22", "23", "24", "25", "26" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTG43A-TO-SGM_SG_RCFNDPLP43A"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFNDPLP43A-TO-SGM_SG_RCOUT43A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTG43A-TO-SGM_SG_RCFNDPLP43A"
+        } ]
+      }
+    },
+    "SGM_SG_RCFNDPLPMN42" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_FNDPLPPRAMAINWS7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCFNDPLPMN42",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_fnd_plp.sh %%daily_monthly_flag FND:PLP %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_RC"
+      }, {
+        "workspace" : "WS42"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "12", "13" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTGMN42-TO-SGM_SG_RCFNDPLPMN42"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFNDPLPMN42-TO-SGM_SG_RCOUTMN42"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTGMN42-TO-SGM_SG_RCFNDPLPMN42"
+        } ]
+      }
+    },
+    "SGM_SG_RCFNDPLPMN43" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_FNDPLPPRAMAINWS7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCFNDPLPMN43",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_fnd_plp.sh %%daily_monthly_flag FND:PLP %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_RC"
+      }, {
+        "workspace" : "WS43"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "12", "13" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTGMN43-TO-SGM_SG_RCFNDPLPMN43"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFNDPLPMN43-TO-SGM_SG_RCOUTMN43"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTGMN43-TO-SGM_SG_RCFNDPLPMN43"
+        } ]
+      }
+    },
+    "SGM_SG_RCOUT42A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_OUTPRAMAINWS7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCOUT42A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_tableau_out_refresh.sh %%daily_monthly_flag OUT %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_RC"
+      }, {
+        "workspace" : "WS42"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "22", "23", "24", "25", "26" ],
+        "FromTime" : "1830",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFNDPLP42A-TO-SGM_SG_RCOUT42A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFNDPLP42A-TO-SGM_SG_RCOUT42A"
+        } ]
+      }
+    },
+    "SGM_SG_RCOUT43A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_PRAOUTMN7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCOUT43A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_tableau_out_refresh.sh %%daily_monthly_flag OUT %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_RC"
+      }, {
+        "workspace" : "WS43"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "22", "23", "24", "25", "26" ],
+        "FromTime" : "1830",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFNDPLP43A-TO-SGM_SG_RCOUT43A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFNDPLP43A-TO-SGM_SG_RCOUT43A"
+        } ]
+      }
+    },
+    "SGM_SG_RCOUTMN42" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_OUTPRAMAINWS7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCOUTMN42",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_tableau_out_refresh.sh %%daily_monthly_flag OUT %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_RC"
+      }, {
+        "workspace" : "WS42"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "12", "13" ],
+        "FromTime" : "1830",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFNDPLPMN42-TO-SGM_SG_RCOUTMN42"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFNDPLPMN42-TO-SGM_SG_RCOUTMN42"
+        } ]
+      }
+    },
+    "SGM_SG_RCOUTMN43" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Priority" : "Very Low",
+      "FileName" : "SGM_GBL_OUTPRAMAINWS7",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCOUTMN43",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_tableau_out_refresh.sh %%daily_monthly_flag OUT %%system %%country %%workspace",
+      "Variables" : [ {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "country" : "ALL"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "system" : "BCRS_RC"
+      }, {
+        "workspace" : "WS43"
+      } ],
+      "RerunLimit" : {
+        "Units" : "Minutes",
+        "Every" : "60"
+      },
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "12", "13" ],
+        "FromTime" : "1830",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFNDPLPMN43-TO-SGM_SG_RCOUTMN43"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFNDPLPMN43-TO-SGM_SG_RCOUTMN43"
+        } ]
+      }
+    },
+    "SGM_SG_RCSTG42A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCSTG42A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_ingestion.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "Variables" : [ {
+        "workspace" : "WS42"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "country" : "ALL"
+      }, {
+        "system" : "BCRS_RC"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "22", "23", "24", "25", "26" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFLCPYFW42A_FW-TO-SGM_SG_RCSTG42A"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTG42A-TO-SGM_SG_RCFNDPLP42A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFLCPYFW42A_FW-TO-SGM_SG_RCSTG42A"
+        } ]
+      }
+    },
+    "SGM_SG_RCSTG43A" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCSTG43A",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_ingestion.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "Variables" : [ {
+        "workspace" : "WS43"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "country" : "ALL"
+      }, {
+        "system" : "BCRS_RC"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "22", "23", "24", "25", "26" ],
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_5" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "eventsToWaitFor" : {
+        "Type" : "WaitForEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFLCPYFW43A_FW-TO-SGM_SG_RCSTG43A"
+        } ]
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTG43A-TO-SGM_SG_RCFNDPLP43A"
+        } ]
+      },
+      "eventsToDelete" : {
+        "Type" : "DeleteEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCFLCPYFW43A_FW-TO-SGM_SG_RCSTG43A"
+        } ]
+      }
+    },
+    "SGM_SG_RCSTGMN42" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCSTGMN42",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace %%NEXT_SCH",
+      "Variables" : [ {
+        "workspace" : "WS42"
+      }, {
+        "NEXT_SCH" : "%%$NEXT"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "country" : "ALL"
+      }, {
+        "system" : "BCRS_RC"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "12", "13" ],
+        "ToTime" : ">",
+        "FromTime" : "0800",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_6" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "IfBase:Folder:CompletionStatus_7" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "2",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_RCSTGMN42-TO-SGM_SG_RCFNDPLPMN42"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "IfBase:Folder:CompletionStatus_8" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "0",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_RCSTGMN42-TO-SGM_SG_RCDMY42"
+        }
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTGMN42-TO-SGM_SG_RCDMY42"
+        }, {
+          "Event" : "SGM_SG_RCSTGMN42-TO-SGM_SG_RCFNDPLPMN42"
+        } ]
+      }
+    },
+    "SGM_SG_RCSTGMN43" : {
+      "Type" : "Job:Command",
+      "DaysKeepActive" : "5",
+      "SubApplication" : "SGM_E_GBL_CDP_BATCH_PRD",
+      "Host" : "haasedge93twqtwpop07.50531.app.standardchartered.com",
+      "FilePath" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace",
+      "CreatedBy" : "edmusr",
+      "Description" : "SGM_SG_RCSTGMN43",
+      "RunAs" : "g.sgmiprdapp.001",
+      "Application" : "SGMI",
+      "Command" : "$script_path/jbs_sgmi_stg_filewatcher.sh %%daily_monthly_flag STG %%system %%country %%workspace %%NEXT_SCH",
+      "Variables" : [ {
+        "workspace" : "WS43"
+      }, {
+        "NEXT_SCH" : "%%$NEXT"
+      }, {
+        "script_path" : "/CTRLFW/sgmi/prd/appl/bin"
+      }, {
+        "daily_monthly_flag" : "MM"
+      }, {
+        "country" : "ALL"
+      }, {
+        "system" : "BCRS_RC"
+      } ],
+      "When" : {
+        "WeekDays" : [ "NONE" ],
+        "MonthDays" : [ "12", "13" ],
+        "ToTime" : ">",
+        "FromTime" : "1000",
+        "DaysRelation" : "OR"
+      },
+      "Notify:NotOK_6" : {
+        "Type" : "Notify:NotOK",
+        "Message" : "FAILED Job:%%JOBNAME OrdID:%%ORDERID of %%$ODATE App:%%APPLIC Grp:%%APPLGROUP on %%NODEID at %%TIME"
+      },
+      "IfBase:Folder:CompletionStatus_7" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "2",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_RCSTGMN43-TO-SGM_SG_RCFNDPLPMN43"
+        },
+        "Action:SetToOK_1" : {
+          "Type" : "Action:SetToOK"
+        }
+      },
+      "IfBase:Folder:CompletionStatus_8" : {
+        "Type" : "If:CompletionStatus",
+        "CompletionStatus" : "0",
+        "Event:Delete_0" : {
+          "Type" : "Event:Delete",
+          "Event" : "SGM_SG_RCSTGMN43-TO-SGM_SG_RCDMY43"
+        }
+      },
+      "eventsToAdd" : {
+        "Type" : "AddEvents",
+        "Events" : [ {
+          "Event" : "SGM_SG_RCSTGMN43-TO-SGM_SG_RCDMY43"
+        }, {
+          "Event" : "SGM_SG_RCSTGMN43-TO-SGM_SG_RCFNDPLPMN43"
+        } ]
+      }
+    }
+  }
+}

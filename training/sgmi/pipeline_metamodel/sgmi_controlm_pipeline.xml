@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<JOBS>
+  <JOB JOBNAME="SGMI_SAMPLE_JOB"
+       COMMAND="/opt/sgmi/jobs/sample_pipeline.sh"
+       RUN_AS="sgmi_batch"
+       APPLICATION="SGMI"
+       SUB_APPLICATION="ETL"
+       HOST="sgmi-batch"
+       TASKTYPE="Command"
+       CALENDAR_NAME="SGMI_SAMPLE_CAL"
+       TIMEFROM="0700"
+       TIMETO="1900"
+       CYCLIC="N"
+       MAXRERUN="1"
+       WHEN="AFTER"
+       ODATE="ODAT">
+    <INCOND NAME="SGMI.SAMPLE.READY" ODATE="ODAT" SIGN="+" AND_OR="AND" />
+    <OUTCOND NAME="SGMI.SAMPLE.COMPLETE" ODATE="ODAT" SIGN="+" TYPE="P" />
+  </JOB>
+</JOBS>
