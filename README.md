@@ -31,3 +31,7 @@ GitHub enforces a 2 GB limit per release asset, so the actual model binaries n
    The script reconstructs the `.gguf` files and unpacks transformer checkpoints back into `models/`.
 
 > **Note:** Model weights and tokenizers are stored via GitHub Releases using the chunked artifacts above. Run `git lfs install` only if you plan to host sub-2 GB files via LFS; larger files must be shipped through releases.
+
+## Stage 3: Search and Graph Services
+
+The `stage3/search/` folder contains the Layer 4 search microservices, and `stage3/graph/` holds the GPU-accelerated graph components. Treat them like read-only exports—each directory keeps its original README and build scripts. Deploy them to your GPU infrastructure as separate services or integrate them into CI as needed.
