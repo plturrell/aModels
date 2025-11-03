@@ -2,7 +2,7 @@
 ##
 ## graph-server builder
 ##
-FROM golang:1.22.6-alpine3.20 AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /workspace
 
@@ -27,8 +27,8 @@ COPY . /workspace/src
 
 WORKDIR /workspace/src/stage3/graph
 
-# Force a toolchain that exists today even though go.mod points at 1.25.x.
-ENV GOTOOLCHAIN=go1.22.6
+# Use the image toolchain (Go 1.24)
+ENV GOTOOLCHAIN=local
 
 RUN go mod tidy
 RUN CGO_ENABLED=0 go build -o /workspace/build/graph-server ./cmd/graph-server

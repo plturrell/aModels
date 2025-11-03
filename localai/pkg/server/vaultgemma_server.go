@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -249,8 +250,10 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Auto-detected domain: %s", domain)
 	}
 
-	// Retrieve domain configuration before model resolution
-	domainConfig, _ := s.domainManager.GetDomainConfig(domain)
+    // Retrieve domain configuration before model resolution
+    domainConfig, _ := s.domainManager.GetDomainConfig(domain)
+    // Determine preferred backend based on environment/GPU when not set in config
+    preferredBackend := pickPreferredBackend()
 	requireModel := true
 	if domainConfig != nil {
 		if strings.EqualFold(domainConfig.BackendType, "hf-transformers") {
@@ -340,7 +343,15 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 
 	handledExternally := false
 
-	if domainConfig != nil && strings.EqualFold(domainConfig.BackendType, "deepseek-ocr") {
+    backendType := ""
+    if domainConfig != nil {
+        backendType = strings.TrimSpace(domainConfig.BackendType)
+    }
+    if backendType == "" {
+        backendType = preferredBackend
+    }
+
+    if strings.EqualFold(backendType, "deepseek-ocr") {
 		service := s.ocrServices[domain]
 		if service == nil {
 			http.Error(w, fmt.Sprintf("OCR service not configured for domain: %s", domain), http.StatusBadGateway)
@@ -379,7 +390,7 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if !handledExternally && domainConfig != nil && strings.EqualFold(domainConfig.BackendType, "hf-transformers") {
+    if !handledExternally && strings.EqualFold(backendType, "hf-transformers") {
 		client := s.transformerClients[domain]
 		if client == nil {
 			http.Error(w, fmt.Sprintf("transformers service not configured for domain: %s", domain), http.StatusBadGateway)
@@ -650,6 +661,22 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+// pickPreferredBackend decides which backend to use when not specified in config.
+// Order:
+// 1) hf-transformers if TRANSFORMERS_BASE_URL is set (GPU or CPU)
+// 2) gguf if GGUF_ENABLE=1
+// 3) vaultgemma as a safe pure-Go fallback
+func pickPreferredBackend() string {
+    base := strings.TrimSpace(os.Getenv("TRANSFORMERS_BASE_URL"))
+    if base != "" {
+        return "hf-transformers"
+    }
+    if strings.EqualFold(strings.TrimSpace(os.Getenv("GGUF_ENABLE")), "1") {
+        return "gguf"
+    }
+    return "vaultgemma"
 }
 
 func (s *VaultGemmaServer) HandleModels(w http.ResponseWriter, r *http.Request) {

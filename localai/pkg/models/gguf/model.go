@@ -1,3 +1,5 @@
+//go:build gguf
+
 package gguf
 
 import (

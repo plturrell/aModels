@@ -1,3 +1,5 @@
+//go:build hana
+
 package hanapool
 
 import (

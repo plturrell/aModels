@@ -3,12 +3,12 @@ module github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI
 go 1.23
 
 require (
-	github.com/go-skynet/go-llama.cpp v0.0.0-20240314183750-6a8041ef6b46
-	github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/glove v0.0.0-00010101000000-000000000000
-	github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/sentencepiece v0.0.0-00010101000000-000000000000
-	golang.org/x/time v0.5.0
-	google.golang.org/grpc v1.70.0
-	google.golang.org/protobuf v1.36.10
+    github.com/go-skynet/go-llama.cpp v0.0.0-20240314183750-6a8041ef6b46
+    github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/glove v0.0.0-00010101000000-000000000000
+    github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/sentencepiece v0.0.0-00010101000000-000000000000
+    golang.org/x/time v0.5.0
+    google.golang.org/grpc v1.70.0
+    google.golang.org/protobuf v1.36.10
 )
 
 require (
@@ -19,8 +19,7 @@ require (
 	github.com/crate-crypto/go-ipa v0.0.0-20240724233137-53bbb0ceb27a // indirect
 	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
-	github.com/ethereum/c-kzg-4844/v2 v2.1.5 // indirect
-	github.com/ethereum/go-verkle v0.2.2 // indirect
+    // pruned ethereum-related indirects by removing go-ethereum/log usage
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect

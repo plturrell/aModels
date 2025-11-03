@@ -2,7 +2,7 @@
 ##
 ## LocalAI builder (VaultGemma server)
 ##
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /workspace
 
@@ -21,9 +21,9 @@ RUN mkdir -p /workspace/src/models && \
 WORKDIR /workspace/src/localai
 
 ENV GOTOOLCHAIN=local
-
-RUN go mod tidy
-RUN CGO_ENABLED=0 go build -o /workspace/build/vaultgemma ./cmd/vaultgemma-server
+ENV GOWORK=off
+RUN go mod download
+RUN CGO_ENABLED=0 go build -mod=mod -o /workspace/build/vaultgemma ./cmd/vaultgemma-server
 
 ##
 ## runtime image

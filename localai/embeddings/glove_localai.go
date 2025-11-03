@@ -6,8 +6,6 @@ import (
 	"math"
 	"strings"
 	"sync"
-
-	maths "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths"
 )
 
 // VectorProvider describes the minimal interface required from a GloVe model implementation.
@@ -253,13 +251,19 @@ func normalize(vec []float32) []float32 {
 }
 
 func cosineSimilarity(a, b []float32) float32 {
-	if len(a) != len(b) {
-		return 0.0
-	}
-	af64, bf64 := make([]float64, len(a)), make([]float64, len(b))
-	for i := range a {
-		af64[i] = float64(a[i])
-		bf64[i] = float64(b[i])
-	}
-	return float32(maths.CosineAuto(af64, bf64))
+    if len(a) != len(b) || len(a) == 0 {
+        return 0.0
+    }
+    var dot, na, nb float64
+    for i := range a {
+        av := float64(a[i])
+        bv := float64(b[i])
+        dot += av * bv
+        na += av * av
+        nb += bv * bv
+    }
+    if na == 0 || nb == 0 {
+        return 0.0
+    }
+    return float32(dot / (math.Sqrt(na) * math.Sqrt(nb)))
 }

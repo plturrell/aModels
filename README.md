@@ -41,9 +41,10 @@ The `stage3/search/` folder contains the Layer 4 search microservices, and `stag
 The repo ships with starter Docker assets so you can test the graph runtime and LocalAI on a Brev GPU workspace:
 
 ```bash
-# 1. Clone the repo and restore heavy model assets (Stage 2)
+# 1. Clone the repo and (optionally) restore heavy model assets (Stage 2)
 git clone https://github.com/plturrell/aModels.git
 cd aModels
+# Optional if you need local models immediately:
 python3 tools/download_model_assets.py --tag weights-v1 --repo plturrell/aModels --output-dir .
 
 # 2. Build the containers (graph + LocalAI + search services + Elasticsearch + training shell)
@@ -77,7 +78,7 @@ The script will place `gemma-2b-gguf.tar.gz` in the models directory so the Loca
 mount it.
 ```
 
-Both Dockerfiles (`stage3/graph/Dockerfile` and `localai/Dockerfile`) clone the upstream
-`agenticAiETH` mono-repo inside the build stage to satisfy `go.mod` replace directives. If you
-already have those modules vendored locally you can override the `UPSTREAM_REPO` build-arg to point
-at your mirror.
+Notes:
+- Elasticsearch may require a smaller heap on small GPUs/hosts. You can export `ES_JAVA_OPTS="-Xms512m -Xmx512m"` before `docker compose up` or adjust it in `docker/brev/docker-compose.yml`.
+- The search service uses SQLite by default and Redis cache is optional; if no Redis is configured it falls back to in-memory cache.
+- The AgentSDK catalog/watch features are disabled in this standalone repo.

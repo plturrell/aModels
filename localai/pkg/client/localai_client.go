@@ -10,9 +10,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
-
-	"github.com/ethereum/go-ethereum/log"
+    "time"
+    "log"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/types"
 )
 
@@ -165,10 +164,8 @@ func (c *LocalAIClient) Generate(ctx context.Context, req *types.GenerateRequest
 		return nil, fmt.Errorf("no choices returned from API")
 	}
 
-	log.Debug("LocalAI generation completed",
-		"model", c.ModelName,
-		"tokens", apiResponse.Usage.TotalTokens,
-		"finish_reason", apiResponse.Choices[0].FinishReason)
+    log.Printf("LocalAI generation completed model=%s tokens=%d finish_reason=%s",
+        c.ModelName, apiResponse.Usage.TotalTokens, apiResponse.Choices[0].FinishReason)
 
 	return &types.GenerateResponse{
 		Text:         apiResponse.Choices[0].Text,

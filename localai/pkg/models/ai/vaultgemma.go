@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths/tensor"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths/util"
+    "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/maths/tensor"
+    "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/maths/util"
 )
 
 // VaultGemma - 1B parameter differential privacy language model

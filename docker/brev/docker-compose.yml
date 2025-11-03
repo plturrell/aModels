@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       - discovery.type=single-node
-      - ES_JAVA_OPTS=-Xms4g -Xmx4g
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
       - xpack.security.enabled=false
     ports:
       - "9200:9200"
@@ -19,6 +19,7 @@ services:
       dockerfile: stage3/graph/Dockerfile
     image: amodels/graph-server:latest
     container_name: graph-server
+    profiles: ["graph"]
     restart: unless-stopped
     environment:
       - GRAPH_CONFIG=/workspace/config/graph.yaml
@@ -42,6 +43,9 @@ services:
     restart: unless-stopped
     environment:
       - MODELS_DIR=/models
+      - TRANSFORMERS_BASE_URL=http://search-python:8091
+      - TRANSFORMERS_MODEL=all-MiniLM-L6-v2
+      - DISABLE_VAULTGEMMA_FALLBACK=1
     volumes:
       - ../../models:/models:ro
     ports:
@@ -86,8 +90,8 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     volumes:
-      - ../../stage3/search/python_service:/workspace:ro
-      - ../../models:/workspace/models:ro
+      - ../../stage3/search/python_service:/workspace:rw
+      - ../../models:/workspace/models:rw
     ports:
       - "8091:8091"
     depends_on:
