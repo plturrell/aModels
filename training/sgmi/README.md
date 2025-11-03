@@ -4,7 +4,7 @@ This directory contains training data and scripts for the SGMI (SAP Global Manuf
 
 ## Contents
 
-- **HIVE DDLS/**: Hive Data Definition Language files for SGMI database schemas
+- **hive-ddl/**: Hive Data Definition Language files for SGMI database schemas
   - Contains table definitions, views, and cleaned statements for various SGMI environments (sit, etl, stg)
   
 - **pipeline_metamodel/**: Pipeline metamodel definitions
@@ -12,16 +12,16 @@ This directory contains training data and scripts for the SGMI (SAP Global Manuf
   - Hive pipeline HQL scripts
   - Table pipeline JSON definitions
 
-- **SGMI_Scripts/**: Execution scripts for SGMI processes
+- **sgmi-scripts/**: Execution scripts for SGMI processes
   - Spark job scripts for Tableau refresh operations
   - JBS framework scripts for ingestion, staging, and reporting
   - Environment configuration files
 
-- **SGMI-controlm/**: Control-M migration and implementation documentation
+- **sgmi-controlm/**: Control-M migration and implementation documentation
   - Migration plans, release notes, and configuration files
   - Production Control-M definitions
 
-- **JSON_with_changes.json**: Training dataset with annotated changes for process learning
+- **json_with_changes.json**: Training dataset with annotated changes for process learning
 
 ## Usage
 

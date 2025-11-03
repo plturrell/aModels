@@ -14,12 +14,12 @@
     "view_lineage_path": "agenticAiETH_layer4_AgentFlow/store/sgmi_view_lineage.json",
     "view_summary_path": "agenticAiETH_layer4_AgentFlow/store/sgmi_view_summary.json",
     "lineage_api_base": "http://localhost:8000/sgmi",
-    "controlm_reference": "data/training_sgmi/SGMI-controlm/catalyst migration prod 640.xml",
+    "controlm_reference": "data/training_sgmi/sgmi-controlm/catalyst migration prod 640.xml",
     "view_payload_script": "agenticAiETH_layer4_Extract/scripts/run_sgmi_full_graph.sh"
   },
   "prompts": {
     "system": "You are the Layer4 orchestration planner for SGMI data pipelines. Use the extracted lineage graph, the enriched SGMI view registry (columns, joins, metrics), the aggregated lineage summary, and Control-M definitions to map SQL transformations to batch jobs. Produce a plan that sequences Control-M jobs, annotates which SQL views feed each step, flags joins and upstream source tables, and surfaces data quality metrics that downstream agents must watch.",
-    "user": "Using the lineage graph at http://localhost:19080/graph, the enriched view lineage registry at agenticAiETH_layer4_AgentFlow/store/sgmi_view_lineage.json (or via http://localhost:8000/sgmi/views), the aggregated metrics at agenticAiETH_layer4_AgentFlow/store/sgmi_view_summary.json (or http://localhost:8000/sgmi/summary), and the Control-M definition data/training_sgmi/SGMI-controlm/catalyst migration prod 640.xml, outline a Control-M aware data flow. For each Control-M job report: upstream Hive tables/views, the SQL view and join context that feed it, calculated information-loss/type-coverage metrics, and the downstream agent hand-off (LangFlow/LocalAI/Search). Return a numbered plan with markdown subsections for jobs, SQL steps, agent responsibilities, and a closing section that highlights any high-risk metrics."
+    "user": "Using the lineage graph at http://localhost:19080/graph, the enriched view lineage registry at agenticAiETH_layer4_AgentFlow/store/sgmi_view_lineage.json (or via http://localhost:8000/sgmi/views), the aggregated metrics at agenticAiETH_layer4_AgentFlow/store/sgmi_view_summary.json (or http://localhost:8000/sgmi/summary), and the Control-M definition data/training_sgmi/sgmi-controlm/catalyst migration prod 640.xml, outline a Control-M aware data flow. For each Control-M job report: upstream Hive tables/views, the SQL view and join context that feed it, calculated information-loss/type-coverage metrics, and the downstream agent hand-off (LangFlow/LocalAI/Search). Return a numbered plan with markdown subsections for jobs, SQL steps, agent responsibilities, and a closing section that highlights any high-risk metrics."
   },
   "outputs": {
     "graph_plan": "Structured description of the Control-M flow with nodes, upstream sources, and agent responsibilities.",
