@@ -21,7 +21,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/Chahine-tech/sql-parser-go/parser"
+	_ "github.com/Chahine-tech/sql-parser-go/pkg/parser"
 	_ "github.com/SAP/go-hdb/driver"
 	"github.com/lib/pq"
 	extractpb "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract/gen/extractpb"

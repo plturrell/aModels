@@ -51,7 +51,7 @@ replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI => ../agen
 
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer1_Blockchain => ../agenticAiETH_layer1_Blockchain
 
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres => ../agenticAiETH_layer4_Postgres
+replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres => ../postgres
 
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK => ../agenticAiETH_layer4_AgentSDK
 

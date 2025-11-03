@@ -31,3 +31,6 @@
 [submodule "third_party/langextract"]
 	path = infrastructure/third_party/langextract
 	url = https://github.com/google/langextract.git
+[submodule "infrastructure/third_party/sql-parser-go"]
+	path = infrastructure/third_party/sql-parser-go
+	url = https://github.com/Chahine-tech/sql-parser-go.git

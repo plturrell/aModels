@@ -18,19 +18,11 @@ require (
 	google.golang.org/protobuf v1.36.10
 )
 
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres => ../agenticAiETH_layer4_Postgres
+replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres => ../postgres
 
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration => ../agenticAiETH_layer4_Orchestration
+replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration => ../../../../agenticAiETH_layer4_Orchestration
 
-replace github.com/Chahine-tech/sql-parser-go => ../third_party/sqlparser
-
-replace github.com/xwb1989/sqlparser/dependency/bytes2 => ../third_party/sqlparser/dependency/bytes2
-
-replace github.com/xwb1989/sqlparser/dependency/hack => ../third_party/sqlparser/dependency/hack
-
-replace github.com/xwb1989/sqlparser/dependency/querypb => ../third_party/sqlparser/dependency/querypb
-
-replace github.com/xwb1989/sqlparser/dependency/sqltypes => ../third_party/sqlparser/dependency/sqltypes
+replace github.com/Chahine-tech/sql-parser-go => ../../infrastructure/third_party/sql-parser-go
 
 require (
 	github.com/Code-Hex/go-generics-cache v1.3.1 // indirect
@@ -63,10 +55,6 @@ require (
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
-	github.com/xwb1989/sqlparser/dependency/bytes2 v0.0.0 // indirect
-	github.com/xwb1989/sqlparser/dependency/hack v0.0.0 // indirect
-	github.com/xwb1989/sqlparser/dependency/querypb v0.0.0 // indirect
-	github.com/xwb1989/sqlparser/dependency/sqltypes v0.0.0 // indirect
 	github.com/yargevad/filepathx v1.0.0 // indirect
 	github.com/yuin/gopher-lua v1.1.0 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect

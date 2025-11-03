@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Chahine-tech/sql-parser-go/parser"
+	"github.com/Chahine-tech/sql-parser-go/pkg/parser"
 )
 
 type ColumnLineage struct {
@@ -22,7 +22,7 @@ type Lineage struct {
 }
 
 func parseSQL(sql string) (*Lineage, error) {
-	p := parser.NewParser(sql)
+	p := parser.New(sql)
 	ast, err := p.Parse()
 	if err != nil {
 		if fallback := fallbackParseSQL(sql); fallback != nil {

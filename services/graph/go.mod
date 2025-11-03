@@ -78,7 +78,7 @@ replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK => ../age
 
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract => ../agenticAiETH_layer4_Extract
 
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres => ../agenticAiETH_layer4_Postgres
+replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres => ../postgres
 
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths => ../agenticAiETH_layer4_Models/maths
 
