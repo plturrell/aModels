@@ -25,3 +25,9 @@
 [submodule "third_party/langgraph"]
 	path = third_party/langgraph
 	url = https://github.com/langchain-ai/langgraph.git
+[submodule "third_party/goose"]
+	path = third_party/goose
+	url = https://github.com/block/goose.git
+[submodule "third_party/langextract"]
+	path = third_party/langextract
+	url = https://github.com/google/langextract.git
