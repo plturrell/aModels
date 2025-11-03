@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package agentic.layer4.postgres.v1;
+
+option go_package = "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/gen/v1;postgresv1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+enum OperationStatus {
+  OPERATION_STATUS_UNSPECIFIED = 0;
+  OPERATION_STATUS_RUNNING = 1;
+  OPERATION_STATUS_SUCCESS = 2;
+  OPERATION_STATUS_ERROR = 3;
+}
+
+message LangOperation {
+  string id = 1;
+  string library_type = 2;
+  string operation = 3;
+  google.protobuf.Struct input = 4;
+  google.protobuf.Struct output = 5;
+  OperationStatus status = 6;
+  string error = 7;
+  int64 latency_ms = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp completed_at = 10;
+  string session_id = 11;
+  string user_id_hash = 12;
+  string privacy_level = 13;
+}
+
+message LogLangOperationRequest {
+  LangOperation operation = 1;
+}
+
+message LogLangOperationResponse {
+  LangOperation operation = 1;
+}
+
+message GetLangOperationRequest {
+  string id = 1;
+}
+
+message GetLangOperationResponse {
+  LangOperation operation = 1;
+}
+
+message ListLangOperationsRequest {
+  string library_type = 1;
+  string session_id = 2;
+  OperationStatus status = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+  google.protobuf.Timestamp created_after = 6;
+  google.protobuf.Timestamp created_before = 7;
+}
+
+message ListLangOperationsResponse {
+  repeated LangOperation operations = 1;
+  string next_page_token = 2;
+}
+
+message LibraryStats {
+  string library_type = 1;
+  int64 total_operations = 2;
+  double success_rate = 3;
+  double average_latency_ms = 4;
+  int64 error_count = 5;
+}
+
+message PerformanceTrend {
+  google.protobuf.Timestamp date = 1;
+  string library_type = 2;
+  int64 operations = 3;
+  double success_rate = 4;
+  double average_latency_ms = 5;
+}
+
+message AnalyticsRequest {
+  google.protobuf.Timestamp start_time = 1;
+  google.protobuf.Timestamp end_time = 2;
+  string library_type = 3;
+}
+
+message AnalyticsResponse {
+  int64 total_operations = 1;
+  double success_rate = 2;
+  double average_latency_ms = 3;
+  map<string, int64> error_breakdown = 4;
+  repeated LibraryStats library_stats = 5;
+  repeated PerformanceTrend performance_trends = 6;
+  google.protobuf.Timestamp generated_at = 7;
+}
+
+message CleanupRequest {
+  google.protobuf.Timestamp older_than = 1;
+}
+
+message CleanupResponse {
+  int64 deleted = 1;
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  string status = 1;
+  string version = 2;
+}
+
+service PostgresLangService {
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  rpc LogLangOperation(LogLangOperationRequest) returns (LogLangOperationResponse);
+  rpc GetLangOperation(GetLangOperationRequest) returns (GetLangOperationResponse);
+  rpc ListLangOperations(ListLangOperationsRequest) returns (ListLangOperationsResponse);
+  rpc GetAnalytics(AnalyticsRequest) returns (AnalyticsResponse);
+  rpc CleanupOperations(CleanupRequest) returns (CleanupResponse);
+}

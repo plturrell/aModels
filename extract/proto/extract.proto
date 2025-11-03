@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package extract.v1;
+
+option go_package = "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract/gen/extractpb";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/wrappers.proto";
+
+message ExampleExtraction {
+  string extraction_class = 1;
+  string extraction_text = 2;
+  google.protobuf.Struct attributes = 3;
+}
+
+message ExampleData {
+  string text = 1;
+  repeated ExampleExtraction extractions = 2;
+}
+
+message ExtractRequest {
+  string document = 1;
+  repeated string documents = 2;
+  google.protobuf.Value text_or_documents = 3;
+  string prompt_description = 4;
+  string model_id = 5;
+  repeated ExampleData examples = 6;
+  string api_key = 7;
+}
+
+message ExtractionResult {
+  string extraction_class = 1;
+  string extraction_text = 2;
+  google.protobuf.Struct attributes = 3;
+  google.protobuf.Int32Value start_index = 4;
+  google.protobuf.Int32Value end_index = 5;
+}
+
+message EntityList {
+  repeated string values = 1;
+}
+
+message ExtractResponse {
+  map<string, EntityList> entities = 1;
+  repeated ExtractionResult extractions = 2;
+}
+
+service ExtractService {
+  rpc Extract(ExtractRequest) returns (ExtractResponse);
+}

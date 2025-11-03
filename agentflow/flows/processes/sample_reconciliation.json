@@ -1,0 +1,34 @@
+{
+  "id": "processes/sample_reconciliation",
+  "name": "Layer1 Ledger Reconciliation",
+  "description": "Generates reconciliation guidance that aligns Layer 1 blockchain processes with Layer 4 orchestration flows.",
+  "category": "processes",
+  "tags": [
+    "layer1",
+    "reconciliation",
+    "a2a-network"
+  ],
+  "metadata": {
+    "layer1_process_path": "agenticAiETH_layer1_Blockchain/processes/reconciliation_pipeline",
+    "orchestrator_agent": "agenticAiETH_layer1_Blockchain/agents/0xF0A1-FoundationTeam/0xDEF0-OrchestratorAgent",
+    "smart_contract_agent": "agenticAiETH_layer1_Blockchain/agents/0xF0A1-FoundationTeam/0xE6A7-SmartContractAgent",
+    "process_agent": "agenticAiETH_layer1_Blockchain/agents/0xF0A1-FoundationTeam/0x9ABC-AgentProcessAgent",
+    "agent_sdk": "agenticAiETH_layer4_AgentSDK"
+  },
+  "prompts": {
+    "system": "You are the Layer 4 orchestration planner for the agenticAiETH network. Your job is to translate Layer 1 blockchain reconciliation processes into executable flow nodes that leverage LocalAI, HANA-backed memory, and the Agent SDK. Maintain compliance with the process catalogue at {{ index .flow \"metadata\" \"layer1_process_path\" }} while exposing only the necessary orchestration details to upstream agents.\n\nAvailable MCP tools (synchronised at runtime):\n{{ range $tool := index .flow \"metadata\" \"agent_tools\" }}- {{ $tool.Name }} — {{ $tool.Description }}\n{{ end }}",
+    "user": "Reconcile the ledger {{ .ledger_id }} for reporting period {{ .reporting_period }}. The reconciliation source payload is:\n{{ .source_payload }}\n\nSummarise the required orchestration steps (Agent SDK tool invocations, smart-contract calls handled by 0xE6A7, and checkpoints for LangGraph/HANA). Emit a markdown plan with numbered steps and include any required parameters for downstream agents."
+  },
+  "outputs": {
+    "primary": {
+      "description": "Markdown plan with orchestration steps for the reconciliation run",
+      "format": "markdown",
+      "key": "plan"
+    }
+  },
+  "sampling": {
+    "temperature": 0.2,
+    "top_p": 0.9,
+    "top_k": 40
+  }
+}

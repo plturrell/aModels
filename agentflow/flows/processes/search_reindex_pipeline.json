@@ -1,0 +1,33 @@
+{
+  "id": "processes/search_reindex_pipeline",
+  "name": "Search Index Refresh Pipeline",
+  "description": "Blueprint for generating extract artefacts and updating search/graph indexes (Redis vector store, Neo4j, HANA).",
+  "category": "processes",
+  "tags": [
+    "search",
+    "extract",
+    "graph"
+  ],
+  "metadata": {
+    "extract_service_url_env": "EXTRACT_SERVICE_URL",
+    "search_refresh_endpoint_env": "SEARCH_REFRESH_URL",
+    "neo4j_url_env": "NEO4J_URL",
+    "hana_schema_env": "HANA_SCHEMA"
+  },
+  "prompts": {
+    "system": "You orchestrate search reindexing for Layer 4. Produce a plan that: 1) invokes the `extract_service` tool (action=\"training\" or \"extract\", as appropriate) to produce structured corpora; 2) persists entities into SQLite/Redis/Neo4j/HANA via the existing graph pipeline; 3) triggers the search refresh endpoint (POST {{ index .flow \"metadata\" \"search_refresh_endpoint_env\" }} /v1/index/reload) with the manifest paths; 4) validates Neo4j + Redis counts and logs status in HANA.\n\nAvailable MCP tools:\n{{ range $tool := index .flow \"metadata\" \"agent_tools\" }}- {{ $tool.Name }} — {{ $tool.Description }}\n{{ end }}\nOnly reference the tools that appear in this list. Provide concrete payloads for each API call, environment variables used, and verification queries.",
+    "user": "Payload:\n{{ .payload }}\n\nReturn a detailed markdown playbook covering extract service calls, graph persistence checkpoints, search refresh actions, and monitoring queries."
+  },
+  "outputs": {
+    "primary": {
+      "description": "Markdown plan covering extract + search reindex orchestration",
+      "format": "markdown",
+      "key": "plan"
+    }
+  },
+  "sampling": {
+    "temperature": 0.2,
+    "top_p": 0.85,
+    "top_k": 40
+  }
+}

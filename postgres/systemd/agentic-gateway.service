@@ -1,0 +1,17 @@
+[Unit]
+Description=Agentic Layer4 FastAPI Gateway
+After=agentic-layer4.service
+Requires=agentic-layer4.service
+
+[Service]
+Type=simple
+WorkingDirectory=/Users/user/Library/CloudStorage/Dropbox/agenticAiETH/agenticAiETH_layer4_Postgres
+Environment=POSTGRES_LANG_SERVICE_ADDR=localhost:50055
+Environment=POSTGRES_LANG_DB_DSN=postgres://user@localhost:5432/postgres?sslmode=disable
+Environment=FASTAPI_HOST=0.0.0.0
+Environment=FASTAPI_PORT=8000
+ExecStart=%h/Library/CloudStorage/Dropbox/agenticAiETH/agenticAiETH_layer4_Postgres/scripts/run_gateway.sh
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
