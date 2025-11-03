@@ -52,8 +52,6 @@ All microservices grouped together for clear visibility:
 - `localai/` - AI inference server
 - `postgres/` - PostgreSQL telemetry and gRPC service
 - `search/` - Intelligent search and discovery platform
-- `postgres/` - PostgreSQL service
-- `browser/` - Browser automation
 
 ### 2. Data (`data/`)
 All data organized by purpose:
@@ -81,9 +79,13 @@ All testing-related code:
 ### 6. Documentation (`docs/`)
 System documentation and guides
 
-### 7. Legacy (`legacy/`)
-Read-only legacy code:
-- `stage3/` - Legacy search/graph services (read-only)
+### 7. Shared Packages (`pkg/`)
+Shared internal Go packages used across services:
+- `catalog/` - Flight catalog management
+- `localai/` - LocalAI client adapters
+- `methods/` - Core methods (MCTS, symbolic, fractal, LNN)
+- `sap/` - SAP HANA client utilities
+- `vision/` - Vision model clients
 
 ## Data Flow
 
