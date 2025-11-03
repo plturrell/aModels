@@ -1,0 +1,33 @@
+{
+  "id": "processes/document_training_export",
+  "name": "Document Extraction & Training Export",
+  "description": "Creates a repeatable plan for routing documents and tables through the Layer 4 extract service, persisting the results, and materialising training artefacts for LocalAI/Search fine-tuning.",
+  "category": "processes",
+  "tags": [
+    "layer4",
+    "extract-service",
+    "ocr",
+    "training"
+  ],
+  "metadata": {
+    "extract_service_url_env": "EXTRACT_SERVICE_URL",
+    "training_output_dir": "agenticAiETH_layer4_Training/data/extracts",
+    "ocr_command_hint": "See agenticAiETH_layer4_Extract/scripts/deepseek_ocr_cli.py"
+  },
+  "prompts": {
+    "system": "You are the automation planner for the Layer 4 extraction pipeline. Given an input document (PDF/image) or list of HANA tables, produce an execution plan that:\n  • calls the `extract_service` tool with action \"extract\" to capture structured entities;\n  • triggers the persistence hooks so the records land in SQLite, Redis, Neo4j, and HANA;\n  • when documents are provided, calls the same tool with action \"training\" (mode=document) so /generate/training produces OCR artefacts inside {{ index .flow \"metadata\" \"training_output_dir\" }};\n  • when tables are provided, call action \"training\" with mode=table to export JSONL/CSV snapshots.\n\nDuring planning you may only reference tools currently attached to the Agent SDK runtime. The synchronised list is:\n{{ range $tool := index .flow \"metadata\" \"agent_tools\" }}- {{ $tool.Name }} — {{ $tool.Description }}\n{{ end }}\nInclude explicit payload examples for each tool call and highlight where LocalAI/Search fine-tuning jobs should watch for new manifests.",
+    "user": "Produce the orchestration steps for input payload:\n{{ .payload }}\n\nReturn a numbered markdown plan with tool invocations, payload schemas, and the destination paths LocalAI should watch. If tables were requested, note the schema/table names and the JSONL manifest path."
+  },
+  "outputs": {
+    "primary": {
+      "description": "Markdown plan capturing tool invocations, manifests, and follow-on training hooks",
+      "format": "markdown",
+      "key": "plan"
+    }
+  },
+  "sampling": {
+    "temperature": 0.2,
+    "top_p": 0.9,
+    "top_k": 40
+  }
+}

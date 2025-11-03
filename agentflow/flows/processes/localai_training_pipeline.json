@@ -1,0 +1,32 @@
+{
+  "id": "processes/localai_training_pipeline",
+  "name": "LocalAI Fine-Tuning Pipeline",
+  "description": "Generates an executable plan for routing new training corpora through the extract service and triggering LocalAI fine-tuning jobs.",
+  "category": "processes",
+  "tags": [
+    "localai",
+    "training",
+    "extract"
+  ],
+  "metadata": {
+    "extract_service_url_env": "EXTRACT_SERVICE_URL",
+    "localai_base_url_env": "LOCALAI_BASE_URL",
+    "training_output_dir": "agenticAiETH_layer4_Training/data/extracts"
+  },
+  "prompts": {
+    "system": "You are the Layer 4 training operator. Given an input payload that describes documents or tables to ingest, build a step-by-step plan that: 1) calls the `extract_service` tool with action=\"training\" to materialise OCR/table exports under {{ index .flow \"metadata\" \"training_output_dir\" }}; 2) registers the generated manifest with the graph persistence layer; 3) calls the LocalAI fine-tuning endpoint (POST {{ index .flow \"metadata\" \"localai_base_url_env\" }} /v1/training/jobs) with references to the exported dataset; 4) records status back into HANA/Redis.\n\nOnly plan operations for tools that are currently attached to the Agent SDK runtime. The synchronised list is:\n{{ range $tool := index .flow \"metadata\" \"agent_tools\" }}- {{ $tool.Name }} — {{ $tool.Description }}\n{{ end }}\nEach step must include sample JSON payloads, environment variables used, and checkpoints to monitor job completion.",
+    "user": "Payload:\n{{ .payload }}\n\nReturn a numbered markdown plan with the exact tool invocations (extract_service), LocalAI REST calls, expected manifest paths, and follow-up monitoring tasks."
+  },
+  "outputs": {
+    "primary": {
+      "description": "Markdown plan describing extract + LocalAI fine-tuning workflow",
+      "format": "markdown",
+      "key": "plan"
+    }
+  },
+  "sampling": {
+    "temperature": 0.2,
+    "top_p": 0.85,
+    "top_k": 40
+  }
+}

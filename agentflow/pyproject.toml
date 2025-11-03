@@ -1,0 +1,18 @@
+[project]
+name = "agentflow"
+version = "0.1.0"
+requires-python = ">=3.9"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlmodel",
+    "httpx",
+    "redis",
+    "hdbcli",
+    "python-dotenv",
+    "pydantic-settings",
+]
+
+[project.optional-dependencies]
+hana = ["hdbcli"]
+postgresql = ["psycopg2-binary"]

@@ -1,0 +1,34 @@
+{
+  "id": "standards/sample_policy",
+  "name": "Layer1 Smart-Contract Governance",
+  "description": "Maps Layer 1 policy standards into Layer 4 orchestration controls for smart contract agents.",
+  "category": "standards",
+  "tags": [
+    "standards",
+    "smart-contracts",
+    "governance"
+  ],
+  "metadata": {
+    "layer1_standards_path": "agenticAiETH_layer1_Blockchain/standards/governance/smart_contract_controls.md",
+    "foundation_agent": "agenticAiETH_layer1_Blockchain/agents/0xF0A1-FoundationTeam/0xDEF0-OrchestratorAgent",
+    "smart_contract_agent": "agenticAiETH_layer1_Blockchain/agents/0xF0A1-FoundationTeam/0xE6A7-SmartContractAgent",
+    "agent_sdk": "agenticAiETH_layer4_AgentSDK",
+    "flow_runner": "agenticAiETH_layer4_Flow"
+  },
+  "prompts": {
+    "system": "You enforce governance standards for the agenticAiETH network. Transform Layer 1 smart-contract policies into actionable orchestration guidance that combines HANA-backed evidence storage, Agent SDK tool usage, and LangGraph checkpointing. Reference the canonical standard at {{ index .flow \"metadata\" \"layer1_standards_path\" }} and ensure the user-facing instructions do not leak HANA internals.",
+    "user": "Draft the orchestration policy for contract {{ .contract_address }} (alias {{ .contract_alias }}). The policy baseline is:\n{{ .policy_excerpt }}\n\nProduce a concise policy (markdown) outlining mandatory Agent SDK tools, monitored contract functions, and audit checkpoints. Highlight any dependencies on Layer 2 or Layer 3 agents that must be triggered during execution."
+  },
+  "outputs": {
+    "primary": {
+      "description": "Governance policy tailored for the target smart contract",
+      "format": "markdown",
+      "key": "policy"
+    }
+  },
+  "sampling": {
+    "temperature": 0.1,
+    "top_p": 0.85,
+    "top_k": 32
+  }
+}

@@ -1,0 +1,13 @@
+[Unit]
+Description=Agentic Layer4 Local PostgreSQL
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/Users/user/Library/CloudStorage/Dropbox/agenticAiETH/agenticAiETH_layer4_Postgres
+ExecStart=%h/Library/CloudStorage/Dropbox/agenticAiETH/agenticAiETH_layer4_Postgres/scripts/start_local_postgres.sh
+ExecStop=%h/Library/CloudStorage/Dropbox/agenticAiETH/agenticAiETH_layer4_Postgres/scripts/stop_local_postgres.sh
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
