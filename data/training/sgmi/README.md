@@ -1,38 +1,50 @@
 # SGMI Training Data
 
-This directory contains training data and scripts for the SGMI (SAP Global Manufacturing Intelligence) process training pipeline.
+This directory contains SGMI (SAP Global Master Index) dataset files for lineage graph generation and training.
 
-## Contents
+## Directory Structure
 
-- **hive-ddl/**: Hive Data Definition Language files for SGMI database schemas
-  - Contains table definitions, views, and cleaned statements for various SGMI environments (sit, etl, stg)
-  
-- **pipeline_metamodel/**: Pipeline metamodel definitions
-  - Control-M pipeline XML configurations
-  - Hive pipeline HQL scripts
-  - Table pipeline JSON definitions
+```
+data/training/sgmi/
+├── json_with_changes.json          # Table metadata and change history
+├── hive-ddl/                       # Hive DDL files
+│   ├── sgmisit_all_tables_statement.hql
+│   ├── sgmisitetl_all_tables_statement.hql
+│   ├── sgmisitstg_all_tables_statement.hql
+│   └── sgmisit_view.hql
+└── sgmi-controlm/                  # Control-M job definitions
+    └── catalyst migration prod 640.xml
+```
 
-- **sgmi-scripts/**: Execution scripts for SGMI processes
-  - Spark job scripts for Tableau refresh operations
-  - JBS framework scripts for ingestion, staging, and reporting
-  - Environment configuration files
+## Required Files
 
-- **sgmi-controlm/**: Control-M migration and implementation documentation
-  - Migration plans, release notes, and configuration files
-  - Production Control-M definitions
-
-- **json_with_changes.json**: Training dataset with annotated changes for process learning
+1. **JSON Tables**: `json_with_changes.json` - Table metadata and change history
+2. **Hive DDL Files** (in `hive-ddl/`):
+   - `sgmisit_all_tables_statement.hql`
+   - `sgmisitetl_all_tables_statement.hql`
+   - `sgmisitstg_all_tables_statement.hql`
+   - `sgmisit_view.hql`
+3. **Control-M XML**: `sgmi-controlm/catalyst migration prod 640.xml`
 
 ## Usage
 
-This data is used to train process understanding models that can:
-- Extract and replicate database schemas
-- Understand pipeline workflows and dependencies
-- Learn from Control-M job definitions
-- Process and normalize SGMI-specific transformations
+Once all files are in place, run:
 
-## Notes
+```bash
+cd services/extract
+./scripts/run_sgmi_full_graph.sh http://localhost:19080/graph
+```
 
-- Large archive files (`.zip`, `.7z`) and compiled binaries (`.jar`) are excluded from Git tracking
-- The JSON file contains process annotations and changes for training purposes
+This will:
+1. Parse Hive DDLs to extract table/view definitions
+2. Build view lineage from SQL joins
+3. Submit the graph to the graph service (Neo4j/Graph)
+4. Generate view lineage metadata files
 
+## Output
+
+The script generates:
+- `sgmi_view_lineage.json` - View registry with columns, joins, metrics
+- `sgmi_view_summary.json` - Aggregated lineage metrics
+
+These are stored in the default view store location or where `SGMI_VIEW_REGISTRY_OUT` points.

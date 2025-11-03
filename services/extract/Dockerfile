@@ -1,16 +1,16 @@
 # Build stage
 FROM golang:1.23-alpine AS builder
 
-WORKDIR /app/extract
+WORKDIR /app/services/extract
 
 # Copy go.mod
-COPY extract/go.mod .
+COPY services/extract/go.mod .
 
 # Download dependencies
 RUN go mod download
 
 # Copy the rest of the source code
-COPY extract/ .
+COPY services/extract/ .
 
 # Build the application
 RUN go build -o /server ./main.go
@@ -25,7 +25,7 @@ WORKDIR /app
 
 # Copy the built executable and helper scripts from the builder stage
 COPY --from=builder /server ./server
-COPY --from=builder /app/extract/scripts ./scripts
+COPY --from=builder /app/services/extract/scripts ./scripts
 
 # Install Python dependencies required by the helper scripts
 RUN pip3 install --no-cache-dir -r ./scripts/requirements.txt

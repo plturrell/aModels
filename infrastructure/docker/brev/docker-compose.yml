@@ -13,31 +13,10 @@ services:
     volumes:
       - esdata:/usr/share/elasticsearch/data
 
-  graph:
-    build:
-      context: ../..
-      dockerfile: stage3/graph/Dockerfile
-    image: amodels/graph-server:latest
-    container_name: graph-server
-    profiles: ["graph"]
-    restart: unless-stopped
-    environment:
-      - GRAPH_CONFIG=/workspace/config/graph.yaml
-    volumes:
-      - ../../configs:/workspace/config:ro
-      - ../../artifacts/model-release:/workspace/assets:ro
-    ports:
-      - "8080:8080"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - capabilities: ["gpu"]
-
   localai:
     build:
       context: ../..
-      dockerfile: localai/Dockerfile
+      dockerfile: services/localai/Dockerfile
     image: amodels/localai:latest
     container_name: localai
     restart: unless-stopped
@@ -59,7 +38,7 @@ services:
   search-inference:
     build:
       context: ../..
-      dockerfile: stage3/search/search-inference/Dockerfile
+      dockerfile: legacy/stage3/search/search-inference/Dockerfile
     image: amodels/search-inference:latest
     container_name: search-inference
     restart: unless-stopped
@@ -67,7 +46,7 @@ services:
       - SEARCH_CONFIG=/workspace/config/search-inference.yaml
       - ELASTICSEARCH_HOST=http://elasticsearch:9200
     volumes:
-      - ../../stage3/search/search-inference/config:/workspace/config:ro
+      - ../../legacy/stage3/search/search-inference/config:/workspace/config:ro
       - ../../models:/workspace/models:ro
     ports:
       - "8090:8090"
@@ -83,7 +62,7 @@ services:
   search-python:
     build:
       context: ../..
-      dockerfile: stage3/search/python_service/Dockerfile
+      dockerfile: legacy/stage3/search/python_service/Dockerfile
     image: amodels/search-python-service:latest
     container_name: search-python
     restart: unless-stopped
@@ -98,14 +77,62 @@ services:
   trainer:
     build:
       context: ../..
-      dockerfile: training/Dockerfile
+      dockerfile: data/training/Dockerfile
     image: amodels/training-base:latest
     container_name: training-shell
     restart: unless-stopped
     command: ["sleep", "infinity"]
     working_dir: /workspace
     volumes:
-      - ../../stage3:/workspace/stage3:ro
+      - ../../tools/scripts:/workspace/scripts:rw
+      - ../../configs:/workspace/configs:rw
+      - ../../models:/workspace/models:rw
+      - ../../data:/workspace/data:rw
+      - ../../tools:/workspace/tools:rw
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
+
+  extract:
+    build:
+      context: ../..
+      dockerfile: services/extract/Dockerfile
+    image: amodels/extract:latest
+    container_name: extract-service
+    restart: unless-stopped
+    environment:
+      - PORT=8081
+      - GRPC_PORT=9090
+      - TRAINING_OUTPUT_DIR=/workspace/data/training/extracts
+    volumes:
+      - ../../data:/workspace/data:rw
+      - ../../logs:/workspace/logs:rw
+    ports:
+      - "8081:8081"
+      - "9090:9090"
+    depends_on:
+      - elasticsearch
+
+  graph:
+    build:
+      context: ../..
+      dockerfile: legacy/stage3/graph/Dockerfile
+    image: amodels/graph-server:latest
+    container_name: graph-server
+    restart: unless-stopped
+    environment:
+      - GRAPH_CONFIG=/workspace/config/graph.yaml
+      - NEO4J_URI=bolt://localhost:7687
+    volumes:
+      - ../../configs:/workspace/config:ro
+      - ../../artifacts/model-release:/workspace/assets:ro
+    ports:
+      - "8080:8080"
+      - "19080:19080"
+    depends_on:
+      - extract
     deploy:
       resources:
         reservations:
