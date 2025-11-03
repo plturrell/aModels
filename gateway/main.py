@@ -92,10 +92,34 @@ async def extract_ocr(payload: Dict[str, Any]) -> Any:
         raise HTTPException(status_code=502, detail=f"Extract service error: {e}")
 
 
+@app.post("/extract/schema-replication")
+async def extract_schema_replication(payload: Dict[str, Any]) -> Any:
+    try:
+        r = await client.post(f"{EXTRACT_URL}/schema-replication", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Extract service error: {e}")
+
+
 @app.post("/data/sql")
 async def data_sql(payload: Dict[str, Any]) -> Any:
     try:
         r = await client.post(f"{DATA_URL}/sql", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Data service error: {e}")
+
+
+@app.get("/telemetry/recent")
+async def telemetry_recent() -> Any:
+    try:
+        r = await client.get(f"{DATA_URL}/telemetry/recent")
         r.raise_for_status()
         return r.json()
     except httpx.HTTPStatusError as e:
