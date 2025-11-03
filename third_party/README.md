@@ -14,13 +14,10 @@ git submodule update --init --recursive
 - `Glean` → facebookincubator/Glean
 - `go-hdb` → SAP/go-hdb
 - `go-llama.cpp` → go-skynet/go-llama.cpp
+- `goose` → block/goose
 - `langchain` → langchain-ai/langchain
+- `langextract` → google/langextract
 - `langflow` → langflow-ai/langflow
 - `langgraph` → langchain-ai/langgraph
-
-### Pending confirmation
-
-- `goose` → please confirm upstream URL
-- `langextract` → please confirm upstream URL
 
 
