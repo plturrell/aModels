@@ -16,6 +16,7 @@ DATA_URL = os.getenv("DATA_URL", "http://localhost:9003")
 OPENSEARCH_URL = os.getenv("OPENSEARCH_URL", "http://localhost:9200")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localhost:8081")
+BROWSER_URL = os.getenv("BROWSER_URL", "http://localhost:8070")
 
 client = httpx.AsyncClient(timeout=30.0)
 
@@ -78,6 +79,12 @@ async def healthz() -> Dict[str, Any]:
         statuses["localai"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
     except Exception as e:
         statuses["localai"] = f"error:{e}"
+    # Layer4 Browser health (if service exposes /healthz)
+    try:
+        r = await client.get(f"{BROWSER_URL}/healthz")
+        statuses["layer4_browser"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
+    except Exception as e:
+        statuses["layer4_browser"] = f"error:{e}"
     return statuses
 
 
@@ -164,6 +171,18 @@ async def localai_chat(payload: Dict[str, Any]) -> Any:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except httpx.RequestError as e:
         raise HTTPException(status_code=502, detail=f"LocalAI error: {e}")
+
+
+@app.get("/browser/health")
+async def browser_health() -> Any:
+    try:
+        r = await client.get(f"{BROWSER_URL}/healthz")
+        r.raise_for_status()
+        return {"ok": True}
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Layer4 Browser error: {e}")
 
 
 @app.get("/redis/get")
