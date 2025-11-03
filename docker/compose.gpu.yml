@@ -1,0 +1,45 @@
+version: "3.9"
+
+# GPU override compose file
+# Usage:
+#   docker compose -f compose.yml -f compose.gpu.yml --profile gpu up --build
+
+profiles:
+  - gpu
+
+services:
+  # Example GPU-enabled LocalAI service (CUDA build)
+  localai:
+    image: quay.io/go-skynet/local-ai:latest-cublas-cuda12
+    profiles: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - DEBUG=false
+    ports:
+      - "8081:8080"
+    volumes:
+      - ../models:/models:ro
+      - localai_data:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
+    runtime: nvidia
+
+  # If you have a GPU-accelerated search inference server, add it here
+  # search-inference:
+  #   image: yourorg/search-inference:gpu
+  #   profiles: [gpu]
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - capabilities: ["gpu"]
+  #   runtime: nvidia
+
+volumes:
+  localai_data:
+
+

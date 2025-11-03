@@ -82,3 +82,13 @@ Notes:
 - Elasticsearch may require a smaller heap on small GPUs/hosts. You can export `ES_JAVA_OPTS="-Xms512m -Xmx512m"` before `docker compose up` or adjust it in `docker/brev/docker-compose.yml`.
 - The search service uses SQLite by default and Redis cache is optional; if no Redis is configured it falls back to in-memory cache.
 - The AgentSDK catalog/watch features are disabled in this standalone repo.
+
+## GPU Compose (gateway/local GPU services)
+
+To run the lightweight gateway stack with a GPU-accelerated LocalAI container:
+
+```bash
+cd docker
+# Base services + GPU override (enables the LocalAI CUDA service)
+docker compose -f compose.yml -f compose.gpu.yml --profile gpu up --build
+```
