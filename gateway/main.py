@@ -9,6 +9,9 @@ from fastapi.middleware.cors import CORSMiddleware
 GATEWAY_PORT = int(os.getenv("GATEWAY_PORT", "8000"))
 
 HANA_URL = os.getenv("HANA_URL", "http://localhost:8083")
+AGENTFLOW_URL = os.getenv("AGENTFLOW_URL", "http://localhost:9001")
+EXTRACT_URL = os.getenv("EXTRACT_URL", "http://localhost:9002")
+DATA_URL = os.getenv("DATA_URL", "http://localhost:9003")
 
 client = httpx.AsyncClient(timeout=30.0)
 
@@ -32,6 +35,24 @@ async def healthz() -> Dict[str, Any]:
         statuses["hana"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
     except Exception as e:
         statuses["hana"] = f"error:{e}"
+    # AgentFlow health
+    try:
+        r = await client.get(f"{AGENTFLOW_URL}/healthz")
+        statuses["agentflow"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
+    except Exception as e:
+        statuses["agentflow"] = f"error:{e}"
+    # Extract health
+    try:
+        r = await client.get(f"{EXTRACT_URL}/healthz")
+        statuses["extract"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
+    except Exception as e:
+        statuses["extract"] = f"error:{e}"
+    # Data health
+    try:
+        r = await client.get(f"{DATA_URL}/healthz")
+        statuses["data"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
+    except Exception as e:
+        statuses["data"] = f"error:{e}"
     return statuses
 
 
@@ -45,6 +66,42 @@ async def hana_sql(payload: Dict[str, Any]) -> Any:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except httpx.RequestError as e:
         raise HTTPException(status_code=502, detail=f"HANA service error: {e}")
+
+
+@app.post("/agentflow/run")
+async def agentflow_run(payload: Dict[str, Any]) -> Any:
+    try:
+        r = await client.post(f"{AGENTFLOW_URL}/run", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"AgentFlow service error: {e}")
+
+
+@app.post("/extract/ocr")
+async def extract_ocr(payload: Dict[str, Any]) -> Any:
+    try:
+        r = await client.post(f"{EXTRACT_URL}/ocr", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Extract service error: {e}")
+
+
+@app.post("/data/sql")
+async def data_sql(payload: Dict[str, Any]) -> Any:
+    try:
+        r = await client.post(f"{DATA_URL}/sql", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Data service error: {e}")
 
 
 if __name__ == "__main__":
