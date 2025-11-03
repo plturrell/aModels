@@ -89,9 +89,7 @@ services:
     restart: unless-stopped
     environment:
       - PYTHONUNBUFFERED=1
-    volumes:
-      - ../../stage3/search/python_service:/workspace:rw
-      - ../../models:/workspace/models:rw
+    # Using baked image contents; mounts disabled to avoid host bind issues
     ports:
       - "8091:8091"
     depends_on:
@@ -107,7 +105,7 @@ services:
     command: ["sleep", "infinity"]
     working_dir: /workspace
     volumes:
-      - ../..:/workspace
+      - ../../stage3:/workspace/stage3:ro
     deploy:
       resources:
         reservations:
