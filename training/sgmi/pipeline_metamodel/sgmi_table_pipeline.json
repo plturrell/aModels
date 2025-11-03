@@ -1,0 +1,14 @@
+[
+  {
+    "order_id": 1,
+    "customer_id": 42,
+    "amount": 13.37,
+    "notes": "first order"
+  },
+  {
+    "order_id": 2,
+    "customer_id": 108,
+    "amount": 7.50,
+    "notes": null
+  }
+]
