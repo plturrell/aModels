@@ -1,9 +1,8 @@
 module github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/glove
 
-go 1.24.0
+go 1.23
 
 require (
-	github.com/SAP/go-hdb v1.14.6
 	github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/sentencepiece v0.0.0-00010101000000-000000000000
 )
 

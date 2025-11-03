@@ -2,33 +2,25 @@
 ##
 ## LocalAI builder (VaultGemma server)
 ##
-FROM golang:1.22.6-alpine3.20 AS builder
-
-ARG UPSTREAM_REPO=https://github.com/plturrell/agenticAiETH.git
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /workspace
 
 RUN apk add --no-cache git build-base
 
-COPY . /workspace/export
-RUN git clone --depth 1 "${UPSTREAM_REPO}" /workspace/upstream
+# Copy the entire repo to maintain the directory structure needed for go.mod replace directives
+COPY . /workspace/src
 
-RUN mkdir -p /workspace/src && \
-    cp -R /workspace/export/localai /workspace/src/localai && \
-    cp -R /workspace/upstream/agenticAiETH_layer1_Blockchain /workspace/src/ && \
-    cp -R /workspace/upstream/agenticAiETH_layer4_AgentSDK /workspace/src/ && \
-    mkdir -p /workspace/src/agenticAiETH_layer4_Training/models && \
-    cp -R /workspace/export/models/glove /workspace/src/agenticAiETH_layer4_Training/models/glove && \
-    cp -R /workspace/export/models/sentencepiece /workspace/src/agenticAiETH_layer4_Training/models/sentencepiece && \
-    mkdir -p /workspace/src/agenticAiETH_layer4_Models && \
-    cp -R /workspace/upstream/agenticAiETH_layer4_Models/maths /workspace/src/agenticAiETH_layer4_Models/ && \
+# Setup the directory structure expected by go.mod replace directives
+RUN mkdir -p /workspace/src/models && \
     mkdir -p /workspace/src/third_party && \
-    cp -R /workspace/upstream/third_party/go-llama.cpp /workspace/src/third_party/ && \
-    cp -R /workspace/upstream/third_party/go-arrow /workspace/src/third_party/
+    if [ ! -d /workspace/src/third_party/go-llama.cpp ]; then \
+        echo "Warning: third_party/go-llama.cpp not found, may need to be provided" ; \
+    fi
 
 WORKDIR /workspace/src/localai
 
-ENV GOTOOLCHAIN=go1.22.6
+ENV GOTOOLCHAIN=local
 
 RUN go mod tidy
 RUN CGO_ENABLED=0 go build -o /workspace/build/vaultgemma ./cmd/vaultgemma-server

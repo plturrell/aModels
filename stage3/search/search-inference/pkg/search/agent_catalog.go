@@ -1,12 +1,10 @@
 package search
 
 import (
+	"fmt"
 	"slices"
 	"sync"
 	"time"
-
-	catalogprompt "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightcatalog/prompt"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightclient"
 )
 
 // AgentCatalog summarises the Agent SDK suite/tool inventory.
@@ -97,31 +95,40 @@ func (s *catalogState) Snapshot() (*AgentCatalog, time.Time) {
 	return s.catalog.Clone(), s.updatedAt
 }
 
-// EnrichCatalog converts an AgentCatalog into the shared prompt enrichment format
-// used throughout Layer4 services and dashboards.
-func EnrichCatalog(cat *AgentCatalog) catalogprompt.Enrichment {
+// Enrichment represents catalog enrichment data (stub for AgentSDK dependency)
+type Enrichment struct {
+	Summary         string
+	Prompt          string
+	Stats           EnrichmentStats
+	Implementations []interface{}
+	UniqueTools     []interface{}
+	StandaloneTools []interface{}
+}
+
+// EnrichmentStats represents statistics about the catalog
+type EnrichmentStats struct {
+	SuiteCount          int
+	UniqueToolCount     int
+	ImplementationCount int
+	StandaloneToolCount int
+	LastAttachmentSuite string
+	LastAttachmentAgo   string
+}
+
+// EnrichCatalog converts an AgentCatalog into enrichment format
+// AgentSDK dependency removed - returns basic enrichment
+func EnrichCatalog(cat *AgentCatalog) Enrichment {
 	if cat == nil {
-		return catalogprompt.Enrichment{}
+		return Enrichment{}
 	}
-	promptCatalog := catalogprompt.Catalog{
-		Suites: make([]flightclient.ServiceSuiteInfo, len(cat.Suites)),
-		Tools:  make([]flightclient.ToolInfo, len(cat.Tools)),
+	
+	stats := EnrichmentStats{
+		SuiteCount:      len(cat.Suites),
+		UniqueToolCount: len(cat.Tools),
 	}
-	for i, suite := range cat.Suites {
-		promptCatalog.Suites[i] = flightclient.ServiceSuiteInfo{
-			Name:           suite.Name,
-			ToolNames:      append([]string(nil), suite.ToolNames...),
-			ToolCount:      suite.ToolCount,
-			Implementation: suite.Implementation,
-			Version:        suite.Version,
-			AttachedAt:     suite.AttachedAt,
-		}
+	
+	return Enrichment{
+		Summary: fmt.Sprintf("%d suites, %d tools", len(cat.Suites), len(cat.Tools)),
+		Stats:   stats,
 	}
-	for i, tool := range cat.Tools {
-		promptCatalog.Tools[i] = flightclient.ToolInfo{
-			Name:        tool.Name,
-			Description: tool.Description,
-		}
-	}
-	return catalogprompt.Enrich(promptCatalog)
 }

@@ -1,11 +1,10 @@
 module github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Search/search-inference
 
-go 1.25.3
+go 1.23
 
 require (
-	github.com/SAP/go-hdb v1.14.6
 	github.com/elastic/go-elasticsearch/v8 v8.19.0
-	github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK v0.0.0
+	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/redis/go-redis/v9 v9.14.1
 )
 
@@ -18,15 +17,15 @@ require (
 	go.opentelemetry.io/otel v1.28.0 // indirect
 	go.opentelemetry.io/otel/metric v1.28.0 // indirect
 	go.opentelemetry.io/otel/trace v1.28.0 // indirect
-	golang.org/x/text v0.30.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 )
 
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK => ../../agenticAiETH_layer4_AgentSDK
+// Removed replace directives for unavailable agenticAiETH dependencies
+// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK => ../../agenticAiETH_layer4_AgentSDK
+// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI => ../../localai
+// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA => ../../agenticAiETH_layer4_HANA
+// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract => ../../agenticAiETH_layer4_Extract
+// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models => ../../agenticAiETH_layer4_Models
 
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI => ../../agenticAiETH_layer4_LocalAI
-
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA => ../../agenticAiETH_layer4_HANA
-
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract => ../../agenticAiETH_layer4_Extract
-
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models => ../../agenticAiETH_layer4_Models
+// Exclude HANA driver - only used with hana build tag, which requires Go 1.24+
+exclude github.com/SAP/go-hdb v1.14.9

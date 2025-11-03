@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightclient"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Search/search-inference/internal/catalog/flightcatalog"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Search/search-inference/pkg/search"
 )
@@ -99,19 +98,18 @@ func TestHandleAgentCatalogStats(t *testing.T) {
 }
 
 func sampleFlightCatalog() flightcatalog.Catalog {
-	now := time.Date(2025, 1, 2, 15, 4, 5, 0, time.UTC)
 	return flightcatalog.Catalog{
-		Suites: []flightclient.ServiceSuiteInfo{
+		Suites: []flightcatalog.ServiceSuiteInfo{
 			{
 				Name:           "SearchSuite",
 				ToolNames:      []string{"search_documents", "rerank_results"},
 				ToolCount:      2,
 				Implementation: "search-runtime",
 				Version:        "0.9.0",
-				AttachedAt:     now,
+				AttachedAt:     time.Date(2025, 1, 2, 15, 4, 5, 0, time.UTC).Format(time.RFC3339),
 			},
 		},
-		Tools: []flightclient.ToolInfo{
+		Tools: []flightcatalog.ToolInfo{
 			{Name: "search_documents", Description: "Execute semantic search"},
 			{Name: "rerank_results", Description: "Rerank search hits"},
 		},

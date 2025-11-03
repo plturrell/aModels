@@ -26,8 +26,10 @@ type vectorCache struct {
 }
 
 func newVectorCache(cfg RedisConfig, ttl time.Duration) (*vectorCache, error) {
+	// Redis is optional - if not provided, use in-memory fallback
 	if cfg.Addr == "" {
-		return nil, fmt.Errorf("redis address must be provided")
+		// Return nil cache which will use in-memory map fallback
+		return nil, nil
 	}
 
 	client := redis.NewClient(&redis.Options{
@@ -40,8 +42,10 @@ func newVectorCache(cfg RedisConfig, ttl time.Duration) (*vectorCache, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	if err := client.Ping(ctx).Err(); err != nil {
+		// If Redis connection fails, log warning but continue without cache
 		client.Close()
-		return nil, fmt.Errorf("connect redis: %w", err)
+		fmt.Printf("⚠️  Redis unavailable at %s, using in-memory cache: %v\n", cfg.Addr, err)
+		return nil, nil
 	}
 
 	if ttl <= 0 {

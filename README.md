@@ -43,7 +43,7 @@ The repo ships with starter Docker assets so you can test the graph runtime and 
 ```bash
 # 1. Clone the repo and restore heavy model assets (Stage 2)
 git clone https://github.com/plturrell/aModels.git
-cd aModels/dist/aModels-training
+cd aModels
 python3 tools/download_model_assets.py --tag weights-v1 --repo plturrell/aModels --output-dir .
 
 # 2. Build the containers (graph + LocalAI + search services + Elasticsearch + training shell)

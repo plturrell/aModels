@@ -11,8 +11,7 @@ import (
 	"strings"
 	"time"
 
-	catalogprompt "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightcatalog/prompt"
-	catalogwatch "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightcatalog/watch"
+	// Removed AgentSDK dependencies - catalog watching disabled
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Search/search-inference/internal/catalog/flightcatalog"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Search/search-inference/pkg/search"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Search/search-inference/pkg/server"
@@ -154,52 +153,10 @@ func main() {
 
 	flightAddr := strings.TrimSpace(os.Getenv("AGENTSDK_FLIGHT_ADDR"))
 	searchService.SetFlightAddr(flightAddr)
-	var (
-		catalogWatcher *catalogwatch.Watcher
-		watcherCancel  context.CancelFunc
-	)
+	// Catalog watching disabled - AgentSDK not available in standalone aModels repo
+	var catalogWatcher interface{} = nil
 	if flightAddr != "" {
-		watcher, err := catalogwatch.New(flightAddr, catalogwatch.WithLogger(log.Default()))
-		if err != nil {
-			log.Printf("⚠️  Failed to initialise catalog watcher for %s: %v", flightAddr, err)
-		} else {
-			watcher.Register(func(snapshot catalogwatch.Snapshot) {
-				converted := convertWatchCatalog(snapshot.Catalog)
-				searchService.UpdateAgentCatalog(converted)
-				convCopy := converted
-				logCatalogEvent("watcher_push", search.EnrichCatalog(&convCopy))
-			})
-			if snap, err := watcher.Refresh(context.Background()); err != nil {
-				log.Printf("⚠️  Initial catalog refresh failed: %v", err)
-			} else {
-				converted := convertWatchCatalog(snap.Catalog)
-				searchService.UpdateAgentCatalog(converted)
-				convCopy := converted
-				logCatalogEvent("watcher_initial", search.EnrichCatalog(&convCopy))
-			}
-			watcherCtx, cancel := context.WithCancel(context.Background())
-			watcherCancel = cancel
-			catalogWatcher = watcher
-			go watcher.Start(watcherCtx)
-		}
-	}
-	defer func() {
-		if watcherCancel != nil {
-			watcherCancel()
-		}
-	}()
-	if catalogWatcher == nil && flightAddr != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		cat, err := flightcatalog.Fetch(ctx, flightAddr)
-		cancel()
-		if err != nil {
-			log.Printf("⚠️  Failed to fetch Agent SDK catalog from %s: %v", flightAddr, err)
-		} else {
-			converted := convertCatalog(cat)
-			searchService.UpdateAgentCatalog(converted)
-			convCopy := converted
-			logCatalogEvent("fallback_initial", search.EnrichCatalog(&convCopy))
-		}
+		log.Printf("ℹ️  Catalog watching disabled (AgentSDK not available). AGENTSDK_FLIGHT_ADDR will be ignored.")
 	}
 
 	srv := server.NewSearchServer(searchService.Model(), searchService)
@@ -211,7 +168,7 @@ func main() {
 	http.HandleFunc("/v1/documents", srv.HandleAddDocument)
 	http.HandleFunc("/v1/documents/batch", srv.HandleAddDocuments)
 	http.HandleFunc("/v1/model", srv.HandleModelInfo)
-	http.HandleFunc("/v1/agent-catalog", handleAgentCatalog(searchService, catalogWatcher))
+	http.HandleFunc("/v1/agent-catalog", handleAgentCatalog(searchService))
 	http.HandleFunc("/v1/agent-catalog/stats", handleAgentCatalogStats(searchService))
 	http.HandleFunc("/", server.ServeStatic("web"))
 
@@ -222,45 +179,18 @@ func main() {
 	}
 }
 
-func handleAgentCatalog(service *search.SearchService, watcher *catalogwatch.Watcher) http.HandlerFunc {
+func handleAgentCatalog(service *search.SearchService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if service == nil {
 			http.Error(w, "search service not configured", http.StatusServiceUnavailable)
 			return
 		}
-		if watcher == nil {
-			if cached, updated := service.AgentCatalogSnapshot(); cached != nil {
-				logCatalogEvent("handler_cached", search.EnrichCatalog(cached))
-				sendSearchCatalogResponse(w, cached, updated)
-				return
-			}
-			http.Error(w, "agent catalog source not configured", http.StatusServiceUnavailable)
-			return
-		}
-
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		snapshot, err := watcher.Refresh(ctx)
-		cancel()
-		if err != nil {
-			if cached, updated := service.AgentCatalogSnapshot(); cached != nil {
-				logCatalogEvent("handler_cached", search.EnrichCatalog(cached))
-				sendSearchCatalogResponse(w, cached, updated)
-				return
-			}
-			http.Error(w, "failed to refresh agent catalog", http.StatusBadGateway)
-			return
-		}
-
-		converted := convertWatchCatalog(snapshot.Catalog)
-		service.UpdateAgentCatalog(converted)
+		// Agent catalog disabled - AgentSDK not available
 		if cached, updated := service.AgentCatalogSnapshot(); cached != nil {
-			logCatalogEvent("handler_refresh", search.EnrichCatalog(cached))
 			sendSearchCatalogResponse(w, cached, updated)
 			return
 		}
-		convCopy := converted
-		logCatalogEvent("handler_refresh", search.EnrichCatalog(&convCopy))
-		sendSearchCatalogResponse(w, &converted, time.Now().UTC())
+		http.Error(w, "agent catalog not available (AgentSDK dependency removed)", http.StatusServiceUnavailable)
 	}
 }
 
@@ -326,9 +256,7 @@ func handleAgentCatalogStats(service *search.SearchService) http.HandlerFunc {
 	}
 }
 
-func convertWatchCatalog(cat catalogwatch.Catalog) search.AgentCatalog {
-	return convertCatalog(flightcatalog.Catalog{Suites: cat.Suites, Tools: cat.Tools})
-}
+// convertWatchCatalog removed - was dependent on AgentSDK catalogwatch package
 
 func convertCatalog(cat flightcatalog.Catalog) search.AgentCatalog {
 	suites := make([]search.AgentSuite, 0, len(cat.Suites))
@@ -356,21 +284,13 @@ func convertCatalog(cat flightcatalog.Catalog) search.AgentCatalog {
 	return result
 }
 
-func logCatalogEvent(source string, enrichment catalogprompt.Enrichment) {
-	stats := enrichment.Stats
-	if stats.SuiteCount == 0 && stats.UniqueToolCount == 0 {
-		log.Printf("[catalog:%s] no suites/tools attached", source)
-		return
+func logCatalogEvent(source string, enrichment interface{}) {
+	// Catalog logging disabled - catalogprompt not available
+	if e, ok := enrichment.(interface{ Stats() interface{} }); ok {
+		log.Printf("[catalog:%s] enrichment stats available", source)
+	} else {
+		log.Printf("[catalog:%s] catalog event (enrichment disabled)", source)
 	}
-	log.Printf("[catalog:%s] suites=%d unique_tools=%d implementations=%d standalone=%d latest_suite=%s latest_age=%s",
-		source,
-		stats.SuiteCount,
-		stats.UniqueToolCount,
-		stats.ImplementationCount,
-		stats.StandaloneToolCount,
-		stats.LastAttachmentSuite,
-		stats.LastAttachmentAgo,
-	)
 }
 
 func respondJSON(w http.ResponseWriter, data any) {

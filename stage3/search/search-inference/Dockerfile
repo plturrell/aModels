@@ -1,29 +1,23 @@
 # syntax=docker/dockerfile:1.6
-FROM golang:1.22.6-alpine3.20 AS builder
-
-ARG UPSTREAM_REPO=https://github.com/plturrell/agenticAiETH.git
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /workspace
 
-RUN apk add --no-cache git build-base
+# SQLite requires CGO, so we need gcc and musl-dev
+RUN apk add --no-cache git build-base gcc musl-dev sqlite-dev
 
-COPY . /workspace/export
-RUN git clone --depth 1 "${UPSTREAM_REPO}" /workspace/upstream
+# Copy the entire repo
+COPY . /workspace/src
 
-RUN mkdir -p /workspace/src && \
-    cp -R /workspace/export/stage3/search/search-inference /workspace/src/search-inference && \
-    cp -R /workspace/upstream/agenticAiETH_layer4_AgentSDK /workspace/src/ && \
-    cp -R /workspace/upstream/agenticAiETH_layer4_LocalAI /workspace/src/ && \
-    cp -R /workspace/upstream/agenticAiETH_layer4_HANA /workspace/src/ && \
-    cp -R /workspace/upstream/agenticAiETH_layer4_Extract /workspace/src/ && \
-    cp -R /workspace/upstream/agenticAiETH_layer4_Models /workspace/src/
+WORKDIR /workspace/src/stage3/search/search-inference
 
-WORKDIR /workspace/src/search-inference
+ENV GOTOOLCHAIN=local
+ENV CGO_ENABLED=1
+ENV GOWORK=off
 
-ENV GOTOOLCHAIN=go1.22.6
-
+# SQLite needs CGO enabled
 RUN go mod tidy
-RUN CGO_ENABLED=0 go build -o /workspace/build/search-inference ./cmd/search-inference
+RUN cd cmd/search-server && go build -o /workspace/build/search-inference .
 
 FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
 
@@ -31,6 +25,11 @@ ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 
 WORKDIR /workspace
+
+# Install SQLite runtime libraries
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libsqlite3-0 \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /workspace/build/search-inference /usr/local/bin/search-inference
 

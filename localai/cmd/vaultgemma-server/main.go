@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	catalogwatch "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightcatalog/watch"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/internal/catalog/flightcatalog"
+	// Catalog watching requires AgentSDK which is not available in aModels repo
+	// Removed dependency on agenticAiETH_layer4_AgentSDK
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/domain"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/ai"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/gguf"
@@ -182,43 +182,9 @@ func main() {
 
 	flightAddr := strings.TrimSpace(os.Getenv("AGENTSDK_FLIGHT_ADDR"))
 	vgServer.SetFlightAddr(flightAddr)
-	var (
-		catalogWatcher *catalogwatch.Watcher
-		watcherCancel  context.CancelFunc
-	)
+	// Catalog watching disabled - AgentSDK not available in standalone aModels repo
 	if flightAddr != "" {
-		watcher, err := catalogwatch.New(flightAddr, catalogwatch.WithLogger(log.Default()))
-		if err != nil {
-			log.Printf("⚠️  Failed to initialise catalog watcher for %s: %v", flightAddr, err)
-		} else {
-			watcher.Register(func(snapshot catalogwatch.Snapshot) {
-				vgServer.UpdateAgentCatalog(convertCatalog(snapshot.Catalog))
-			})
-			if snap, err := watcher.Refresh(context.Background()); err != nil {
-				log.Printf("⚠️  Initial catalog refresh failed: %v", err)
-			} else {
-				vgServer.UpdateAgentCatalog(convertCatalog(snap.Catalog))
-			}
-			watcherCtx, cancel := context.WithCancel(context.Background())
-			watcherCancel = cancel
-			catalogWatcher = watcher
-			go watcher.Start(watcherCtx)
-		}
-	}
-	defer func() {
-		if watcherCancel != nil {
-			watcherCancel()
-		}
-	}()
-	if catalogWatcher == nil && flightAddr != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		cat, err := flightcatalog.Fetch(ctx, flightAddr)
-		cancel()
-		if err != nil {
-			log.Printf("⚠️  Failed to fetch Agent SDK catalog from %s: %v", flightAddr, err)
-		} else {
-			vgServer.UpdateAgentCatalog(convertCatalog(cat))
-		}
+		log.Printf("ℹ️  Catalog watching disabled (AgentSDK not available). AGENTSDK_FLIGHT_ADDR will be ignored.")
 	}
 
 	// Setup routes
@@ -228,7 +194,7 @@ func main() {
 	http.HandleFunc("/v1/models", server.EnableCORS(vgServer.HandleModels))
 	http.HandleFunc("/v1/domains", server.EnableCORS(vgServer.HandleListDomains))
 	http.HandleFunc("/v1/domain-registry", server.EnableCORS(vgServer.HandleDomainRegistry))
-	http.HandleFunc("/v1/agent-catalog", server.EnableCORS(handleAgentCatalog(vgServer, catalogWatcher)))
+	http.HandleFunc("/v1/agent-catalog", server.EnableCORS(handleAgentCatalog(vgServer)))
 	http.HandleFunc("/health", server.EnableCORS(vgServer.HandleHealth))
 	http.HandleFunc("/metrics", server.EnableCORS(vgServer.HandleMetrics))
 
@@ -262,36 +228,14 @@ func main() {
 	}
 }
 
-func handleAgentCatalog(vgServer *server.VaultGemmaServer, watcher *catalogwatch.Watcher) http.HandlerFunc {
+func handleAgentCatalog(vgServer *server.VaultGemmaServer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if watcher == nil {
-			if cached, updated := vgServer.AgentCatalogSnapshot(); cached != nil {
-				sendAgentCatalogResponse(w, cached, updated)
-				return
-			}
-			http.Error(w, "agent catalog source not configured", http.StatusServiceUnavailable)
-			return
-		}
-
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		snapshot, err := watcher.Refresh(ctx)
-		cancel()
-		if err != nil {
-			if cached, updated := vgServer.AgentCatalogSnapshot(); cached != nil {
-				sendAgentCatalogResponse(w, cached, updated)
-				return
-			}
-			http.Error(w, fmt.Sprintf("failed to refresh agent catalog: %v", err), http.StatusBadGateway)
-			return
-		}
-
-		converted := convertCatalog(snapshot.Catalog)
-		vgServer.UpdateAgentCatalog(converted)
+		// Agent catalog disabled - AgentSDK not available
 		if cached, updated := vgServer.AgentCatalogSnapshot(); cached != nil {
 			sendAgentCatalogResponse(w, cached, updated)
 			return
 		}
-		sendAgentCatalogResponse(w, &converted, time.Now().UTC())
+		http.Error(w, "agent catalog not available (AgentSDK dependency removed)", http.StatusServiceUnavailable)
 	}
 }
 
@@ -310,31 +254,7 @@ func sendAgentCatalogResponse(w http.ResponseWriter, cat *server.AgentCatalog, u
 	respondJSON(w, response)
 }
 
-func convertCatalog(cat flightcatalog.Catalog) server.AgentCatalog {
-	suites := make([]server.AgentSuite, 0, len(cat.Suites))
-	for _, suite := range cat.Suites {
-		suites = append(suites, server.AgentSuite{
-			Name:           suite.Name,
-			ToolNames:      append([]string(nil), suite.ToolNames...),
-			ToolCount:      int(suite.ToolCount),
-			Implementation: suite.Implementation,
-			Version:        suite.Version,
-			AttachedAt:     suite.AttachedAt,
-		})
-	}
-
-	tools := make([]server.AgentTool, 0, len(cat.Tools))
-	for _, tool := range cat.Tools {
-		tools = append(tools, server.AgentTool{
-			Name:        tool.Name,
-			Description: tool.Description,
-		})
-	}
-
-	result := server.AgentCatalog{Suites: suites, Tools: tools}
-	result.Normalize()
-	return result
-}
+// convertCatalog removed - was dependent on AgentSDK flightcatalog package
 
 func respondJSON(w http.ResponseWriter, data any) {
 	w.Header().Set("Content-Type", "application/json")

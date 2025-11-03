@@ -1,6 +1,6 @@
 module github.com/langchain-ai/langgraph-go
 
-go 1.25.3
+go 1.23
 
 require (
 	github.com/ethereum/go-ethereum v1.16.5

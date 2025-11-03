@@ -1,17 +1,13 @@
 module github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI
 
-go 1.25.3
+go 1.23
 
 require (
-	github.com/SAP/go-hdb v1.14.6
-	github.com/ethereum/go-ethereum v1.16.5
 	github.com/go-skynet/go-llama.cpp v0.0.0-20240314183750-6a8041ef6b46
-	github.com/plturrell/agenticAiETH/agenticAiETH_layer1_Blockchain v0.0.0
-	github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths v0.0.0
 	github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/glove v0.0.0-00010101000000-000000000000
 	github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/sentencepiece v0.0.0-00010101000000-000000000000
-	golang.org/x/time v0.14.0
-	google.golang.org/grpc v1.76.0
+	golang.org/x/time v0.5.0
+	google.golang.org/grpc v1.70.0
 	google.golang.org/protobuf v1.36.10
 )
 
@@ -33,23 +29,23 @@ require (
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
 	github.com/tklauser/numcpus v0.10.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	golang.org/x/crypto v0.43.0 // indirect
-	golang.org/x/net v0.46.0 // indirect
-	golang.org/x/sync v0.17.0 // indirect
-	golang.org/x/sys v0.37.0 // indirect
-	golang.org/x/text v0.30.0 // indirect
+	golang.org/x/crypto v0.22.0 // indirect
+	golang.org/x/net v0.24.0 // indirect
+	golang.org/x/sync v0.6.0 // indirect
+	golang.org/x/sys v0.19.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 	gonum.org/v1/gonum v0.16.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250825161204-c5933d9347a5 // indirect
 )
 
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer1_Blockchain => ../agenticAiETH_layer1_Blockchain
+// Removed replace directives for unavailable agenticAiETH dependencies
+// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer1_Blockchain => ../agenticAiETH_layer1_Blockchain
 
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/glove => ../agenticAiETH_layer4_Training/models/glove
+replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/glove => ../models/glove
 
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/sentencepiece => ../agenticAiETH_layer4_Training/models/sentencepiece
+replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/sentencepiece => ../models/sentencepiece
 
-replace github.com/go-skynet/go-llama.cpp => ../third_party/go-llama.cpp
+// Removed - third_party not available: replace github.com/go-skynet/go-llama.cpp => ../third_party/go-llama.cpp
 
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK => ../agenticAiETH_layer4_AgentSDK
-
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths => ../agenticAiETH_layer4_Models/maths
+// Removed - AgentSDK not available: replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK => ../agenticAiETH_layer4_AgentSDK
+// Removed - maths not needed: replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths => ../agenticAiETH_layer4_Models/maths

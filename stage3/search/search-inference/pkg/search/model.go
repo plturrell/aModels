@@ -2,24 +2,19 @@ package search
 
 import (
 	"context"
-	"fmt"
-
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/ai"
 )
 
 // SearchModel wraps VaultGemma for embedding and rerank tasks
 // Reuses the baseline weights from training workspace
+// Note: LocalAI models package not available - using stub implementation
 
 type SearchModel struct {
-	baseModel *ai.VaultGemma
+	baseModel interface{} // Stub - LocalAI not available in standalone repo
 }
 
 func LoadSearchModel(modelPath string) (*SearchModel, error) {
-	vg, err := ai.LoadVaultGemmaFromSafetensors(modelPath)
-	if err != nil {
-		return nil, fmt.Errorf("load vaultgemma: %w", err)
-	}
-	return &SearchModel{baseModel: vg}, nil
+	// LocalAI dependency removed - return stub model
+	return &SearchModel{baseModel: nil}, nil
 }
 
 func (s *SearchModel) Close() error {
