@@ -20,15 +20,15 @@ jobs:
       matrix:
         include:
           - name: search-inference
-            dockerfile: stage3/search/search-inference/Dockerfile
+            dockerfile: services/search/search-inference/Dockerfile
           - name: localai
-            dockerfile: localai/Dockerfile
+            dockerfile: services/localai/Dockerfile
           - name: search-python
-            dockerfile: stage3/search/python_service/Dockerfile
+            dockerfile: services/search/python_service/Dockerfile
           - name: gateway
-            dockerfile: gateway/Dockerfile
+            dockerfile: services/gateway/Dockerfile
           - name: hana-service
-            dockerfile: hana/Dockerfile
+            dockerfile: services/hana/Dockerfile
     steps:
       - uses: actions/checkout@v4
       - name: Log in to GHCR
