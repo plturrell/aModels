@@ -31,15 +31,15 @@ WORKDIR /app/services/extract
 # Download dependencies
 RUN go mod download
 
-# Install protoc and regenerate protobuf files
+# Copy the rest of the source code
+COPY services/extract/ .
+
+# Install protoc and regenerate protobuf files (after source is copied)
 RUN apk add --no-cache protobuf-dev protoc && \
     go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10 && \
     go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest && \
     mkdir -p gen/extractpb && \
     protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto
-
-# Copy the rest of the source code
-COPY services/extract/ .
 
 # Tidy and build
 RUN go mod tidy
