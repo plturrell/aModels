@@ -16,10 +16,13 @@ services:
     environment:
       - HANA_URL=http://hana:8083
       - GATEWAY_PORT=8000
+      - DEEPAGENTS_URL=http://deepagents:9004
+      - LOCALAI_URL=http://localai:8080
     ports:
       - "8000:8000"
     depends_on:
       - hana
+      - deepagents
 
   postgres:
     image: ankane/pgvector:latest
