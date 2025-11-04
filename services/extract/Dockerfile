@@ -41,14 +41,15 @@ RUN apk add --no-cache protobuf-dev protoc && \
     mkdir -p gen/extractpb && \
     protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto
 
-# The protobuf package is in the same module, so we need to ensure go.mod is valid
-# First, try to get the package to update go.mod automatically
-RUN go get -d github.com/plturrell/aModels/services/extract/gen/extractpb@v0.0.0 || true
+# Manually update go.mod to include the local protobuf package
+# Add it as a require with replace pointing to local directory
+RUN echo "require github.com/plturrell/aModels/services/extract/gen/extractpb v0.0.0" >> go.mod && \
+    echo "replace github.com/plturrell/aModels/services/extract/gen/extractpb => ./gen/extractpb" >> go.mod
 
-# Then run go mod tidy to update dependencies (ignore errors about missing remote package)
-RUN go mod tidy 2>&1 | grep -v "does not contain package" || true
+# Update dependencies
+RUN go mod tidy
 
-# Build (go.mod should be valid now)
+# Build (go.mod is now properly configured)
 RUN go build -o /server .
 
 # Final stage
