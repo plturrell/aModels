@@ -102,6 +102,14 @@ func (p *PostgresConfigStore) GetAllDomainConfigs(ctx context.Context) (map[stri
 	return configs, rows.Err()
 }
 
+// CountDomainConfigs returns the count of enabled domain configs (for logging)
+func (p *PostgresConfigStore) CountDomainConfigs(ctx context.Context) (int, error) {
+	query := `SELECT COUNT(*) FROM domain_configs WHERE enabled = true`
+	var count int
+	err := p.db.QueryRowContext(ctx, query).Scan(&count)
+	return count, err
+}
+
 // SaveDomainConfig saves or updates a domain configuration
 func (p *PostgresConfigStore) SaveDomainConfig(ctx context.Context, domainName string, config *DomainConfig, trainingRunID, modelVersion string, metrics map[string]interface{}) error {
 	configJSON, err := json.Marshal(config)
