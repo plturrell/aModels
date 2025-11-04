@@ -250,6 +250,9 @@ func main() {
 	mux.HandleFunc("/knowledge-graph", server.handleGraph) // Main knowledge graph processing endpoint
 	mux.HandleFunc("/graph", server.handleGraph)          // Legacy alias for backward compatibility
 	mux.HandleFunc("/knowledge-graph/query", server.handleNeo4jQuery) // Neo4j Cypher query endpoint
+	mux.HandleFunc("/workflow/petri-to-langgraph", server.handlePetriNetToLangGraph) // Convert Petri net to LangGraph
+	mux.HandleFunc("/workflow/petri-to-agentflow", server.handlePetriNetToAgentFlow) // Convert Petri net to AgentFlow
+	mux.HandleFunc("/knowledge-graph/queries", server.handleGraphQueryHelpers) // Get common graph query helpers
 	mux.HandleFunc("/catalog/projects", server.handleGetProjects)
 	mux.HandleFunc("/catalog/projects/add", server.handleAddProject)
 	mux.HandleFunc("/catalog/systems", server.handleGetSystems)
@@ -1370,6 +1373,151 @@ func (s *extractServer) handleNeo4jQuery(w http.ResponseWriter, r *http.Request)
 	}
 
 	handlers.WriteJSON(w, http.StatusOK, result)
+}
+
+// handlePetriNetToLangGraph converts a Petri net from catalog to LangGraph workflow.
+func (s *extractServer) handlePetriNetToLangGraph(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+
+	var req struct {
+		PetriNetID string `json:"petri_net_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("failed to decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Get Petri net from catalog
+	if s.catalog == nil {
+		http.Error(w, "catalog not available", http.StatusInternalServerError)
+		return
+	}
+
+	s.catalog.mu.RLock()
+	petriNetData, exists := s.catalog.PetriNets[req.PetriNetID]
+	s.catalog.mu.RUnlock()
+
+	if !exists {
+		handlers.WriteJSON(w, http.StatusNotFound, map[string]any{
+			"error": fmt.Sprintf("Petri net '%s' not found in catalog", req.PetriNetID),
+		})
+		return
+	}
+
+	// Convert catalog data to PetriNet struct
+	petriNetJSON, err := json.Marshal(petriNetData)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to marshal petri net: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	var petriNet PetriNet
+	if err := json.Unmarshal(petriNetJSON, &petriNet); err != nil {
+		http.Error(w, fmt.Sprintf("failed to unmarshal petri net: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Convert to LangGraph workflow
+	converter := NewWorkflowConverter(s.logger)
+	langGraphWorkflow := converter.ConvertPetriNetToLangGraph(&petriNet)
+
+	handlers.WriteJSON(w, http.StatusOK, langGraphWorkflow)
+}
+
+// handlePetriNetToAgentFlow converts a Petri net from catalog to AgentFlow workflow.
+func (s *extractServer) handlePetriNetToAgentFlow(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+
+	var req struct {
+		PetriNetID string `json:"petri_net_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("failed to decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Get Petri net from catalog
+	if s.catalog == nil {
+		http.Error(w, "catalog not available", http.StatusInternalServerError)
+		return
+	}
+
+	s.catalog.mu.RLock()
+	petriNetData, exists := s.catalog.PetriNets[req.PetriNetID]
+	s.catalog.mu.RUnlock()
+
+	if !exists {
+		handlers.WriteJSON(w, http.StatusNotFound, map[string]any{
+			"error": fmt.Sprintf("Petri net '%s' not found in catalog", req.PetriNetID),
+		})
+		return
+	}
+
+	// Convert catalog data to PetriNet struct
+	petriNetJSON, err := json.Marshal(petriNetData)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to marshal petri net: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	var petriNet PetriNet
+	if err := json.Unmarshal(petriNetJSON, &petriNet); err != nil {
+		http.Error(w, fmt.Sprintf("failed to unmarshal petri net: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Convert to AgentFlow workflow
+	converter := NewWorkflowConverter(s.logger)
+	agentFlowWorkflow := converter.ConvertPetriNetToAgentFlow(&petriNet)
+
+	handlers.WriteJSON(w, http.StatusOK, agentFlowWorkflow)
+}
+
+// handleGraphQueryHelpers returns common graph query helpers.
+func (s *extractServer) handleGraphQueryHelpers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	helpers := NewGraphQueryHelpers(s.logger)
+	
+	queries := map[string]string{
+		"petri_nets":              helpers.QueryPetriNets(),
+		"petri_net_transitions":   helpers.QueryPetriNetTransitions("${petri_net_id}"),
+		"workflow_paths":         helpers.QueryWorkflowPaths("${petri_net_id}"),
+		"transaction_tables":      helpers.QueryTransactionTables(),
+		"processing_sequences":    helpers.QueryProcessingSequences(),
+		"table_classifications":   helpers.QueryTableClassifications(),
+		"code_parameters":        helpers.QueryCodeParameters(""),
+		"hardcoded_lists":         helpers.QueryHardcodedLists(),
+		"testing_endpoints":       helpers.QueryTestingEndpoints(),
+		"advanced_extraction_summary": helpers.QueryAdvancedExtractionSummary(),
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{
+		"queries": queries,
+		"usage": map[string]string{
+			"petri_nets":              "Find all Petri nets in the knowledge graph",
+			"petri_net_transitions":   "Find transitions with SQL subprocesses (replace ${petri_net_id})",
+			"workflow_paths":          "Find workflow paths in a Petri net (replace ${petri_net_id})",
+			"transaction_tables":      "Find all transaction tables",
+			"processing_sequences":    "Find table processing sequences",
+			"table_classifications":   "Find all table classifications",
+			"code_parameters":         "Find code parameters (optionally filter by source type)",
+			"hardcoded_lists":          "Find hardcoded lists/constants",
+			"testing_endpoints":        "Find testing endpoints",
+			"advanced_extraction_summary": "Get summary of advanced extraction results",
+		},
+	})
 }
 
 // --- /catalog/information-systems ---

@@ -569,6 +569,97 @@ class MetadataEntropyPatternLearner:
         return self.learned_patterns
 
 
+class WorkflowPatternLearner:
+    """Learns patterns from Petri nets and workflow structures."""
+    
+    def __init__(self):
+        self.workflow_patterns = defaultdict(Counter)
+        self.job_dependencies = defaultdict(list)
+        self.sql_patterns = defaultdict(Counter)
+        self.learned_patterns = {}
+    
+    def learn_from_petri_net(
+        self,
+        petri_net: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Learn workflow patterns from a Petri net structure.
+        
+        Args:
+            petri_net: Petri net structure from catalog or knowledge graph
+        
+        Returns:
+            Dictionary with learned patterns:
+            - workflow_patterns: Common workflow structures
+            - job_dependencies: Job dependency patterns
+            - sql_patterns: SQL query patterns in workflows
+        """
+        logger.info(f"Learning workflow patterns from Petri net: {petri_net.get('id', 'unknown')}")
+        
+        transitions = petri_net.get("transitions", [])
+        arcs = petri_net.get("arcs", [])
+        places = petri_net.get("places", [])
+        
+        # Learn job dependency patterns
+        for arc in arcs:
+            source = arc.get("source", "")
+            target = arc.get("target", "")
+            arc_type = arc.get("type", "")
+            
+            if arc_type == "place_to_transition":
+                # Find the transition this arc points to
+                for transition in transitions:
+                    if transition.get("id") == target:
+                        job_name = transition.get("label", "")
+                        if job_name:
+                            self.job_dependencies[job_name].append(source)
+        
+        # Learn SQL patterns from subprocesses
+        for transition in transitions:
+            subprocesses = transition.get("sub_processes", [])
+            for subprocess in subprocesses:
+                if subprocess.get("type") == "sql":
+                    sql_content = subprocess.get("content", "")
+                    if sql_content:
+                        # Extract SQL operation type
+                        sql_upper = sql_content.upper()
+                        if "SELECT" in sql_upper:
+                            self.sql_patterns["SELECT"] += 1
+                        if "INSERT" in sql_upper:
+                            self.sql_patterns["INSERT"] += 1
+                        if "UPDATE" in sql_upper:
+                            self.sql_patterns["UPDATE"] += 1
+                        if "DELETE" in sql_upper:
+                            self.sql_patterns["DELETE"] += 1
+        
+        # Learn workflow patterns (place -> transition -> place)
+        workflow_sequences = []
+        for arc in arcs:
+            if arc.get("type") == "place_to_transition":
+                source_place = arc.get("source", "")
+                target_transition = arc.get("target", "")
+                
+                # Find follow-up arcs
+                for next_arc in arcs:
+                    if next_arc.get("type") == "transition_to_place" and next_arc.get("source") == target_transition:
+                        target_place = next_arc.get("target", "")
+                        sequence = f"{source_place} -> {target_transition} -> {target_place}"
+                        workflow_sequences.append(sequence)
+                        self.workflow_patterns[sequence] += 1
+        
+        self.learned_patterns = {
+            "workflow_patterns": dict(self.workflow_patterns.most_common(20)),
+            "job_dependencies": {k: v for k, v in self.job_dependencies.items()},
+            "sql_patterns": dict(self.sql_patterns),
+            "workflow_sequences": workflow_sequences[:20],
+            "total_transitions": len(transitions),
+            "total_arcs": len(arcs),
+        }
+        
+        logger.info(f"Learned workflow patterns: {len(self.workflow_patterns)} patterns, {len(self.job_dependencies)} job dependencies")
+        
+        return self.learned_patterns
+
+
 class PatternLearningEngine:
     """Main engine for learning patterns from knowledge graphs and Glean data."""
     

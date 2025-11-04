@@ -12,6 +12,7 @@ from .extract_client import ExtractServiceClient
 from .pipeline import TrainingPipeline
 from .pattern_learning import (
     PatternLearningEngine,
+    WorkflowPatternLearner,
     ColumnTypePatternLearner,
     RelationshipPatternLearner,
     MetadataEntropyPatternLearner,
@@ -34,6 +35,7 @@ __all__ = [
     "ExtractServiceClient",
     "TrainingPipeline",
     "PatternLearningEngine",
+    "WorkflowPatternLearner",
     "ColumnTypePatternLearner",
     "RelationshipPatternLearner",
     "MetadataEntropyPatternLearner",
