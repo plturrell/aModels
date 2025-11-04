@@ -140,6 +140,10 @@ services:
       - NEO4J_USERNAME=neo4j
       - NEO4J_PASSWORD=amodels123
       - POSTGRES_CATALOG_DSN=postgresql://postgres:postgres@postgres:5432/amodels?sslmode=disable
+      # DeepAgents is enabled by default (10/10 integration)
+      # Set DEEPAGENTS_ENABLED=false to disable
+      - DEEPAGENTS_ENABLED=${DEEPAGENTS_ENABLED:-true}
+      - DEEPAGENTS_URL=${DEEPAGENTS_URL:-http://deepagents-service:9004}
     volumes:
       - ../../data:/workspace/data:rw
       - ../../logs:/workspace/logs:rw
@@ -178,6 +182,35 @@ services:
         reservations:
           devices:
             - capabilities: ["gpu"]
+
+  deepagents:
+    build:
+      context: ../..
+      dockerfile: services/deepagents/Dockerfile
+    image: amodels/deepagents:latest
+    container_name: deepagents-service
+    restart: unless-stopped
+    environment:
+      - DEEPAGENTS_PORT=9004
+      # Service URLs for DeepAgents tools
+      - EXTRACT_SERVICE_URL=http://extract-service:8082
+      - AGENTFLOW_SERVICE_URL=http://agentflow-service:8001
+      - GRAPH_SERVICE_URL=http://graph-server:8080
+      # Model Configuration (optional - can use LOCALAI_URL as fallback)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LOCALAI_URL=http://localai:8081
+    ports:
+      - "9004:9004"
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9004/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 networks:
   default:
