@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/internal/httprr"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/llms/openai"
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/llms/stub"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/prompts"
 )
 

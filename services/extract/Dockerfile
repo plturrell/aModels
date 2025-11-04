@@ -11,6 +11,8 @@ COPY services/extract/go.mod ./services/extract/
 
 # Copy submodule dependencies
 COPY infrastructure/third_party/sql-parser-go ./infrastructure/third_party/sql-parser-go/
+COPY infrastructure/third_party/go-arrow ./infrastructure/third_party/go-arrow/
+COPY infrastructure/third_party/orchestration ./infrastructure/third_party/orchestration/
 
 # Copy other module dependencies (matching replace directive paths)
 # From services/extract: ../postgres -> services/postgres
@@ -32,7 +34,8 @@ RUN go mod download
 # Copy the rest of the source code
 COPY services/extract/ .
 
-# Build the application (build entire package, not just main.go)
+# Tidy and build
+RUN go mod tidy
 RUN go build -o /server .
 
 # Final stage

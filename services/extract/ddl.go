@@ -93,7 +93,7 @@ func ddlToGraph(parsed ddlParseResult) ([]Node, []Edge) {
 
 			columnID := fmt.Sprintf("%s.%s", tableID, column.Name)
 			columnProps := map[string]any{
-				"type":     column.Type,
+				"type":     normalizeColumnType(column.Type),
 				"nullable": column.Nullable,
 			}
 			if column.Default != nil {

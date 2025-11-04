@@ -736,6 +736,12 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		s.logger.Printf("normalization warning: %s", warning)
 	}
 
+	// Validate graph before persistence
+	validationWarnings := validateGraph(nodes, edges)
+	for _, warning := range validationWarnings {
+		s.logger.Printf("validation warning: %s", warning)
+	}
+
 	columnDtypes := make([]string, 0)
 	for _, node := range nodes {
 		if node.Type != "column" || node.Props == nil {
@@ -1157,10 +1163,14 @@ func (p *columnProfile) toProps() map[string]any {
 	case 0:
 		props["type"] = "unknown"
 	case 1:
-		props["type"] = typeKeys[0]
+		props["type"] = normalizeColumnType(typeKeys[0])
 	default:
 		props["type"] = "mixed"
-		props["types"] = typeKeys
+		normalizedTypes := make([]string, len(typeKeys))
+		for i, t := range typeKeys {
+			normalizedTypes[i] = normalizeColumnType(t)
+		}
+		props["types"] = normalizedTypes
 	}
 
 	nullable := p.nullCount > 0 || (p.totalRows > 0 && p.presentCount < p.totalRows)
@@ -1194,6 +1204,96 @@ func inferJSONType(value any) string {
 	default:
 		return fmt.Sprintf("%T", value)
 	}
+}
+
+// validateGraph performs validation checks on the graph before persistence
+func validateGraph(nodes []Node, edges []Edge) []string {
+	var warnings []string
+
+	// Check for orphan columns
+	tableMap := make(map[string]bool)
+	columnMap := make(map[string]bool)
+	hasColumnEdges := make(map[string]bool)
+
+	for _, node := range nodes {
+		if node.Type == "table" {
+			tableMap[node.ID] = true
+		} else if node.Type == "column" {
+			columnMap[node.ID] = true
+		}
+	}
+
+	for _, edge := range edges {
+		if edge.Label == "HAS_COLUMN" && columnMap[edge.TargetID] {
+			hasColumnEdges[edge.TargetID] = true
+		}
+	}
+
+	orphanCount := 0
+	for colID := range columnMap {
+		if !hasColumnEdges[colID] {
+			orphanCount++
+		}
+	}
+
+	if orphanCount > 0 {
+		warnings = append(warnings, fmt.Sprintf("validation: %d orphan columns found (missing HAS_COLUMN edges)", orphanCount))
+	}
+
+	// Check for orphan edges (edges pointing to non-existent nodes)
+	nodeMap := make(map[string]bool)
+	for _, node := range nodes {
+		nodeMap[node.ID] = true
+	}
+
+	orphanEdgeCount := 0
+	for _, edge := range edges {
+		if !nodeMap[edge.SourceID] || !nodeMap[edge.TargetID] {
+			orphanEdgeCount++
+		}
+	}
+
+	if orphanEdgeCount > 0 {
+		warnings = append(warnings, fmt.Sprintf("validation: %d orphan edges found (pointing to non-existent nodes)", orphanEdgeCount))
+	}
+
+	return warnings
+}
+
+// normalizeColumnType normalizes column type names to a consistent format
+func normalizeColumnType(rawType string) string {
+	rawType = strings.ToLower(strings.TrimSpace(rawType))
+	if rawType == "" {
+		return "unknown"
+	}
+
+	// Normalize common variations
+	typeMap := map[string]string{
+		"string":  "string",
+		"varchar": "string",
+		"text":    "string",
+		"char":    "string",
+		"decimal": "decimal",
+		"numeric": "decimal",
+		"number":  "decimal",
+		"float":   "decimal",
+		"double":  "decimal",
+		"int":     "integer",
+		"bigint":  "integer",
+		"integer": "integer",
+		"smallint": "integer",
+		"tinyint": "integer",
+		"date":    "date",
+		"timestamp": "timestamp",
+		"datetime": "timestamp",
+		"boolean": "boolean",
+		"bool":    "boolean",
+	}
+
+	if normalized, ok := typeMap[rawType]; ok {
+		return normalized
+	}
+	return rawType
 }
 
 // --- langextract helpers ---
@@ -1491,11 +1591,11 @@ func (s *extractServer) generateTableExtract(ctx context.Context, input tableGen
 	}
 
 	// Optional orchestration integration:
-	orchChain, err := ch.GetChainByName("relational_table_extraction")
-	if err != nil {
-		// Log but don't fail - orchestration is optional
-		s.logger.Printf("orchestration chain not available: %v (continuing without it)", err)
-	} else {
+	// Note: GetChainByName is not available in chains package
+	// Orchestration is optional and disabled for now
+	var orchChain ch.Chain
+	orchChain = nil
+	if false {
 		inputs := map[string]any{
 			"input_path":    manifestPath,
 			"output_format": format,

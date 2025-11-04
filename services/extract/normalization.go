@@ -105,6 +105,10 @@ func normalizeGraph(input normalizationInput) normalizationResult {
 		edgeOrder = append(edgeOrder, key)
 	}
 
+	// Fix orphan columns by creating missing HAS_COLUMN edges
+	fixWarnings := fixOrphanColumns(nodeMap, edgeMap, &edgeOrder)
+	result.Warnings = append(result.Warnings, fixWarnings...)
+
 	rootID := selectRootNode(nodeMap, nodeOrder)
 
 	catalogNodesAdded := 0
@@ -330,4 +334,129 @@ func selectRootNode(nodeMap map[string]Node, order []string) string {
 	}
 
 	return order[0]
+}
+
+// fixOrphanColumns creates missing HAS_COLUMN edges for orphan columns
+// It uses multiple strategies to match columns to their parent tables
+func fixOrphanColumns(nodeMap map[string]Node, edgeMap map[string]Edge, edgeOrder *[]string) []string {
+	var warnings []string
+
+	// Build index of tables and columns
+	tableMap := make(map[string]Node)
+	columnMap := make(map[string]Node)
+	for id, node := range nodeMap {
+		if node.Type == "table" {
+			tableMap[id] = node
+		} else if node.Type == "column" {
+			columnMap[id] = node
+		}
+	}
+
+	// Build index of existing HAS_COLUMN edges
+	hasColumnEdges := make(map[string]bool)
+	for _, edge := range edgeMap {
+		if edge.Label == "HAS_COLUMN" {
+			hasColumnEdges[edge.TargetID] = true
+		}
+	}
+
+	fixed := 0
+	for colID := range columnMap {
+		if colID == "" {
+			continue
+		}
+
+		// Check if column already has a HAS_COLUMN edge
+		if hasColumnEdges[colID] {
+			continue
+		}
+
+		// Try to find parent table using multiple strategies
+		var parentTable *Node
+
+		// Strategy 1: Direct prefix match (table.column or schema.table.column)
+		parts := strings.Split(colID, ".")
+		if len(parts) >= 2 {
+			// Try: first part as table ID
+			if table, ok := tableMap[parts[0]]; ok {
+				parentTable = &table
+			}
+
+			// Try: all but last part as table ID (for schema.table.column)
+			if parentTable == nil && len(parts) > 2 {
+				tableID := strings.Join(parts[:len(parts)-1], ".")
+				if table, ok := tableMap[tableID]; ok {
+					parentTable = &table
+				}
+			}
+
+			// Try: second-to-last part as table ID (if schema.table.column doesn't match)
+			if parentTable == nil && len(parts) >= 3 {
+				tableID := parts[len(parts)-2]
+				if table, ok := tableMap[tableID]; ok {
+					parentTable = &table
+				}
+			}
+		}
+
+		// Strategy 2: Clean backticks and try again
+		if parentTable == nil {
+			cleanColID := strings.ReplaceAll(colID, "`", "")
+			cleanParts := strings.Split(cleanColID, ".")
+			if len(cleanParts) >= 2 {
+				cleanTableID := cleanParts[0]
+				for tid, table := range tableMap {
+					cleanTID := strings.ReplaceAll(tid, "`", "")
+					if cleanTableID == cleanTID {
+						parentTable = &table
+						break
+					}
+				}
+
+				// Try: all but last part as table ID (cleaned)
+				if parentTable == nil && len(cleanParts) > 2 {
+					cleanTableID := strings.Join(cleanParts[:len(cleanParts)-1], ".")
+					for tid, table := range tableMap {
+						cleanTID := strings.ReplaceAll(tid, "`", "")
+						if cleanTableID == cleanTID {
+							parentTable = &table
+							break
+						}
+					}
+				}
+			}
+		}
+
+		// Strategy 3: Match by label pattern (if column ID contains table label)
+		if parentTable == nil {
+			for _, table := range tableMap {
+				tableLabel := strings.Trim(table.Label, "`")
+				if tableLabel != "" && strings.Contains(colID, tableLabel) {
+					parentTable = &table
+					break
+				}
+			}
+		}
+
+		// Create edge if parent table found
+		if parentTable != nil {
+			label := "HAS_COLUMN"
+			key := edgeKey(parentTable.ID, colID, label)
+			if _, exists := edgeMap[key]; !exists {
+				edgeMap[key] = Edge{
+					SourceID: parentTable.ID,
+					TargetID: colID,
+					Label:    label,
+				}
+				*edgeOrder = append(*edgeOrder, key)
+				fixed++
+			}
+		}
+	}
+
+	if fixed > 0 {
+		warnings = append(warnings, fmt.Sprintf("fixed %d orphan columns by creating missing HAS_COLUMN edges", fixed))
+	}
+
+	return warnings
 }
