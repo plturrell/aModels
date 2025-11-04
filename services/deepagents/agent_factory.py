@@ -4,8 +4,6 @@ import os
 from typing import List, Optional
 from langchain_core.tools import Tool
 from langchain_core.language_models import BaseChatModel
-from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
 from deepagents import create_deep_agent
 
 from .tools import (
@@ -85,7 +83,7 @@ def create_amodels_deep_agent(
     """Create a DeepAgent configured for aModels.
     
     Args:
-        model: Optional LangChain chat model. Defaults to Claude Sonnet 4.5.
+        model: Optional LangChain chat model. Defaults to LocalAI.
         system_prompt: Optional custom system prompt. Uses default aModels prompt if not provided.
         custom_tools: Optional list of additional tools to include.
         **kwargs: Additional arguments passed to create_deep_agent.
@@ -93,35 +91,21 @@ def create_amodels_deep_agent(
     Returns:
         Compiled LangGraph agent with aModels tools and configuration.
     """
-    # Default model: Claude Sonnet 4.5 (or from env)
+    # Default model: LocalAI only (no external LLM dependencies)
     if model is None:
-        anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
-        openai_api_key = os.getenv("OPENAI_API_KEY")
-        
-        # Prefer Anthropic if available, fallback to OpenAI
-        if anthropic_api_key:
-            model = ChatAnthropic(
-                model="claude-sonnet-4-20250514",
-                api_key=anthropic_api_key,
-            )
-        elif openai_api_key:
+        localai_url = os.getenv("LOCALAI_URL", "http://localai:8081")
+        try:
+            from langchain_community.chat_models import ChatOpenAI
             model = ChatOpenAI(
-                model="gpt-4o",
-                api_key=openai_api_key,
+                base_url=f"{localai_url}/v1",
+                api_key="not-needed",
+                model="gemma-7b",
             )
-        else:
-            # Use LocalAI if available
-            localai_url = os.getenv("LOCALAI_URL", "http://localai:8080")
-            try:
-                from langchain_community.chat_models import ChatOpenAI
-                model = ChatOpenAI(
-                    base_url=f"{localai_url}/v1",
-                    api_key="not-needed",
-                    model="gemma-7b",
-                )
-            except Exception:
-                # Fallback to Claude (requires API key)
-                model = ChatAnthropic(model="claude-sonnet-4-20250514")
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to connect to LocalAI at {localai_url}: {e}. "
+                "Please ensure LocalAI service is running and accessible."
+            )
     
     # Default system prompt
     if system_prompt is None:

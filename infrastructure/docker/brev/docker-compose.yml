@@ -125,6 +125,16 @@ services:
     volumes:
       - postgresdata:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
   extract:
     build:
       context: ../..
@@ -196,15 +206,17 @@ services:
       - EXTRACT_SERVICE_URL=http://extract-service:8082
       - AGENTFLOW_SERVICE_URL=http://agentflow-service:8001
       - GRAPH_SERVICE_URL=http://graph-server:8080
-      # Model Configuration (optional - can use LOCALAI_URL as fallback)
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Model Configuration - LocalAI only (no external LLM dependencies)
       - LOCALAI_URL=http://localai:8081
+      # Disable external LLM providers
+      - ANTHROPIC_API_KEY=
+      - OPENAI_API_KEY=
     ports:
       - "9004:9004"
     depends_on:
       - postgres
       - redis
+      - localai
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9004/healthz"]
       interval: 30s
@@ -221,3 +233,4 @@ volumes:
   neo4jdata:
   neo4jlogs:
   postgresdata:
+  redisdata:
