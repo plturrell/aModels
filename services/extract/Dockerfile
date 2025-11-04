@@ -41,11 +41,10 @@ RUN apk add --no-cache protobuf-dev protoc && \
     mkdir -p gen/extractpb && \
     protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto
 
-# The generated protobuf package is part of this module
-# We need to ensure go.mod is updated. Since the package exists locally,
-# we can use GOSUMDB=off and build with -mod=mod to auto-update
-ENV GOSUMDB=off
-RUN go build -mod=mod -o /server .
+# The protobuf files are generated and will be committed to the repo
+# This ensures they exist in the remote module for go.mod validation
+# Update dependencies and build
+RUN go mod tidy && go build -o /server .
 
 # Final stage
 FROM alpine:latest
