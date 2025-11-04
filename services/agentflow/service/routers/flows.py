@@ -149,8 +149,25 @@ async def run_flow(
         stream=payload.stream,
     )
     result = await langflow.run_flow(target_id, run_request)
-    return {
+
+    # Optional DeepAgents analysis (if enabled)
+    from ..deepagents import analyze_flow_execution
+
+    deepagents_analysis = await analyze_flow_execution(
+        flow_id=flow_id,
+        flow_result=result,
+        input_value=payload.input_value,
+        inputs=payload.inputs,
+    )
+
+    response = {
         "local_id": spec.id,
         "remote_id": target_id,
         "result": result,
     }
+
+    # Add DeepAgents analysis if available
+    if deepagents_analysis:
+        response["deepagents_analysis"] = deepagents_analysis
+
+    return response
