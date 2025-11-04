@@ -34,20 +34,19 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+# Use /models mount point from Docker volume
+MODELS_BASE = os.getenv("MODELS_BASE", "/models")
 MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
     "phi-3.5-mini": {
         "path": os.path.join(
-            BASE_DIR,
-            "agenticAiETH_layer4_Models",
+            MODELS_BASE,
             "phi",
             "phi-3-pytorch-phi-3.5-mini-instruct-v2",
         )
     },
     "granite-4.0-h-micro": {
         "path": os.path.join(
-            BASE_DIR,
-            "agenticAiETH_layer4_Models",
+            MODELS_BASE,
             "granite",
             "granite-4.0-transformers-granite",
         )

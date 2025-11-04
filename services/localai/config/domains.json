@@ -8,7 +8,7 @@
       "model_name": "phi-3.5-mini",
       "model_path": "",
       "transformers_config": {
-        "endpoint": "http://127.0.0.1:8081/v1/chat/completions",
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
         "model_name": "phi-3.5-mini",
         "timeout_seconds": 60
       },
@@ -483,7 +483,7 @@
       "model_name": "granite-4.0",
       "model_path": "",
       "transformers_config": {
-        "endpoint": "http://127.0.0.1:8082/v1/chat/completions",
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
         "model_name": "granite-4.0"
       },
       "fallback_model": "phi-3.5-mini",
@@ -520,7 +520,7 @@
       "model_name": "gemma-2b-it",
       "model_path": "",
       "transformers_config": {
-        "endpoint": "http://127.0.0.1:8083/v1/chat/completions",
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
         "model_name": "gemma-2b-it",
         "timeout_seconds": 180
       },
@@ -670,7 +670,7 @@
       "model_name": "granite-4.0",
       "model_path": "",
       "transformers_config": {
-        "endpoint": "http://127.0.0.1:8082/v1/chat/completions",
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
         "model_name": "granite-4.0"
       },
       "fallback_model": "phi-3.5-mini",
@@ -779,7 +779,7 @@
       "backend_type": "hf-transformers",
       "model_name": "phi-3.5-mini",
       "transformers_config": {
-        "endpoint": "http://127.0.0.1:8081/v1/chat/completions",
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
         "model_name": "phi-3.5-mini",
         "timeout_seconds": 120
       }
