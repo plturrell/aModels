@@ -108,7 +108,9 @@ async def invoke_agent(request: AgentRequest) -> AgentResponse:
         )
     
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Agent invocation failed: {str(e)}")
+        import traceback
+        error_detail = f"{str(e)}\n{traceback.format_exc()}"
+        raise HTTPException(status_code=500, detail=f"Agent invocation failed: {error_detail}")
 
 
 @app.post("/stream")

@@ -6,7 +6,7 @@ from langchain_core.tools import Tool
 from langchain_core.language_models import BaseChatModel
 from deepagents import create_deep_agent
 
-from .tools import (
+from tools import (
     query_knowledge_graph,
     run_agentflow_flow,
     run_orchestration_chain,

@@ -38,6 +38,10 @@ WORKDIR /workspace
 
 COPY --from=builder /workspace/build/vaultgemma /usr/local/bin/vaultgemma-server
 
+# Copy entrypoint script
+COPY services/localai/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 # Config directory will be mounted via volume in docker-compose
 RUN mkdir -p /workspace/config
 
@@ -45,4 +49,4 @@ WORKDIR /workspace
 
 EXPOSE 8081
 
-ENTRYPOINT ["/usr/local/bin/vaultgemma-server", "-config", "/workspace/config/domains.json", "-port", "8080"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

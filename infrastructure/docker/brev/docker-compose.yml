@@ -58,7 +58,7 @@ services:
       - DOMAIN_CONFIG_PATH=/workspace/config/domains.json
     volumes:
       - ../../models:/models:ro
-      - /home/aModels/services/localai/config:/workspace/config:ro
+      - ../../services/localai/config:/workspace/config:ro
     ports:
       - "8081:8080"
     depends_on:
@@ -259,7 +259,7 @@ services:
 
   deepagents:
     build:
-      context: ../..
+      context: ../../..
       dockerfile: services/deepagents/Dockerfile
     image: amodels/deepagents:latest
     container_name: deepagents-service

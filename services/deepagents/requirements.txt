@@ -12,6 +12,7 @@ pydantic>=2.9.0
 
 # Model providers (LocalAI only - no external LLM dependencies)
 langchain-community>=0.3.0
+openai>=1.0.0
 
 # Utilities
 python-dotenv>=1.0.0

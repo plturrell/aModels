@@ -25,7 +25,10 @@ import (
 func main() {
 	modelPath := flag.String("model", "../agenticAiETH_layer4_Models/vaultgemm/vaultgemma-transformers-1b-v1", "Model path")
 	port := flag.String("port", "8080", "Server port")
-	configPath := flag.String("config", "config/domains.json", "Domain configuration file")
+	configPath := flag.String("config", os.Getenv("DOMAIN_CONFIG_PATH"), "Domain configuration file")
+	if *configPath == "" {
+		*configPath = "config/domains.json"
+	}
 	flag.Parse()
 
 	log.Printf("🚀 VaultGemma Server - Pure Go Implementation")
