@@ -45,7 +45,10 @@ RUN apk add --no-cache protobuf-dev protoc && \
 # This tells Go to use the local package instead of trying to fetch from remote
 RUN go mod edit -replace github.com/plturrell/aModels/services/extract/gen/extractpb=./gen/extractpb
 
-# Build (go.mod is now updated with replace directive)
+# Update go.mod dependencies after adding replace directive
+RUN go mod tidy
+
+# Build (go.mod is now updated with replace directive and dependencies)
 RUN go build -o /server .
 
 # Final stage
