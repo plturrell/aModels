@@ -133,3 +133,137 @@ func (p *Neo4jPersistence) SaveGraph(nodes []Node, edges []Edge) error {
 
 	return err
 }
+
+// QueryResult represents a single row from a Neo4j query result.
+type QueryResult struct {
+	Columns []string               `json:"columns"`
+	Data    []map[string]any       `json:"data"`
+}
+
+// ExecuteQuery executes a Cypher query against Neo4j and returns the results.
+func (p *Neo4jPersistence) ExecuteQuery(ctx context.Context, cypherQuery string, params map[string]any) (*QueryResult, error) {
+	session := p.driver.NewSession(ctx, neo4j.SessionConfig{})
+	defer session.Close(ctx)
+
+	result, err := session.Run(ctx, cypherQuery, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute query: %w", err)
+	}
+
+	records, err := result.Collect(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect query results: %w", err)
+	}
+
+	if len(records) == 0 {
+		return &QueryResult{Columns: []string{}, Data: []map[string]any{}}, nil
+	}
+
+	// Get column names from first record
+	keys := records[0].Keys
+	columns := make([]string, len(keys))
+	for i, key := range keys {
+		columns[i] = key
+	}
+
+	// Collect data rows
+	data := make([]map[string]any, 0, len(records))
+	for _, record := range records {
+		row := make(map[string]any)
+		for _, key := range keys {
+			value, ok := record.Get(key)
+			if !ok {
+				row[key] = nil
+				continue
+			}
+			
+			// Handle Neo4j types
+			row[key] = convertNeo4jValue(value)
+		}
+		data = append(data, row)
+	}
+
+	return &QueryResult{
+		Columns: columns,
+		Data:    data,
+	}, nil
+}
+
+// convertNeo4jValue converts Neo4j-specific types to Go-native types.
+func convertNeo4jValue(value any) any {
+	switch v := value.(type) {
+	case neo4j.Node:
+		// Convert Neo4j node to map
+		props := make(map[string]any)
+		for k, val := range v.Props {
+			props[k] = convertNeo4jValue(val)
+		}
+		return map[string]any{
+			"id":         v.ElementId,
+			"labels":     v.Labels,
+			"properties": props,
+		}
+	case neo4j.Relationship:
+		// Convert Neo4j relationship to map
+		props := make(map[string]any)
+		for k, val := range v.Props {
+			props[k] = convertNeo4jValue(val)
+		}
+		return map[string]any{
+			"id":         v.ElementId,
+			"type":       v.Type,
+			"start":      v.StartElementId,
+			"end":        v.EndElementId,
+			"properties": props,
+		}
+	case neo4j.Path:
+		// Convert Neo4j path to map
+		nodes := make([]map[string]any, 0, len(v.Nodes))
+		for _, node := range v.Nodes {
+			props := make(map[string]any)
+			for k, val := range node.Props {
+				props[k] = convertNeo4jValue(val)
+			}
+			nodes = append(nodes, map[string]any{
+				"id":         node.ElementId,
+				"labels":     node.Labels,
+				"properties": props,
+			})
+		}
+		relationships := make([]map[string]any, 0, len(v.Relationships))
+		for _, rel := range v.Relationships {
+			props := make(map[string]any)
+			for k, val := range rel.Props {
+				props[k] = convertNeo4jValue(val)
+			}
+			relationships = append(relationships, map[string]any{
+				"id":         rel.ElementId,
+				"type":       rel.Type,
+				"start":      rel.StartElementId,
+				"end":        rel.EndElementId,
+				"properties": props,
+			})
+		}
+		return map[string]any{
+			"nodes":         nodes,
+			"relationships": relationships,
+		}
+	case []any:
+		// Recursively convert arrays
+		result := make([]any, len(v))
+		for i, item := range v {
+			result[i] = convertNeo4jValue(item)
+		}
+		return result
+	case map[string]any:
+		// Recursively convert maps
+		result := make(map[string]any)
+		for k, val := range v {
+			result[k] = convertNeo4jValue(val)
+		}
+		return result
+	default:
+		// Primitive types pass through
+		return value
+	}
+}

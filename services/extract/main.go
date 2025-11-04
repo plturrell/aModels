@@ -107,8 +107,10 @@ func main() {
 
 	// Create persistence layer
 	var graphPersistences []GraphPersistence
+	var neo4jPersistence *Neo4jPersistence
 	if server.neo4jURI != "" {
-		neo4jPersistence, err := NewNeo4jPersistence(server.neo4jURI, server.neo4jUsername, server.neo4jPassword)
+		var err error
+		neo4jPersistence, err = NewNeo4jPersistence(server.neo4jURI, server.neo4jUsername, server.neo4jPassword)
 		if err != nil {
 			logger.Fatalf("failed to create neo4j persistence: %v", err)
 		}
@@ -119,6 +121,7 @@ func main() {
 			logger.Fatalf("failed to connect to neo4j: %v", err)
 		}
 		graphPersistences = append(graphPersistences, neo4jPersistence)
+		server.neo4jPersistence = neo4jPersistence
 		logger.Println("connected to neo4j")
 	}
 
@@ -233,6 +236,7 @@ func main() {
 	mux.HandleFunc("/generate/training", server.handleGenerateTraining)
 	mux.HandleFunc("/knowledge-graph", server.handleGraph) // Main knowledge graph processing endpoint
 	mux.HandleFunc("/graph", server.handleGraph)          // Legacy alias for backward compatibility
+	mux.HandleFunc("/knowledge-graph/query", server.handleNeo4jQuery) // Neo4j Cypher query endpoint
 	mux.HandleFunc("/catalog/projects", server.handleGetProjects)
 	mux.HandleFunc("/catalog/projects/add", server.handleAddProject)
 	mux.HandleFunc("/catalog/systems", server.handleGetSystems)
@@ -277,6 +281,7 @@ type extractServer struct {
 	tablePersistence    TablePersistence
 	vectorPersistence   VectorPersistence
 	graphPersistence    GraphPersistence
+	neo4jPersistence   *Neo4jPersistence // Direct Neo4j access for queries
 	flight              *extractFlightServer
 	hanaReplication     *hanaReplication
 	postgresReplication *postgresReplication
@@ -1006,6 +1011,62 @@ func (s *extractServer) handleAddSystem(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.WriteHeader(http.StatusCreated)
+}
+
+// --- /knowledge-graph/query (Neo4j Cypher queries) ---
+
+// handleNeo4jQuery handles Cypher query requests to Neo4j.
+func (s *extractServer) handleNeo4jQuery(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		handlers.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	defer r.Body.Close()
+
+	if s.neo4jPersistence == nil {
+		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "Neo4j not configured. Set NEO4J_URI, NEO4J_USERNAME, and NEO4J_PASSWORD environment variables.",
+		})
+		return
+	}
+
+	var request struct {
+		Query  string         `json:"query"`
+		Params map[string]any `json:"params,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		handlers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": fmt.Sprintf("invalid request body: %v", err),
+		})
+		return
+	}
+
+	if request.Query == "" {
+		handlers.WriteJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "query is required",
+		})
+		return
+	}
+
+	if request.Params == nil {
+		request.Params = make(map[string]any)
+	}
+
+	// Execute query with timeout
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	result, err := s.neo4jPersistence.ExecuteQuery(ctx, request.Query, request.Params)
+	if err != nil {
+		s.logger.Printf("Neo4j query error: %v", err)
+		handlers.WriteJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": fmt.Sprintf("query execution failed: %v", err),
+		})
+		return
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, result)
 }
 
 // --- /catalog/information-systems ---

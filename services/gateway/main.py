@@ -206,6 +206,27 @@ async def extract_schema_replication(payload: Dict[str, Any]) -> Any:
         raise HTTPException(status_code=502, detail=f"Extract service error: {e}")
 
 
+@app.post("/knowledge-graph/query")
+async def knowledge_graph_query(payload: Dict[str, Any]) -> Any:
+    """
+    Execute a Cypher query against the Neo4j knowledge graph.
+    
+    Request format:
+    {
+        "query": "MATCH (n:Node) RETURN n LIMIT 10",
+        "params": {"project_id": "optional", "system_id": "optional"}
+    }
+    """
+    try:
+        r = await client.post(f"{EXTRACT_URL}/knowledge-graph/query", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Extract service error: {e}")
+
+
 @app.post("/data/sql")
 async def data_sql(payload: Dict[str, Any]) -> Any:
     try:

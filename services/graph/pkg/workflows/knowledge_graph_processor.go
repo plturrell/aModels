@@ -292,8 +292,8 @@ func AnalyzeKnowledgeGraphQualityNode() stategraph.NodeFunc {
 	})
 }
 
-// QueryKnowledgeGraphNode returns a node that queries a knowledge graph (placeholder for future Neo4j integration).
-func QueryKnowledgeGraphNode() stategraph.NodeFunc {
+// QueryKnowledgeGraphNode returns a node that queries a knowledge graph using Neo4j Cypher queries.
+func QueryKnowledgeGraphNode(extractServiceURL string) stategraph.NodeFunc {
 	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
 		query, ok := state["knowledge_graph_query"].(string)
 		if !ok || query == "" {
@@ -301,33 +301,73 @@ func QueryKnowledgeGraphNode() stategraph.NodeFunc {
 			return state, nil
 		}
 
-		// TODO: Integrate with Neo4j or other graph database to query knowledge graphs
-		// For now, this is a placeholder that demonstrates the concept
-		log.Printf("Querying knowledge graph: %s", query)
+		// Extract query parameters if provided
+		var queryParams map[string]any
+		if params, ok := state["knowledge_graph_query_params"].(map[string]any); ok {
+			queryParams = params
+		} else {
+			queryParams = make(map[string]any)
+		}
 
-		// Extract nodes/edges from knowledge_graph state
-		nodesIface, _ := state["knowledge_graph_nodes"].([]any)
-		edgesIface, _ := state["knowledge_graph_edges"].([]any)
-
-		// Simple query matching (placeholder)
-		results := []map[string]any{}
-		if query == "root_node" || query == "root" {
-			rootID, _ := state["knowledge_graph"].(map[string]any)["root_node_id"].(string)
-			if rootID != "" {
-				results = append(results, map[string]any{
-					"type": "root_node",
-					"id":   rootID,
-				})
+		if extractServiceURL == "" || extractServiceURL == "offline" {
+			extractServiceURL = os.Getenv("EXTRACT_SERVICE_URL")
+			if extractServiceURL == "" {
+				extractServiceURL = "http://extract-service:19080"
 			}
 		}
 
-		newState := make(map[string]any, len(state)+1)
+		log.Printf("Querying knowledge graph with Cypher: %s", query)
+
+		// Call extract service Neo4j query endpoint
+		endpoint := strings.TrimRight(extractServiceURL, "/") + "/knowledge-graph/query"
+		requestBody := map[string]any{
+			"query":  query,
+			"params": queryParams,
+		}
+
+		body, err := json.Marshal(requestBody)
+		if err != nil {
+			return nil, fmt.Errorf("marshal query request: %w", err)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("build query request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := knowledgeGraphHTTPClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("request knowledge graph query: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+			return nil, fmt.Errorf("knowledge graph query failed with status %s: %s",
+				resp.Status, strings.TrimSpace(string(bodyBytes)))
+		}
+
+		var queryResult struct {
+			Columns []string         `json:"columns"`
+			Data    []map[string]any `json:"data"`
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&queryResult); err != nil {
+			return nil, fmt.Errorf("decode query response: %w", err)
+		}
+
+		// Store results in state
+		newState := make(map[string]any, len(state)+2)
 		for k, v := range state {
 			newState[k] = v
 		}
-		newState["knowledge_graph_query_results"] = results
+		newState["knowledge_graph_query_results"] = queryResult.Data
+		newState["knowledge_graph_query_columns"] = queryResult.Columns
 
-		log.Printf("Knowledge graph query returned %d results", len(results))
+		log.Printf("Knowledge graph query returned %d results with %d columns",
+			len(queryResult.Data), len(queryResult.Columns))
+
 		return newState, nil
 	})
 }
@@ -345,7 +385,7 @@ func NewKnowledgeGraphProcessorWorkflow(opts KnowledgeGraphProcessorOptions) (*s
 	nodes := map[string]stategraph.NodeFunc{
 		"process_kg":        ProcessKnowledgeGraphNode(extractServiceURL),
 		"analyze_quality":    AnalyzeKnowledgeGraphQualityNode(),
-		"query_kg":          QueryKnowledgeGraphNode(),
+		"query_kg":          QueryKnowledgeGraphNode(extractServiceURL),
 	}
 
 	edges := []EdgeSpec{
