@@ -45,6 +45,9 @@ RUN apk add --no-cache protobuf-dev protoc && \
     mkdir -p gen/extractpb && \
     protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto
 
+# Update go.mod again after protobuf files are generated (filters remote package errors)
+RUN go mod tidy 2>&1 | grep -v "does not contain package" || true
+
 # Build (protobuf files are now generated and in the same module)
 RUN go build -o /server .
 
