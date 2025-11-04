@@ -779,7 +779,8 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		s.logger.Printf("ERROR: Very high KL divergence (%.3f) - data type distribution is highly abnormal", klDivergence)
 	}
 
-	// Store metrics in root node for graph analysis
+	// Store metrics in root node for graph analysis and Glean export
+	// This ensures metrics are available in all persistence layers (Neo4j, Glean, etc.)
 	if rootID != "" {
 		for i := range nodes {
 			if nodes[i].ID == rootID {
@@ -790,6 +791,9 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 				nodes[i].Props["kl_divergence"] = klDivergence
 				nodes[i].Props["actual_distribution"] = actualDistribution
 				nodes[i].Props["ideal_distribution"] = idealDistribution
+				nodes[i].Props["column_count"] = len(columnDtypes)
+				// Store metrics timestamp for tracking over time
+				nodes[i].Props["metrics_calculated_at"] = time.Now().UTC().Format(time.RFC3339Nano)
 				break
 			}
 		}
@@ -797,6 +801,10 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 
 	s.replicateSchema(ctx, nodes, edges)
 
+	// Save graph to persistence layers (Neo4j, Glean, etc.)
+	// Information theory metrics are included:
+	// 1. In root node properties (accessible in Neo4j queries)
+	// 2. In Glean export manifest (via glean_persistence.go)
 	if s.graphPersistence != nil {
 		if err := s.graphPersistence.SaveGraph(nodes, edges); err != nil {
 			s.logger.Printf("failed to save graph: %v", err)

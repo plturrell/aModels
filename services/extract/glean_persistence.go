@@ -193,6 +193,30 @@ func (g *GleanPersistence) buildBatch(nodes []Node, edges []Edge) ([]gleanPredic
 		})
 	}
 
+	// Extract information theory metrics from root node if present
+	var metadataEntropy, klDivergence float64
+	var actualDistribution, idealDistribution map[string]float64
+	for _, node := range nodes {
+		if node.Props != nil {
+			if val, ok := node.Props["metadata_entropy"].(float64); ok {
+				metadataEntropy = val
+			}
+			if val, ok := node.Props["kl_divergence"].(float64); ok {
+				klDivergence = val
+			}
+			if val, ok := node.Props["actual_distribution"].(map[string]float64); ok {
+				actualDistribution = val
+			}
+			if val, ok := node.Props["ideal_distribution"].(map[string]float64); ok {
+				idealDistribution = val
+			}
+			// Only check root nodes (typically project/system nodes)
+			if node.Type == "project" || node.Type == "system" || node.Type == "information-system" {
+				break
+			}
+		}
+	}
+
 	exportMeta := gleanFact{
 		Key: map[string]any{
 			"exported_at": time.Now().UTC().Format(time.RFC3339Nano),
@@ -200,6 +224,28 @@ func (g *GleanPersistence) buildBatch(nodes []Node, edges []Edge) ([]gleanPredic
 			"edge_count":  len(edgeFacts),
 		},
 	}
+	
+	// Add information theory metrics to export manifest if available
+	// These metrics enable data quality analysis in Glean queries
+	if metadataEntropy > 0 || klDivergence > 0 {
+		if metaMap, ok := exportMeta.Key.(map[string]any); ok {
+			metaMap["metadata_entropy"] = metadataEntropy
+			metaMap["kl_divergence"] = klDivergence
+			if columnCount > 0 {
+				metaMap["column_count"] = columnCount
+			}
+			if actualDistribution != nil && len(actualDistribution) > 0 {
+				metaMap["actual_distribution"] = actualDistribution
+			}
+			if idealDistribution != nil && len(idealDistribution) > 0 {
+				metaMap["ideal_distribution"] = idealDistribution
+			}
+			if metricsCalculatedAt != "" {
+				metaMap["metrics_calculated_at"] = metricsCalculatedAt
+			}
+		}
+	}
+	
 	predicates = append(predicates, gleanPredicate{
 		Predicate: g.predicate(manifestPredicateName),
 		Facts:     []gleanFact{exportMeta},
