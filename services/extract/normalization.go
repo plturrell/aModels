@@ -392,7 +392,7 @@ func fixOrphanColumns(nodeMap map[string]Node, edgeMap map[string]Edge, edgeOrde
 
 			// Try: second-to-last part as table ID (if schema.table.column doesn't match)
 			if parentTable == nil && len(parts) >= 3 {
-				tableID := parts[len(parts)-2]
+				tableID := parts[len(parts)-2] // Safe: len >= 3 ensures index exists
 				if table, ok := tableMap[tableID]; ok {
 					parentTable = &table
 				}
