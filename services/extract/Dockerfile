@@ -41,6 +41,10 @@ RUN apk add --no-cache protobuf-dev protoc && \
     mkdir -p gen/extractpb && \
     protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto
 
+# Create a stub go.mod in gen/extractpb so replace directive works
+RUN echo "module github.com/plturrell/aModels/services/extract/gen/extractpb" > gen/extractpb/go.mod && \
+    echo "go 1.25.3" >> gen/extractpb/go.mod
+
 # Manually update go.mod to include the local protobuf package
 # Add it as a require with replace pointing to local directory
 RUN echo "require github.com/plturrell/aModels/services/extract/gen/extractpb v0.0.0" >> go.mod && \
