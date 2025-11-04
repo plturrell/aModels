@@ -38,11 +38,11 @@ WORKDIR /workspace
 
 COPY --from=builder /workspace/build/vaultgemma /usr/local/bin/vaultgemma-server
 
-# Copy config directory
+# Copy config directory from source (needs to be in build context)
 COPY services/localai/config /workspace/config
 
 WORKDIR /workspace
 
 EXPOSE 8081
 
-ENTRYPOINT ["/usr/local/bin/vaultgemma-server", "-config", "config/domains.json"]
+ENTRYPOINT ["/usr/local/bin/vaultgemma-server", "-config", "/workspace/config/domains.json"]
