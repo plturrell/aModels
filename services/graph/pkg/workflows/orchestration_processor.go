@@ -75,15 +75,53 @@ func RunOrchestrationChainNode(localAIURL string) stategraph.NodeFunc {
 
 		// If knowledge graph context is available, enrich inputs
 		if kgContext, ok := chainInputs["knowledge_graph_context"].(map[string]any); ok {
+			// Extract quality metrics
 			if quality, ok := kgContext["quality"].(map[string]any); ok {
 				chainInputs["quality_score"] = quality["score"]
 				chainInputs["quality_level"] = quality["level"]
+				if issues, ok := quality["issues"].([]any); ok {
+					chainInputs["issues"] = issues
+				}
 			}
+			// Extract graph structure
 			if nodes, ok := kgContext["nodes"].([]any); ok {
 				chainInputs["node_count"] = len(nodes)
 			}
 			if edges, ok := kgContext["edges"].([]any); ok {
 				chainInputs["edge_count"] = len(edges)
+			}
+			// Extract query results if available
+			if queryResults, ok := kgContext["query_results"].([]any); ok {
+				chainInputs["knowledge_graph_query_results"] = queryResults
+			}
+			// Extract metadata entropy and KL divergence if available
+			if metadataEntropy, ok := kgContext["metadata_entropy"].(float64); ok {
+				chainInputs["metadata_entropy"] = metadataEntropy
+			}
+			if klDivergence, ok := kgContext["kl_divergence"].(float64); ok {
+				chainInputs["kl_divergence"] = klDivergence
+			}
+		}
+		
+		// Also check if knowledge graph is in state directly (from unified workflow)
+		if kgIface, ok := state["knowledge_graph"].(map[string]any); ok {
+			if quality, ok := kgIface["quality"].(map[string]any); ok {
+				if chainInputs["quality_score"] == nil {
+					chainInputs["quality_score"] = quality["score"]
+				}
+				if chainInputs["quality_level"] == nil {
+					chainInputs["quality_level"] = quality["level"]
+				}
+			}
+			if nodes, ok := kgIface["nodes"].([]any); ok {
+				if chainInputs["node_count"] == nil {
+					chainInputs["node_count"] = len(nodes)
+				}
+			}
+			if edges, ok := kgIface["edges"].([]any); ok {
+				if chainInputs["edge_count"] == nil {
+					chainInputs["edge_count"] = len(edges)
+				}
 			}
 		}
 
@@ -94,22 +132,117 @@ func RunOrchestrationChainNode(localAIURL string) stategraph.NodeFunc {
 		}
 
 		// Store results in state
-		newState := make(map[string]any, len(state)+3)
+		newState := make(map[string]any, len(state)+5)
 		for k, v := range state {
 			newState[k] = v
 		}
 		newState["orchestration_result"] = result
 		newState["orchestration_chain_name"] = chainName
+		newState["orchestration_success"] = true
+		newState["orchestration_executed_at"] = time.Now().Format(time.RFC3339)
 
-		log.Printf("Orchestration chain executed: chain=%s, output_keys=%v",
+		// Extract text output if available (common for LLM chains)
+		if text, ok := result["text"].(string); ok {
+			newState["orchestration_text"] = text
+		}
+		if output, ok := result["output"].(string); ok {
+			newState["orchestration_text"] = output
+		}
+
+		log.Printf("Orchestration chain executed: chain=%s, output_keys=%v, success=true",
 			chainName, chain.GetOutputKeys())
 
 		return newState, nil
 	})
 }
 
+// AnalyzeChainResultsNode returns a node that analyzes orchestration chain execution results.
+func AnalyzeChainResultsNode() stategraph.NodeFunc {
+	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
+		resultIface, ok := state["orchestration_result"]
+		if !ok {
+			log.Println("No orchestration result available; skipping analysis")
+			return state, nil
+		}
+
+		resultMap, ok := resultIface.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("orchestration_result is not a map")
+		}
+
+		log.Printf("Analyzing orchestration chain result: %v", resultMap)
+
+		// Determine success/failure
+		success := true
+		if errorMsg, ok := resultMap["error"].(string); ok && errorMsg != "" {
+			success = false
+			log.Printf("Orchestration chain execution failed: %s", errorMsg)
+		}
+
+		// Extract output keys
+		chainName, _ := state["orchestration_chain_name"].(string)
+
+		analysis := map[string]any{
+			"success":    success,
+			"chain_name": chainName,
+			"result":     resultMap,
+			"analyzed_at": time.Now().Format(time.RFC3339),
+		}
+
+		// Extract text output
+		if text, ok := resultMap["text"].(string); ok {
+			analysis["output_text"] = text
+			analysis["output_length"] = len(text)
+		}
+
+		newState := make(map[string]any, len(state)+2)
+		for k, v := range state {
+			newState[k] = v
+		}
+		newState["orchestration_success"] = success
+		newState["orchestration_analysis"] = analysis
+
+		log.Printf("Orchestration chain result analyzed: success=%v, chain=%s", success, chainName)
+
+		return newState, nil
+	})
+}
+
+// ChainResultRoutingFunc determines the next node based on orchestration chain results.
+func ChainResultRoutingFunc(ctx context.Context, value any) ([]string, error) {
+	state, ok := value.(map[string]any)
+	if !ok {
+		return []string{"error"}, nil
+	}
+
+	success, _ := state["orchestration_success"].(bool)
+	if !success {
+		return []string{"error"}, nil
+	}
+
+	analysis, ok := state["orchestration_analysis"].(map[string]any)
+	if !ok {
+		return []string{"complete"}, nil
+	}
+
+	// Route based on chain output
+	if outputText, ok := analysis["output_text"].(string); ok {
+		if len(outputText) == 0 {
+			return []string{"empty"}, nil
+		}
+		// Check if output indicates error or needs review
+		lowerText := strings.ToLower(outputText)
+		if strings.Contains(lowerText, "error") || strings.Contains(lowerText, "failed") {
+			return []string{"review"}, nil
+		}
+	}
+
+	return []string{"complete"}, nil
+}
+
 // createOrchestrationChain creates an orchestration chain based on the chain name.
-// Currently supports: "llm_chain", "question_answering", "summarization"
+// Supports: "llm_chain", "question_answering", "summarization", "knowledge_graph_analyzer",
+// "data_quality_analyzer", "pipeline_analyzer", "sql_analyzer"
 func createOrchestrationChain(chainName, localAIURL string) (orch.Chain, error) {
 	// Create LocalAI LLM instance
 	llm, err := orchlocalai.New(localAIURL)
@@ -143,7 +276,7 @@ func createOrchestrationChain(chainName, localAIURL string) (orch.Chain, error) 
 		)
 		return orch.NewLLMChain(llm, promptTemplate), nil
 
-	case "knowledge_graph_analyzer":
+	case "knowledge_graph_analyzer", "kg_analyzer":
 		// Chain for analyzing knowledge graphs
 		promptTemplate := orchprompts.NewPromptTemplate(
 			"Analyze the following knowledge graph information:\n\n"+
@@ -151,8 +284,59 @@ func createOrchestrationChain(chainName, localAIURL string) (orch.Chain, error) 
 				"Edges: {{.edge_count}}\n"+
 				"Quality Score: {{.quality_score}}\n"+
 				"Quality Level: {{.quality_level}}\n\n"+
+				"Knowledge Graph Context: {{.knowledge_graph_context}}\n\n"+
 				"Provide insights and recommendations:\n\n{{.query}}",
-			[]string{"node_count", "edge_count", "quality_score", "quality_level", "query"},
+			[]string{"node_count", "edge_count", "quality_score", "quality_level", "knowledge_graph_context", "query"},
+		)
+		return orch.NewLLMChain(llm, promptTemplate), nil
+
+	case "data_quality_analyzer", "quality_analyzer":
+		// Chain for analyzing data quality metrics
+		promptTemplate := orchprompts.NewPromptTemplate(
+			"Analyze the following data quality metrics:\n\n"+
+				"Metadata Entropy: {{.metadata_entropy}}\n"+
+				"KL Divergence: {{.kl_divergence}}\n"+
+				"Quality Score: {{.quality_score}}\n"+
+				"Quality Level: {{.quality_level}}\n"+
+				"Issues: {{.issues}}\n\n"+
+				"Provide data quality assessment and recommendations:\n\n{{.query}}",
+			[]string{"metadata_entropy", "kl_divergence", "quality_score", "quality_level", "issues", "query"},
+		)
+		return orch.NewLLMChain(llm, promptTemplate), nil
+
+	case "pipeline_analyzer", "pipeline":
+		// Chain for analyzing data pipelines
+		promptTemplate := orchprompts.NewPromptTemplate(
+			"Analyze the following data pipeline:\n\n"+
+				"Control-M Jobs: {{.controlm_jobs}}\n"+
+				"SQL Queries: {{.sql_queries}}\n"+
+				"Source Tables: {{.source_tables}}\n"+
+				"Target Tables: {{.target_tables}}\n"+
+				"Data Flow Path: {{.data_flow_path}}\n\n"+
+				"Provide pipeline insights and optimization recommendations:\n\n{{.query}}",
+			[]string{"controlm_jobs", "sql_queries", "source_tables", "target_tables", "data_flow_path", "query"},
+		)
+		return orch.NewLLMChain(llm, promptTemplate), nil
+
+	case "sql_analyzer", "sql":
+		// Chain for analyzing SQL queries
+		promptTemplate := orchprompts.NewPromptTemplate(
+			"Analyze the following SQL query:\n\n{{.sql_query}}\n\n"+
+				"Context: {{.context}}\n\n"+
+				"Provide SQL analysis, optimization suggestions, and explain execution plan:\n\n{{.query}}",
+			[]string{"sql_query", "context", "query"},
+		)
+		return orch.NewLLMChain(llm, promptTemplate), nil
+
+	case "agentflow_analyzer", "agentflow":
+		// Chain for analyzing AgentFlow flows
+		promptTemplate := orchprompts.NewPromptTemplate(
+			"Analyze the following AgentFlow flow execution:\n\n"+
+				"Flow ID: {{.flow_id}}\n"+
+				"Flow Result: {{.flow_result}}\n"+
+				"Knowledge Graph Context: {{.knowledge_graph_context}}\n\n"+
+				"Provide flow analysis and recommendations:\n\n{{.query}}",
+			[]string{"flow_id", "flow_result", "knowledge_graph_context", "query"},
 		)
 		return orch.NewLLMChain(llm, promptTemplate), nil
 

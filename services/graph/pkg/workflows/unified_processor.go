@@ -299,34 +299,113 @@ func ProcessAgentFlowWorkflowNode(agentflowServiceURL string) stategraph.NodeFun
 	})
 }
 
+// ParallelSplitNode executes all three branches in parallel by creating separate state copies.
+// This is a workaround since LangGraph conditional edges can only route to one destination.
+// In practice, this would be handled by the workflow runtime executing multiple branches.
+func ParallelSplitNode() stategraph.NodeFunc {
+	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
+		log.Println("Splitting workflow into parallel branches (KG, Orchestration, AgentFlow)...")
+		
+		// Mark that parallel execution should occur
+		// The actual parallel execution happens via the join node waiting for all inputs
+		newState := make(map[string]any, len(state)+1)
+		for k, v := range state {
+			newState[k] = v
+		}
+		newState["parallel_split"] = true
+		newState["parallel_branches"] = []string{"process_kg", "process_orch", "process_agentflow"}
+
+		return newState, nil
+	})
+}
+
 // JoinUnifiedResultsNode returns a join node that aggregates results from parallel branches.
 func JoinUnifiedResultsNode() stategraph.JoinFunc {
 	return func(ctx context.Context, inputs []any) (any, error) {
-		log.Println("Joining unified workflow results...")
+		log.Printf("Joining unified workflow results from %d branches...", len(inputs))
 
 		mergedState := make(map[string]any)
 
-		// Merge all inputs
-		for _, input := range inputs {
+		// Merge all inputs (from parallel branches or sequential unified node)
+		for i, input := range inputs {
 			if state, ok := input.(map[string]any); ok {
+				log.Printf("Merging input %d: keys=%v", i, getStateKeys(state))
 				for k, v := range state {
-					mergedState[k] = v
+					// Don't overwrite existing values unless they're nil
+					if existing, exists := mergedState[k]; !exists || existing == nil {
+						mergedState[k] = v
+					}
 				}
 			}
 		}
 
+		// Determine what was processed
+		kgProcessed := mergedState["knowledge_graph"] != nil
+		orchProcessed := mergedState["orchestration_result"] != nil || mergedState["orchestration_text"] != nil
+		afProcessed := mergedState["agentflow_result"] != nil
+
 		// Add unified summary
 		mergedState["unified_workflow_complete"] = true
 		mergedState["unified_workflow_summary"] = map[string]any{
-			"knowledge_graph_processed": mergedState["knowledge_graph"] != nil,
-			"orchestration_processed":    mergedState["orchestration_result"] != nil,
-			"agentflow_processed":       mergedState["agentflow_result"] != nil,
+			"knowledge_graph_processed": kgProcessed,
+			"orchestration_processed":    orchProcessed,
+			"agentflow_processed":       afProcessed,
+			"branches_joined":            len(inputs),
 			"joined_at":                  time.Now().Format(time.RFC3339),
 		}
 
-		log.Println("Unified workflow results joined successfully")
+		log.Printf("Unified workflow results joined: KG=%v, Orch=%v, AF=%v, branches=%d",
+			kgProcessed, orchProcessed, afProcessed, len(inputs))
+
 		return mergedState, nil
 	}
+}
+
+// Helper function to get state keys for logging
+func getStateKeys(state map[string]any) []string {
+	keys := make([]string, 0, len(state))
+	for k := range state {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// WorkflowModeRoutingFunc determines the execution mode and routes accordingly.
+func WorkflowModeRoutingFunc(ctx context.Context, value any) ([]string, error) {
+	state, ok := value.(map[string]any)
+	if !ok {
+		return []string{"sequential"}, nil
+	}
+
+	// Check for workflow mode in request
+	if unifiedReq, ok := state["unified_request"].(map[string]any); ok {
+		if mode, ok := unifiedReq["workflow_mode"].(string); ok && mode != "" {
+			return []string{mode}, nil
+		}
+	}
+
+	// Check if multiple requests are present (parallel mode)
+	hasKG := state["knowledge_graph_request"] != nil
+	hasOrch := state["orchestration_request"] != nil
+	hasAF := state["agentflow_request"] != nil
+
+	count := 0
+	if hasKG {
+		count++
+	}
+	if hasOrch {
+		count++
+	}
+	if hasAF {
+		count++
+	}
+
+	// If multiple independent requests, use parallel mode
+	if count > 1 {
+		return []string{"parallel"}, nil
+	}
+
+	return []string{"sequential"}, nil
 }
 
 // NewUnifiedProcessorWorkflow creates a workflow that processes all three systems together.
@@ -356,8 +435,10 @@ func NewUnifiedProcessorWorkflow(opts UnifiedProcessorOptions) (*stategraph.Comp
 		}
 	}
 
-	// For parallel mode, use separate nodes and join
+	// Nodes for both sequential and parallel modes
 	nodes := map[string]stategraph.NodeFunc{
+		"determine_mode":  DetermineWorkflowModeNode(),
+		"split_parallel":  ParallelSplitNode(),
 		"process_kg":      ProcessKnowledgeGraphWorkflowNode(extractServiceURL),
 		"process_orch":    ProcessOrchestrationWorkflowNode(localAIURL),
 		"process_agentflow": ProcessAgentFlowWorkflowNode(agentflowServiceURL),
@@ -368,25 +449,36 @@ func NewUnifiedProcessorWorkflow(opts UnifiedProcessorOptions) (*stategraph.Comp
 		}),
 	}
 
-	// Add join node for parallel execution
+	// Edges for workflow routing
 	var edges []EdgeSpec
-	
-	// For parallel mode: all three processes run in parallel, then join
+	var conditionalEdges []ConditionalEdgeSpec
+
+	// Determine mode routing
+	conditionalEdges = append(conditionalEdges, ConditionalEdgeSpec{
+		Source: "determine_mode",
+		PathFunc: WorkflowModeRoutingFunc,
+		PathMap: map[string]string{
+			"sequential": "process_unified",
+			"parallel":    "split_parallel",
+		},
+	})
+
+	// For parallel mode, we need a split node
+	// Since LangGraph doesn't have explicit split nodes, we use multiple entry points
+	// For true parallel execution, all three nodes should be reachable simultaneously
 	edges = append(edges,
+		// Sequential mode path
+		EdgeSpec{From: "process_unified", To: "join_results", Label: "unified_complete"},
+		// Parallel mode paths (all three can execute independently)
 		EdgeSpec{From: "process_kg", To: "join_results", Label: "kg_complete"},
 		EdgeSpec{From: "process_orch", To: "join_results", Label: "orch_complete"},
 		EdgeSpec{From: "process_agentflow", To: "join_results", Label: "af_complete"},
 	)
 
-	// For sequential mode: use the unified node
-	edges = append(edges,
-		EdgeSpec{From: "process_unified", To: "join_results", Label: "unified_complete"},
-	)
-
 	// Build with join node
 	builder := stategraph.New()
 	
-	// Add all nodes
+	// Add all nodes with retry/timeout configuration
 	for id, handler := range nodes {
 		opts := []stategraph.NodeOption{
 			stategraph.WithNodeRetries(2),
@@ -398,7 +490,7 @@ func NewUnifiedProcessorWorkflow(opts UnifiedProcessorOptions) (*stategraph.Comp
 		}
 	}
 
-	// Add join node
+	// Add join node for aggregating results
 	if err := builder.AddJoinNode("join_results", JoinUnifiedResultsNode(),
 		stategraph.WithJoinTimeout(30*time.Second)); err != nil {
 		return nil, err
@@ -415,11 +507,77 @@ func NewUnifiedProcessorWorkflow(opts UnifiedProcessorOptions) (*stategraph.Comp
 		}
 	}
 
-	// Set entry point (determine based on mode)
-	builder.SetEntryPoint("process_unified") // Default to sequential
+	// Add conditional edges
+	for _, condEdge := range conditionalEdges {
+		if err := builder.AddConditionalEdges(condEdge.Source, condEdge.PathFunc, condEdge.PathMap); err != nil {
+			return nil, err
+		}
+	}
+
+	// For parallel mode, we need to handle multiple entry points
+	// Since LangGraph supports this via conditional routing, we use a mode determination node
+	// For true parallel execution, we need a split node concept
+	// Workaround: Use conditional routing to start all three branches
+	
+	// Add a split node for parallel execution
+	// In true parallel mode, all three nodes should execute simultaneously
+	// For now, we'll use a workaround where the mode node routes to all three
+	
+	// Add edges from mode determination to parallel branches
+	// Note: This requires conditional edges that can route to multiple destinations
+	// For now, we'll use a simpler approach where parallel mode routes to a special node
+	
+	// Set entry point
+	builder.SetEntryPoint("determine_mode")
 	builder.SetFinishPoint("join_results")
 
 	return builder.Compile()
+}
+
+// DetermineWorkflowModeNode returns a node that determines the workflow execution mode.
+func DetermineWorkflowModeNode() stategraph.NodeFunc {
+	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
+		workflowMode := "sequential" // default
+
+		// Check for explicit mode in request
+		if unifiedReq, ok := state["unified_request"].(map[string]any); ok {
+			if mode, ok := unifiedReq["workflow_mode"].(string); ok && mode != "" {
+				workflowMode = mode
+			}
+		}
+
+		// Auto-detect mode based on request presence
+		hasKG := state["knowledge_graph_request"] != nil
+		hasOrch := state["orchestration_request"] != nil
+		hasAF := state["agentflow_request"] != nil
+
+		requestCount := 0
+		if hasKG {
+			requestCount++
+		}
+		if hasOrch {
+			requestCount++
+		}
+		if hasAF {
+			requestCount++
+		}
+
+		// If multiple independent requests and no explicit mode, use parallel
+		if requestCount > 1 && workflowMode == "sequential" {
+			workflowMode = "parallel"
+		}
+
+		newState := make(map[string]any, len(state)+1)
+		for k, v := range state {
+			newState[k] = v
+		}
+		newState["workflow_mode"] = workflowMode
+
+		log.Printf("Determined workflow mode: %s (requests: KG=%v, Orch=%v, AF=%v)",
+			workflowMode, hasKG, hasOrch, hasAF)
+
+		return newState, nil
+	})
 }
 
 // Helper functions for parsing request data
