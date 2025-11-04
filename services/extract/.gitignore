@@ -1,0 +1,45 @@
+# Binaries
+agenticAiETH_layer4_Extract
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+deepseek_ocr/venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+
+# Test artifacts
+*.out
+coverage.out
+*.coverprofile
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+

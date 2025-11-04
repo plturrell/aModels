@@ -59,7 +59,7 @@ func newTelemetryClient(ctx context.Context, cfg telemetryConfig) (*telemetryCli
 
 	dialTimeout := cfg.DialTimeout
 	if dialTimeout <= 0 {
-		dialTimeout = 5 * time.Second
+		dialTimeout = defaultDialTimeout
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
@@ -76,7 +76,7 @@ func newTelemetryClient(ctx context.Context, cfg telemetryConfig) (*telemetryCli
 
 	callTimeout := cfg.CallTimeout
 	if callTimeout <= 0 {
-		callTimeout = 3 * time.Second
+		callTimeout = defaultCallTimeout
 	}
 
 	library := strings.TrimSpace(cfg.LibraryType)

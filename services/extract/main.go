@@ -29,15 +29,43 @@ import (
 )
 
 const (
+	// Server configuration
 	defaultPort               = "8081"
 	defaultGRPCPort           = "9090"
 	defaultFlightAddr         = ":8815"
-	defaultLangextractURL     = "http://langextract-api:5000"
-	defaultPromptDescription  = "Extract the key entities (people, projects, dates, locations) from the document text."
+	
+	// External service URLs
+	defaultLangextractURL = "http://langextract-api:5000"
+	
+	// Extraction defaults
+	defaultPromptDescription = "Extract the key entities (people, projects, dates, locations) from the document text."
 	defaultModelID            = "gemini-2.5-flash"
-	defaultTrainingDir        = "../agenticAiETH_layer4_Training/data/extracts"
+	
+	// Training output
+	defaultTrainingDir = "../agenticAiETH_layer4_Training/data/extracts"
+	
+	// Telemetry
 	defaultTelemetryLibrary   = "layer4_extract"
 	defaultTelemetryOperation = "run_extract"
+	
+	// HTTP client timeouts
+	defaultHTTPClientTimeout = 45 * time.Second
+	defaultDialTimeout       = 5 * time.Second
+	defaultCallTimeout       = 3 * time.Second
+	
+	// Preview and display limits
+	previewMaxLength          = 200
+	documentPreviewLength     = 120
+	maxExamplePreviews        = 3
+	maxDocumentPreviews       = 3
+	
+	// Data type distribution defaults
+	defaultStringRatio  = 0.4
+	defaultNumberRatio = 0.4
+	defaultBooleanRatio = 0.1
+	defaultDateRatio    = 0.05
+	defaultArrayRatio   = 0.03
+	defaultObjectRatio  = 0.02
 )
 
 func main() {
@@ -64,7 +92,7 @@ func main() {
 	}
 
 	server := &extractServer{
-		client:         &http.Client{Timeout: 45 * time.Second},
+		client:         &http.Client{Timeout: defaultHTTPClientTimeout},
 		langextractURL: strings.TrimRight(langURL, "/"),
 		apiKey:         apiKey,
 		trainingDir:    trainingDir,
@@ -177,8 +205,8 @@ func main() {
 			DefaultOperation: telemetryOperation,
 			PrivacyLevel:     telemetryPrivacy,
 			UserIDHash:       telemetryUser,
-			DialTimeout:      5 * time.Second,
-			CallTimeout:      3 * time.Second,
+			DialTimeout:      defaultDialTimeout,
+			CallTimeout:       defaultCallTimeout,
 		})
 		if err != nil {
 			logger.Printf("telemetry disabled: %v", err)
@@ -757,12 +785,12 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	idealDistribution := req.IdealDistribution
 	if idealDistribution == nil {
 		idealDistribution = map[string]float64{
-			"string":  0.4,
-			"number":  0.4,
-			"boolean": 0.1,
-			"date":    0.05,
-			"array":   0.03,
-			"object":  0.02,
+			"string":  defaultStringRatio,
+			"number":  defaultNumberRatio,
+			"boolean": defaultBooleanRatio,
+			"date":    defaultDateRatio,
+			"array":   defaultArrayRatio,
+			"object":  defaultObjectRatio,
 		}
 	}
 	klDivergence := calculateKLDivergence(actualDistribution, idealDistribution)
@@ -1002,7 +1030,7 @@ func profileJSONColumns(objects []map[string]any) map[string]*columnProfile {
 				profile.nullCount++
 			} else {
 				profile.counts[valueType]++
-				if len(profile.examples) < 3 {
+				if len(profile.examples) < maxExamplePreviews {
 					profile.examples = append(profile.examples, value)
 				}
 			}
@@ -1358,24 +1386,25 @@ func (s *extractServer) generateTableExtract(ctx context.Context, input tableGen
 		return generationResult{}, err
 	}
 
-	// New orchestration integration:
+	// Optional orchestration integration:
 	orchChain, err := ch.GetChainByName("relational_table_extraction")
 	if err != nil {
-		return generationResult{}, fmt.Errorf("orchestration: %w", err)
+		// Log but don't fail - orchestration is optional
+		s.logger.Printf("orchestration chain not available: %v (continuing without it)", err)
+	} else {
+		inputs := map[string]any{
+			"input_path":    manifestPath,
+			"output_format": format,
+			"hints": map[string]any{
+				"schema": schema,
+				"tables": tables,
+			},
+		}
+		if _, err := ch.Call(ctx, orchChain, inputs); err != nil {
+			s.logger.Printf("orchestration chain call failed: %v (continuing without it)", err)
+			// Don't fail the entire operation if orchestration fails
+		}
 	}
-	inputs := map[string]any{
-		"input_path":    manifestPath,
-		"output_format": format,
-		"hints": map[string]any{ // use hints as needed
-			"schema": schema,
-			"tables": tables,
-		},
-	}
-	if _, err := ch.Call(ctx, orchChain, inputs); err != nil {
-		return generationResult{}, fmt.Errorf("orchestration chain: %w", err)
-	}
-	// Attach/Log manifest: optionally write or embed in result.
-	// ... downstream processing ...
 
 	// Adapt actual output as needed for your system:
 	return generationResult{
