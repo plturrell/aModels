@@ -17,7 +17,6 @@ import (
 	postgresflight "github.com/langchain-ai/langgraph-go/pkg/clients/postgresflight"
 	postgresgrpc "github.com/langchain-ai/langgraph-go/pkg/clients/postgresgrpc"
 	"github.com/langchain-ai/langgraph-go/pkg/workflows"
-	kgworkflows "github.com/langchain-ai/langgraph-go/pkg/workflows"
 	catalogprompt "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightcatalog/prompt"
 	postgresv1 "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/gen/v1"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -133,8 +132,8 @@ func main() {
 			}
 
 			// Create knowledge graph processor workflow
-			workflow, err := kgworkflows.NewKnowledgeGraphProcessorWorkflow(kgworkflows.KnowledgeGraphProcessorOptions{
-				ExtractServiceURL: os.Getenv("EXTRACT_SERVICE_URL"),
+			workflow, err := workflows.NewKnowledgeGraphProcessorWorkflow(workflows.KnowledgeGraphProcessorOptions{
+				ExtractServiceURL: extractHTTPURL,
 			})
 			if err != nil {
 				http.Error(w, fmt.Sprintf("create workflow: %v", err), http.StatusInternalServerError)
@@ -142,7 +141,7 @@ func main() {
 			}
 
 			// Execute workflow
-			result, err := workflow.Run(context.Background(), req)
+			result, err := workflow.Invoke(context.Background(), req)
 			if err != nil {
 				http.Error(w, fmt.Sprintf("workflow execution failed: %v", err), http.StatusInternalServerError)
 				return
