@@ -190,131 +190,136 @@ func QueryKnowledgeGraphForChainNode(extractServiceURL string) stategraph.NodeFu
 		log.Printf("Querying knowledge graph for chain planning: query=%s, project=%s, system=%s",
 			query, projectID, systemID)
 
-		// Query knowledge graph (placeholder - would need actual query endpoint)
-		// For now, we'll use the knowledge graph from state if available
-		kgIface, ok := state["knowledge_graph"]
-		if !ok {
-			log.Println("No knowledge graph available in state; skipping query")
-			return state, nil
+		// Call extract service Neo4j query endpoint
+		endpoint := strings.TrimRight(extractServiceURL, "/") + "/knowledge-graph/query"
+		
+		// Build query parameters if project/system IDs are available
+		queryParams := make(map[string]any)
+		if projectID != "" {
+			queryParams["project_id"] = projectID
 		}
-
-		kgMap, ok := kgIface.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("knowledge_graph is not a map")
+		if systemID != "" {
+			queryParams["system_id"] = systemID
 		}
-
-		// Extract relevant information for chain planning
-		nodesIface, _ := kgMap["nodes"].([]any)
-		edgesIface, _ := kgMap["edges"].([]any)
-		qualityIface, _ := kgMap["quality"].(map[string]any)
-
-		// Store query results in state for chain execution
-		newState := make(map[string]any, len(state)+4)
-		for k, v := range state {
-			newState[k] = v
-		}
-		newState["knowledge_graph_query_results"] = map[string]any{
-			"query":      query,
-			"node_count": len(nodesIface),
-			"edge_count": len(edgesIface),
-			"quality":    qualityIface,
-		}
-
-		// Add knowledge graph context to chain inputs
-		if chainInputs, ok := newState["chain_inputs"].(map[string]any); ok {
-			chainInputs["knowledge_graph_context"] = map[string]any{
-				"nodes":   nodesIface,
-				"edges":   edgesIface,
-				"quality": qualityIface,
-			}
-		} else {
-			newState["chain_inputs"] = map[string]any{
-				"knowledge_graph_context": map[string]any{
-					"nodes":   nodesIface,
-					"edges":   edgesIface,
-					"quality": qualityIface,
-				},
+		
+		// Use provided params if available
+		if params, ok := state["knowledge_graph_query_params"].(map[string]any); ok {
+			for k, v := range params {
+				queryParams[k] = v
 			}
 		}
 
-		log.Printf("Knowledge graph query completed: nodes=%d, edges=%d",
-			len(nodesIface), len(edgesIface))
+		requestBody := map[string]any{
+			"query":  query,
+			"params": queryParams,
+		}
 
-		return newState, nil
-	})
-}
+		body, err := json.Marshal(requestBody)
+		if err != nil {
+			return nil, fmt.Errorf("marshal query request: %w", err)
+		}
 
-// AnalyzeChainResultsNode returns a node that analyzes orchestration chain execution results.
-func AnalyzeChainResultsNode() stategraph.NodeFunc {
-	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
-		resultIface, ok := state["orchestration_result"]
-		if !ok {
-			log.Println("No orchestration result available; skipping analysis")
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+		if err != nil {
+			return nil, fmt.Errorf("build query request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			// Fall back to using knowledge graph from state if available
+			log.Printf("Neo4j query failed, falling back to state: %v", err)
+			kgIface, ok := state["knowledge_graph"]
+			if ok {
+				newState := make(map[string]any, len(state)+1)
+				for k, v := range state {
+					newState[k] = v
+				}
+				newState["knowledge_graph_context"] = kgIface
+				return newState, nil
+			}
+			return nil, fmt.Errorf("request knowledge graph query: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+			log.Printf("Knowledge graph query failed: %s", string(bodyBytes))
+			// Fall back to using knowledge graph from state if available
+			kgIface, ok := state["knowledge_graph"]
+			if ok {
+				newState := make(map[string]any, len(state)+1)
+				for k, v := range state {
+					newState[k] = v
+				}
+				newState["knowledge_graph_context"] = kgIface
+				return newState, nil
+			}
 			return state, nil
 		}
 
-		resultMap, ok := resultIface.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("orchestration_result is not a map")
+		var queryResult struct {
+			Columns []string         `json:"columns"`
+			Data    []map[string]any `json:"data"`
 		}
 
-		log.Printf("Analyzing orchestration chain result: %v", resultMap)
-
-		// Determine success/failure
-		success := true
-		if errorMsg, ok := resultMap["error"].(string); ok && errorMsg != "" {
-			success = false
-			log.Printf("Orchestration chain execution failed: %s", errorMsg)
+		if err := json.NewDecoder(resp.Body).Decode(&queryResult); err != nil {
+			return nil, fmt.Errorf("decode query response: %w", err)
 		}
 
-		// Extract output keys
-		chainName, _ := state["orchestration_chain_name"].(string)
-
+		// Store knowledge graph context for the chain
 		newState := make(map[string]any, len(state)+2)
 		for k, v := range state {
 			newState[k] = v
 		}
-		newState["orchestration_success"] = success
-		newState["orchestration_analysis"] = map[string]any{
-			"success":    success,
-			"chain_name": chainName,
-			"result":     resultMap,
+		newState["knowledge_graph_context"] = map[string]any{
+			"query_results": queryResult.Data,
+			"columns":       queryResult.Columns,
 		}
+		newState["knowledge_graph_query_results"] = queryResult.Data
 
-		log.Printf("Orchestration chain result analyzed: success=%v, chain=%s", success, chainName)
+		log.Printf("Knowledge graph query returned %d results for chain planning", len(queryResult.Data))
+
 		return newState, nil
-	})
-}
+		defer resp.Body.Close()
 
-// NewOrchestrationProcessorWorkflow creates a workflow that processes orchestration chains with knowledge graph integration.
-func NewOrchestrationProcessorWorkflow(opts OrchestrationProcessorOptions) (*stategraph.CompiledStateGraph, error) {
-	localAIURL := opts.LocalAIURL
-	if localAIURL == "" {
-		localAIURL = os.Getenv("LOCALAI_URL")
-		if localAIURL == "" {
-			localAIURL = "http://localai:8080"
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+			log.Printf("Knowledge graph query failed: %s", string(bodyBytes))
+			// Fall back to using knowledge graph from state if available
+			kgIface, ok := state["knowledge_graph"]
+			if ok {
+				newState := make(map[string]any, len(state)+1)
+				for k, v := range state {
+					newState[k] = v
+				}
+				newState["knowledge_graph_context"] = kgIface
+				return newState, nil
+			}
+			return state, nil
 		}
-	}
 
-	extractServiceURL := opts.ExtractServiceURL
-	if extractServiceURL == "" {
-		extractServiceURL = os.Getenv("EXTRACT_SERVICE_URL")
-		if extractServiceURL == "" {
-			extractServiceURL = "http://extract-service:19080"
+		var queryResult struct {
+			Columns []string         `json:"columns"`
+			Data    []map[string]any `json:"data"`
 		}
-	}
 
-	nodes := map[string]stategraph.NodeFunc{
-		"query_kg":      QueryKnowledgeGraphForChainNode(extractServiceURL),
-		"run_chain":     RunOrchestrationChainNode(localAIURL),
-		"analyze_result": AnalyzeChainResultsNode(),
-	}
+		if err := json.NewDecoder(resp.Body).Decode(&queryResult); err != nil {
+			return nil, fmt.Errorf("decode query response: %w", err)
+		}
 
-	edges := []EdgeSpec{
-		{From: "query_kg", To: "run_chain", Label: "chain_execution"},
-		{From: "run_chain", To: "analyze_result", Label: "result_analysis"},
-	}
+		// Store knowledge graph context for the chain
+		newState := make(map[string]any, len(state)+2)
+		for k, v := range state {
+			newState[k] = v
+		}
+		newState["knowledge_graph_context"] = map[string]any{
+			"query_results": queryResult.Data,
+			"columns":       queryResult.Columns,
+		}
+		newState["knowledge_graph_query_results"] = queryResult.Data
 
-	return BuildGraph("query_kg", "analyze_result", nodes, edges)
-}
+		log.Printf("Knowledge graph query returned %d results for chain planning", len(queryResult.Data))
 
+		return newState, nil
