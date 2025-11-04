@@ -493,6 +493,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
+	started := time.Now()
 
 	var nodes []Node
 	var edges []Edge
@@ -765,6 +766,35 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	klDivergence := calculateKLDivergence(actualDistribution, idealDistribution)
 
+	// Log information theory metrics for monitoring
+	if metadataEntropy < 1.0 {
+		s.logger.Printf("WARNING: Low metadata entropy (%.3f) - schema may have low diversity", metadataEntropy)
+	} else if metadataEntropy > 4.0 {
+		s.logger.Printf("INFO: High metadata entropy (%.3f) - schema has high diversity", metadataEntropy)
+	}
+
+	if klDivergence > 0.5 {
+		s.logger.Printf("WARNING: High KL divergence (%.3f) - data type distribution deviates significantly from ideal", klDivergence)
+	} else if klDivergence > 1.0 {
+		s.logger.Printf("ERROR: Very high KL divergence (%.3f) - data type distribution is highly abnormal", klDivergence)
+	}
+
+	// Store metrics in root node for graph analysis
+	if rootID != "" {
+		for i := range nodes {
+			if nodes[i].ID == rootID {
+				if nodes[i].Props == nil {
+					nodes[i].Props = make(map[string]any)
+				}
+				nodes[i].Props["metadata_entropy"] = metadataEntropy
+				nodes[i].Props["kl_divergence"] = klDivergence
+				nodes[i].Props["actual_distribution"] = actualDistribution
+				nodes[i].Props["ideal_distribution"] = idealDistribution
+				break
+			}
+		}
+	}
+
 	s.replicateSchema(ctx, nodes, edges)
 
 	if s.graphPersistence != nil {
@@ -783,6 +813,13 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		"metadata_entropy": metadataEntropy,
 		"kl_divergence":    klDivergence,
 		"root_node_id":     rootID,
+		"metrics": map[string]any{
+			"metadata_entropy":    metadataEntropy,
+			"kl_divergence":       klDivergence,
+			"actual_distribution": actualDistribution,
+			"ideal_distribution":  idealDistribution,
+			"column_count":        len(columnDtypes),
+		},
 	}
 
 	if normResult.Stats != nil {
@@ -790,6 +827,44 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			"root_node_id": rootID,
 			"stats":        normResult.Stats,
 			"warnings":     normResult.Warnings,
+		}
+	}
+
+	// Record telemetry for graph processing with information theory metrics
+	if s.telemetry != nil {
+		telemetryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		telemetryRecord := telemetryRecord{
+			LibraryType:  "layer4_extract",
+			Operation:    "graph_processing",
+			Input: map[string]any{
+				"json_tables_count":    len(req.JSONTables),
+				"hive_ddls_count":      len(req.HiveDDLs),
+				"sql_queries_count":    len(req.SqlQueries),
+				"control_m_files_count": len(req.ControlMFiles),
+				"project_id":           req.ProjectID,
+				"system_id":            req.SystemID,
+				"information_system_id": req.InformationSystemID,
+			},
+			Output: map[string]any{
+				"nodes_count":        len(nodes),
+				"edges_count":        len(edges),
+				"metadata_entropy":   metadataEntropy,
+				"kl_divergence":      klDivergence,
+				"actual_distribution": actualDistribution,
+				"ideal_distribution":  idealDistribution,
+				"column_count":        len(columnDtypes),
+				"root_node_id":        rootID,
+			},
+			StartedAt:    started,
+			CompletedAt:  time.Now(),
+			Latency:      time.Since(started),
+		}
+		if normResult.Stats != nil {
+			telemetryRecord.Output["normalization_stats"] = normResult.Stats
+		}
+		if err := s.telemetry.Log(telemetryCtx, telemetryRecord); err != nil {
+			s.logger.Printf("telemetry warning: %v", err)
 		}
 	}
 
