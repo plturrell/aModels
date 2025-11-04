@@ -20,5 +20,6 @@ git submodule update --init --recursive
 - `langflow` → langflow-ai/langflow
 - `langgraph` → langchain-ai/langgraph
 - `sql-parser-go` → Chahine-tech/sql-parser-go
+- `orchestration` → plturrell/agenticAiETH_layer4_Orchestration
 
 

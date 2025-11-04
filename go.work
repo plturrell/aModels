@@ -4,6 +4,8 @@ use (
 	.
 	./models/glove
 	./models/sentencepiece
+	./services/extract
+	./infrastructure/third_party/orchestration
 )
 
 // Removed mono-repo dependencies - not available in standalone aModels repo

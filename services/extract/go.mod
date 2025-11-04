@@ -20,7 +20,7 @@ require (
 
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres => ../postgres
 
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration => ../../../../agenticAiETH_layer4_Orchestration
+replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration => ../../infrastructure/third_party/orchestration
 
 replace github.com/Chahine-tech/sql-parser-go => ../../infrastructure/third_party/sql-parser-go
 
