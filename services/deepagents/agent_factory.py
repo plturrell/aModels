@@ -94,20 +94,22 @@ def create_amodels_deep_agent(
     # Default model: LocalAI only (no external LLM dependencies)
     if model is None:
         localai_url = os.getenv("LOCALAI_URL", "http://localai:8081")
-        localai_model = os.getenv("LOCALAI_MODEL", "phi-3.5-mini")  # Default matches LocalAI general domain
+        # LocalAI uses domain names as model identifiers (not model names)
+        # The "general" domain uses phi-3.5-mini via transformers backend
+        localai_model = os.getenv("LOCALAI_MODEL", "general")  # Default to "general" domain
         
         try:
             from langchain_community.chat_models import ChatOpenAI
             model = ChatOpenAI(
                 base_url=f"{localai_url}/v1",
                 api_key="not-needed",
-                model=localai_model,
+                model=localai_model,  # This is the domain name (e.g., "general")
             )
         except Exception as e:
             raise RuntimeError(
-                f"Failed to connect to LocalAI at {localai_url} with model {localai_model}: {e}. "
+                f"Failed to connect to LocalAI at {localai_url} with domain {localai_model}: {e}. "
                 "Please ensure LocalAI service is running and accessible. "
-                f"Available models can be queried at {localai_url}/v1/models"
+                f"Available domains can be queried at {localai_url}/v1/domains"
             )
     
     # Default system prompt

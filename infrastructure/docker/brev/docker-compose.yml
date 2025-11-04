@@ -208,8 +208,9 @@ services:
       - GRAPH_SERVICE_URL=http://graph-server:8080
       # Model Configuration - LocalAI only (no external LLM dependencies)
       - LOCALAI_URL=http://localai:8081
-      # Model name (defaults to phi-3.5-mini which matches LocalAI general domain)
-      - LOCALAI_MODEL=${LOCALAI_MODEL:-phi-3.5-mini}
+      # Domain name (defaults to "general" which uses phi-3.5-mini via transformers backend)
+      # Available domains can be queried at http://localai:8081/v1/domains
+      - LOCALAI_MODEL=${LOCALAI_MODEL:-general}
       # Disable external LLM providers
       - ANTHROPIC_API_KEY=
       - OPENAI_API_KEY=
