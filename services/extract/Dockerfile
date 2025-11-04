@@ -41,10 +41,11 @@ RUN apk add --no-cache protobuf-dev protoc && \
     mkdir -p gen/extractpb && \
     protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto
 
-# Update go.mod to include the generated protobuf package
-# Then build (go mod tidy will fail for local package, but go build will work)
-RUN go mod tidy 2>&1 | grep -v "does not contain package" || true
-RUN go build -o /server .
+# Update go.mod to allow build without remote package check
+# The protobuf package is local, so we use -mod=readonly to skip validation
+RUN go mod edit -replace github.com/plturrell/aModels/services/extract/gen/extractpb=./gen/extractpb || true
+RUN go mod tidy || true
+RUN go build -mod=readonly -o /server .
 
 # Final stage
 FROM alpine:latest
