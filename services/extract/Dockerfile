@@ -31,6 +31,15 @@ WORKDIR /app/services/extract
 # Download dependencies
 RUN go mod download
 
+# Install protoc and regenerate protobuf files
+RUN apt-get update -qq && \
+    apt-get install -y -qq protobuf-compiler >/dev/null 2>&1 && \
+    go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest && \
+    mkdir -p gen/extractpb && \
+    protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Copy the rest of the source code
 COPY services/extract/ .
 
