@@ -251,7 +251,9 @@ Knowledge Graph Output
 
 **Redis Persistence**
 - Caches frequently accessed data
+- Stores vector embeddings for SQL queries
 - Improves query performance
+- **Note**: Vector storage exists but retrieval/search not implemented (see `docs/extraction-embedding-rag-review.md`)
 
 **Flight Persistence**
 - Exposes graph data via Flight protocol
