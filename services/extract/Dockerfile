@@ -41,8 +41,12 @@ RUN apk add --no-cache protobuf-dev protoc && \
     mkdir -p gen/extractpb && \
     protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto
 
-# Build with auto-update of go.mod (the protobuf package is local)
-RUN go build -mod=mod -o /server .
+# Add replace directive for local protobuf package before building
+# This tells Go to use the local package instead of trying to fetch from remote
+RUN go mod edit -replace github.com/plturrell/aModels/services/extract/gen/extractpb=./gen/extractpb
+
+# Build (go.mod is now updated with replace directive)
+RUN go build -o /server .
 
 # Final stage
 FROM alpine:latest
