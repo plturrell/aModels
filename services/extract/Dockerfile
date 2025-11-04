@@ -41,9 +41,12 @@ RUN apk add --no-cache protobuf-dev protoc && \
     mkdir -p gen/extractpb && \
     protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto
 
-# Build (go build will automatically update go.mod if needed)
-# The protobuf package is local, so we skip tidy and let build handle it
-RUN go build -o /server .
+# Update go.mod manually to include generated protobuf package
+# Then run tidy to update dependencies
+RUN echo "require github.com/plturrell/aModels/services/extract/gen/extractpb v0.0.0" >> go.mod && \
+    echo "replace github.com/plturrell/aModels/services/extract/gen/extractpb => ./gen/extractpb" >> go.mod && \
+    go mod tidy && \
+    go build -o /server .
 
 # Final stage
 FROM alpine:latest
