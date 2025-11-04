@@ -51,6 +51,11 @@ services:
       - TRANSFORMERS_BASE_URL=http://search-python:8091
       - TRANSFORMERS_MODEL=all-MiniLM-L6-v2
       - DISABLE_VAULTGEMMA_FALLBACK=1
+      # Redis config (preferred over file-based)
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - REDIS_DOMAIN_CONFIG_KEY=${REDIS_DOMAIN_CONFIG_KEY:-localai:domains:config}
+      # Fallback to file if Redis not available
+      - DOMAIN_CONFIG_PATH=/workspace/config/domains.json
     volumes:
       - ../../models:/models:ro
       - /home/aModels/services/localai/config:/workspace/config:ro
@@ -59,6 +64,10 @@ services:
     depends_on:
       transformers:
         condition: service_healthy
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_started
     deploy:
       resources:
         reservations:
@@ -164,6 +173,25 @@ services:
       - "6379:6379"
     volumes:
       - redisdata:/data
+
+  config-sync:
+    build:
+      context: ../..
+      dockerfile: services/localai/cmd/config-sync/Dockerfile
+    image: amodels/config-sync:latest
+    container_name: config-sync
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DSN=postgres://postgres:postgres@postgres:5432/amodels?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_DOMAIN_CONFIG_KEY=localai:domains:config
+      - SYNC_INTERVAL=30s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: ["-postgres", "postgres://postgres:postgres@postgres:5432/amodels?sslmode=disable", "-redis", "redis://redis:6379/0", "-interval", "30s"]
 
   extract:
     build:
