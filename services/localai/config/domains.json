@@ -39,7 +39,7 @@
       "name": "SQL Agent",
       "layer": "layer1",
       "team": "DataTeam",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0x5678",
       "attention_weights": {
         "sql_queries": 0.95,
@@ -69,7 +69,7 @@
       "name": "AI Preparation Agent",
       "layer": "layer1",
       "team": "DataTeam",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0x9753",
       "attention_weights": {
         "data_preparation": 0.9,
@@ -98,7 +98,7 @@
       "name": "Data Process Agent",
       "layer": "layer1",
       "team": "DataTeam",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0xA1B2",
       "attention_weights": {
         "data_processing": 0.9,
@@ -127,7 +127,7 @@
       "name": "Standardization Agent",
       "layer": "layer1",
       "team": "DataTeam",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0xC3D4",
       "attention_weights": {
         "standardization": 0.95,
@@ -156,7 +156,7 @@
       "name": "Agent Process Agent",
       "layer": "layer1",
       "team": "FoundationTeam",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0x9ABC",
       "attention_weights": {
         "agent_management": 0.95,
@@ -186,7 +186,7 @@
       "name": "Blockchain Agent",
       "layer": "layer1",
       "team": "FoundationTeam",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0xB10C",
       "attention_weights": {
         "blockchain_ops": 0.95,
@@ -216,7 +216,7 @@
       "name": "Orchestrator Agent",
       "layer": "layer1",
       "team": "FoundationTeam",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0xDEF0",
       "attention_weights": {
         "orchestration": 0.95,
@@ -245,7 +245,7 @@
       "name": "Smart Contract Agent",
       "layer": "layer1",
       "team": "FoundationTeam",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0xE6A7",
       "attention_weights": {
         "smart_contracts": 0.95,
@@ -275,7 +275,7 @@
       "name": "QA Validation Agent",
       "layer": "layer2",
       "team": "QualityControl",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0x1234",
       "attention_weights": {
         "validation": 0.95,
@@ -304,7 +304,7 @@
       "name": "Audit Agent",
       "layer": "layer2",
       "team": "QualityControl",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0x7E21",
       "attention_weights": {
         "audit": 0.95,
@@ -334,7 +334,7 @@
       "name": "Quality Control Agent",
       "layer": "layer2",
       "team": "QualityControl",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0x8642",
       "attention_weights": {
         "quality_control": 0.95,
@@ -363,7 +363,7 @@
       "name": "Control Tower Agent",
       "layer": "layer2",
       "team": "QualityControl",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0xCT00",
       "attention_weights": {
         "monitoring": 0.95,
@@ -392,7 +392,7 @@
       "name": "Risk Controller Agent",
       "layer": "layer2",
       "team": "QualityControl",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0xD4C5",
       "attention_weights": {
         "risk_assessment": 0.95,
@@ -421,7 +421,7 @@
       "name": "Calculation Validation Agent",
       "layer": "layer2",
       "team": "QualityControl",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0xE5F6",
       "attention_weights": {
         "calculation": 0.95,
@@ -450,7 +450,7 @@
       "name": "Governance Agent",
       "layer": "layer2",
       "team": "QualityControl",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0xG0V1",
       "attention_weights": {
         "governance": 0.95,
@@ -550,7 +550,7 @@
       "name": "Treasury Agent",
       "layer": "layer3",
       "team": "FinanceOperations",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0x71A2",
       "attention_weights": {
         "treasury": 0.95,
@@ -579,7 +579,7 @@
       "name": "Invoice Language Agent",
       "layer": "layer3",
       "team": "FinanceOperations",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0x8F32",
       "attention_weights": {
         "invoice_processing": 0.95,
@@ -608,7 +608,7 @@
       "name": "Investor Relations Agent",
       "layer": "layer3",
       "team": "FinanceOperations",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0x92C8",
       "attention_weights": {
         "investor_relations": 0.9,
@@ -637,7 +637,7 @@
       "name": "Trade Reconciliation Agent",
       "layer": "layer3",
       "team": "FinanceOperations",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0xA7D2",
       "attention_weights": {
         "reconciliation": 0.95,
@@ -701,7 +701,7 @@
       "name": "News Intelligence Agent",
       "layer": "layer3",
       "team": "FinanceOperations",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-2b-q4_k_m.gguf",
       "agent_id": "0xN135",
       "attention_weights": {
         "news_analysis": 0.9,
@@ -730,7 +730,7 @@
       "name": "Browser Analysis Agent",
       "layer": "layer4",
       "team": "BrowserTeam",
-      "model_path": "../agenticAiETH_layer4_Models/gemma-7b-q4_k_m.gguf",
+      "model_path": "../../models/gemma-7b-q4_k_m.gguf",
       "agent_id": "0xBR0W",
       "attention_weights": {
         "web_analysis": 0.95,
