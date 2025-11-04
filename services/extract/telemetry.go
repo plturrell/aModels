@@ -13,7 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	postgresv1 "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/gen/v1"
+	postgresv1 "github.com/plturrell/aModels/services/postgres/pkg/gen/v1"
 )
 
 type telemetryConfig struct {

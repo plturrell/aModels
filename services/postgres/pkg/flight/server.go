@@ -12,8 +12,8 @@ import (
 	"github.com/apache/arrow/go/v16/arrow/flight"
 	"github.com/apache/arrow/go/v16/arrow/ipc"
 	"github.com/apache/arrow/go/v16/arrow/memory"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/models"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/repository"
+	"github.com/plturrell/aModels/services/postgres/pkg/models"
+	"github.com/plturrell/aModels/services/postgres/pkg/repository"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

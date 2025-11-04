@@ -8,7 +8,7 @@ import (
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/models"
+	"github.com/plturrell/aModels/services/postgres/pkg/models"
 )
 
 func newTestRepo(t *testing.T) (*OperationsRepository, sqlmock.Sqlmock, func()) {

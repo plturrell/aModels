@@ -4,22 +4,20 @@ go 1.23
 
 require (
 	github.com/SAP/go-hdb v1.14.6
-	github.com/agenticAiETH/agenticAiETH_layer4 v0.0.0-00010101000000-000000000000
 	github.com/apache/arrow/go/v16 v16.0.0
 	github.com/gorilla/mux v1.8.1
 	github.com/joho/godotenv v1.5.1
-	github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK v0.0.0
 	golang.org/x/image v0.25.0
 	gonum.org/v1/gonum v0.16.0
 	gorgonia.org/gorgonia v0.9.18
 	gorgonia.org/tensor v0.9.24
 )
 
-replace github.com/agenticAiETH/agenticAiETH_layer4 => ../agenticAiETH_layer4
+// Removed agenticAiETH_layer4 and AgentSDK - not part of aModels repository
+// replace github.com/agenticAiETH/agenticAiETH_layer4 => ../agenticAiETH_layer4
+// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK => ../agenticAiETH_layer4_AgentSDK
 
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK => ../agenticAiETH_layer4_AgentSDK
-
-replace github.com/apache/arrow/go/v16 => ../third_party/go-arrow
+replace github.com/apache/arrow/go/v16 => ./infrastructure/third_party/go-arrow
 
 replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20250825161204-c5933d9347a5
 

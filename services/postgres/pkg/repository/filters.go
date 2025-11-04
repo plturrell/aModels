@@ -3,7 +3,7 @@ package repository
 import (
 	"time"
 
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/models"
+	"github.com/plturrell/aModels/services/postgres/pkg/models"
 )
 
 // ListFilters captures optional filters for listing operations.

@@ -7,7 +7,7 @@ import (
 
 	"github.com/apache/arrow/go/v16/arrow/array"
 	"github.com/apache/arrow/go/v16/arrow/memory"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/models"
+	"github.com/plturrell/aModels/services/postgres/pkg/models"
 )
 
 func TestBuildOperationsRecord(t *testing.T) {

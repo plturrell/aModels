@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/models"
+	"github.com/plturrell/aModels/services/postgres/pkg/models"
 )
 
 // OperationsRepository persists lang operations and related metadata in Postgres.

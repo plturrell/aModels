@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package extract.v1;
 
-option go_package = "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract/gen/extractpb";
+option go_package = "github.com/plturrell/aModels/services/extract/gen/extractpb";
 
 import "google/protobuf/struct.proto";
 import "google/protobuf/wrappers.proto";

@@ -128,7 +128,7 @@ const (
 	defaultGRPCPort           = "9090"
 	defaultFlightAddr         = ":8815"
 	defaultLangextractURL     = "http://langextract-api:5000"
-	defaultTrainingDir        = "../agenticAiETH_layer4_Training/data/extracts"
+	defaultTrainingDir        = "../../data/training/extracts"
 	defaultTelemetryLibrary   = "layer4_extract"
 	defaultTelemetryOperation = "run_extract"
 	DefaultHTTPClientTimeout   = 45 * time.Second

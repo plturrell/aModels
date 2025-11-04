@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	postgresv1 "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/gen/v1"
+	postgresv1 "github.com/plturrell/aModels/services/postgres/pkg/gen/v1"
 )
 
 func main() {

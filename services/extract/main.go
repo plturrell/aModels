@@ -24,11 +24,11 @@ import (
 	_ "github.com/Chahine-tech/sql-parser-go/pkg/parser"
 	_ "github.com/SAP/go-hdb/driver"
 	"github.com/lib/pq"
-	extractpb "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract/gen/extractpb"
+	extractpb "github.com/plturrell/aModels/services/extract/gen/extractpb"
 	ch "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/chains"
 	
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract/internal/config"
-	handlers "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract/internal/handlers"
+	"github.com/plturrell/aModels/services/extract/internal/config"
+	handlers "github.com/plturrell/aModels/services/extract/internal/handlers"
 )
 
 const (
@@ -45,7 +45,7 @@ const (
 	defaultModelID            = "gemini-2.5-flash"
 	
 	// Training output
-	defaultTrainingDir = "../agenticAiETH_layer4_Training/data/extracts"
+	defaultTrainingDir = "../../data/training/extracts"
 	
 	// Telemetry
 	defaultTelemetryLibrary   = "layer4_extract"
@@ -243,7 +243,7 @@ func main() {
 		server.startExplorer()
 	} else {
 		addr := ":" + cfg.Server.Port
-		logger.Printf("agenticAiETH_layer4_Extract listening on %s (proxying %s)", addr, server.langextractURL)
+		logger.Printf("extract service listening on %s (proxying %s)", addr, server.langextractURL)
 		if err := http.ListenAndServe(addr, mux); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatalf("server exited with error: %v", err)
 		}

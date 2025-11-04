@@ -7,13 +7,14 @@
 package extractpb
 
 import (
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
 	wrapperspb "google.golang.org/protobuf/types/known/wrapperspb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -441,7 +442,7 @@ const file_proto_extract_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.extract.v1.EntityListR\x05value:\x028\x012T\n" +
 	"\x0eExtractService\x12B\n" +
-	"\aExtract\x12\x1a.extract.v1.ExtractRequest\x1a\x1b.extract.v1.ExtractResponseBMZKgithub.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract/gen/extractpbb\x06proto3"
+	"\aExtract\x12\x1a.extract.v1.ExtractRequest\x1a\x1b.extract.v1.ExtractResponseBMZKgithub.com/plturrell/aModels/services/extract/gen/extractpbb\x06proto3"
 
 var (
 	file_proto_extract_proto_rawDescOnce sync.Once

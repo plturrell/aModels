@@ -1,4 +1,4 @@
-module github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres
+module github.com/plturrell/aModels/services/postgres
 
 go 1.25.3
 

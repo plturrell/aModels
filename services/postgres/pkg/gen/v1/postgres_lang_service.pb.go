@@ -1113,7 +1113,7 @@ const file_v1_postgres_lang_service_proto_rawDesc = "" +
 	"\x10GetLangOperation\x123.agentic.layer4.postgres.v1.GetLangOperationRequest\x1a4.agentic.layer4.postgres.v1.GetLangOperationResponse\x12\x83\x01\n" +
 	"\x12ListLangOperations\x125.agentic.layer4.postgres.v1.ListLangOperationsRequest\x1a6.agentic.layer4.postgres.v1.ListLangOperationsResponse\x12k\n" +
 	"\fGetAnalytics\x12,.agentic.layer4.postgres.v1.AnalyticsRequest\x1a-.agentic.layer4.postgres.v1.AnalyticsResponse\x12l\n" +
-	"\x11CleanupOperations\x12*.agentic.layer4.postgres.v1.CleanupRequest\x1a+.agentic.layer4.postgres.v1.CleanupResponseBVZTgithub.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/gen/v1;postgresv1b\x06proto3"
+	"\x11CleanupOperations\x12*.agentic.layer4.postgres.v1.CleanupRequest\x1a+.agentic.layer4.postgres.v1.CleanupResponseBVZTgithub.com/plturrell/aModels/services/postgres/pkg/gen/v1;postgresv1b\x06proto3"
 
 var (
 	file_v1_postgres_lang_service_proto_rawDescOnce sync.Once

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package agentic.layer4.postgres.v1;
 
-option go_package = "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/gen/v1;postgresv1";
+option go_package = "github.com/plturrell/aModels/services/postgres/pkg/gen/v1;postgresv1";
 
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
