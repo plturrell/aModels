@@ -45,4 +45,4 @@ WORKDIR /workspace
 
 EXPOSE 8081
 
-ENTRYPOINT ["/usr/local/bin/vaultgemma-server", "-config", "/workspace/config/domains.json"]
+ENTRYPOINT ["/usr/local/bin/vaultgemma-server", "-config", "config/domains.json"]
