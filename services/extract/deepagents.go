@@ -27,17 +27,29 @@ func NewDeepAgentsClient(logger *log.Logger) *DeepAgentsClient {
 	if baseURL == "" {
 		baseURL = "http://deepagents-service:9004"
 	}
+<<<<<<< HEAD
 
 	// Enabled by default (10/10 integration)
 	// Only disable if explicitly set to false
 	enabled := os.Getenv("DEEPAGENTS_ENABLED") != "false"
 
+=======
+	
+	// Enabled by default (10/10 integration)
+	// Only disable if explicitly set to false
+	enabled := os.Getenv("DEEPAGENTS_ENABLED") != "false"
+	
+>>>>>>> 0a025abe60b7633bd29e09340fd3b54080e7b084
 	if enabled {
 		logger.Printf("DeepAgents integration enabled (URL: %s)", baseURL)
 	} else {
 		logger.Printf("DeepAgents integration disabled (DEEPAGENTS_ENABLED=false)")
 	}
+<<<<<<< HEAD
 
+=======
+	
+>>>>>>> 0a025abe60b7633bd29e09340fd3b54080e7b084
 	return &DeepAgentsClient{
 		baseURL: baseURL,
 		client: &http.Client{
@@ -114,7 +126,11 @@ Be specific and actionable.`, graphSummary, projectID, systemID)
 	}
 
 	endpoint := fmt.Sprintf("%s/invoke", c.baseURL)
+<<<<<<< HEAD
 
+=======
+	
+>>>>>>> 0a025abe60b7633bd29e09340fd3b54080e7b084
 	// Retry logic for resilience
 	var lastErr error
 	maxRetries := 2
@@ -198,11 +214,19 @@ func (c *DeepAgentsClient) checkHealth(ctx context.Context) bool {
 // FormatGraphSummary formats a knowledge graph for analysis.
 func FormatGraphSummary(nodes []Node, edges []Edge, quality map[string]any, metrics map[string]any) string {
 	var summary strings.Builder
+<<<<<<< HEAD
 
 	summary.WriteString(fmt.Sprintf("Knowledge Graph Summary:\n"))
 	summary.WriteString(fmt.Sprintf("- Nodes: %d\n", len(nodes)))
 	summary.WriteString(fmt.Sprintf("- Edges: %d\n", len(edges)))
 
+=======
+	
+	summary.WriteString(fmt.Sprintf("Knowledge Graph Summary:\n"))
+	summary.WriteString(fmt.Sprintf("- Nodes: %d\n", len(nodes)))
+	summary.WriteString(fmt.Sprintf("- Edges: %d\n", len(edges)))
+	
+>>>>>>> 0a025abe60b7633bd29e09340fd3b54080e7b084
 	// Count node types
 	nodeTypes := make(map[string]int)
 	for _, node := range nodes {
@@ -212,7 +236,11 @@ func FormatGraphSummary(nodes []Node, edges []Edge, quality map[string]any, metr
 	for nodeType, count := range nodeTypes {
 		summary.WriteString(fmt.Sprintf("  - %s: %d\n", nodeType, count))
 	}
+<<<<<<< HEAD
 
+=======
+	
+>>>>>>> 0a025abe60b7633bd29e09340fd3b54080e7b084
 	// Count edge labels
 	edgeLabels := make(map[string]int)
 	for _, edge := range edges {
@@ -222,7 +250,11 @@ func FormatGraphSummary(nodes []Node, edges []Edge, quality map[string]any, metr
 	for label, count := range edgeLabels {
 		summary.WriteString(fmt.Sprintf("  - %s: %d\n", label, count))
 	}
+<<<<<<< HEAD
 
+=======
+	
+>>>>>>> 0a025abe60b7633bd29e09340fd3b54080e7b084
 	// Add quality metrics
 	if quality != nil {
 		if score, ok := quality["score"].(float64); ok {
@@ -238,7 +270,11 @@ func FormatGraphSummary(nodes []Node, edges []Edge, quality map[string]any, metr
 			}
 		}
 	}
+<<<<<<< HEAD
 
+=======
+	
+>>>>>>> 0a025abe60b7633bd29e09340fd3b54080e7b084
 	// Add information theory metrics
 	if metrics != nil {
 		summary.WriteString("\nInformation Theory Metrics:\n")
@@ -252,7 +288,11 @@ func FormatGraphSummary(nodes []Node, edges []Edge, quality map[string]any, metr
 			summary.WriteString(fmt.Sprintf("  - Column Count: %.0f\n", colCount))
 		}
 	}
+<<<<<<< HEAD
 
+=======
+	
+>>>>>>> 0a025abe60b7633bd29e09340fd3b54080e7b084
 	return summary.String()
 }
 

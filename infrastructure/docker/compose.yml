@@ -49,4 +49,30 @@ services:
       - "9200:9200"
       - "9600:9600"
 
+  deepagents:
+    build:
+      context: ../../services/deepagents
+      dockerfile: Dockerfile
+    environment:
+      - EXTRACT_SERVICE_URL=http://extract-service:19080
+      - AGENTFLOW_SERVICE_URL=http://agentflow-service:9001
+      - GRAPH_SERVICE_URL=http://graph-service:8081
+      - LOCALAI_URL=http://localai:8080
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DEEPAGENTS_PORT=9004
+      # DeepAgents is enabled by default (10/10 integration)
+      # Set DEEPAGENTS_ENABLED=false to disable
+      - DEEPAGENTS_ENABLED=${DEEPAGENTS_ENABLED:-true}
+    ports:
+      - "9004:9004"
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9004/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 

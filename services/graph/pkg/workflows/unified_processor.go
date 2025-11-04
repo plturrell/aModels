@@ -10,6 +10,9 @@ import (
 	"github.com/langchain-ai/langgraph-go/pkg/stategraph"
 )
 
+// Import RunDeepAgentNode from deepagents_processor
+// This is defined in deepagents_processor.go
+
 // UnifiedProcessorOptions configures the unified workflow that combines all three systems.
 type UnifiedProcessorOptions struct {
 	ExtractServiceURL   string
@@ -343,6 +346,7 @@ func JoinUnifiedResultsNode() stategraph.JoinFunc {
 		kgProcessed := mergedState["knowledge_graph"] != nil
 		orchProcessed := mergedState["orchestration_result"] != nil || mergedState["orchestration_text"] != nil
 		afProcessed := mergedState["agentflow_result"] != nil
+		deepagentsProcessed := mergedState["deepagents_result"] != nil || mergedState["deepagents_text"] != nil
 
 		// Add unified summary
 		mergedState["unified_workflow_complete"] = true
@@ -350,12 +354,13 @@ func JoinUnifiedResultsNode() stategraph.JoinFunc {
 			"knowledge_graph_processed": kgProcessed,
 			"orchestration_processed":    orchProcessed,
 			"agentflow_processed":       afProcessed,
+			"deepagents_processed":      deepagentsProcessed,
 			"branches_joined":            len(inputs),
 			"joined_at":                  time.Now().Format(time.RFC3339),
 		}
 
-		log.Printf("Unified workflow results joined: KG=%v, Orch=%v, AF=%v, branches=%d",
-			kgProcessed, orchProcessed, afProcessed, len(inputs))
+		log.Printf("Unified workflow results joined: KG=%v, Orch=%v, AF=%v, DeepAgents=%v, branches=%d",
+			kgProcessed, orchProcessed, afProcessed, deepagentsProcessed, len(inputs))
 
 		return mergedState, nil
 	}
@@ -388,6 +393,7 @@ func WorkflowModeRoutingFunc(ctx context.Context, value any) ([]string, error) {
 	hasKG := state["knowledge_graph_request"] != nil
 	hasOrch := state["orchestration_request"] != nil
 	hasAF := state["agentflow_request"] != nil
+	hasDeepAgents := state["deepagents_request"] != nil
 
 	count := 0
 	if hasKG {
@@ -397,6 +403,9 @@ func WorkflowModeRoutingFunc(ctx context.Context, value any) ([]string, error) {
 		count++
 	}
 	if hasAF {
+		count++
+	}
+	if hasDeepAgents {
 		count++
 	}
 
@@ -435,6 +444,12 @@ func NewUnifiedProcessorWorkflow(opts UnifiedProcessorOptions) (*stategraph.Comp
 		}
 	}
 
+	// Get DeepAgents service URL
+	deepagentsServiceURL := os.Getenv("DEEPAGENTS_SERVICE_URL")
+	if deepagentsServiceURL == "" {
+		deepagentsServiceURL = "http://deepagents-service:9004"
+	}
+
 	// Nodes for both sequential and parallel modes
 	nodes := map[string]stategraph.NodeFunc{
 		"determine_mode":  DetermineWorkflowModeNode(),
@@ -442,6 +457,7 @@ func NewUnifiedProcessorWorkflow(opts UnifiedProcessorOptions) (*stategraph.Comp
 		"process_kg":      ProcessKnowledgeGraphWorkflowNode(extractServiceURL),
 		"process_orch":    ProcessOrchestrationWorkflowNode(localAIURL),
 		"process_agentflow": ProcessAgentFlowWorkflowNode(agentflowServiceURL),
+		"process_deepagents": RunDeepAgentNode(deepagentsServiceURL),
 		"process_unified": ProcessUnifiedWorkflowNode(UnifiedProcessorOptions{
 			ExtractServiceURL:   extractServiceURL,
 			AgentFlowServiceURL: agentflowServiceURL,
@@ -465,14 +481,19 @@ func NewUnifiedProcessorWorkflow(opts UnifiedProcessorOptions) (*stategraph.Comp
 
 	// For parallel mode, we need a split node
 	// Since LangGraph doesn't have explicit split nodes, we use multiple entry points
-	// For true parallel execution, all three nodes should be reachable simultaneously
+	// For true parallel execution, all branches should be reachable simultaneously
 	edges = append(edges,
 		// Sequential mode path
 		EdgeSpec{From: "process_unified", To: "join_results", Label: "unified_complete"},
-		// Parallel mode paths (all three can execute independently)
+		// Parallel mode paths (all branches can execute independently)
+		EdgeSpec{From: "split_parallel", To: "process_kg", Label: "kg_branch"},
+		EdgeSpec{From: "split_parallel", To: "process_orch", Label: "orch_branch"},
+		EdgeSpec{From: "split_parallel", To: "process_agentflow", Label: "af_branch"},
+		EdgeSpec{From: "split_parallel", To: "process_deepagents", Label: "deepagents_branch"},
 		EdgeSpec{From: "process_kg", To: "join_results", Label: "kg_complete"},
 		EdgeSpec{From: "process_orch", To: "join_results", Label: "orch_complete"},
 		EdgeSpec{From: "process_agentflow", To: "join_results", Label: "af_complete"},
+		EdgeSpec{From: "process_deepagents", To: "join_results", Label: "deepagents_complete"},
 	)
 
 	// Build with join node
