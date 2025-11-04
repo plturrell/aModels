@@ -41,9 +41,9 @@ RUN apk add --no-cache protobuf-dev protoc && \
     mkdir -p gen/extractpb && \
     protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto
 
-# Build directly (protobuf package is in same module, no replace needed)
-# The generated files are part of this module, so build works without replace
-# Skip go mod tidy since the local package isn't in remote module
+# Set GOPRIVATE to prevent Go from trying to fetch the local package
+# Then build (the package is in the same module, so it should work)
+ENV GOPRIVATE=github.com/plturrell/aModels/services/extract/gen/extractpb
 RUN go build -o /server .
 
 # Final stage
