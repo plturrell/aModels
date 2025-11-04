@@ -29,6 +29,7 @@ import (
 	
 	"github.com/plturrell/aModels/services/extract/internal/config"
 	handlers "github.com/plturrell/aModels/services/extract/internal/handlers"
+	"github.com/plturrell/aModels/services/extract/internal/processing"
 )
 
 const (
@@ -766,17 +767,48 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	klDivergence := calculateKLDivergence(actualDistribution, idealDistribution)
 
-	// Log information theory metrics for monitoring
-	if metadataEntropy < 1.0 {
-		s.logger.Printf("WARNING: Low metadata entropy (%.3f) - schema may have low diversity", metadataEntropy)
-	} else if metadataEntropy > 4.0 {
-		s.logger.Printf("INFO: High metadata entropy (%.3f) - schema has high diversity", metadataEntropy)
+	// Interpret metrics and determine actionable insights
+	thresholds := processing.DefaultMetricsThresholds()
+	interpretation := processing.InterpretMetrics(
+		metadataEntropy,
+		klDivergence,
+		len(columnDtypes),
+		actualDistribution,
+		idealDistribution,
+		thresholds,
+		s.logger,
+	)
+	
+	// Take action based on interpretation
+	if interpretation.ShouldReject {
+		s.logger.Printf("ERROR: Rejecting graph processing due to critical data quality issues (quality=%s, score=%.2f)",
+			interpretation.QualityLevel, interpretation.QualityScore)
+		handlers.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			"error": "Graph processing rejected due to data quality issues",
+			"quality_level": interpretation.QualityLevel,
+			"quality_score": interpretation.QualityScore,
+			"issues": interpretation.Issues,
+			"recommendations": interpretation.Recommendations,
+			"metrics": map[string]any{
+				"metadata_entropy": metadataEntropy,
+				"kl_divergence": klDivergence,
+				"column_count": len(columnDtypes),
+			},
+		})
+		return
 	}
-
-	if klDivergence > 0.5 {
-		s.logger.Printf("WARNING: High KL divergence (%.3f) - data type distribution deviates significantly from ideal", klDivergence)
-	} else if klDivergence > 1.0 {
-		s.logger.Printf("ERROR: Very high KL divergence (%.3f) - data type distribution is highly abnormal", klDivergence)
+	
+	// Log warnings if needed
+	if interpretation.ShouldWarn {
+		for _, issue := range interpretation.Issues {
+			s.logger.Printf("WARNING: %s", issue)
+		}
+	}
+	
+	// Get processing strategy flags (for future use)
+	processingFlags := processing.GetProcessingFlags(interpretation)
+	if processingFlags["skip_processing"] {
+		s.logger.Printf("WARNING: Data quality suggests simplified processing")
 	}
 
 	// Store metrics in root node for graph analysis and Glean export
@@ -828,6 +860,20 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			"ideal_distribution":  idealDistribution,
 			"column_count":        len(columnDtypes),
 		},
+		"quality": map[string]any{
+			"score":            interpretation.QualityScore,
+			"level":            interpretation.QualityLevel,
+			"issues":           interpretation.Issues,
+			"recommendations":   interpretation.Recommendations,
+			"processing_strategy": interpretation.ProcessingStrategy,
+			"needs_validation": interpretation.NeedsValidation,
+			"needs_review":     interpretation.NeedsReview,
+		},
+	}
+	
+	// Add warnings if present
+	if interpretation.ShouldWarn {
+		response["warnings"] = interpretation.Issues
 	}
 
 	if normResult.Stats != nil {
