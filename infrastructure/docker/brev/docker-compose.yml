@@ -53,7 +53,7 @@ services:
       - DISABLE_VAULTGEMMA_FALLBACK=1
     volumes:
       - ../../models:/models:ro
-      - ../../services/localai/config:/workspace/config:ro
+      - ../../services/localai/config/domains.json:/workspace/config/domains.json:ro
     ports:
       - "8081:8080"
     depends_on:
