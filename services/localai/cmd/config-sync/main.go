@@ -73,7 +73,8 @@ func main() {
 			if err := pgStore.SyncToRedis(ctx, redisLoader); err != nil {
 				log.Printf("⚠️  Sync failed: %v", err)
 			} else {
-				log.Printf("✅ Sync complete")
+				count, _ := pgStore.CountDomainConfigs(ctx)
+				log.Printf("✅ Sync complete (%d domains)", count)
 			}
 		}
 	}

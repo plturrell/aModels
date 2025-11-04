@@ -6,6 +6,8 @@ require (
     github.com/go-skynet/go-llama.cpp v0.0.0-20240314183750-6a8041ef6b46
     github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/glove v0.0.0-00010101000000-000000000000
     github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/sentencepiece v0.0.0-00010101000000-000000000000
+    github.com/redis/go-redis/v9 v9.5.1
+    github.com/lib/pq v1.10.9
     golang.org/x/time v0.5.0
     google.golang.org/grpc v1.70.0
     google.golang.org/protobuf v1.36.10

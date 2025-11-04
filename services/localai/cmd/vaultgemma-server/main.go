@@ -58,11 +58,20 @@ func main() {
 		log.Printf("   - Attention heads: %d", model.Config.NumHeads)
 	}
 
-	// Load domain configurations
+	// Load domain configurations (Redis or file-based)
 	domainManager := domain.NewDomainManager()
-	if err := domainManager.LoadDomainConfigs(*configPath); err != nil {
+	configLoader, err := domain.NewConfigLoader()
+	if err != nil {
+		log.Printf("⚠️  Failed to create config loader: %v", err)
+		log.Printf("⚠️  Falling back to file-based config")
+		configLoader = &domain.FileConfigLoader{path: *configPath}
+	}
+	
+	if err := configLoader.LoadDomainConfigs(context.Background(), domainManager); err != nil {
 		log.Printf("⚠️  Failed to load domain configs: %v", err)
 		log.Printf("⚠️  Continuing with single model mode")
+	} else {
+		log.Printf("✅ Loaded domain configs from %s", domain.GetConfigSource())
 	}
 
 	// Initialize model registries
