@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/langchain-ai/langgraph-go/pkg/stategraph"
 )
@@ -181,7 +182,155 @@ func ProcessUnifiedWorkflowNode(opts UnifiedProcessorOptions) stategraph.NodeFun
 	})
 }
 
+// ProcessKnowledgeGraphWorkflowNode returns a node that processes knowledge graphs.
+func ProcessKnowledgeGraphWorkflowNode(extractServiceURL string) stategraph.NodeFunc {
+	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
+		kgReq, ok := state["knowledge_graph_request"].(*KnowledgeGraphRequest)
+		if !ok || kgReq == nil {
+			return state, nil // Skip if no KG request
+		}
+
+		kgState := map[string]any{
+			"knowledge_graph_request": kgReq,
+		}
+		kgNode := ProcessKnowledgeGraphNode(extractServiceURL)
+		kgResult, err := kgNode(ctx, kgState)
+		if err != nil {
+			return nil, fmt.Errorf("process knowledge graph: %w", err)
+		}
+
+		newState := make(map[string]any, len(state)+1)
+		for k, v := range state {
+			newState[k] = v
+		}
+		for k, v := range kgResult.(map[string]any) {
+			newState[k] = v
+		}
+		return newState, nil
+	})
+}
+
+// ProcessOrchestrationWorkflowNode returns a node that processes orchestration chains.
+func ProcessOrchestrationWorkflowNode(localAIURL string) stategraph.NodeFunc {
+	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
+		orchReq, ok := state["orchestration_request"].(*OrchestrationRequest)
+		if !ok || orchReq == nil {
+			return state, nil // Skip if no orchestration request
+		}
+
+		orchState := map[string]any{
+			"orchestration_request": map[string]any{
+				"chain_name": orchReq.ChainName,
+				"inputs":      orchReq.Inputs,
+			},
+		}
+
+		// Add knowledge graph context if available
+		if kgIface, ok := state["knowledge_graph"]; ok {
+			if kgMap, ok := kgIface.(map[string]any); ok {
+				if orchInputs, ok := orchState["orchestration_request"].(map[string]any)["inputs"].(map[string]any); ok {
+					orchInputs["knowledge_graph_context"] = kgMap
+				}
+			}
+		}
+
+		orchNode := RunOrchestrationChainNode(localAIURL)
+		orchResult, err := orchNode(ctx, orchState)
+		if err != nil {
+			return nil, fmt.Errorf("process orchestration chain: %w", err)
+		}
+
+		newState := make(map[string]any, len(state)+1)
+		for k, v := range state {
+			newState[k] = v
+		}
+		for k, v := range orchResult.(map[string]any) {
+			newState[k] = v
+		}
+		return newState, nil
+	})
+}
+
+// ProcessAgentFlowWorkflowNode returns a node that processes AgentFlow flows.
+func ProcessAgentFlowWorkflowNode(agentflowServiceURL string) stategraph.NodeFunc {
+	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
+		afReq, ok := state["agentflow_request"].(*AgentFlowRunRequest)
+		if !ok || afReq == nil {
+			return state, nil // Skip if no AgentFlow request
+		}
+
+		afState := map[string]any{
+			"agentflow_request": map[string]any{
+				"flow_id":     afReq.FlowID,
+				"input_value":  afReq.InputValue,
+				"inputs":       afReq.Inputs,
+				"ensure":       afReq.Ensure,
+			},
+		}
+
+		// Add knowledge graph and orchestration results if available
+		if kgIface, ok := state["knowledge_graph"]; ok {
+			afState["knowledge_graph"] = kgIface
+		}
+		if orchResult, ok := state["orchestration_result"]; ok {
+			if orchMap, ok := orchResult.(map[string]any); ok {
+				if text, ok := orchMap["text"].(string); ok {
+					if afInputs, ok := afState["agentflow_request"].(map[string]any)["inputs"].(map[string]any); ok {
+						afInputs["orchestration_result"] = text
+					}
+				}
+			}
+		}
+
+		afNode := RunAgentFlowFlowNode(agentflowServiceURL)
+		afResult, err := afNode(ctx, afState)
+		if err != nil {
+			return nil, fmt.Errorf("process AgentFlow flow: %w", err)
+		}
+
+		newState := make(map[string]any, len(state)+1)
+		for k, v := range state {
+			newState[k] = v
+		}
+		for k, v := range afResult.(map[string]any) {
+			newState[k] = v
+		}
+		return newState, nil
+	})
+}
+
+// JoinUnifiedResultsNode returns a join node that aggregates results from parallel branches.
+func JoinUnifiedResultsNode() stategraph.JoinFunc {
+	return func(ctx context.Context, inputs []any) (any, error) {
+		log.Println("Joining unified workflow results...")
+
+		mergedState := make(map[string]any)
+
+		// Merge all inputs
+		for _, input := range inputs {
+			if state, ok := input.(map[string]any); ok {
+				for k, v := range state {
+					mergedState[k] = v
+				}
+			}
+		}
+
+		// Add unified summary
+		mergedState["unified_workflow_complete"] = true
+		mergedState["unified_workflow_summary"] = map[string]any{
+			"knowledge_graph_processed": mergedState["knowledge_graph"] != nil,
+			"orchestration_processed":    mergedState["orchestration_result"] != nil,
+			"agentflow_processed":       mergedState["agentflow_result"] != nil,
+			"joined_at":                  time.Now().Format(time.RFC3339),
+		}
+
+		log.Println("Unified workflow results joined successfully")
+		return mergedState, nil
+	}
+}
+
 // NewUnifiedProcessorWorkflow creates a workflow that processes all three systems together.
+// Supports sequential, parallel, and conditional execution modes.
 func NewUnifiedProcessorWorkflow(opts UnifiedProcessorOptions) (*stategraph.CompiledStateGraph, error) {
 	extractServiceURL := opts.ExtractServiceURL
 	if extractServiceURL == "" {
@@ -207,7 +356,11 @@ func NewUnifiedProcessorWorkflow(opts UnifiedProcessorOptions) (*stategraph.Comp
 		}
 	}
 
+	// For parallel mode, use separate nodes and join
 	nodes := map[string]stategraph.NodeFunc{
+		"process_kg":      ProcessKnowledgeGraphWorkflowNode(extractServiceURL),
+		"process_orch":    ProcessOrchestrationWorkflowNode(localAIURL),
+		"process_agentflow": ProcessAgentFlowWorkflowNode(agentflowServiceURL),
 		"process_unified": ProcessUnifiedWorkflowNode(UnifiedProcessorOptions{
 			ExtractServiceURL:   extractServiceURL,
 			AgentFlowServiceURL: agentflowServiceURL,
@@ -215,9 +368,58 @@ func NewUnifiedProcessorWorkflow(opts UnifiedProcessorOptions) (*stategraph.Comp
 		}),
 	}
 
-	edges := []EdgeSpec{}
+	// Add join node for parallel execution
+	var edges []EdgeSpec
+	
+	// For parallel mode: all three processes run in parallel, then join
+	edges = append(edges,
+		EdgeSpec{From: "process_kg", To: "join_results", Label: "kg_complete"},
+		EdgeSpec{From: "process_orch", To: "join_results", Label: "orch_complete"},
+		EdgeSpec{From: "process_agentflow", To: "join_results", Label: "af_complete"},
+	)
 
-	return BuildGraph("process_unified", "process_unified", nodes, edges)
+	// For sequential mode: use the unified node
+	edges = append(edges,
+		EdgeSpec{From: "process_unified", To: "join_results", Label: "unified_complete"},
+	)
+
+	// Build with join node
+	builder := stategraph.New()
+	
+	// Add all nodes
+	for id, handler := range nodes {
+		opts := []stategraph.NodeOption{
+			stategraph.WithNodeRetries(2),
+			stategraph.WithNodeTimeout(120 * time.Second),
+			stategraph.WithNodeRetryDelay(2 * time.Second),
+		}
+		if err := builder.AddNode(id, handler, opts...); err != nil {
+			return nil, err
+		}
+	}
+
+	// Add join node
+	if err := builder.AddJoinNode("join_results", JoinUnifiedResultsNode(),
+		stategraph.WithJoinTimeout(30*time.Second)); err != nil {
+		return nil, err
+	}
+
+	// Add edges
+	for _, edge := range edges {
+		var edgeOpts []stategraph.EdgeOption
+		if edge.Label != "" {
+			edgeOpts = append(edgeOpts, stategraph.WithEdgeLabel(edge.Label))
+		}
+		if err := builder.AddEdge(edge.From, edge.To, edgeOpts...); err != nil {
+			return nil, err
+		}
+	}
+
+	// Set entry point (determine based on mode)
+	builder.SetEntryPoint("process_unified") // Default to sequential
+	builder.SetFinishPoint("join_results")
+
+	return builder.Compile()
 }
 
 // Helper functions for parsing request data

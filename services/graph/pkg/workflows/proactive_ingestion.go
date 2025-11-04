@@ -18,6 +18,7 @@ import (
 	"github.com/langchain-ai/langgraph-go/internal/catalog/flightcatalog"
 	extractgrpcclient "github.com/langchain-ai/langgraph-go/pkg/clients/extractgrpc"
 	extractpersist "github.com/langchain-ai/langgraph-go/pkg/persistence/extract"
+	"github.com/langchain-ai/langgraph-go/pkg/graph"
 	"github.com/langchain-ai/langgraph-go/pkg/stategraph"
 	extractpb "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract/gen/extractpb"
 )
@@ -57,20 +58,57 @@ var agentSDKHTTPClient = &http.Client{
 
 // BuildGraph constructs a compiled state graph using the supplied node handlers and edges.
 func BuildGraph(entry, exit string, nodes map[string]stategraph.NodeFunc, edges []EdgeSpec) (*stategraph.CompiledStateGraph, error) {
+	return BuildGraphWithOptions(entry, exit, nodes, edges, nil, nil)
+}
+
+// BuildGraphWithOptions constructs a compiled state graph with advanced options.
+func BuildGraphWithOptions(
+	entry, exit string,
+	nodes map[string]stategraph.NodeFunc,
+	edges []EdgeSpec,
+	conditionalEdges []ConditionalEdgeSpec,
+	stateManager *graph.StateManager,
+) (*stategraph.CompiledStateGraph, error) {
 	if len(nodes) == 0 {
 		return nil, fmt.Errorf("graph builder: at least one node must be provided")
 	}
 	builder := stategraph.New()
+	
+	// Enable state manager if provided
+	if stateManager != nil {
+		builder.UseStateManager(stateManager)
+	}
+	
+	// Add nodes with optional retry/timeout configuration
 	for id, handler := range nodes {
-		if err := builder.AddNode(id, handler); err != nil {
+		opts := []stategraph.NodeOption{
+			stategraph.WithNodeRetries(2),                                    // Retry failed nodes
+			stategraph.WithNodeTimeout(60 * time.Second),                    // 60s timeout per node
+			stategraph.WithNodeRetryDelay(2 * time.Second),                  // 2s delay between retries
+		}
+		if err := builder.AddNode(id, handler, opts...); err != nil {
 			return nil, err
 		}
 	}
+	
+	// Add regular edges
 	for _, edge := range edges {
-		if err := builder.AddEdge(edge.From, edge.To, stategraph.WithEdgeLabel(edge.Label)); err != nil {
+		var opts []stategraph.EdgeOption
+		if edge.Label != "" {
+			opts = append(opts, stategraph.WithEdgeLabel(edge.Label))
+		}
+		if err := builder.AddEdge(edge.From, edge.To, opts...); err != nil {
 			return nil, err
 		}
 	}
+	
+	// Add conditional edges
+	for _, condEdge := range conditionalEdges {
+		if err := builder.AddConditionalEdges(condEdge.Source, condEdge.PathFunc, condEdge.PathMap); err != nil {
+			return nil, err
+		}
+	}
+	
 	if entry != "" {
 		builder.SetEntryPoint(entry)
 	}
@@ -78,6 +116,13 @@ func BuildGraph(entry, exit string, nodes map[string]stategraph.NodeFunc, edges 
 		builder.SetFinishPoint(exit)
 	}
 	return builder.Compile()
+}
+
+// ConditionalEdgeSpec defines a conditional edge configuration.
+type ConditionalEdgeSpec struct {
+	Source   string                                    // Source node name
+	PathFunc stategraph.ConditionalFunc                // Function to determine routing
+	PathMap  map[string]string                         // Map of route labels to destination nodes
 }
 
 // wrapStateFunc adapts map-based node handlers into the runtime-agnostic

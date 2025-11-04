@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/langchain-ai/langgraph-go/pkg/graph"
 	"github.com/langchain-ai/langgraph-go/pkg/stategraph"
 )
 
@@ -372,7 +373,156 @@ func QueryKnowledgeGraphNode(extractServiceURL string) stategraph.NodeFunc {
 	})
 }
 
+// QualityRoutingFunc determines the next node based on knowledge graph quality.
+func QualityRoutingFunc(ctx context.Context, value any) ([]string, error) {
+	state, ok := value.(map[string]any)
+	if !ok {
+		return []string{"reject"}, nil // Default to reject if state is invalid
+	}
+
+	// Check if processing should continue
+	shouldProcess, _ := state["should_process_kg"].(bool)
+	shouldValidate, _ := state["should_validate_kg"].(bool)
+	shouldReview, _ := state["should_review_kg"].(bool)
+	processingStrategy, _ := state["processing_strategy"].(string)
+
+	// Route based on quality and processing strategy
+	if !shouldProcess {
+		return []string{"reject"}, nil
+	}
+
+	if processingStrategy == "skip" {
+		return []string{"skip"}, nil
+	}
+
+	if shouldReview {
+		return []string{"review"}, nil
+	}
+
+	if shouldValidate {
+		return []string{"validate"}, nil
+	}
+
+	// Good quality - proceed to query
+	return []string{"query"}, nil
+}
+
+// ValidateKnowledgeGraphNode returns a node that validates knowledge graph data.
+func ValidateKnowledgeGraphNode() stategraph.NodeFunc {
+	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
+		log.Println("Validating knowledge graph data...")
+		
+		kgIface, ok := state["knowledge_graph"]
+		if !ok {
+			return nil, fmt.Errorf("knowledge_graph not found in state")
+		}
+
+		kgMap, ok := kgIface.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("knowledge_graph is not a map")
+		}
+
+		// Validate nodes and edges exist
+		nodes, _ := kgMap["nodes"].([]any)
+		edges, _ := kgMap["edges"].([]any)
+
+		validationResults := map[string]any{
+			"valid":         len(nodes) > 0 && len(edges) > 0,
+			"node_count":    len(nodes),
+			"edge_count":    len(edges),
+			"validated_at":  time.Now().Format(time.RFC3339),
+		}
+
+		newState := make(map[string]any, len(state)+1)
+		for k, v := range state {
+			newState[k] = v
+		}
+		newState["validation_results"] = validationResults
+
+		log.Printf("Knowledge graph validation: valid=%v, nodes=%d, edges=%d",
+			validationResults["valid"], len(nodes), len(edges))
+
+		return newState, nil
+	})
+}
+
+// ReviewKnowledgeGraphNode returns a node that flags knowledge graph for human review.
+func ReviewKnowledgeGraphNode() stategraph.NodeFunc {
+	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
+		log.Println("Flagging knowledge graph for human review...")
+		
+		kgIface, ok := state["knowledge_graph"]
+		if !ok {
+			return nil, fmt.Errorf("knowledge_graph not found in state")
+		}
+
+		reviewInfo := map[string]any{
+			"flagged_for_review": true,
+			"reason":            "Quality level requires human review",
+			"flagged_at":        time.Now().Format(time.RFC3339),
+		}
+
+		newState := make(map[string]any, len(state)+2)
+		for k, v := range state {
+			newState[k] = v
+		}
+		newState["review_info"] = reviewInfo
+		newState["knowledge_graph"] = kgIface // Preserve knowledge graph
+
+		log.Println("Knowledge graph flagged for review")
+
+		return newState, nil
+	})
+}
+
+// RejectKnowledgeGraphNode returns a node that rejects low-quality knowledge graphs.
+func RejectKnowledgeGraphNode() stategraph.NodeFunc {
+	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
+		log.Println("Rejecting knowledge graph due to poor quality...")
+		
+		rejectionInfo := map[string]any{
+			"rejected":   true,
+			"reason":    "Knowledge graph quality is below acceptable threshold",
+			"rejected_at": time.Now().Format(time.RFC3339),
+		}
+
+		newState := make(map[string]any, len(state)+1)
+		for k, v := range state {
+			newState[k] = v
+		}
+		newState["rejection_info"] = rejectionInfo
+
+		log.Println("Knowledge graph rejected")
+
+		return newState, nil
+	})
+}
+
+// SkipKnowledgeGraphNode returns a node that skips processing for simplified strategy.
+func SkipKnowledgeGraphNode() stategraph.NodeFunc {
+	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
+		log.Println("Skipping knowledge graph processing (simplified strategy)...")
+		
+		skipInfo := map[string]any{
+			"skipped":   true,
+			"reason":   "Processing strategy is 'simplified' or 'skip'",
+			"skipped_at": time.Now().Format(time.RFC3339),
+		}
+
+		newState := make(map[string]any, len(state)+1)
+		for k, v := range state {
+			newState[k] = v
+		}
+		newState["skip_info"] = skipInfo
+
+		log.Println("Knowledge graph processing skipped")
+
+		return newState, nil
+	})
+}
+
 // NewKnowledgeGraphProcessorWorkflow creates a workflow that processes knowledge graphs using LangGraph.
+// This workflow uses conditional edges for quality-based routing.
 func NewKnowledgeGraphProcessorWorkflow(opts KnowledgeGraphProcessorOptions) (*stategraph.CompiledStateGraph, error) {
 	extractServiceURL := opts.ExtractServiceURL
 	if extractServiceURL == "" {
@@ -383,16 +533,36 @@ func NewKnowledgeGraphProcessorWorkflow(opts KnowledgeGraphProcessorOptions) (*s
 	}
 
 	nodes := map[string]stategraph.NodeFunc{
-		"process_kg":        ProcessKnowledgeGraphNode(extractServiceURL),
-		"analyze_quality":    AnalyzeKnowledgeGraphQualityNode(),
-		"query_kg":          QueryKnowledgeGraphNode(extractServiceURL),
+		"process_kg":     ProcessKnowledgeGraphNode(extractServiceURL),
+		"analyze_quality": AnalyzeKnowledgeGraphQualityNode(),
+		"validate_kg":    ValidateKnowledgeGraphNode(),
+		"review_kg":      ReviewKnowledgeGraphNode(),
+		"reject_kg":      RejectKnowledgeGraphNode(),
+		"skip_kg":        SkipKnowledgeGraphNode(),
+		"query_kg":       QueryKnowledgeGraphNode(extractServiceURL),
 	}
 
 	edges := []EdgeSpec{
 		{From: "process_kg", To: "analyze_quality", Label: "quality_analysis"},
-		{From: "analyze_quality", To: "query_kg", Label: "conditional_query"},
+		{From: "validate_kg", To: "query_kg", Label: "validated"},
+		{From: "review_kg", To: "query_kg", Label: "reviewed"},
 	}
 
-	return BuildGraph("process_kg", "query_kg", nodes, edges)
+	// Conditional routing based on quality
+	conditionalEdges := []ConditionalEdgeSpec{
+		{
+			Source: "analyze_quality",
+			PathFunc: QualityRoutingFunc,
+			PathMap: map[string]string{
+				"reject":  "reject_kg",
+				"skip":    "skip_kg",
+				"review":  "review_kg",
+				"validate": "validate_kg",
+				"query":   "query_kg",
+			},
+		},
+	}
+
+	return BuildGraphWithOptions("process_kg", "query_kg", nodes, edges, conditionalEdges, nil)
 }
 
