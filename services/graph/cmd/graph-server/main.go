@@ -277,6 +277,84 @@ func main() {
 			}
 			writeJSON(w, data)
 		})
+
+		// Pipeline to AgentFlow conversion endpoint
+		http.HandleFunc("/pipeline/to-agentflow", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+
+			var req map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, fmt.Sprintf("invalid request: %v", err), http.StatusBadRequest)
+				return
+			}
+
+			projectID, _ := req["project_id"].(string)
+			systemID, _ := req["system_id"].(string)
+			flowName, _ := req["flow_name"].(string)
+			flowID, _ := req["flow_id"].(string)
+			if flowID == "" {
+				flowID = fmt.Sprintf("pipeline_%s_%s", projectID, systemID)
+			}
+			if flowName == "" {
+				flowName = fmt.Sprintf("Control-M Pipeline - %s", systemID)
+			}
+			force, _ := req["force"].(bool)
+			agentFlowServiceURL := os.Getenv("AGENTFLOW_SERVICE_URL")
+			if agentFlowServiceURL == "" {
+				agentFlowServiceURL = "http://agentflow-service:9001"
+			}
+
+			// Create converter and query pipeline
+			converter := workflows.NewControlMToAgentFlowConverter(extractHTTPURL)
+			ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+			defer cancel()
+
+			segments, err := converter.QueryPipelineFromGraph(ctx, projectID, systemID)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("query pipeline: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			if len(segments) == 0 {
+				http.Error(w, "no pipeline segments found", http.StatusNotFound)
+				return
+			}
+
+			// Generate LangFlow flow
+			flowJSON, err := converter.GenerateLangFlowFlow(segments, flowName)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("generate flow: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			// Create flow in AgentFlow/LangFlow
+			createResult, err := converter.CreateFlowInAgentFlow(ctx, agentFlowServiceURL, flowJSON, flowID, projectID, force)
+			if err != nil {
+				log.Printf("Failed to create flow in AgentFlow: %v", err)
+				// Return flow JSON even if creation fails
+				writeJSON(w, map[string]any{
+					"flow_id":    flowID,
+					"flow_name":  flowName,
+					"segments":   segments,
+					"flow_json":  flowJSON,
+					"created":    false,
+					"error":      err.Error(),
+				})
+				return
+			}
+
+			writeJSON(w, map[string]any{
+				"flow_id":    flowID,
+				"flow_name":  flowName,
+				"segments":   segments,
+				"flow_json":  flowJSON,
+				"created":    true,
+				"result":     createResult,
+			})
+		})
 	}
 
 	if extractGRPCClient != nil {

@@ -227,6 +227,36 @@ async def knowledge_graph_query(payload: Dict[str, Any]) -> Any:
         raise HTTPException(status_code=502, detail=f"Extract service error: {e}")
 
 
+@app.post("/pipeline/to-agentflow")
+async def pipeline_to_agentflow(payload: Dict[str, Any]) -> Any:
+    """
+    Convert Control-M → SQL → Tables pipeline from knowledge graph into LangFlow flow.
+    
+    Request format:
+    {
+        "project_id": "project-123",
+        "system_id": "system-456",
+        "flow_name": "SGMI Pipeline",
+        "flow_id": "sgmi_pipeline",
+        "force": false
+    }
+    
+    This endpoint:
+    1. Queries Neo4j for Control-M jobs and their SQL/table relationships
+    2. Generates a LangFlow flow JSON with logical agents
+    3. Imports the flow into AgentFlow/LangFlow service
+    """
+    try:
+        graph_url = os.getenv("GRAPH_SERVICE_URL", "http://localhost:8081")
+        r = await client.post(f"{graph_url}/pipeline/to-agentflow", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Graph service error: {e}")
+
+
 @app.post("/data/sql")
 async def data_sql(payload: Dict[str, Any]) -> Any:
     try:
