@@ -41,7 +41,7 @@ RUN apk add --no-cache protobuf-dev protoc && \
     mkdir -p gen/extractpb && \
     protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto
 
-# Tidy and build
+# Tidy and build (after protobuf files are generated)
 RUN go mod tidy
 RUN go build -o /server .
 
