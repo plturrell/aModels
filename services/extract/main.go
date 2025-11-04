@@ -103,13 +103,8 @@ func main() {
 
 		// Document store
 		docStorePath: cfg.Persistence.DocStorePath,
-<<<<<<< HEAD
 
 		// DeepAgents client (enabled by default, 10/10 integration)
-=======
-		
-		// DeepAgents client
->>>>>>> 0a025abe60b7633bd29e09340fd3b54080e7b084
 		deepAgentsClient: NewDeepAgentsClient(logger),
 	}
 
@@ -908,17 +903,10 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			"kl_divergence":    klDivergence,
 			"column_count":     float64(len(columnDtypes)),
 		})
-<<<<<<< HEAD
 
 		analysisCtx, analysisCancel := context.WithTimeout(ctx, 90*time.Second) // Increased timeout for retries
 		defer analysisCancel()
 
-=======
-		
-		analysisCtx, analysisCancel := context.WithTimeout(ctx, 90*time.Second) // Increased timeout for retries
-		defer analysisCancel()
-		
->>>>>>> 0a025abe60b7633bd29e09340fd3b54080e7b084
 		// Analysis is non-fatal - failures don't affect graph processing
 		analysis, err := s.deepAgentsClient.AnalyzeKnowledgeGraph(analysisCtx, graphSummary, req.ProjectID, req.SystemID)
 		if err != nil {
@@ -961,15 +949,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			"result":   deepAgentsAnalysis.Result,
 		}
 	}
-	
-	// Add DeepAgents analysis if available
-	if deepAgentsAnalysis != nil {
-		response["deepagents_analysis"] = map[string]any{
-			"messages": deepAgentsAnalysis.Messages,
-			"result":   deepAgentsAnalysis.Result,
-		}
-	}
-	
+
 	// Add warnings if present
 	if interpretation.ShouldWarn {
 		response["warnings"] = interpretation.Issues
