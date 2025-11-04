@@ -43,7 +43,8 @@ RUN apk add --no-cache protobuf-dev protoc && \
     go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10 && \
     go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest && \
     mkdir -p gen/extractpb && \
-    protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto
+    protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto && \
+    if [ -d gen/extractpb/github.com ]; then mv gen/extractpb/github.com/plturrell/aModels/services/extract/gen/extractpb/*.pb.go gen/extractpb/ && rm -rf gen/extractpb/github.com; fi
 
 # Update go.mod again after protobuf files are generated (filters remote package errors)
 RUN go mod tidy 2>&1 | grep -v "does not contain package" || true
