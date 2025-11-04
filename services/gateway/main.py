@@ -17,6 +17,8 @@ OPENSEARCH_URL = os.getenv("OPENSEARCH_URL", "http://localhost:9200")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localhost:8081")
 BROWSER_URL = os.getenv("BROWSER_URL", "http://localhost:8070")
+DEEPAGENTS_URL = os.getenv("DEEPAGENTS_URL", "http://localhost:9004")
+GRAPH_SERVICE_URL = os.getenv("GRAPH_SERVICE_URL", "http://localhost:8081")
 
 client = httpx.AsyncClient(timeout=30.0)
 
@@ -85,6 +87,12 @@ async def healthz() -> Dict[str, Any]:
         statuses["layer4_browser"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
     except Exception as e:
         statuses["layer4_browser"] = f"error:{e}"
+    # DeepAgents health
+    try:
+        r = await client.get(f"{DEEPAGENTS_URL}/healthz")
+        statuses["deepagents"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
+    except Exception as e:
+        statuses["deepagents"] = f"error:{e}"
     return statuses
 
 
@@ -225,6 +233,78 @@ async def knowledge_graph_query(payload: Dict[str, Any]) -> Any:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except httpx.RequestError as e:
         raise HTTPException(status_code=502, detail=f"Extract service error: {e}")
+
+
+@app.post("/deepagents/invoke")
+async def deepagents_invoke(payload: Dict[str, Any]) -> Any:
+    """
+    Invoke the deep agent service.
+    
+    Request format:
+    {
+        "messages": [{"role": "user", "content": "..."}],
+        "stream": false,
+        "config": {}
+    }
+    """
+    try:
+        r = await client.post(f"{DEEPAGENTS_URL}/invoke", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"DeepAgents service error: {e}")
+
+
+@app.post("/deepagents/stream")
+async def deepagents_stream(payload: Dict[str, Any]):
+    """
+    Stream deep agent responses (Server-Sent Events).
+    
+    Request format:
+    {
+        "messages": [{"role": "user", "content": "..."}],
+        "stream": true,
+        "config": {}
+    }
+    """
+    try:
+        from fastapi.responses import StreamingResponse
+        
+        async def generate():
+            async with httpx.AsyncClient(timeout=300.0) as stream_client:
+                async with stream_client.stream(
+                    "POST",
+                    f"{DEEPAGENTS_URL}/stream",
+                    json=payload,
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if line:
+                            yield f"{line}\n"
+        
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+        )
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"DeepAgents service error: {e}")
+
+
+@app.get("/deepagents/info")
+async def deepagents_info() -> Any:
+    """Get information about the deep agent."""
+    try:
+        r = await client.get(f"{DEEPAGENTS_URL}/agent/info")
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"DeepAgents service error: {e}")
 
 
 @app.post("/pipeline/to-agentflow")

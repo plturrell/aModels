@@ -59,6 +59,9 @@ async def lifespan(app: FastAPI):
                 result = close_callable()
                 if result is not None:
                     await result
+        # Close DeepAgents client
+        from .deepagents import close_deepagents_client
+        await close_deepagents_client()
 
 
 app = FastAPI(title="AgentFlow Service", version="0.1.0", lifespan=lifespan)

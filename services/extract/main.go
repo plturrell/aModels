@@ -103,6 +103,9 @@ func main() {
 
 		// Document store
 		docStorePath: cfg.Persistence.DocStorePath,
+		
+		// DeepAgents client
+		deepAgentsClient: NewDeepAgentsClient(logger),
 	}
 
 	// Create persistence layer
@@ -277,6 +280,9 @@ type extractServer struct {
 	// Document store
 	docStorePath   string
 	docPersistence DocumentPersistence
+	
+	// DeepAgents client
+	deepAgentsClient *DeepAgentsClient
 
 	tablePersistence    TablePersistence
 	vectorPersistence   VectorPersistence
@@ -317,13 +323,31 @@ func parseBoolEnv(value string, defaultValue bool) bool {
 }
 
 // --- /healthz ---
-func (s *extractServer) handleHealthz(w http.ResponseWriter, _ *http.Request) {
-	handlers.WriteJSON(w, http.StatusOK, map[string]any{
+func (s *extractServer) handleHealthz(w http.ResponseWriter, r *http.Request) {
+	status := map[string]any{
 		"status":        "ok",
+		"service":       "extract",
 		"langextract":   s.langextractURL,
 		"training_dir":  s.trainingDir,
 		"ocr_available": len(s.ocrCommand) > 0,
-	})
+	}
+
+	// Check DeepAgents health if enabled (10/10 integration)
+	if s.deepAgentsClient != nil && s.deepAgentsClient.enabled {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		deepAgentsHealthy := s.deepAgentsClient.checkHealth(ctx)
+		status["deepagents"] = map[string]any{
+			"enabled": true,
+			"healthy": deepAgentsHealthy,
+		}
+	} else {
+		status["deepagents"] = map[string]any{
+			"enabled": false,
+		}
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, status)
 }
 
 // --- /extract ---
@@ -863,6 +887,34 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		s.flight.UpdateGraph(nodes, edges)
 	}
 
+	// DeepAgents analysis (enabled by default, 10/10 integration)
+	// Always attempt analysis if client is enabled (non-fatal if service unavailable)
+	var deepAgentsAnalysis *AnalyzeGraphResponse
+	if s.deepAgentsClient != nil && s.deepAgentsClient.enabled {
+		graphSummary := FormatGraphSummary(nodes, edges, map[string]any{
+			"score":  interpretation.QualityScore,
+			"level":  interpretation.QualityLevel,
+			"issues": interpretation.Issues,
+		}, map[string]any{
+			"metadata_entropy": metadataEntropy,
+			"kl_divergence":    klDivergence,
+			"column_count":     float64(len(columnDtypes)),
+		})
+		
+		analysisCtx, analysisCancel := context.WithTimeout(ctx, 90*time.Second) // Increased timeout for retries
+		defer analysisCancel()
+		
+		// Analysis is non-fatal - failures don't affect graph processing
+		analysis, err := s.deepAgentsClient.AnalyzeKnowledgeGraph(analysisCtx, graphSummary, req.ProjectID, req.SystemID)
+		if err != nil {
+			// Error already logged in AnalyzeKnowledgeGraph with retry details
+			// Continue processing without analysis
+		} else if analysis != nil {
+			deepAgentsAnalysis = analysis
+			s.logger.Printf("DeepAgents analysis completed and included in response")
+		}
+	}
+
 	response := map[string]any{
 		"nodes":            nodes,
 		"edges":            edges,
@@ -885,6 +937,14 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			"needs_validation": interpretation.NeedsValidation,
 			"needs_review":     interpretation.NeedsReview,
 		},
+	}
+	
+	// Add DeepAgents analysis if available
+	if deepAgentsAnalysis != nil {
+		response["deepagents_analysis"] = map[string]any{
+			"messages": deepAgentsAnalysis.Messages,
+			"result":   deepAgentsAnalysis.Result,
+		}
 	}
 	
 	// Add warnings if present
