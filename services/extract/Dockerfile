@@ -41,20 +41,11 @@ RUN apk add --no-cache protobuf-dev protoc && \
     mkdir -p gen/extractpb && \
     protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto
 
-# Create a stub go.mod in gen/extractpb so replace directive works
-RUN echo "module github.com/plturrell/aModels/services/extract/gen/extractpb" > gen/extractpb/go.mod && \
-    echo "go 1.25.3" >> gen/extractpb/go.mod
-
-# Manually update go.mod to include the local protobuf package
-# Add it as a require with replace pointing to local directory
-RUN echo "require github.com/plturrell/aModels/services/extract/gen/extractpb v0.0.0" >> go.mod && \
-    echo "replace github.com/plturrell/aModels/services/extract/gen/extractpb => ./gen/extractpb" >> go.mod
-
-# Update dependencies
-RUN go mod tidy
-
-# Build (go.mod is now properly configured)
-RUN go build -o /server .
+# The generated protobuf package is part of this module
+# We need to ensure go.mod is updated. Since the package exists locally,
+# we can use GOSUMDB=off and build with -mod=mod to auto-update
+ENV GOSUMDB=off
+RUN go build -mod=mod -o /server .
 
 # Final stage
 FROM alpine:latest
