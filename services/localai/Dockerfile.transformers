@@ -16,6 +16,9 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Copy transformers service
 COPY services/localai/services/transformers_cpu_server.py /app/transformers_cpu_server.py
 
+# Create models directory structure if needed
+RUN mkdir -p /models
+
 # Set environment variables
 ENV TRANSFORMERS_CPU_PORT=9090
 ENV PYTHONUNBUFFERED=1
