@@ -37,7 +37,9 @@ const webUITemplate = `
 	</div>
 
 	<script>
-		// TODO: Add JavaScript to fetch data from the API and render the UI
+		// Web UI implementation deferred - use catalog endpoints for now:
+		// GET /catalog/projects, /catalog/systems, /catalog/information-systems
+		// POST /graph for graph visualization
 	</script>
 </body>
 </html>
