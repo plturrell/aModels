@@ -135,6 +135,25 @@ async def agentflow_process(payload: Dict[str, Any]) -> Any:
         raise HTTPException(status_code=502, detail=f"Graph service error: {e}")
 
 
+@app.post("/orchestration/process")
+async def orchestration_process(payload: Dict[str, Any]) -> Any:
+    """
+    Process orchestration chains via LangGraph workflow orchestration.
+    This integrates orchestration chains with knowledge graphs and quality-based routing.
+    Orchestration = Go-native LangChain-like framework for LLM chains.
+    """
+    try:
+        # Proxy to graph service for LangGraph workflow orchestration
+        graph_url = os.getenv("GRAPH_SERVICE_URL", "http://localhost:8081")
+        r = await client.post(f"{graph_url}/orchestration/process", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Graph service error: {e}")
+
+
 @app.post("/extract/ocr")
 async def extract_ocr(payload: Dict[str, Any]) -> Any:
     try:
