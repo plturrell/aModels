@@ -9,7 +9,7 @@ LOG_DIR=$(cd "${ROOT_DIR}/.." && pwd)/logs/sgmi_pipeline
 
 mkdir -p "${LOG_DIR}"
 
-target_url=${1:-http://localhost:8081/graph}
+target_url=${1:-http://localhost:19080/knowledge-graph}
 
 json_table=$(python3 - <<'PY' "${DATA_DIR}/sgmi_table_pipeline.json"
 import os, sys

@@ -17,6 +17,7 @@ import (
 	postgresflight "github.com/langchain-ai/langgraph-go/pkg/clients/postgresflight"
 	postgresgrpc "github.com/langchain-ai/langgraph-go/pkg/clients/postgresgrpc"
 	"github.com/langchain-ai/langgraph-go/pkg/workflows"
+	kgworkflows "github.com/langchain-ai/langgraph-go/pkg/workflows"
 	catalogprompt "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightcatalog/prompt"
 	postgresv1 "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/gen/v1"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -118,6 +119,40 @@ func main() {
 	http.HandleFunc("/agent/catalog", newAgentCatalogHandler(agentSDKFlightAddr))
 
 	if extractFlightAddr != "" {
+		// Knowledge graph processing endpoint (uses LangGraph workflow)
+		http.HandleFunc("/knowledge-graph/process", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+
+			var req map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, fmt.Sprintf("invalid request: %v", err), http.StatusBadRequest)
+				return
+			}
+
+			// Create knowledge graph processor workflow
+			workflow, err := kgworkflows.NewKnowledgeGraphProcessorWorkflow(kgworkflows.KnowledgeGraphProcessorOptions{
+				ExtractServiceURL: os.Getenv("EXTRACT_SERVICE_URL"),
+			})
+			if err != nil {
+				http.Error(w, fmt.Sprintf("create workflow: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			// Execute workflow
+			result, err := workflow.Run(context.Background(), req)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("workflow execution failed: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(result)
+		})
+
+		// Legacy extract/graph endpoint (Arrow Flight integration)
 		http.HandleFunc("/extract/graph", func(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 			defer cancel()

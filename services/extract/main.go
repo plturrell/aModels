@@ -231,7 +231,8 @@ func main() {
 	mux.HandleFunc("/healthz", server.handleHealthz)
 	mux.HandleFunc("/extract", server.handleExtract)
 	mux.HandleFunc("/generate/training", server.handleGenerateTraining)
-	mux.HandleFunc("/graph", server.handleGraph)
+	mux.HandleFunc("/knowledge-graph", server.handleGraph) // Main knowledge graph processing endpoint
+	mux.HandleFunc("/graph", server.handleGraph)          // Legacy alias for backward compatibility
 	mux.HandleFunc("/catalog/projects", server.handleGetProjects)
 	mux.HandleFunc("/catalog/projects/add", server.handleAddProject)
 	mux.HandleFunc("/catalog/systems", server.handleGetSystems)
@@ -453,7 +454,11 @@ func (s *extractServer) handleGenerateTraining(w http.ResponseWriter, r *http.Re
 	}
 }
 
-// --- /graph ---
+// --- /knowledge-graph ---
+// Processes knowledge graphs: extracts schema, relationships, and metadata from
+// JSON tables, Hive DDLs, SQL queries, and Control-M files.
+// Returns normalized graph with nodes (tables, columns, jobs) and edges (relationships).
+// This is different from LangGraph workflow graphs which execute agent workflows.
 
 type Node struct {
 	ID    string         `json:"id"`

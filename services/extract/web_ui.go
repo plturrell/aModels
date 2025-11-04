@@ -39,7 +39,8 @@ const webUITemplate = `
 	<script>
 		// Web UI implementation deferred - use catalog endpoints for now:
 		// GET /catalog/projects, /catalog/systems, /catalog/information-systems
-		// POST /graph for graph visualization
+		// POST /knowledge-graph for knowledge graph processing and visualization
+		// (Also available at /graph for backward compatibility)
 	</script>
 </body>
 </html>

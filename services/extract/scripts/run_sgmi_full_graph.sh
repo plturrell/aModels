@@ -10,7 +10,7 @@ LOG_DIR="${REPO_ROOT}/logs/sgmi_pipeline"
 
 mkdir -p "${LOG_DIR}"
 
-target_url=${1:-http://localhost:19080/graph}
+target_url=${1:-http://localhost:19080/knowledge-graph}
 
 json_tables=(
   "${DATA_ROOT}/json_with_changes.json"
