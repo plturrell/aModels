@@ -30,6 +30,7 @@ type Catalog struct {
 	Projects           []Project           `json:"projects"`
 	Systems            []System            `json:"systems"`
 	InformationSystems []InformationSystem `json:"information_systems"`
+	PetriNets          map[string]any      `json:"petri_nets,omitempty"` // Petri net workflows
 
 	mu       sync.RWMutex
 	filePath string

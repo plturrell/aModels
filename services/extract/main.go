@@ -111,6 +111,8 @@ func main() {
 	// Create persistence layer
 	var graphPersistences []GraphPersistence
 	var neo4jPersistence *Neo4jPersistence
+	var realTimeGleanExporter *RealTimeGleanExporter
+	
 	if server.neo4jURI != "" {
 		var err error
 		neo4jPersistence, err = NewNeo4jPersistence(server.neo4jURI, server.neo4jUsername, server.neo4jPassword)
@@ -128,14 +130,22 @@ func main() {
 		logger.Println("connected to neo4j")
 	}
 
+	var gleanPersistence *GleanPersistence
 	if exportDir := strings.TrimSpace(os.Getenv("GLEAN_EXPORT_DIR")); exportDir != "" {
 		predicatePrefix := strings.TrimSpace(os.Getenv("GLEAN_PREDICATE_PREFIX"))
-		gleanPersistence, err := NewGleanPersistence(exportDir, predicatePrefix, logger)
+		var err error
+		gleanPersistence, err = NewGleanPersistence(exportDir, predicatePrefix, logger)
 		if err != nil {
 			logger.Fatalf("failed to create glean persistence: %v", err)
 		}
 		graphPersistences = append(graphPersistences, gleanPersistence)
 		logger.Printf("glean export enabled (dir=%s, prefix=%s)", gleanPersistence.ExportDir(), gleanPersistence.PredicatePrefix())
+		
+		// Initialize real-time Glean exporter if enabled
+		dbName := strings.TrimSpace(os.Getenv("GLEAN_DB_NAME"))
+		schemaPath := gleanPersistence.schemaPath
+		realTimeGleanExporter = NewRealTimeGleanExporter(gleanPersistence, dbName, schemaPath, logger)
+		server.realTimeGleanExporter = realTimeGleanExporter
 	}
 
 	server.graphPersistence = newCompositeGraphPersistence(graphPersistences...)
@@ -286,8 +296,9 @@ type extractServer struct {
 
 	tablePersistence    TablePersistence
 	vectorPersistence   VectorPersistence
-	graphPersistence    GraphPersistence
-	neo4jPersistence   *Neo4jPersistence // Direct Neo4j access for queries
+	graphPersistence      GraphPersistence
+	neo4jPersistence     *Neo4jPersistence // Direct Neo4j access for queries
+	realTimeGleanExporter *RealTimeGleanExporter // Real-time Glean synchronization
 	flight              *extractFlightServer
 	hanaReplication     *hanaReplication
 	postgresReplication *postgresReplication
@@ -581,6 +592,10 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		edges = append(edges, ddlEdges...)
 	}
 
+	// Collect all Control-M jobs for Petri net conversion
+	allControlMJobs := []ControlMJob{}
+	controlMJobMap := make(map[string][]ControlMJob) // path -> jobs
+
 	for _, path := range req.ControlMFiles {
 		if strings.TrimSpace(path) == "" {
 			continue
@@ -591,6 +606,9 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			s.logger.Printf("failed to parse control-m xml file %q: %v", path, err)
 			continue
 		}
+
+		allControlMJobs = append(allControlMJobs, jobs...)
+		controlMJobMap[path] = jobs
 
 		for _, job := range jobs {
 			jobID := fmt.Sprintf("control-m:%s", job.JobName)
@@ -647,6 +665,48 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 		}
+	}
+
+	// Convert Control-M jobs to Petri net and add to knowledge graph
+	if len(allControlMJobs) > 0 {
+		// Map SQL queries to job names (if we can infer from context)
+		// For now, we'll create a simple mapping
+		sqlQueriesByJob := make(map[string][]string)
+		
+		// Try to match SQL queries to jobs based on table names or patterns
+		// This is a simplified approach - in practice, you'd have better job-to-SQL mapping
+		for i, sql := range req.SqlQueries {
+			// Use a simple heuristic: assign SQL to jobs in order
+			if i < len(allControlMJobs) {
+				jobName := allControlMJobs[i].JobName
+				sqlQueriesByJob[jobName] = append(sqlQueriesByJob[jobName], sql)
+			}
+		}
+
+		// Convert Control-M to Petri net
+		petriNetConverter := NewPetriNetConverter(s.logger)
+		petriNet := petriNetConverter.ConvertControlMToPetriNet(allControlMJobs, sqlQueriesByJob)
+
+		// Convert Petri net to graph nodes/edges
+		petriNodes, petriEdges, petriRootID := petriNetConverter.PetriNetToGraphNodes(petriNet)
+		nodes = append(nodes, petriNodes...)
+		edges = append(edges, petriEdges...)
+
+		// Link Petri net to root node
+		if rootID != "" {
+			edges = append(edges, Edge{
+				SourceID: rootID,
+				TargetID: petriRootID,
+				Label:    "HAS_PETRI_NET",
+				Props: map[string]any{
+					"petri_net_id": petriNet.ID,
+					"name":         petriNet.Name,
+				},
+			})
+		}
+
+		s.logger.Printf("Converted Control-M to Petri net: %d places, %d transitions, %d arcs",
+			len(petriNet.Places), len(petriNet.Transitions), len(petriNet.Arcs))
 	}
 
 	for _, sql := range req.SqlQueries {
@@ -876,6 +936,36 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 
 	s.replicateSchema(ctx, nodes, edges)
 
+	// Export Petri net to catalog if available
+	if len(allControlMJobs) > 0 {
+		petriNetConverter := NewPetriNetConverter(s.logger)
+		sqlQueriesByJob := make(map[string][]string)
+		for i, sql := range req.SqlQueries {
+			if i < len(allControlMJobs) {
+				jobName := allControlMJobs[i].JobName
+				sqlQueriesByJob[jobName] = append(sqlQueriesByJob[jobName], sql)
+			}
+		}
+		petriNet := petriNetConverter.ConvertControlMToPetriNet(allControlMJobs, sqlQueriesByJob)
+		
+		if s.catalog != nil {
+			catalogEntry := petriNetConverter.ExportPetriNetToCatalog(petriNet)
+			s.catalog.mu.Lock()
+			if s.catalog.PetriNets == nil {
+				s.catalog.PetriNets = make(map[string]any)
+			}
+			s.catalog.PetriNets[petriNet.ID] = catalogEntry
+			s.catalog.mu.Unlock()
+			
+			// Save catalog to persist Petri net
+			if err := s.catalog.Save(); err != nil {
+				s.logger.Printf("failed to save Petri net to catalog: %v", err)
+			} else {
+				s.logger.Printf("Saved Petri net '%s' to catalog", petriNet.ID)
+			}
+		}
+	}
+
 	// Save graph to persistence layers (Neo4j, Glean, etc.)
 	// Information theory metrics are included:
 	// 1. In root node properties (accessible in Neo4j queries)
@@ -885,9 +975,159 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			s.logger.Printf("failed to save graph: %v", err)
 		}
 	}
+	
+	// Real-time Glean synchronization (if enabled)
+	// This automatically ingests batches into Glean Catalog as they are created
+	if s.realTimeGleanExporter != nil {
+		// Extract projectID and systemID from request or nodes
+		exportProjectID := req.ProjectID
+		exportSystemID := req.SystemID
+		
+		// Fallback to extracting from nodes if not in request
+		if exportProjectID == "" {
+			for _, node := range nodes {
+				if node.Type == "project" || node.Type == "information-system" {
+					exportProjectID = node.Label
+					break
+				}
+			}
+		}
+		if exportSystemID == "" {
+			for _, node := range nodes {
+				if node.Type == "system" {
+					exportSystemID = node.Label
+					break
+				}
+			}
+		}
+		
+		// Export to Glean in real-time (non-blocking async queue)
+		if err := s.realTimeGleanExporter.ExportGraph(ctx, nodes, edges, exportProjectID, exportSystemID); err != nil {
+			s.logger.Printf("real-time Glean export failed (non-fatal): %v", err)
+		}
+	}
 
 	if s.flight != nil {
 		s.flight.UpdateGraph(nodes, edges)
+	}
+
+	// Advanced extraction (Priority 6.1 enhancement)
+	// Extract table sequences, parameters, hardcoded lists, table classifications, and testing endpoints
+	// Collect Control-M file contents for advanced extraction
+	controlMContents := []string{}
+	for _, path := range req.ControlMFiles {
+		if strings.TrimSpace(path) == "" {
+			continue
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			s.logger.Printf("failed to read Control-M file %q for advanced extraction: %v", path, err)
+			continue
+		}
+		controlMContents = append(controlMContents, string(content))
+	}
+	
+	// Collect JSON table data for advanced extraction (read raw JSON)
+	jsonTableData := []map[string]any{}
+	for _, path := range req.JSONTables {
+		if strings.TrimSpace(path) == "" {
+			continue
+		}
+		// Read JSON file content
+		content, err := os.ReadFile(path)
+		if err != nil {
+			s.logger.Printf("failed to read JSON file %q for advanced extraction: %v", path, err)
+			continue
+		}
+		var tableData map[string]any
+		if err := json.Unmarshal(content, &tableData); err == nil {
+			jsonTableData = append(jsonTableData, tableData)
+		}
+	}
+	
+	// Perform advanced extraction
+	advancedExtractor := NewAdvancedExtractor(s.logger)
+	advancedResult := advancedExtractor.ExtractAdvanced(
+		req.SqlQueries,
+		controlMContents,
+		req.HiveDDLs,
+		jsonTableData,
+	)
+	
+	// Add advanced extraction results to graph nodes/edges
+	// This enhances the knowledge graph with advanced metadata
+	if advancedResult != nil {
+		// Add table classifications as node properties
+		for _, classification := range advancedResult.TableClassifications {
+			for i := range nodes {
+				if nodes[i].Type == "table" && nodes[i].Label == classification.TableName {
+					if nodes[i].Props == nil {
+						nodes[i].Props = make(map[string]any)
+					}
+					nodes[i].Props["table_classification"] = classification.Classification
+					nodes[i].Props["classification_confidence"] = classification.Confidence
+					nodes[i].Props["classification_evidence"] = classification.Evidence
+					break
+				}
+			}
+		}
+		
+		// Add table process sequences as edges or metadata
+		for _, sequence := range advancedResult.TableProcessSequences {
+			// Create edges between tables in sequence
+			for i := 0; i < len(sequence.Tables)-1; i++ {
+				sourceTable := sequence.Tables[i]
+				targetTable := sequence.Tables[i+1]
+				
+				// Find or create edge
+				edgeFound := false
+				for j := range edges {
+					if edges[j].SourceID == sourceTable && edges[j].TargetID == targetTable &&
+						edges[j].Label == "PROCESSES_BEFORE" {
+						edgeFound = true
+						if edges[j].Props == nil {
+							edges[j].Props = make(map[string]any)
+						}
+						edges[j].Props["sequence_id"] = sequence.SequenceID
+						edges[j].Props["sequence_type"] = sequence.SequenceType
+						edges[j].Props["sequence_order"] = sequence.Order
+						break
+					}
+				}
+				
+				if !edgeFound {
+					edges = append(edges, Edge{
+						SourceID: sourceTable,
+						TargetID: targetTable,
+						Label:    "PROCESSES_BEFORE",
+						Props: map[string]any{
+							"sequence_id":   sequence.SequenceID,
+							"sequence_type": sequence.SequenceType,
+							"sequence_order": sequence.Order,
+						},
+					})
+				}
+			}
+		}
+		
+		// Store advanced extraction results in root node for reference
+		if rootID != "" {
+			for i := range nodes {
+				if nodes[i].ID == rootID {
+					if nodes[i].Props == nil {
+						nodes[i].Props = make(map[string]any)
+					}
+					nodes[i].Props["advanced_extraction"] = map[string]any{
+						"table_process_sequences": len(advancedResult.TableProcessSequences),
+						"code_parameters":          len(advancedResult.CodeParameters),
+						"hardcoded_lists":          len(advancedResult.HardcodedLists),
+						"table_classifications":   len(advancedResult.TableClassifications),
+						"testing_endpoints":        len(advancedResult.TestingEndpoints),
+					}
+					break
+				}
+			}
+		}
 	}
 
 	// DeepAgents analysis (enabled by default, 10/10 integration)

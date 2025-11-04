@@ -15,10 +15,26 @@ import pandas as pd
 import torch
 import yaml
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+# Add services/training to path for Glean integration
+ROOT_DIR = Path(__file__).resolve().parents[2]
+TRAINING_SERVICE_DIR = ROOT_DIR / "services" / "training"
+if str(TRAINING_SERVICE_DIR) not in sys.path:
+    sys.path.insert(0, str(TRAINING_SERVICE_DIR))
 
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+try:
+    from glean_integration import ingest_glean_data_for_training, GleanTrainingClient
+    from extract_client import ExtractServiceClient
+    from pipeline import TrainingPipeline
+    TRAINING_SERVICE_AVAILABLE = True
+except ImportError:
+    TRAINING_SERVICE_AVAILABLE = False
+    print("⚠️  Training service integration not available. Install services/training/")
+
+# ROOT_DIR is already set above for Glean integration
+TRAINING_ROOT_DIR = Path(__file__).resolve().parents[1]
+
+if str(TRAINING_ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(TRAINING_ROOT_DIR))
 
 from models.relational_transformer import (  # noqa: E402
     CellTokenizer,
@@ -181,15 +197,167 @@ def main() -> None:
     parser.add_argument("--ablate-neighbor", action="store_true")
     parser.add_argument("--ablate-temporal", action="store_true")
     parser.add_argument("--ablate-full", action="store_true")
+    
+    # Glean integration arguments
+    parser.add_argument("--glean-project-id", help="Project ID for Glean historical data queries")
+    parser.add_argument("--glean-system-id", help="System ID for Glean historical data queries")
+    parser.add_argument("--glean-days-back", type=int, default=30, help="Number of days to look back in Glean (default: 30)")
+    parser.add_argument("--glean-enable", action="store_true", help="Enable Glean Catalog integration for training")
+    parser.add_argument("--glean-output-dir", help="Directory to save Glean training data")
+    
+    # Extract service integration arguments
+    parser.add_argument("--extract-service-url", help="Extract service URL (default: from EXTRACT_SERVICE_URL env)")
+    parser.add_argument("--extract-project-id", help="Project ID for Extract service knowledge graph")
+    parser.add_argument("--extract-system-id", help="System ID for Extract service knowledge graph")
+    parser.add_argument("--extract-json-tables", nargs="+", help="JSON table file paths for Extract service")
+    parser.add_argument("--extract-hive-ddls", nargs="+", help="Hive DDL file paths for Extract service")
+    parser.add_argument("--extract-controlm-files", nargs="+", help="Control-M XML file paths for Extract service")
+    parser.add_argument("--extract-enable", action="store_true", help="Enable Extract service integration for training")
+    
+    # Training pipeline arguments
+    parser.add_argument("--training-pipeline-enable", action="store_true", help="Enable full training pipeline (Extract + Glean + Pattern Learning)")
+    parser.add_argument("--training-output-dir", help="Directory for training pipeline output")
+    
     args = parser.parse_args()
 
     with open(args.config, "r", encoding="utf-8") as handle:
         config = yaml.safe_load(handle)
 
+    # Run full training pipeline if enabled
+    training_pipeline_results = None
+    graph_data = None
+    glean_data = None
+    learned_patterns = None
+    
+    if args.training_pipeline_enable and TRAINING_SERVICE_AVAILABLE:
+        print("🚀 Running full training pipeline (Extract + Glean + Pattern Learning)...")
+        try:
+            pipeline = TrainingPipeline(
+                extract_service_url=args.extract_service_url,
+                output_dir=args.training_output_dir
+            )
+            
+            training_pipeline_results = pipeline.run_full_pipeline(
+                project_id=args.extract_project_id or args.glean_project_id or "sgmi",
+                system_id=args.extract_system_id or args.glean_system_id,
+                json_tables=args.extract_json_tables,
+                hive_ddls=args.extract_hive_ddls,
+                control_m_files=args.extract_controlm_files,
+                glean_days_back=args.glean_days_back,
+                enable_glean=args.glean_enable,
+                enable_temporal_analysis=True  # Enable temporal analysis by default
+            )
+            
+            if training_pipeline_results.get("status") == "success":
+                print("✅ Training pipeline completed successfully")
+                print(f"   Steps completed: {', '.join(training_pipeline_results.get('steps', {}).keys())}")
+                
+                # Extract data for use in model training
+                # Note: Actual graph_data and glean_data would come from the pipeline
+                # For now, we'll use the pipeline results
+                print("📊 Training pipeline data available for model training")
+            else:
+                print(f"⚠️  Training pipeline completed with issues: {training_pipeline_results}")
+        except Exception as e:
+            print(f"⚠️  Training pipeline failed (continuing with manual integration): {e}")
+            training_pipeline_results = None
+    elif args.training_pipeline_enable and not TRAINING_SERVICE_AVAILABLE:
+        print("⚠️  Training pipeline requested but not available. Continuing with manual integration.")
+    
+    # Manual Extract service integration if enabled (without full pipeline)
+    if args.extract_enable and TRAINING_SERVICE_AVAILABLE and not args.training_pipeline_enable:
+        print("📊 Querying Extract service for knowledge graph...")
+        try:
+            extract_client = ExtractServiceClient(extract_service_url=args.extract_service_url)
+            
+            if not extract_client.health_check():
+                print("⚠️  Extract service not available. Skipping Extract integration.")
+            else:
+                graph_data = extract_client.get_knowledge_graph(
+                    project_id=args.extract_project_id or "sgmi",
+                    system_id=args.extract_system_id,
+                    json_tables=args.extract_json_tables,
+                    hive_ddls=args.extract_hive_ddls,
+                    control_m_files=args.extract_controlm_files
+                )
+                
+                print(f"✅ Retrieved knowledge graph: {len(graph_data.get('nodes', []))} nodes, "
+                      f"{len(graph_data.get('edges', []))} edges")
+        except Exception as e:
+            print(f"⚠️  Extract service integration failed (continuing without graph data): {e}")
+            graph_data = None
+    
+    # Manual Glean integration if enabled (without full pipeline)
+    if args.glean_enable and TRAINING_SERVICE_AVAILABLE and not args.training_pipeline_enable:
+        print("📊 Ingesting historical data from Glean Catalog...")
+        try:
+            glean_data = ingest_glean_data_for_training(
+                project_id=args.glean_project_id,
+                system_id=args.glean_system_id,
+                days_back=args.glean_days_back,
+                output_dir=args.glean_output_dir
+            )
+            print(f"✅ Ingested {glean_data['metadata']['node_count']} nodes, {glean_data['metadata']['edge_count']} edges from Glean")
+            if glean_data.get('metrics', {}).get('averages'):
+                print(f"   Metrics: entropy_avg={glean_data['metrics']['averages'].get('metadata_entropy', 'N/A'):.2f}, "
+                      f"kl_div_avg={glean_data['metrics']['averages'].get('kl_divergence', 'N/A'):.2f}")
+        except Exception as e:
+            print(f"⚠️  Glean ingestion failed (continuing without historical data): {e}")
+            glean_data = None
+    elif args.glean_enable and not TRAINING_SERVICE_AVAILABLE:
+        print("⚠️  Glean integration requested but not available. Continuing without historical data.")
+    
+    # Learn patterns from graph and Glean data if available
+    if (graph_data or glean_data) and TRAINING_SERVICE_AVAILABLE:
+        print("🧠 Learning patterns from knowledge graph and Glean data...")
+        try:
+            from pattern_learning import PatternLearningEngine
+            
+            pattern_engine = PatternLearningEngine()
+            
+            # Extract nodes and edges
+            nodes = graph_data.get("nodes", []) if graph_data else []
+            edges = graph_data.get("edges", []) if graph_data else []
+            metrics = graph_data.get("metrics", {}) if graph_data else {}
+            
+            # Add Glean data if available
+            if glean_data:
+                nodes.extend(glean_data.get("nodes", []))
+                edges.extend(glean_data.get("edges", []))
+            
+            # Learn patterns
+            learned_patterns = pattern_engine.learn_patterns(
+                nodes=nodes,
+                edges=edges,
+                metrics=metrics,
+                glean_data=glean_data
+            )
+            
+            print(f"✅ Learned patterns: {learned_patterns['summary'].get('unique_column_types', 0)} column types, "
+                  f"{learned_patterns['summary'].get('unique_edge_labels', 0)} relationship types")
+        except Exception as e:
+            print(f"⚠️  Pattern learning failed (continuing without patterns): {e}")
+            learned_patterns = None
+    
     database = build_database(config)
     context_cfg = config.get("context", {})
     training_cfg = config.get("training", {})
     model_cfg = config.get("model", {})
+    
+    # Store training context for potential use in dataset/enrichment
+    training_context = {
+        "graph_data": graph_data,
+        "glean_data": glean_data,
+        "learned_patterns": learned_patterns,
+        "pipeline_results": training_pipeline_results,
+    }
+    
+    # TODO: Integrate training_context into training dataset
+    # This could involve:
+    # 1. Adding historical patterns as features
+    # 2. Using temporal metrics for context
+    # 3. Enriching training data with Glean insights
+    # 4. Using learned patterns for data augmentation
 
     context_length = context_cfg.get("max_cells", 1024)
     width_bound = context_cfg.get("width_bound", 8)
@@ -318,6 +486,37 @@ def main() -> None:
         checkpoint_path = Path(args.checkpoint_out)
         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
         trainer.save_checkpoint(str(checkpoint_path), metadata={"stage": "pretrain"})
+        
+        # Evaluate and export training metrics if training service available
+        if TRAINING_SERVICE_AVAILABLE:
+            try:
+                from evaluation import evaluate_training_results, export_training_metrics_to_glean
+                from glean_integration import GleanTrainingClient
+                
+                # Get training metrics (simplified - would need actual trainer metrics)
+                model_metrics = {
+                    "loss": getattr(trainer, 'last_loss', None),
+                    "step": trainer.global_step,
+                }
+                
+                # Evaluate results
+                evaluation = evaluate_training_results(
+                    model_metrics=model_metrics,
+                    training_context=training_context if 'training_context' in locals() else None,
+                    checkpoint_path=str(checkpoint_path)
+                )
+                
+                # Export to Glean if enabled
+                if args.glean_enable:
+                    glean_client = GleanTrainingClient()
+                    export_info = export_training_metrics_to_glean(
+                        evaluation=evaluation,
+                        glean_client=glean_client,
+                        output_dir=args.training_output_dir or args.glean_output_dir
+                    )
+                    print(f"✅ Training metrics exported: {export_info.get('output_file', 'N/A')}")
+            except Exception as e:
+                print(f"⚠️  Training evaluation/export failed (non-fatal): {e}")
     elif args.mode == "fine-tune":
         if not args.checkpoint_out:
             raise ValueError("--checkpoint-out is required when running in fine-tune mode.")
@@ -329,6 +528,37 @@ def main() -> None:
         checkpoint_path = Path(args.checkpoint_out)
         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
         trainer.save_checkpoint(str(checkpoint_path), metadata={"stage": "fine_tune"})
+        
+        # Evaluate and export training metrics if training service available
+        if TRAINING_SERVICE_AVAILABLE:
+            try:
+                from evaluation import evaluate_training_results, export_training_metrics_to_glean
+                from glean_integration import GleanTrainingClient
+                
+                # Get training metrics (simplified - would need actual trainer metrics)
+                model_metrics = {
+                    "loss": getattr(trainer, 'last_loss', None),
+                    "step": trainer.global_step,
+                }
+                
+                # Evaluate results
+                evaluation = evaluate_training_results(
+                    model_metrics=model_metrics,
+                    training_context=training_context if 'training_context' in locals() else None,
+                    checkpoint_path=str(checkpoint_path)
+                )
+                
+                # Export to Glean if enabled
+                if args.glean_enable:
+                    glean_client = GleanTrainingClient()
+                    export_info = export_training_metrics_to_glean(
+                        evaluation=evaluation,
+                        glean_client=glean_client,
+                        output_dir=args.training_output_dir or args.glean_output_dir
+                    )
+                    print(f"✅ Training metrics exported: {export_info.get('output_file', 'N/A')}")
+            except Exception as e:
+                print(f"⚠️  Training evaluation/export failed (non-fatal): {e}")
     elif args.mode in {"stream-pretrain", "stream-fine-tune"}:
         stream_key = args.redis_stream
         group = args.redis_group

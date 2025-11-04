@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
@@ -84,6 +85,8 @@ func (p *Neo4jPersistence) SaveGraph(nodes []Node, edges []Edge) error {
 	defer session.Close(ctx)
 
 	_, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		
 		for _, node := range nodes {
 			// Serialize all properties as a single JSON string to avoid nested map issues
 			propsJSON := "{}"
@@ -93,13 +96,15 @@ func (p *Neo4jPersistence) SaveGraph(nodes []Node, edges []Edge) error {
 				}
 			}
 			
+			// Add updated_at timestamp to node for temporal analysis
 			_, err := tx.Run(ctx,
-				"MERGE (n:Node {id: $id}) SET n.type = $type, n.label = $label, n.properties_json = $props",
+				"MERGE (n:Node {id: $id}) SET n.type = $type, n.label = $label, n.properties_json = $props, n.updated_at = $updated_at",
 				map[string]any{
-					"id":    node.ID,
-					"type":  node.Type,
-					"label": node.Label,
-					"props": propsJSON,
+					"id":        node.ID,
+					"type":      node.Type,
+					"label":     node.Label,
+					"props":     propsJSON,
+					"updated_at": now,
 				})
 			if err != nil {
 				return nil, fmt.Errorf("failed to save node %s: %w", node.ID, err)
@@ -115,13 +120,15 @@ func (p *Neo4jPersistence) SaveGraph(nodes []Node, edges []Edge) error {
 				}
 			}
 			
+			// Add updated_at timestamp to edge for temporal analysis
 			_, err := tx.Run(ctx,
-				"MATCH (source:Node {id: $source_id}) MATCH (target:Node {id: $target_id}) MERGE (source)-[r:RELATIONSHIP]->(target) SET r.label = $label, r.properties_json = $props",
+				"MATCH (source:Node {id: $source_id}) MATCH (target:Node {id: $target_id}) MERGE (source)-[r:RELATIONSHIP]->(target) SET r.label = $label, r.properties_json = $props, r.updated_at = $updated_at",
 				map[string]any{
-					"source_id": edge.SourceID,
-					"target_id": edge.TargetID,
-					"label":     edge.Label,
-					"props":     propsJSON,
+					"source_id":  edge.SourceID,
+					"target_id":  edge.TargetID,
+					"label":      edge.Label,
+					"props":      propsJSON,
+					"updated_at": now,
 				})
 			if err != nil {
 				return nil, fmt.Errorf("failed to save edge %s->%s: %w", edge.SourceID, edge.TargetID, err)
