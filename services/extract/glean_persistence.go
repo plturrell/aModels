@@ -194,25 +194,40 @@ func (g *GleanPersistence) buildBatch(nodes []Node, edges []Edge) ([]gleanPredic
 	}
 
 	// Extract information theory metrics from root node if present
+	// These metrics are calculated during graph processing and stored in the root node
 	var metadataEntropy, klDivergence float64
-	var actualDistribution, idealDistribution map[string]float64
+	var actualDistribution, idealDistribution map[string]any
+	var columnCount int
+	var metricsCalculatedAt string
+	
+	// Find root node (typically project/system/information-system nodes have metrics)
 	for _, node := range nodes {
 		if node.Props != nil {
+			// Check for metrics (stored in root node after graph normalization)
 			if val, ok := node.Props["metadata_entropy"].(float64); ok {
 				metadataEntropy = val
 			}
 			if val, ok := node.Props["kl_divergence"].(float64); ok {
 				klDivergence = val
 			}
-			if val, ok := node.Props["actual_distribution"].(map[string]float64); ok {
+			if val, ok := node.Props["actual_distribution"].(map[string]any); ok {
 				actualDistribution = val
 			}
-			if val, ok := node.Props["ideal_distribution"].(map[string]float64); ok {
+			if val, ok := node.Props["ideal_distribution"].(map[string]any); ok {
 				idealDistribution = val
 			}
-			// Only check root nodes (typically project/system nodes)
+			if val, ok := node.Props["column_count"].(int); ok {
+				columnCount = val
+			}
+			if val, ok := node.Props["metrics_calculated_at"].(string); ok {
+				metricsCalculatedAt = val
+			}
+			// Root nodes (project/system/information-system) typically have metrics
 			if node.Type == "project" || node.Type == "system" || node.Type == "information-system" {
-				break
+				// Continue to check if this node has metrics, otherwise keep searching
+				if metadataEntropy > 0 || klDivergence > 0 {
+					break
+				}
 			}
 		}
 	}
