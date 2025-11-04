@@ -41,15 +41,9 @@ RUN apk add --no-cache protobuf-dev protoc && \
     mkdir -p gen/extractpb && \
     protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto
 
-# Add require and replace directives for local protobuf package
-# First add it as a requirement, then replace with local path
-RUN go mod edit -require github.com/plturrell/aModels/services/extract/gen/extractpb@v0.0.0 && \
-    go mod edit -replace github.com/plturrell/aModels/services/extract/gen/extractpb=./gen/extractpb
-
-# Update go.mod dependencies (should work now with require+replace)
-RUN go mod tidy
-
-# Build (go.mod is now properly configured)
+# Build directly (protobuf package is in same module, no replace needed)
+# The generated files are part of this module, so build works without replace
+# Skip go mod tidy since the local package isn't in remote module
 RUN go build -o /server .
 
 # Final stage
