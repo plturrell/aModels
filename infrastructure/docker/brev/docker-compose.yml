@@ -95,6 +95,36 @@ services:
           devices:
             - capabilities: ["gpu"]
 
+  neo4j:
+    image: neo4j:5.18-community
+    container_name: neo4j
+    restart: unless-stopped
+    environment:
+      - NEO4J_AUTH=neo4j/amodels123
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_server_default__listen__address=0.0.0.0
+      - NEO4J_server_http_listen__address=0.0.0.0:7474
+      - NEO4J_server_bolt_listen__address=0.0.0.0:7687
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4jdata:/data
+      - neo4jlogs:/logs
+
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=amodels
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgresdata:/var/lib/postgresql/data
+
   extract:
     build:
       context: ../..
@@ -106,6 +136,10 @@ services:
       - PORT=8082
       - GRPC_PORT=9090
       - TRAINING_OUTPUT_DIR=/workspace/data/training/extracts
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USERNAME=neo4j
+      - NEO4J_PASSWORD=amodels123
+      - POSTGRES_CATALOG_DSN=postgresql://postgres:postgres@postgres:5432/amodels?sslmode=disable
     volumes:
       - ../../data:/workspace/data:rw
       - ../../logs:/workspace/logs:rw
@@ -115,6 +149,8 @@ services:
       - "8815:8815"
     depends_on:
       - elasticsearch
+      - neo4j
+      - postgres
 
   graph:
     build:
@@ -125,7 +161,9 @@ services:
     restart: unless-stopped
     environment:
       - GRAPH_CONFIG=/workspace/config/graph.yaml
-      - NEO4J_URI=bolt://localhost:7687
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USERNAME=neo4j
+      - NEO4J_PASSWORD=amodels123
     volumes:
       - ../../configs:/workspace/config:ro
       - ../../artifacts/model-release:/workspace/assets:ro
@@ -134,6 +172,7 @@ services:
       - "19080:19080"
     depends_on:
       - extract
+      - neo4j
     deploy:
       resources:
         reservations:
@@ -146,3 +185,6 @@ networks:
 
 volumes:
   esdata:
+  neo4jdata:
+  neo4jlogs:
+  postgresdata:
