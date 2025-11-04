@@ -41,8 +41,8 @@ RUN apk add --no-cache protobuf-dev protoc && \
     mkdir -p gen/extractpb && \
     protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto
 
-# Tidy and build (after protobuf files are generated)
-RUN go mod tidy
+# Build (go mod tidy is skipped as protobuf package is local and not in remote module)
+# The dependencies are already downloaded, so we can build directly
 RUN go build -o /server .
 
 # Final stage
