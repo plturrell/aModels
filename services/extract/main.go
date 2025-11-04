@@ -21,11 +21,14 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/Chahine-tech/sql-parser-go/pkg/parser"
+	_ "github.com/Chahine-tech/sql-parser-go/parser"
 	_ "github.com/SAP/go-hdb/driver"
 	"github.com/lib/pq"
 	extractpb "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract/gen/extractpb"
 	ch "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/chains"
+	
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract/internal/config"
+	handlers "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract/internal/handlers"
 )
 
 const (
@@ -74,42 +77,31 @@ func main() {
 
 	logger := log.New(os.Stdout, "[extract-service] ", log.LstdFlags|log.Lmsgprefix)
 
-	port := strings.TrimSpace(os.Getenv("PORT"))
-	if port == "" {
-		port = defaultPort
-	}
-
-	langURL := strings.TrimSpace(os.Getenv("LANGEXTRACT_API_URL"))
-	if langURL == "" {
-		langURL = defaultLangextractURL
-	}
-
-	apiKey := os.Getenv("LANGEXTRACT_API_KEY")
-
-	trainingDir := strings.TrimSpace(os.Getenv("TRAINING_OUTPUT_DIR"))
-	if trainingDir == "" {
-		trainingDir = defaultTrainingDir
+	// Load configuration
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		logger.Fatalf("failed to load configuration: %v", err)
 	}
 
 	server := &extractServer{
-		client:         &http.Client{Timeout: defaultHTTPClientTimeout},
-		langextractURL: strings.TrimRight(langURL, "/"),
-		apiKey:         apiKey,
-		trainingDir:    trainingDir,
+		client:         &http.Client{Timeout: config.DefaultHTTPClientTimeout},
+		langextractURL: cfg.Langextract.URL,
+		apiKey:         cfg.Langextract.APIKey,
+		trainingDir:    cfg.Training.OutputDir,
 		logger:         logger,
-		ocrCommand:     deriveOCRCommand(),
+		ocrCommand:     handlers.DeriveOCRCommand(),
 
 		// Persistence config
-		sqlitePath:    os.Getenv("SQLITE_PATH"),
-		redisAddr:     os.Getenv("REDIS_ADDR"),
-		redisPassword: os.Getenv("REDIS_PASSWORD"),
-		redisDB:       parseIntEnv(os.Getenv("REDIS_DB"), 0),
-		neo4jURI:      os.Getenv("NEO4J_URI"),
-		neo4jUsername: os.Getenv("NEO4J_USERNAME"),
-		neo4jPassword: os.Getenv("NEO4J_PASSWORD"),
+		sqlitePath:    cfg.Persistence.SQLitePath,
+		redisAddr:     cfg.Persistence.RedisAddr,
+		redisPassword: cfg.Persistence.RedisPassword,
+		redisDB:       cfg.Persistence.RedisDB,
+		neo4jURI:      cfg.Persistence.Neo4jURI,
+		neo4jUsername: cfg.Persistence.Neo4jUsername,
+		neo4jPassword: cfg.Persistence.Neo4jPassword,
 
 		// Document store
-		docStorePath: os.Getenv("DOCUMENT_STORE_PATH"),
+		docStorePath: cfg.Persistence.DocStorePath,
 	}
 
 	// Create persistence layer
@@ -183,57 +175,35 @@ func main() {
 		logger.Println("redis persistence enabled")
 	}
 
-	telemetryEnabled := parseBoolEnv(os.Getenv("POSTGRES_LANG_SERVICE_ENABLED"), true)
-	telemetryAddr := strings.TrimSpace(os.Getenv("POSTGRES_LANG_SERVICE_ADDR"))
-	telemetryPrivacy := strings.TrimSpace(os.Getenv("POSTGRES_LANG_SERVICE_PRIVACY"))
-	telemetryUser := strings.TrimSpace(os.Getenv("POSTGRES_LANG_SERVICE_USER_ID"))
-	telemetryLibrary := strings.TrimSpace(os.Getenv("POSTGRES_LANG_SERVICE_LIBRARY_TYPE"))
-	if telemetryLibrary == "" {
-		telemetryLibrary = defaultTelemetryLibrary
-	}
+	server.telemetryOperation = cfg.Telemetry.Operation
 
-	telemetryOperation := strings.TrimSpace(os.Getenv("POSTGRES_LANG_SERVICE_OPERATION"))
-	if telemetryOperation == "" {
-		telemetryOperation = defaultTelemetryOperation
-	}
-	server.telemetryOperation = telemetryOperation
-
-	if telemetryEnabled && telemetryAddr != "" {
+	if cfg.Telemetry.Enabled && cfg.Telemetry.Address != "" {
 		telemetryClient, err := newTelemetryClient(context.Background(), telemetryConfig{
-			Address:          telemetryAddr,
-			LibraryType:      telemetryLibrary,
-			DefaultOperation: telemetryOperation,
-			PrivacyLevel:     telemetryPrivacy,
-			UserIDHash:       telemetryUser,
-			DialTimeout:      defaultDialTimeout,
-			CallTimeout:       defaultCallTimeout,
+			Address:          cfg.Telemetry.Address,
+			LibraryType:      cfg.Telemetry.LibraryType,
+			DefaultOperation: cfg.Telemetry.Operation,
+			PrivacyLevel:     cfg.Telemetry.PrivacyLevel,
+			UserIDHash:       cfg.Telemetry.UserIDHash,
+			DialTimeout:      cfg.Telemetry.DialTimeout,
+			CallTimeout:      cfg.Telemetry.CallTimeout,
 		})
 		if err != nil {
 			logger.Printf("telemetry disabled: %v", err)
 		} else {
 			server.telemetry = telemetryClient
-			logger.Printf("telemetry enabled (addr=%s, library=%s)", telemetryAddr, telemetryLibrary)
+			logger.Printf("telemetry enabled (addr=%s, library=%s)", cfg.Telemetry.Address, cfg.Telemetry.LibraryType)
 			defer telemetryClient.Close()
 		}
-	} else if telemetryEnabled && telemetryAddr == "" {
+	} else if cfg.Telemetry.Enabled && cfg.Telemetry.Address == "" {
 		logger.Printf("telemetry disabled: POSTGRES_LANG_SERVICE_ADDR not set")
 	}
 
-	if err := os.MkdirAll(trainingDir, 0o755); err != nil {
+	if err := os.MkdirAll(cfg.Training.OutputDir, 0o755); err != nil {
 		logger.Fatalf("failed to prepare training directory: %v", err)
 	}
 
-	grpcPort := strings.TrimSpace(os.Getenv("GRPC_PORT"))
-	if grpcPort == "" {
-		grpcPort = defaultGRPCPort
-	}
-
-	grpcAddr := ":" + grpcPort
-
-	flightAddr := strings.TrimSpace(os.Getenv("FLIGHT_ADDR"))
-	if flightAddr == "" {
-		flightAddr = defaultFlightAddr
-	}
+	grpcAddr := ":" + cfg.Server.GRPCPort
+	flightAddr := cfg.Server.FlightAddr
 
 	flightServer := newExtractFlightServer(logger)
 	server.flight = flightServer
@@ -272,7 +242,7 @@ func main() {
 	if *explorer {
 		server.startExplorer()
 	} else {
-		addr := ":" + port
+		addr := ":" + cfg.Server.Port
 		logger.Printf("agenticAiETH_layer4_Extract listening on %s (proxying %s)", addr, server.langextractURL)
 		if err := http.ListenAndServe(addr, mux); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatalf("server exited with error: %v", err)
@@ -341,7 +311,7 @@ func parseBoolEnv(value string, defaultValue bool) bool {
 
 // --- /healthz ---
 func (s *extractServer) handleHealthz(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":        "ok",
 		"langextract":   s.langextractURL,
 		"training_dir":  s.trainingDir,
@@ -392,7 +362,7 @@ func (s *extractServer) handleExtract(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, response)
+	handlers.WriteJSON(w, http.StatusOK, response)
 }
 
 func (s *extractServer) recordTelemetry(ctx context.Context, sessionID string, input map[string]any, output map[string]any, runErr error, started time.Time, latency time.Duration) error {
@@ -459,7 +429,7 @@ func (s *extractServer) handleGenerateTraining(w http.ResponseWriter, r *http.Re
 			http.Error(w, fmt.Sprintf("table extract failed: %v", err), http.StatusBadGateway)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
+		handlers.WriteJSON(w, http.StatusOK, map[string]any{
 			"success":  true,
 			"mode":     "table",
 			"manifest": result.ManifestPath,
@@ -471,7 +441,7 @@ func (s *extractServer) handleGenerateTraining(w http.ResponseWriter, r *http.Re
 			http.Error(w, fmt.Sprintf("document extract failed: %v", err), http.StatusBadGateway)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
+		handlers.WriteJSON(w, http.StatusOK, map[string]any{
 			"success":  true,
 			"mode":     "document",
 			"manifest": result.ManifestPath,
@@ -823,7 +793,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, response)
+	handlers.WriteJSON(w, http.StatusOK, response)
 }
 
 // --- /catalog/projects ---
@@ -1382,7 +1352,7 @@ func (s *extractServer) generateTableExtract(ctx context.Context, input tableGen
 	}
 
 	manifestPath := filepath.Join(outputBase, "manifest.json")
-	if err := writeJSONFile(manifestPath, manifestData); err != nil {
+	if err := handlers.WriteJSONFile(manifestPath, manifestData); err != nil {
 		return generationResult{}, err
 	}
 
@@ -1483,7 +1453,8 @@ func normalizeValue(v any) any {
 	}
 }
 
-func writeJSONFile(path string, payload any) error {
+// writeJSONFile moved to internal/handlers/helpers.go
+func _writeJSONFile(path string, payload any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create manifest dir: %w", err)
 	}
@@ -1556,7 +1527,7 @@ func (s *extractServer) generateDocumentExtract(ctx context.Context, input docum
 		"files":     outputs,
 	}
 	manifestPath := filepath.Join(outputDir, "manifest.json")
-	if err := writeJSONFile(manifestPath, manifest); err != nil {
+	if err := handlers.WriteJSONFile(manifestPath, manifest); err != nil {
 		return generationResult{}, err
 	}
 
@@ -1566,7 +1537,8 @@ func (s *extractServer) generateDocumentExtract(ctx context.Context, input docum
 	}, nil
 }
 
-func deriveOCRCommand() []string {
+// deriveOCRCommand moved to internal/handlers/helpers.go
+func _deriveOCRCommand() []string {
 	if cmd := strings.TrimSpace(os.Getenv("OCR_COMMAND")); cmd != "" {
 		return strings.Fields(cmd)
 	}
@@ -1586,13 +1558,7 @@ func deriveOCRCommand() []string {
 
 // --- utilities ---
 
-func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(payload); err != nil {
-		log.Printf("failed to write JSON response: %v", err)
-	}
-}
+// writeJSON moved to internal/handlers/helpers.go
 
 type CatalogAsset struct {
 	EntityID      string
