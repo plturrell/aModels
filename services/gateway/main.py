@@ -154,6 +154,34 @@ async def orchestration_process(payload: Dict[str, Any]) -> Any:
         raise HTTPException(status_code=502, detail=f"Graph service error: {e}")
 
 
+@app.post("/unified/process")
+async def unified_process(payload: Dict[str, Any]) -> Any:
+    """
+    Process unified workflow combining knowledge graphs, orchestration chains, and AgentFlow flows.
+    This is the ultimate integration endpoint that uses all three systems together.
+    
+    Request format:
+    {
+        "unified_request": {
+            "knowledge_graph_request": {...},  // Optional
+            "orchestration_request": {...},    // Optional
+            "agentflow_request": {...},         // Optional
+            "workflow_mode": "sequential"       // Optional: "sequential", "parallel", "conditional"
+        }
+    }
+    """
+    try:
+        # Proxy to graph service for unified workflow orchestration
+        graph_url = os.getenv("GRAPH_SERVICE_URL", "http://localhost:8081")
+        r = await client.post(f"{graph_url}/unified/process", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Graph service error: {e}")
+
+
 @app.post("/extract/ocr")
 async def extract_ocr(payload: Dict[str, Any]) -> Any:
     try:

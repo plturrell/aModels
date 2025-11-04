@@ -8,6 +8,9 @@ import (
 
 	"github.com/langchain-ai/langgraph-go/pkg/stategraph"
 	orch "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/chains"
+	orchllms "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/llms"
+	orchlocalai "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/llms/localai"
+	orchprompts "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/prompts"
 )
 
 // OrchestrationProcessorOptions configures the orchestration chain processing workflow.
@@ -60,11 +63,23 @@ func RunOrchestrationChainNode(localAIURL string) stategraph.NodeFunc {
 		log.Printf("Running orchestration chain: %s", chainName)
 
 		// Create or load orchestration chain based on chain name
-		// For now, we'll create a simple LLM chain as an example
-		// In production, this would load from a registry or factory
 		chain, err := createOrchestrationChain(chainName, localAIURL)
 		if err != nil {
 			return nil, fmt.Errorf("create orchestration chain %s: %w", chainName, err)
+		}
+
+		// If knowledge graph context is available, enrich inputs
+		if kgContext, ok := chainInputs["knowledge_graph_context"].(map[string]any); ok {
+			if quality, ok := kgContext["quality"].(map[string]any); ok {
+				chainInputs["quality_score"] = quality["score"]
+				chainInputs["quality_level"] = quality["level"]
+			}
+			if nodes, ok := kgContext["nodes"].([]any); ok {
+				chainInputs["node_count"] = len(nodes)
+			}
+			if edges, ok := kgContext["edges"].([]any); ok {
+				chainInputs["edge_count"] = len(edges)
+			}
 		}
 
 		// Execute chain
@@ -89,17 +104,61 @@ func RunOrchestrationChainNode(localAIURL string) stategraph.NodeFunc {
 }
 
 // createOrchestrationChain creates an orchestration chain based on the chain name.
-// This is a placeholder - in production, this would use a chain registry or factory.
+// Currently supports: "llm_chain", "question_answering", "summarization"
 func createOrchestrationChain(chainName, localAIURL string) (orch.Chain, error) {
-	// For now, return an error indicating chain creation is not fully implemented
-	// In production, this would:
-	// 1. Load chain configuration from registry
-	// 2. Create LLM instance (LocalAI, Azure, etc.)
-	// 3. Create prompt template
-	// 4. Combine into chain
-	// 5. Return chain
+	// Create LocalAI LLM instance
+	llm, err := orchlocalai.New(localAIURL)
+	if err != nil {
+		return nil, fmt.Errorf("create LocalAI LLM: %w", err)
+	}
 
-	return nil, fmt.Errorf("chain creation not fully implemented: %s (requires chain registry)", chainName)
+	// Create chain based on chain name
+	switch chainName {
+	case "llm_chain", "default":
+		// Simple LLM chain with customizable prompt
+		promptTemplate := orchprompts.NewPromptTemplate(
+			"Answer the following question or task:\n\n{{.input}}",
+			[]string{"input"},
+		)
+		return orch.NewLLMChain(llm, promptTemplate), nil
+
+	case "question_answering", "qa":
+		// Question answering chain with context support
+		promptTemplate := orchprompts.NewPromptTemplate(
+			"Context: {{.context}}\n\nQuestion: {{.question}}\n\nAnswer:",
+			[]string{"context", "question"},
+		)
+		return orch.NewLLMChain(llm, promptTemplate), nil
+
+	case "summarization", "summarize":
+		// Summarization chain
+		promptTemplate := orchprompts.NewPromptTemplate(
+			"Summarize the following text:\n\n{{.text}}\n\nSummary:",
+			[]string{"text"},
+		)
+		return orch.NewLLMChain(llm, promptTemplate), nil
+
+	case "knowledge_graph_analyzer":
+		// Chain for analyzing knowledge graphs
+		promptTemplate := orchprompts.NewPromptTemplate(
+			"Analyze the following knowledge graph information:\n\n"+
+				"Nodes: {{.node_count}}\n"+
+				"Edges: {{.edge_count}}\n"+
+				"Quality Score: {{.quality_score}}\n"+
+				"Quality Level: {{.quality_level}}\n\n"+
+				"Provide insights and recommendations:\n\n{{.query}}",
+			[]string{"node_count", "edge_count", "quality_score", "quality_level", "query"},
+		)
+		return orch.NewLLMChain(llm, promptTemplate), nil
+
+	default:
+		// Default to simple LLM chain with custom input
+		promptTemplate := orchprompts.NewPromptTemplate(
+			"{{.input}}",
+			[]string{"input"},
+		)
+		return orch.NewLLMChain(llm, promptTemplate), nil
+	}
 }
 
 // QueryKnowledgeGraphForChainNode returns a node that queries knowledge graphs to inform chain execution.

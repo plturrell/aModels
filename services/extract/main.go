@@ -1590,25 +1590,12 @@ func (s *extractServer) generateTableExtract(ctx context.Context, input tableGen
 		return generationResult{}, err
 	}
 
-	// Optional orchestration integration:
-	// Note: GetChainByName is not available in chains package
-	// Orchestration is optional and disabled for now
-	var orchChain ch.Chain
-	orchChain = nil
-	if false {
-		inputs := map[string]any{
-			"input_path":    manifestPath,
-			"output_format": format,
-			"hints": map[string]any{
-				"schema": schema,
-				"tables": tables,
-			},
-		}
-		if _, err := ch.Call(ctx, orchChain, inputs); err != nil {
-			s.logger.Printf("orchestration chain call failed: %v (continuing without it)", err)
-			// Don't fail the entire operation if orchestration fails
-		}
-	}
+	// Optional orchestration integration via LangGraph workflow:
+	// If ORCHESTRATION_ENABLED is set, orchestration chains can be executed
+	// via the graph service /orchestration/process endpoint.
+	// This allows orchestration to be used without direct dependency on chains package.
+	// For direct chain usage, see services/graph/pkg/workflows/orchestration_processor.go
+	// Note: Orchestration is now enabled via LangGraph workflows, not direct chain calls
 
 	// Adapt actual output as needed for your system:
 	return generationResult{
