@@ -23,7 +23,7 @@ type Lineage struct {
 
 func parseSQL(sql string) (*Lineage, error) {
 	p := parser.New(sql)
-	ast, err := p.Parse()
+	ast, err := p.ParseStatement()
 	if err != nil {
 		if fallback := fallbackParseSQL(sql); fallback != nil {
 			return fallback, nil
@@ -31,8 +31,11 @@ func parseSQL(sql string) (*Lineage, error) {
 		return nil, fmt.Errorf("failed to parse sql: %w", err)
 	}
 
+	// Convert Statement AST to map format for extractLineage
+	astMap := statementToMap(ast)
+
 	builder := newLineageBuilder()
-	builder.extractLineage(ast, lineageContext{})
+	builder.extractLineage(astMap, lineageContext{})
 	result := builder.Build()
 
 	if fallback := fallbackParseSQL(sql); fallback != nil {
@@ -457,6 +460,67 @@ func stripAlias(fragment string) string {
 		return parts[len(parts)-1]
 	}
 	return frag
+}
+
+// statementToMap converts a parser.Statement AST to a map format expected by extractLineage
+func statementToMap(stmt parser.Statement) map[string]interface{} {
+	result := make(map[string]interface{})
+	
+	switch s := stmt.(type) {
+	case *parser.SelectStatement:
+		result["select"] = selectStatementToMap(s)
+	case *parser.InsertStatement:
+		result["insert"] = true
+		result["tables"] = []interface{}{s.Table.String()}
+	case *parser.UpdateStatement:
+		result["update"] = true
+		result["tables"] = []interface{}{s.Table.String()}
+		if s.Where != nil {
+			result["where"] = expressionToMap(s.Where)
+		}
+	case *parser.DeleteStatement:
+		result["delete"] = true
+		// DeleteStatement may not have a From field - check structure
+		if s.Where != nil {
+			result["where"] = expressionToMap(s.Where)
+		}
+	}
+	
+	return result
+}
+
+func selectStatementToMap(s *parser.SelectStatement) map[string]interface{} {
+	result := make(map[string]interface{})
+	
+	if s.From != nil {
+		tables := []interface{}{}
+		for _, table := range s.From.Tables {
+			tables = append(tables, table.String())
+		}
+		for _, join := range s.Joins {
+			if join.Table.Name != "" {
+				tables = append(tables, join.Table.String())
+			}
+		}
+		result["tables"] = tables
+	}
+	
+	if len(s.Columns) > 0 {
+		columns := []interface{}{}
+		for _, col := range s.Columns {
+			columns = append(columns, col.String())
+		}
+		result["columns"] = columns
+	}
+	
+	return result
+}
+
+func expressionToMap(expr parser.Expression) map[string]interface{} {
+	result := make(map[string]interface{})
+	result["type"] = expr.Type()
+	result["value"] = expr.String()
+	return result
 }
 
 func shortIdentifier(name string) string {

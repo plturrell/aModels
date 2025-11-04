@@ -103,22 +103,23 @@ services:
     container_name: extract-service
     restart: unless-stopped
     environment:
-      - PORT=8081
+      - PORT=8082
       - GRPC_PORT=9090
       - TRAINING_OUTPUT_DIR=/workspace/data/training/extracts
     volumes:
       - ../../data:/workspace/data:rw
       - ../../logs:/workspace/logs:rw
     ports:
-      - "8081:8081"
+      - "8082:8082"
       - "9090:9090"
+      - "8815:8815"
     depends_on:
       - elasticsearch
 
   graph:
     build:
       context: ../..
-      dockerfile: legacy/stage3/graph/Dockerfile
+      dockerfile: services/graph/Dockerfile
     image: amodels/graph-server:latest
     container_name: graph-server
     restart: unless-stopped

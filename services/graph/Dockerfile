@@ -25,7 +25,7 @@ COPY . /workspace/src
 # 2. Update go.mod to remove/update replace directives
 # 3. Refactor code to remove dependencies
 
-WORKDIR /workspace/src/stage3/graph
+WORKDIR /workspace/src/services/graph
 
 # Use the image toolchain (Go 1.24)
 ENV GOTOOLCHAIN=local
