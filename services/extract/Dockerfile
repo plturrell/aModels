@@ -31,20 +31,22 @@ WORKDIR /app/services/extract
 # Download dependencies
 RUN go mod download
 
-# Copy the rest of the source code
+# Copy the rest of the source code (excluding generated protobuf files for now)
 COPY services/extract/ .
 
-# Install protoc and regenerate protobuf files (after source is copied)
+# First, update go.mod dependencies (protobuf package may not exist yet, that's OK)
+# We'll generate the files after, and they're part of the same module
+RUN go mod tidy 2>&1 | grep -v "does not contain package" || true
+
+# Install protoc and regenerate protobuf files
 RUN apk add --no-cache protobuf-dev protoc && \
     go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.10 && \
     go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest && \
     mkdir -p gen/extractpb && \
     protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto
 
-# The protobuf files are generated and will be committed to the repo
-# This ensures they exist in the remote module for go.mod validation
-# Update dependencies and build
-RUN go mod tidy && go build -o /server .
+# Build (protobuf files are now generated and in the same module)
+RUN go build -o /server .
 
 # Final stage
 FROM alpine:latest
