@@ -453,16 +453,27 @@ Knowledge Graph Output
 ## Rating: 92/100
 
 ### Breakdown
-- **Input Handling**: 95/100 - Excellent support for multiple formats
-- **Processing**: 90/100 - Comprehensive processing with advanced extraction
-- **Quality Assessment**: 95/100 - Excellent information theory metrics
-- **Persistence**: 90/100 - Multiple persistence layers with real-time sync
-- **Integration**: 95/100 - Excellent integration with workflows and testing
-- **Documentation**: 90/100 - Good documentation, could be enhanced
+- **Input Handling**: 95/100 - Excellent support for multiple formats (JSON, DDL, SQL, Control-M)
+- **Processing**: 90/100 - Comprehensive processing with advanced extraction (sequences, parameters, classifications)
+- **Quality Assessment**: 95/100 - Excellent information theory metrics with actionable interpretation
+- **Persistence**: 90/100 - Multiple persistence layers (Neo4j, Glean, Postgres, Redis, Flight) with real-time sync
+- **Integration**: 95/100 - Excellent integration with workflows (Petri nets → LangGraph/AgentFlow), testing, and training
+- **Documentation**: 90/100 - Good documentation, could be enhanced with more examples
 
 ## Conclusion
 
 The extraction process is **highly comprehensive and well-integrated**. It successfully transforms raw source data into a rich knowledge graph with advanced metadata, quality metrics, and workflow representations. The process is intelligent, database-driven, and provides excellent observability.
+
+### Key Process Highlights
+
+1. **Multi-Format Support**: Handles JSON tables, Hive DDLs, SQL queries, and Control-M XML files
+2. **Advanced Extraction**: Extracts table process sequences, code parameters, hardcoded lists, table classifications, and testing endpoints
+3. **Quality Metrics**: Calculates and interprets information theory metrics (metadata entropy, KL divergence) with actionable recommendations
+4. **Workflow Conversion**: Converts Control-M jobs to Petri nets, which can be converted to LangGraph or AgentFlow workflows
+5. **Real-Time Sync**: Automatically exports to Glean Catalog in real-time via async queue
+6. **Comprehensive Persistence**: Saves to Neo4j, Glean, Postgres, Redis, and Flight for maximum accessibility
+7. **Temporal Tracking**: Includes timestamps (`updated_at`, `metrics_calculated_at`) for temporal pattern analysis
+8. **Intelligent Processing**: Uses quality metrics to determine processing strategies and warnings
 
 **Key Strengths:**
 - Multi-format support (JSON, DDL, SQL, Control-M)
