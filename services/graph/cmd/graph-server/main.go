@@ -151,6 +151,40 @@ func main() {
 			json.NewEncoder(w).Encode(result)
 		})
 
+		// AgentFlow workflow orchestration endpoint (uses LangGraph)
+		http.HandleFunc("/agentflow/process", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+
+			var req map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, fmt.Sprintf("invalid request: %v", err), http.StatusBadRequest)
+				return
+			}
+
+			// Create AgentFlow processor workflow
+			workflow, err := workflows.NewAgentFlowProcessorWorkflow(workflows.AgentFlowProcessorOptions{
+				AgentFlowServiceURL: os.Getenv("AGENTFLOW_SERVICE_URL"),
+				ExtractServiceURL:   extractHTTPURL,
+			})
+			if err != nil {
+				http.Error(w, fmt.Sprintf("create workflow: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			// Execute workflow
+			result, err := workflow.Invoke(context.Background(), req)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("workflow execution failed: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(result)
+		})
+
 		// Legacy extract/graph endpoint (Arrow Flight integration)
 		http.HandleFunc("/extract/graph", func(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)

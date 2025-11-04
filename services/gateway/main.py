@@ -102,14 +102,37 @@ async def hana_sql(payload: Dict[str, Any]) -> Any:
 
 @app.post("/agentflow/run")
 async def agentflow_run(payload: Dict[str, Any]) -> Any:
+    """
+    Run an AgentFlow flow via LangFlow (external service).
+    This is a proxy to the AgentFlow service which manages LangFlow flows.
+    """
     try:
-        r = await client.post(f"{AGENTFLOW_URL}/run", json=payload)
+        # AgentFlow service manages flow execution via LangFlow
+        r = await client.post(f"{AGENTFLOW_URL}/flows/{payload.get('flow_id', '')}/run", json=payload)
         r.raise_for_status()
         return r.json()
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except httpx.RequestError as e:
         raise HTTPException(status_code=502, detail=f"AgentFlow service error: {e}")
+
+
+@app.post("/agentflow/process")
+async def agentflow_process(payload: Dict[str, Any]) -> Any:
+    """
+    Process AgentFlow flows via LangGraph workflow orchestration.
+    This integrates AgentFlow with knowledge graphs and quality-based routing.
+    """
+    try:
+        # Proxy to graph service for LangGraph workflow orchestration
+        graph_url = os.getenv("GRAPH_SERVICE_URL", "http://localhost:8081")
+        r = await client.post(f"{graph_url}/agentflow/process", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Graph service error: {e}")
 
 
 @app.post("/extract/ocr")
