@@ -1,21 +1,52 @@
 version: "3.9"
 
-# GPU override compose file
+# GPU override compose file with GPU Orchestrator
 # Usage:
 #   docker compose -f compose.yml -f compose.gpu.yml --profile gpu up --build
+#
+# GPU Orchestrator manages GPU allocation dynamically across all services.
+# Services request GPUs via GPU_ORCHESTRATOR_URL instead of hardcoding device IDs.
 
 profiles:
   - gpu
 
 services:
-  # Example GPU-enabled LocalAI service (CUDA build)
+  # GPU Orchestrator Service - Central GPU management
+  gpu-orchestrator:
+    build:
+      context: ../../services/gpu-orchestrator
+      dockerfile: Dockerfile
+    profiles: [gpu]
+    environment:
+      - PORT=8088
+      - DEEPAGENTS_URL=http://deepagents:9004
+      - GRAPH_SERVICE_URL=http://graph-service:8081
+    ports:
+      - "8088:8088"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
+    runtime: nvidia
+    # GPU orchestrator needs access to all GPUs to monitor and allocate
+    # It uses nvidia-smi to discover and monitor GPUs
+    volumes:
+      - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro
+      - /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:/usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1:ro
+
+  # GPU-enabled LocalAI service (CUDA build)
+  # Now uses GPU orchestrator for dynamic allocation instead of NVIDIA_VISIBLE_DEVICES=all
   localai:
     image: quay.io/go-skynet/local-ai:latest-cublas-cuda12
     profiles: [gpu]
     environment:
-      - NVIDIA_VISIBLE_DEVICES=all
+      # Remove hardcoded NVIDIA_VISIBLE_DEVICES - let GPU orchestrator manage it
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - DEBUG=false
+      # GPU Orchestrator integration
+      - GPU_ORCHESTRATOR_URL=http://gpu-orchestrator:8088
+      - LOCALAI_GPU_COUNT=${LOCALAI_GPU_COUNT:-2}
     ports:
       - "8081:8080"
     volumes:
@@ -27,23 +58,69 @@ services:
           devices:
             - capabilities: ["gpu"]
     runtime: nvidia
+    depends_on:
+      - gpu-orchestrator
 
   gateway:
     environment:
       - LOCALAI_URL=http://localai:8080
+      - GPU_ORCHESTRATOR_URL=http://gpu-orchestrator:8088
     depends_on:
       - localai
+      - gpu-orchestrator
 
-  # If you have a GPU-accelerated search inference server, add it here
-  # search-inference:
-  #   image: yourorg/search-inference:gpu
-  #   profiles: [gpu]
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - capabilities: ["gpu"]
-  #   runtime: nvidia
+  # Training service with GPU orchestrator integration
+  training:
+    environment:
+      - GPU_ORCHESTRATOR_URL=http://gpu-orchestrator:8088
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
+    runtime: nvidia
+    depends_on:
+      - gpu-orchestrator
+
+  # SAP RPT OSS service with GPU orchestrator integration
+  sap-rpt-oss:
+    environment:
+      - GPU_ORCHESTRATOR_URL=http://gpu-orchestrator:8088
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
+    runtime: nvidia
+    depends_on:
+      - gpu-orchestrator
+
+  # DeepSeek OCR service with GPU orchestrator integration
+  deepseek-ocr:
+    environment:
+      - GPU_ORCHESTRATOR_URL=http://gpu-orchestrator:8088
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: ["gpu"]
+    runtime: nvidia
+    depends_on:
+      - gpu-orchestrator
+
+  # DeepAgents service with GPU orchestrator integration for intelligent allocation
+  deepagents:
+    environment:
+      - GPU_ORCHESTRATOR_URL=http://gpu-orchestrator:8088
+    depends_on:
+      - gpu-orchestrator
+
+  # Extract service with GPU orchestrator integration (for DeepSeek OCR)
+  extract-service:
+    environment:
+      - GPU_ORCHESTRATOR_URL=http://gpu-orchestrator:8088
+    depends_on:
+      - gpu-orchestrator
 
 volumes:
   localai_data:
