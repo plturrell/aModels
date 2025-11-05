@@ -18,6 +18,7 @@ type UnifiedProcessorOptions struct {
 	ExtractServiceURL   string
 	AgentFlowServiceURL string
 	LocalAIURL          string
+	GPUOrchestratorURL  string // URL to GPU orchestrator service (optional)
 }
 
 // UnifiedWorkflowRequest represents a request that can use all three systems.
@@ -91,6 +92,46 @@ func ProcessUnifiedWorkflowNode(opts UnifiedProcessorOptions) stategraph.NodeFun
 		newState := make(map[string]any, len(state)+5)
 		for k, v := range state {
 			newState[k] = v
+		}
+
+		// Step 0: Allocate GPUs if GPU orchestrator is available
+		if opts.GPUOrchestratorURL != "" {
+			gpuOpts := GPUProcessorOptions{
+				GPUOrchestratorURL: opts.GPUOrchestratorURL,
+			}
+			gpuAllocNode := ProcessGPUAllocationNode(gpuOpts)
+			// Determine service name from workflow
+			serviceName := "unified-workflow"
+			if kgReq, ok := state["knowledge_graph_request"].(map[string]any); ok && kgReq != nil {
+				serviceName = "knowledge-graph"
+			} else if orchReq, ok := state["orchestration_request"].(map[string]any); ok && orchReq != nil {
+				serviceName = "orchestration"
+			} else if afReq, ok := state["agentflow_request"].(map[string]any); ok && afReq != nil {
+				serviceName = "agentflow"
+			}
+			
+			// Add GPU allocation request to state
+			gpuAllocState := make(map[string]any)
+			for k, v := range newState {
+				gpuAllocState[k] = v
+			}
+			gpuAllocState["gpu_allocation_request"] = map[string]any{
+				"service_name":  serviceName,
+				"workload_type": "generic",
+			}
+			
+			gpuResult, err := gpuAllocNode(ctx, gpuAllocState)
+			if err == nil {
+				// Merge GPU allocation into state
+				if gpuMap, ok := gpuResult.(map[string]any); ok {
+					if gpuAlloc, ok := gpuMap["gpu_allocation"].(map[string]any); ok {
+						newState["gpu_allocation"] = gpuAlloc
+						log.Printf("GPU allocation successful for unified workflow")
+					}
+				}
+			} else {
+				log.Printf("Warning: GPU allocation failed, continuing without GPU: %v", err)
+			}
 		}
 
 		// Step 1: Process knowledge graph if requested
@@ -178,6 +219,31 @@ func ProcessUnifiedWorkflowNode(opts UnifiedProcessorOptions) stategraph.NodeFun
 			"orchestration_processed":    unifiedReq.OrchestrationRequest != nil,
 			"agentflow_processed":       unifiedReq.AgentFlowRequest != nil,
 			"workflow_mode":              unifiedReq.WorkflowMode,
+		}
+
+		// Release GPUs if allocated
+		if opts.GPUOrchestratorURL != "" {
+			if gpuAlloc, ok := newState["gpu_allocation"].(map[string]any); ok {
+				gpuOpts := GPUProcessorOptions{
+					GPUOrchestratorURL: opts.GPUOrchestratorURL,
+				}
+				releaseNode := ReleaseGPUAllocationNode(gpuOpts)
+				releaseState := make(map[string]any)
+				for k, v := range newState {
+					releaseState[k] = v
+				}
+				releaseResult, err := releaseNode(ctx, releaseState)
+				if err == nil {
+					// Update state with release result (GPU allocation removed)
+					if releaseMap, ok := releaseResult.(map[string]any); ok {
+						// Remove GPU allocation from state
+						delete(newState, "gpu_allocation")
+						log.Printf("GPU allocation released successfully")
+					}
+				} else {
+					log.Printf("Warning: GPU release failed: %v", err)
+				}
+			}
 		}
 
 		log.Printf("Unified workflow completed successfully")
