@@ -24,13 +24,17 @@ RUN CGO_ENABLED=0 go build -mod=mod -o /workspace/build/vaultgemma ./cmd/vaultge
 ##
 ## runtime image
 ##
-FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
+FROM ubuntu:22.04
 
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     MODELS_DIR=/models
 
 WORKDIR /workspace
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /workspace/build/vaultgemma /usr/local/bin/vaultgemma-server
 
