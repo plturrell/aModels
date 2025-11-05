@@ -1,6 +1,6 @@
 module github.com/mudler/LocalAI
 
-go 1.24.4
+go 1.23
 
 toolchain go1.24.5
 

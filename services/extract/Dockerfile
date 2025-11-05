@@ -13,6 +13,7 @@ COPY services/extract/go.mod ./services/extract/
 COPY infrastructure/third_party/sql-parser-go ./infrastructure/third_party/sql-parser-go/
 COPY infrastructure/third_party/go-arrow ./infrastructure/third_party/go-arrow/
 COPY infrastructure/third_party/orchestration ./infrastructure/third_party/orchestration/
+COPY infrastructure/third_party/go-hdb ./infrastructure/third_party/go-hdb/
 
 # Copy other module dependencies (matching replace directive paths)
 # From services/extract: ../postgres -> services/postgres
@@ -28,7 +29,8 @@ RUN mkdir -p /agenticAiETH_layer4_Orchestration && \
 
 WORKDIR /app/services/extract
 
-# Download dependencies
+# Download dependencies (use GOTOOLCHAIN=auto to allow downloading newer Go if needed)
+ENV GOTOOLCHAIN=auto
 RUN go mod download
 
 # Copy the rest of the source code (excluding generated protobuf files for now)
@@ -44,7 +46,14 @@ RUN apk add --no-cache protobuf-dev protoc && \
     go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.4.0 && \
     mkdir -p gen/extractpb && \
     protoc --go_out=gen/extractpb --go-grpc_out=gen/extractpb --proto_path=proto proto/extract.proto && \
-    if [ -d gen/extractpb/github.com ]; then mv gen/extractpb/github.com/plturrell/aModels/services/extract/gen/extractpb/*.pb.go gen/extractpb/ && rm -rf gen/extractpb/github.com; fi
+    if [ -d gen/extractpb/github.com ]; then mv gen/extractpb/github.com/plturrell/aModels/services/extract/gen/extractpb/*.pb.go gen/extractpb/ && rm -rf gen/extractpb/github.com; fi && \
+    mkdir -p ../tmp/postgres_gen && \
+    protoc --go_out=../tmp/postgres_gen --go-grpc_out=../tmp/postgres_gen \
+        --proto_path=../postgres/proto ../postgres/proto/v1/postgres_lang_service.proto && \
+    if [ -d ../tmp/postgres_gen/github.com/plturrell/aModels/services/postgres/pkg/gen/v1 ]; then \
+        cp ../tmp/postgres_gen/github.com/plturrell/aModels/services/postgres/pkg/gen/v1/*.pb.go ../postgres/pkg/gen/v1/ && \
+        rm -rf ../tmp/postgres_gen; \
+    fi
 
 # Update go.mod again after protobuf files are generated (filters remote package errors)
 RUN go mod tidy 2>&1 | grep -v "does not contain package" || true

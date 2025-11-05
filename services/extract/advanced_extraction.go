@@ -1,4 +1,3 @@
-//go:build disabled
 package main
 
 import (
@@ -22,16 +21,6 @@ type AdvancedExtractionResult struct {
 	TestingEndpoints      []TestingEndpoint      `json:"testing_endpoints"`
 }
 
-// TableProcessSequence represents the sequence/order of table processing.
-type TableProcessSequence struct {
-	SequenceID   string   `json:"sequence_id"`
-	Tables       []string `json:"tables"`        // Ordered list of tables
-	SourceType   string   `json:"source_type"`   // sql, controlm, ddl, etc.
-	SourceFile   string   `json:"source_file"`
-	SequenceType string   `json:"sequence_type"` // insert, update, select, etc.
-	Order        int      `json:"order"`         // Processing order
-}
-
 // CodeParameter represents a parameter found in code.
 type CodeParameter struct {
 	Name         string `json:"name"`
@@ -51,17 +40,6 @@ type HardcodedList struct {
 	SourceFile string   `json:"source_file"`
 	Type       string   `json:"type"`        // IN clause, enum, constant list, etc.
 	Context    string   `json:"context"`
-}
-
-// TableClassification classifies a table as transaction or reference.
-// Phase 5: Extended with Props for quality scores and review flags.
-type TableClassification struct {
-	TableName      string   `json:"table_name"`
-	Classification string   `json:"classification"` // transaction, reference, lookup, staging, etc.
-	Confidence     float64  `json:"confidence"`     // 0.0 to 1.0
-	Evidence       []string `json:"evidence"`       // Reasons for classification
-	Patterns       []string `json:"patterns"`       // Patterns that led to classification
-	Props          map[string]any `json:"props,omitempty"` // Phase 5: Additional properties (quality_score, needs_review)
 }
 
 // TestingEndpoint represents a testing/test endpoint.
@@ -549,9 +527,6 @@ func (ae *AdvancedExtractor) extractTableSequencesFromControlM(controlMContent, 
 	// Look for job dependencies and extract table references from job commands
 	
 	// Pattern: Job dependencies indicate sequence
-	dependencyPattern := regexp.MustCompile(`(?i)(?:wait|depend|after)\s*[=:]\s*(\w+)`)
-	matches := dependencyPattern.FindAllStringSubmatch(controlMContent, -1)
-	
 	// Extract table names from SQL commands in jobs
 	tablePattern := regexp.MustCompile(`(?i)(?:table|from|into|update)\s+(\w+)`)
 	tableMatches := tablePattern.FindAllStringSubmatch(controlMContent, -1)
@@ -610,7 +585,6 @@ func (ae *AdvancedExtractor) extractTestingEndpointsFromControlM(controlMContent
 	
 	// Look for test indicators in Control-M job names and descriptions
 	testPattern := regexp.MustCompile(`(?i)(test|mock|stub|fake|sample|demo|trial)`)
-	testMatches := testPattern.FindAllStringSubmatch(controlMContent, -1)
 	
 	// Extract endpoint patterns (HTTP URLs, API calls)
 	endpointPattern := regexp.MustCompile(`(?i)(https?://[^\s]+|/[a-z0-9/_-]+)`)
@@ -742,59 +716,56 @@ func (ae *AdvancedExtractor) classifyTableWithAdvancedSAPRPT(tableName, context,
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
-			Source:         sourceID,
 		}, 0.0, false
 	}
 
-	var result map[string]any
-	if err := json.Unmarshal(output, &result); err != nil {
+	var resultData map[string]any
+	if err := json.Unmarshal(output, &resultData); err != nil {
 		return TableClassification{
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
-			Source:         sourceID,
 		}, 0.0, false
 	}
 
 	classification := "unknown"
-	if cls, ok := result["classification"].(string); ok {
+	if cls, ok := resultData["classification"].(string); ok {
 		classification = cls
 	}
 
 	confidence := 0.0
-	if conf, ok := result["classification_confidence"].(float64); ok {
+	if conf, ok := resultData["classification_confidence"].(float64); ok {
 		confidence = conf
 	}
 
 	qualityScore := 0.0
-	if qs, ok := result["quality_score"].(float64); ok {
+	if qs, ok := resultData["quality_score"].(float64); ok {
 		qualityScore = qs
 	}
 
 	needsReview := false
-	if nr, ok := result["needs_review"].(bool); ok {
+	if nr, ok := resultData["needs_review"].(bool); ok {
 		needsReview = nr
 	}
 
 	evidence := []string{}
-	if ev, ok := result["uncertainty_reason"].(string); ok && ev != "" {
+	if ev, ok := resultData["uncertainty_reason"].(string); ok && ev != "" {
 		evidence = append(evidence, ev)
 	}
-	if method, ok := result["method"].(string); ok {
+	if method, ok := resultData["method"].(string); ok {
 		evidence = append(evidence, fmt.Sprintf("Method: %s", method))
 	}
 
-	result := TableClassification{
+	classificationResult := TableClassification{
 		TableName:      tableName,
 		Classification: classification,
 		Confidence:     confidence,
 		Evidence:       evidence,
-		Source:         sourceID,
 		Props:          make(map[string]any),
 	}
-	result.Props["quality_score"] = qualityScore
-	result.Props["needs_review"] = needsReview
-	return result, qualityScore, needsReview
+	classificationResult.Props["quality_score"] = qualityScore
+	classificationResult.Props["needs_review"] = needsReview
+	return classificationResult, qualityScore, needsReview
 }
 
 // classifyTableWithFullSAPRPT calls the Python script to classify using full SAP_RPT_OSS_Classifier with training data
@@ -822,7 +793,6 @@ func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sou
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
-			Source:         sourceID,
 		}
 	}
 
@@ -842,7 +812,6 @@ func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sou
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
-			Source:         sourceID,
 			Props:          make(map[string]any),
 		}
 	}
@@ -853,7 +822,6 @@ func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sou
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
-			Source:         sourceID,
 			Props:          make(map[string]any),
 		}
 	}
@@ -882,7 +850,6 @@ func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sou
 		Classification: classification,
 		Confidence:     confidence,
 		Evidence:       evidence,
-		Source:         sourceID,
 		Props:          make(map[string]any),
 	}
 }

@@ -1,6 +1,6 @@
 module github.com/go-skynet/LocalAI/.github/gallery-agent
 
-go 1.24.1
+go 1.23
 
 require (
 	github.com/mudler/cogito v0.3.0

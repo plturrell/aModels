@@ -1,6 +1,6 @@
 module github.com/plturrell/aModels/services/extract
 
-go 1.25.3
+go 1.23
 
 require (
 	github.com/Chahine-tech/sql-parser-go v0.0.0-20250711162409-da324d384ca3
@@ -14,7 +14,7 @@ require (
 	github.com/plturrell/aModels/services/postgres v0.0.0
 	github.com/redis/go-redis/v9 v9.16.0
 	google.golang.org/grpc v1.76.0
-	google.golang.org/protobuf v1.36.10
+	google.golang.org/protobuf v1.34.2
 )
 
 replace github.com/plturrell/aModels/services/postgres => ../postgres
@@ -24,6 +24,8 @@ replace github.com/SAP/go-hdb => ../../infrastructure/third_party/go-hdb
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration => ../../infrastructure/third_party/orchestration
 
 replace github.com/Chahine-tech/sql-parser-go => ../../infrastructure/third_party/sql-parser-go
+
+replace google.golang.org/protobuf => google.golang.org/protobuf v1.34.2
 
 require (
 	github.com/alicebob/gopher-json v0.0.0-20200520072559-a9ecdc9d1d3a // indirect

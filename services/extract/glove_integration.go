@@ -1,11 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 )
 
 // GloveEmbeddingGenerator generates word embeddings using Glove
