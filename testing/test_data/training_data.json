@@ -1,0 +1,41 @@
+{
+  "domain_id": "test-financial",
+  "training_samples": [
+    {
+      "text": "customer payment transaction amount",
+      "domain": "test-financial",
+      "features": {
+        "has_payment": 1,
+        "has_amount": 1,
+        "has_transaction": 1
+      }
+    },
+    {
+      "text": "user contact email address",
+      "domain": "test-customer",
+      "features": {
+        "has_user": 1,
+        "has_contact": 1,
+        "has_email": 1
+      }
+    },
+    {
+      "text": "product inventory stock quantity",
+      "domain": "test-product",
+      "features": {
+        "has_product": 1,
+        "has_inventory": 1,
+        "has_quantity": 1
+      }
+    }
+  ],
+  "metadata": {
+    "total_samples": 3,
+    "domains": [
+      "test-financial",
+      "test-customer",
+      "test-product"
+    ],
+    "created_at": "2025-01-01T00:00:00Z"
+  }
+}

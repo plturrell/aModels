@@ -45,36 +45,43 @@ services:
             - capabilities: ["gpu"]
 
   localai:
-    build:
-      context: ../..
-      dockerfile: services/localai/Dockerfile
-    image: amodels/localai:latest
+    # Use official LocalAI from GitHub instead of custom build
+    # See https://github.com/mudler/LocalAI for available tags
+    # Available tags: latest, v3.7.0, latest-cuda, etc.
+    image: quay.io/go-skynet/local-ai:latest  # Start with latest, can use latest-cuda if GPU needed
     container_name: localai
     restart: unless-stopped
     environment:
-      - MODELS_DIR=/models
-      - TRANSFORMERS_BASE_URL=http://search-python:8091
-      - TRANSFORMERS_MODEL=all-MiniLM-L6-v2
-      - DISABLE_VAULTGEMMA_FALLBACK=1
+      - MODELS_PATH=/models
+      # Use local embedding model
+      - EMBEDDINGS_MODEL=all-MiniLM-L6-v2
       # Redis config (preferred over file-based)
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - REDIS_DOMAIN_CONFIG_KEY=${REDIS_DOMAIN_CONFIG_KEY:-localai:domains:config}
-      # Enable domains that require env vars
-      - ENABLE_GEMMA7B=1
-      # Fallback to file if Redis not available
-      - DOMAIN_CONFIG_PATH=/workspace/config/domains.json
+      - REDIS_PREFIX=localai
+      # Enable debug if needed
+      - DEBUG=true
+      # Threads for inference
+      - THREADS=4
+      # Context size
+      - CONTEXT_SIZE=512
+      # Port
+      - PORT=8080
     volumes:
       - ../../models:/models:ro
-      - ../../services/localai/config:/workspace/config:ro
+      - ../../services/localai/config:/config:ro
     ports:
       - "8081:8080"
     depends_on:
-      transformers:
-        condition: service_healthy
       redis:
         condition: service_started
       postgres:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     deploy:
       resources:
         reservations:
@@ -323,3 +330,4 @@ volumes:
   neo4jlogs:
   postgresdata:
   redisdata:
+  localai-config:

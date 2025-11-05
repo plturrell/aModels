@@ -1,0 +1,95 @@
+{
+  "domains": {
+    "test-financial": {
+      "name": "Test Financial Domain",
+      "agent_id": "test-0x1111",
+      "layer": "business",
+      "team": "FinanceTeam",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 60
+      },
+      "keywords": [
+        "financial",
+        "amount",
+        "price",
+        "cost",
+        "revenue",
+        "payment",
+        "transaction",
+        "account",
+        "balance"
+      ],
+      "tags": [
+        "financial",
+        "business",
+        "money"
+      ],
+      "max_tokens": 512,
+      "temperature": 0.3
+    },
+    "test-customer": {
+      "name": "Test Customer Domain",
+      "agent_id": "test-0x2222",
+      "layer": "application",
+      "team": "CustomerTeam",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 60
+      },
+      "keywords": [
+        "customer",
+        "client",
+        "user",
+        "person",
+        "contact",
+        "email",
+        "phone",
+        "address"
+      ],
+      "tags": [
+        "customer",
+        "application",
+        "user"
+      ],
+      "max_tokens": 256,
+      "temperature": 0.5
+    },
+    "test-product": {
+      "name": "Test Product Domain",
+      "agent_id": "test-0x3333",
+      "layer": "data",
+      "team": "ProductTeam",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 60
+      },
+      "keywords": [
+        "product",
+        "item",
+        "sku",
+        "catalog",
+        "inventory",
+        "stock",
+        "quantity"
+      ],
+      "tags": [
+        "product",
+        "data",
+        "inventory"
+      ],
+      "max_tokens": 256,
+      "temperature": 0.4
+    }
+  },
+  "default_domain": "test-financial"
+}

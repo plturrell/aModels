@@ -381,6 +381,125 @@ def test_transformers_service() -> bool:
         return False
 
 
+def test_domain_create_api() -> bool:
+    """Test domain creation API endpoint."""
+    try:
+        # Test domain creation
+        payload = {
+            "name": "Test Domain",
+            "agent_id": "test-0x9999",
+            "layer": "test",
+            "team": "TestTeam",
+            "keywords": ["test", "domain", "validation"],
+            "tags": ["test"],
+            "backend_type": "hf-transformers",
+            "model_name": "phi-3.5-mini",
+            "transformers_config": {
+                "endpoint": f"{TRANSFORMERS_URL}/v1/chat/completions",
+                "model_name": "phi-3.5-mini",
+                "timeout_seconds": 60
+            },
+            "max_tokens": 256,
+            "temperature": 0.7
+        }
+        
+        response = httpx.post(
+            f"{LOCALAI_URL}/v1/domains/create",
+            json=payload,
+            timeout=DEFAULT_TIMEOUT
+        )
+        
+        if response.status_code in [200, 201]:
+            data = response.json()
+            print(f"✅ Domain creation successful")
+            print(f"   Domain ID: {data.get('domain_id', 'N/A')}")
+            return True
+        else:
+            print(f"⚠️  Domain creation returned: {response.status_code}")
+            print(f"   Response: {response.text[:200]}")
+            # May fail if domain already exists, which is OK for testing
+            return response.status_code == 409  # Conflict is acceptable
+    except Exception as e:
+        print(f"⚠️  Domain creation API not available: {e}")
+        return False
+
+
+def test_domain_list_api() -> bool:
+    """Test domain listing API endpoint."""
+    try:
+        response = httpx.get(
+            f"{LOCALAI_URL}/v1/domains/list",
+            timeout=DEFAULT_TIMEOUT
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            domains = data.get("domains", {})
+            print(f"✅ Domain list API successful")
+            print(f"   Found {len(domains)} domains")
+            return True
+        else:
+            print(f"❌ Domain list API failed: {response.status_code}")
+            return False
+    except Exception as e:
+        print(f"❌ Domain list API error: {e}")
+        return False
+
+
+def test_domain_config_loading() -> bool:
+    """Test domain configuration loading (Redis/File fallback)."""
+    try:
+        # Test /v1/domains endpoint which loads from Redis or file
+        response = httpx.get(
+            f"{LOCALAI_URL}/v1/domains",
+            timeout=DEFAULT_TIMEOUT
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            domains = data.get("data", [])
+            
+            if len(domains) > 0:
+                print(f"✅ Domain config loading successful")
+                print(f"   Loaded {len(domains)} domains")
+                
+                # Check if domains have required fields
+                first_domain = domains[0]
+                if "id" in first_domain and "config" in first_domain:
+                    print(f"   Domain structure valid")
+                    return True
+                else:
+                    print(f"   ⚠️  Domain structure incomplete")
+                    return False
+            else:
+                print(f"⚠️  No domains loaded (may be expected if Redis not configured)")
+                return False
+        else:
+            print(f"❌ Domain config loading failed: {response.status_code}")
+            return False
+    except Exception as e:
+        print(f"❌ Domain config loading error: {e}")
+        return False
+
+
+def test_extract_domain_detection() -> bool:
+    """Test Extract service domain detection capability."""
+    try:
+        # Test if extract service has domain detection
+        # This would require a proper extraction request, but we can check the service
+        response = httpx.get(f"{EXTRACT_URL}/healthz", timeout=HEALTH_TIMEOUT)
+        if response.status_code == 200:
+            print(f"✅ Extract service available for domain detection")
+            print(f"   (Domain detection tested in test_domain_detection.py)")
+            return True
+        else:
+            print(f"⚠️  Extract service returned: {response.status_code}")
+            return False
+    except Exception as e:
+        print(f"⚠️  Extract service not available: {e}")
+        return False
+
+
 def test_no_external_apis() -> bool:
     """Verify no external API calls are being made."""
     print("Checking for external API references in configuration...")
@@ -433,6 +552,11 @@ def main():
     suite.run_test("LocalAI Chat", "Test LocalAI chat completion", test_localai_chat_completion)
     suite.run_test("LocalAI Embeddings", "Test LocalAI embeddings endpoint", test_localai_embeddings)
     
+    # Week 1: Domain Lifecycle API Tests
+    suite.run_test("Domain Create API", "Test /v1/domains/create endpoint", test_domain_create_api)
+    suite.run_test("Domain List API", "Test /v1/domains/list endpoint", test_domain_list_api)
+    suite.run_test("Domain Config Loading", "Test domain config loading from Redis/File", test_domain_config_loading)
+    
     # Service Integration Tests
     suite.run_test("DeepAgents Health", "Test DeepAgents service health", test_deepagents_health)
     suite.run_test("DeepAgents LocalAI", "Verify DeepAgents uses LocalAI", test_deepagents_localai)
@@ -440,6 +564,7 @@ def main():
     suite.run_test("Search Inference Health", "Test Search-inference service health", test_search_inference_health)
     suite.run_test("Search Embeddings", "Test Search-inference embeddings via LocalAI", test_search_embeddings)
     suite.run_test("Extract Service", "Test Extract service connection", test_extract_service)
+    suite.run_test("Extract Domain Detection", "Test Extract service domain detection", test_extract_domain_detection)
     suite.run_test("Gateway Service", "Test Gateway service connection", test_gateway_service)
     suite.run_test("Transformers Service", "Test Transformers service for embeddings", test_transformers_service)
     

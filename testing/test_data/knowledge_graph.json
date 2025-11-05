@@ -1,0 +1,67 @@
+{
+  "nodes": [
+    {
+      "id": "node_1",
+      "label": "customers",
+      "type": "table",
+      "props": {
+        "schema": "public",
+        "database": "test_db",
+        "domain": "test-customer",
+        "agent_id": "test-0x2222"
+      }
+    },
+    {
+      "id": "node_2",
+      "label": "customer_id",
+      "type": "column",
+      "props": {
+        "table": "customers",
+        "type": "bigint",
+        "domain": "test-customer",
+        "agent_id": "test-0x2222"
+      }
+    },
+    {
+      "id": "node_3",
+      "label": "orders",
+      "type": "table",
+      "props": {
+        "schema": "public",
+        "database": "test_db",
+        "domain": "test-financial",
+        "agent_id": "test-0x1111"
+      }
+    },
+    {
+      "id": "node_4",
+      "label": "order_amount",
+      "type": "column",
+      "props": {
+        "table": "orders",
+        "type": "decimal",
+        "domain": "test-financial",
+        "agent_id": "test-0x1111"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source_id": "node_2",
+      "target_id": "node_4",
+      "type": "RELATES_TO",
+      "props": {
+        "domain": "test-financial",
+        "agent_id": "test-0x1111"
+      }
+    }
+  ],
+  "metrics": {
+    "total_nodes": 4,
+    "total_edges": 1,
+    "domains_detected": [
+      "test-customer",
+      "test-financial"
+    ]
+  }
+}

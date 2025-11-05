@@ -1,100 +1,155 @@
 #!/bin/bash
-# Comprehensive test runner for all LocalAI interaction points
+# Run all tests with proper Docker network URLs
+# This script ensures tests use the correct service URLs
 
-set -e
+set +e  # Don't exit on error - collect all test results
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/.."
+cd "$(dirname "$0")/.."
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-echo "=========================================="
-echo "LocalAI Integration Test Suite"
-echo "=========================================="
+echo "============================================================"
+echo "Running All Tests"
+echo "============================================================"
 echo ""
 
-# Check if services are running
-check_service() {
-    local url=$1
-    local name=$2
+# Step 0: Verify services first
+echo "Step 0: Verifying services..."
+if ! ./testing/00_check_services.sh > /dev/null 2>&1; then
+    echo "⚠️  Some services not ready, but continuing..."
+fi
+echo ""
+
+# Set Docker network URLs (services accessible from Docker network)
+export LOCALAI_URL="http://localai:8080"
+export EXTRACT_SERVICE_URL="http://extract-service:19080"
+export TRAINING_SERVICE_URL="http://training-service:8080"
+export POSTGRES_DSN="postgresql://postgres:postgres@postgres:5432/amodels"
+export REDIS_URL="redis://redis:6379/0"
+export NEO4J_URI="bolt://neo4j:7687"
+export NEO4J_USER="neo4j"
+export NEO4J_PASSWORD="password"
+
+echo "Using Docker network URLs:"
+echo "  LOCALAI_URL: $LOCALAI_URL"
+echo "  EXTRACT_SERVICE_URL: $EXTRACT_SERVICE_URL"
+echo "  TRAINING_SERVICE_URL: $TRAINING_SERVICE_URL"
+echo ""
+
+# Test results tracking
+TOTAL_TESTS=0
+PASSED_TESTS=0
+FAILED_TESTS=0
+FAILED_LIST=()
+
+# Function to run a test and track results
+run_test() {
+    local test_file=$1
+    local test_name=$2
     
-    if curl -s -f "$url" > /dev/null 2>&1; then
-        echo -e "${GREEN}✅${NC} $name is running"
+    if [ ! -f "testing/$test_file" ]; then
+        echo "⚠️  Test file not found: testing/$test_file"
+        return 1
+    fi
+    
+    echo "============================================================"
+    echo "Running: $test_name"
+    echo "File: $test_file"
+    echo "============================================================"
+    
+    TOTAL_TESTS=$((TOTAL_TESTS + 1))
+    
+    if python3 "testing/$test_file" 2>&1; then
+        echo ""
+        echo "✅ $test_name: PASSED"
+        PASSED_TESTS=$((PASSED_TESTS + 1))
         return 0
     else
-        echo -e "${YELLOW}⚠️${NC} $name is not running (tests may be skipped)"
+        echo ""
+        echo "❌ $test_name: FAILED"
+        FAILED_TESTS=$((FAILED_TESTS + 1))
+        FAILED_LIST+=("$test_name")
         return 1
     fi
 }
 
-echo "Checking services..."
-check_service "http://localhost:8081/health" "LocalAI"
-check_service "http://localhost:9004/healthz" "DeepAgents"
-check_service "http://localhost:8080/health" "Graph Service"
-check_service "http://localhost:8090/health" "Search-inference"
-check_service "http://localhost:8082/health" "Extract Service"
-check_service "http://localhost:8000/health" "Gateway"
-check_service "http://localhost:9090/health" "Transformers Service"
+# Week 1: Foundation Tests
+echo "============================================================"
+echo "WEEK 1: Foundation Tests"
+echo "============================================================"
 echo ""
 
-# Run Python tests
-echo "=========================================="
-echo "Running Python Integration Tests"
-echo "=========================================="
-if command -v python3 &> /dev/null; then
-    python3 testing/test_localai_integration_suite.py
-    PYTHON_EXIT=$?
-else
-    echo -e "${YELLOW}⚠️${NC} Python3 not found, skipping Python tests"
-    PYTHON_EXIT=0
-fi
+run_test "test_domain_detection.py" "Domain Detection"
+run_test "test_domain_filter.py" "Domain Filter"
+run_test "test_domain_trainer.py" "Domain Trainer"
+run_test "test_domain_metrics.py" "Domain Metrics"
+
+# Week 2: Integration Tests
+echo ""
+echo "============================================================"
+echo "WEEK 2: Integration Tests"
+echo "============================================================"
 echo ""
 
-# Run Go tests
-echo "=========================================="
-echo "Running Go Integration Tests"
-echo "=========================================="
-if command -v go &> /dev/null; then
-    cd testing
-    go test -v -timeout 60s ./test_embedding_models.go ./test_service_integrations.go ./test_deepseek_ocr.go
-    GO_EXIT=$?
-    cd ..
-else
-    echo -e "${YELLOW}⚠️${NC} Go not found, skipping Go tests"
-    GO_EXIT=0
-fi
+run_test "test_extraction_flow.py" "Extraction Flow"
+run_test "test_training_flow.py" "Training Flow"
+run_test "test_ab_testing_flow.py" "A/B Testing Flow"
+run_test "test_rollback_flow.py" "Rollback Flow"
+
+# Week 3: Pattern Learning & Intelligence
+echo ""
+echo "============================================================"
+echo "WEEK 3: Pattern Learning & Intelligence"
+echo "============================================================"
 echo ""
 
-# Run DeepAgents specific test
-echo "=========================================="
-echo "Running DeepAgents → LocalAI Test"
-echo "=========================================="
-if [ -f scripts/test_deepagents_localai.py ]; then
-    python3 scripts/test_deepagents_localai.py
-    DEEPAGENTS_EXIT=$?
-else
-    echo -e "${YELLOW}⚠️${NC} DeepAgents test script not found"
-    DEEPAGENTS_EXIT=0
-fi
+run_test "test_pattern_learning.py" "Pattern Learning"
+run_test "test_extraction_intelligence.py" "Extraction Intelligence"
+run_test "test_automation.py" "Automation"
+
+# Week 4: Performance & Load Tests
+echo ""
+echo "============================================================"
+echo "WEEK 4: Performance & Load Tests"
+echo "============================================================"
 echo ""
 
-# Summary
-echo "=========================================="
-echo "Test Summary"
-echo "=========================================="
+run_test "test_performance.py" "Performance Tests"
+run_test "test_load.py" "Load Tests"
+run_test "test_concurrent_requests.py" "Concurrent Requests"
+run_test "performance_benchmark.py" "Performance Benchmark"
 
-if [ $PYTHON_EXIT -eq 0 ] && [ $GO_EXIT -eq 0 ] && [ $DEEPAGENTS_EXIT -eq 0 ]; then
-    echo -e "${GREEN}✅ All tests passed!${NC}"
-    exit 0
-else
-    echo -e "${RED}❌ Some tests failed${NC}"
-    echo "Python tests: $([ $PYTHON_EXIT -eq 0 ] && echo 'PASS' || echo 'FAIL')"
-    echo "Go tests: $([ $GO_EXIT -eq 0 ] && echo 'PASS' || echo 'FAIL')"
-    echo "DeepAgents tests: $([ $DEEPAGENTS_EXIT -eq 0 ] && echo 'PASS' || echo 'FAIL')"
+# Integration Suite
+echo ""
+echo "============================================================"
+echo "Integration Suite"
+echo "============================================================"
+echo ""
+
+run_test "test_localai_integration_suite.py" "LocalAI Integration Suite"
+
+# Final Summary
+echo ""
+echo "============================================================"
+echo "Test Execution Summary"
+echo "============================================================"
+echo ""
+echo "Total Tests Run: $TOTAL_TESTS"
+echo "✅ Passed: $PASSED_TESTS"
+echo "❌ Failed: $FAILED_TESTS"
+echo ""
+
+if [ $FAILED_TESTS -gt 0 ]; then
+    echo "Failed Tests:"
+    for test in "${FAILED_LIST[@]}"; do
+        echo "  ❌ $test"
+    done
+    echo ""
+    echo "============================================================"
+    echo "❌ SOME TESTS FAILED"
+    echo "============================================================"
     exit 1
+else
+    echo "============================================================"
+    echo "✅ ALL TESTS PASSED"
+    echo "============================================================"
+    exit 0
 fi
-

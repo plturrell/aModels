@@ -1,0 +1,29 @@
+[
+  {
+    "query": "What is the total revenue from customer payments?",
+    "expected_domain": "test-financial",
+    "keywords": [
+      "revenue",
+      "customer",
+      "payments"
+    ]
+  },
+  {
+    "query": "Find all customer contact information",
+    "expected_domain": "test-customer",
+    "keywords": [
+      "customer",
+      "contact",
+      "information"
+    ]
+  },
+  {
+    "query": "Show product inventory levels",
+    "expected_domain": "test-product",
+    "keywords": [
+      "product",
+      "inventory",
+      "levels"
+    ]
+  }
+]

@@ -1,0 +1,50 @@
+{
+  "domain_id": "test-financial",
+  "performance": {
+    "latest": {
+      "accuracy": 0.87,
+      "latency_ms": 120,
+      "tokens_per_second": 45.2,
+      "throughput": 100
+    },
+    "average": {
+      "accuracy": 0.85,
+      "latency_ms": 125,
+      "tokens_per_second": 44.0
+    },
+    "history": [
+      {
+        "version": "v1",
+        "metrics": {
+          "accuracy": 0.8,
+          "latency_ms": 150
+        },
+        "updated_at": "2025-01-01T00:00:00Z"
+      },
+      {
+        "version": "v2",
+        "metrics": {
+          "accuracy": 0.85,
+          "latency_ms": 130
+        },
+        "updated_at": "2025-01-02T00:00:00Z"
+      },
+      {
+        "version": "v3",
+        "metrics": {
+          "accuracy": 0.87,
+          "latency_ms": 120
+        },
+        "updated_at": "2025-01-03T00:00:00Z"
+      }
+    ]
+  },
+  "usage": {
+    "total_requests": 1000,
+    "requests_per_day": 100
+  },
+  "quality": {
+    "completeness": 0.95,
+    "consistency": 0.92
+  }
+}

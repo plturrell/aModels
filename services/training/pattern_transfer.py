@@ -225,7 +225,6 @@ class PatternTransferLearner:
                 target_domain,
                 adaptation_factor
             )
-        }
         
         # Adapt metadata patterns
         if "metrics_patterns" in source_patterns:
