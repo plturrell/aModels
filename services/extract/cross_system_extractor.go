@@ -11,12 +11,21 @@ import (
 
 // CrossSystemExtractor extracts patterns across multiple systems and platforms.
 type CrossSystemExtractor struct {
-	logger *log.Logger
+	logger            *log.Logger
+	terminologyLearner *TerminologyLearner // Phase 10: LNN-based terminology learning
 }
 
 // NewCrossSystemExtractor creates a new cross-system extractor.
 func NewCrossSystemExtractor(logger *log.Logger) *CrossSystemExtractor {
-	return &CrossSystemExtractor{logger: logger}
+	return &CrossSystemExtractor{
+		logger:            logger,
+		terminologyLearner: nil, // Will be set via SetTerminologyLearner
+	}
+}
+
+// SetTerminologyLearner sets the terminology learner (Phase 10).
+func (cse *CrossSystemExtractor) SetTerminologyLearner(learner *TerminologyLearner) {
+	cse.terminologyLearner = learner
 }
 
 // SystemSchema represents a schema from a specific system.
@@ -337,15 +346,25 @@ func (cse *CrossSystemExtractor) createStructureSignature(table TableSchema) str
 }
 
 // analyzeNamingConvention analyzes the naming convention of a column name.
+// Phase 10: Enhanced with LNN-based pattern recognition
 func (cse *CrossSystemExtractor) analyzeNamingConvention(columnName string) string {
-	// Detect naming convention
+	// Phase 10: Use LNN for naming convention detection if available
+	if cse.terminologyLearner != nil {
+		ctx := context.Background()
+		patterns := cse.terminologyLearner.AnalyzeNamingConvention(ctx, columnName)
+		if len(patterns) > 0 {
+			return patterns[0] // Return first detected pattern
+		}
+	}
+
+	// Fallback to fixed pattern matching
 	lower := strings.ToLower(columnName)
 
 	if strings.Contains(columnName, "_") {
 		return "snake_case"
 	} else if strings.Contains(columnName, "-") {
 		return "kebab-case"
-	} else if columnName[0] >= 'A' && columnName[0] <= 'Z' {
+	} else if len(columnName) > 0 && columnName[0] >= 'A' && columnName[0] <= 'Z' {
 		return "PascalCase"
 	} else if strings.ToLower(columnName) != columnName {
 		return "camelCase"

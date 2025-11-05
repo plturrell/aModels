@@ -294,6 +294,22 @@ func main() {
 	server.semanticSchemaAnalyzer = NewSemanticSchemaAnalyzer(logger)
 	logger.Println("Semantic schema analyzer initialized (Phase 8.1)")
 
+	// Phase 10: Initialize terminology learner with LNN
+	terminologyStore := NewNeo4jTerminologyStore(server.neo4jPersistence, logger)
+	terminologyLearner := NewTerminologyLearner(terminologyStore, logger)
+	
+	// Load existing terminology from store
+	if err := terminologyLearner.LoadTerminology(context.Background()); err != nil {
+		logger.Printf("Warning: Failed to load existing terminology: %v", err)
+	}
+	
+	// Set global terminology learner for embedding enhancement
+	SetGlobalTerminologyLearner(terminologyLearner)
+	
+	// Wire terminology learner to components
+	server.semanticSchemaAnalyzer.SetTerminologyLearner(terminologyLearner)
+	logger.Println("Terminology learner initialized (Phase 10)")
+
 	// Phase 9.2: Initialize self-healing system
 	server.selfHealingSystem = NewSelfHealingSystem(logger)
 	logger.Println("Self-healing system initialized (Phase 9.2)")
@@ -372,6 +388,12 @@ func main() {
 	mux.HandleFunc("/workflow/petri-to-langgraph", server.handlePetriNetToLangGraph) // Convert Petri net to LangGraph
 	mux.HandleFunc("/workflow/petri-to-langgraph-advanced", server.handlePetriNetToAdvancedLangGraph) // Convert Petri net to advanced LangGraph (Phase 7.3)
 	mux.HandleFunc("/workflow/petri-to-agentflow", server.handlePetriNetToAgentFlow) // Convert Petri net to AgentFlow
+	// Phase 10: Terminology learning endpoints
+	mux.HandleFunc("/terminology/domains", server.handleTerminologyDomains)     // List learned domains
+	mux.HandleFunc("/terminology/roles", server.handleTerminologyRoles)          // List learned roles
+	mux.HandleFunc("/terminology/patterns", server.handleTerminologyPatterns)    // List learned naming patterns
+	mux.HandleFunc("/terminology/learn", server.handleTerminologyLearn)          // Trigger manual learning
+	mux.HandleFunc("/terminology/evolution", server.handleTerminologyEvolution)  // Terminology evolution over time
 	mux.HandleFunc("/semantic/analyze-column", server.handleAnalyzeColumnSemantics) // Semantic column analysis (Phase 8.1)
 	mux.HandleFunc("/semantic/analyze-lineage", server.handleAnalyzeDataLineage) // Semantic data lineage analysis (Phase 8.1)
 	mux.HandleFunc("/health/status", server.handleHealthStatus) // Health status for all services (Phase 9.2)
@@ -1157,6 +1179,14 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		if err := s.graphPersistence.SaveGraph(nodes, edges); err != nil {
 			s.logger.Printf("failed to save graph: %v", err)
 		}
+
+		// Phase 10: Learn terminology from this extraction run (incremental learning)
+		if terminologyLearner := GetGlobalTerminologyLearner(); terminologyLearner != nil {
+			if err := terminologyLearner.LearnFromExtraction(r.Context(), nodes, edges); err != nil {
+				s.logger.Printf("Warning: Failed to learn terminology from extraction: %v", err)
+				// Non-fatal: continue even if terminology learning fails
+			}
+		}
 	}
 
 	// Real-time Glean synchronization (if enabled)
@@ -1230,6 +1260,12 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 
 	// Perform advanced extraction
 	advancedExtractor := NewAdvancedExtractor(s.logger)
+	
+	// Phase 10: Wire terminology learner to advanced extractor
+	if terminologyLearner := GetGlobalTerminologyLearner(); terminologyLearner != nil {
+		advancedExtractor.SetTerminologyLearner(terminologyLearner)
+	}
+	
 	advancedResult := advancedExtractor.ExtractAdvanced(
 		req.SqlQueries,
 		controlMContents,

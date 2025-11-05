@@ -15,6 +15,7 @@ func generateEmbedding(ctx context.Context, sql string) ([]float32, error) {
 
 // generateSemanticEmbedding generates semantic embedding using sap-rpt-1-oss for text queries
 // Phase 3: Uses connection pooling (handled by Python script)
+// Phase 10: Enhanced with LNN terminology layer
 func generateSemanticEmbedding(ctx context.Context, text string) ([]float32, error) {
 	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
 		"--artifact-type", "text",
@@ -34,10 +35,33 @@ func generateSemanticEmbedding(ctx context.Context, text string) ([]float32, err
 		return nil, fmt.Errorf("failed to unmarshal semantic embedding: %w", err)
 	}
 
+	// Phase 10: Apply terminology enhancement if available
+	if globalTerminologyLearner != nil {
+		enhanced, err := globalTerminologyLearner.EnhanceEmbedding(ctx, text, embedding, "sap_rpt")
+		if err == nil {
+			return enhanced, nil
+		}
+		// Fallback to original embedding if enhancement fails
+	}
+
 	return embedding, nil
 }
 
+// globalTerminologyLearner is a global reference to the terminology learner (set during initialization)
+var globalTerminologyLearner *TerminologyLearner
+
+// SetGlobalTerminologyLearner sets the global terminology learner (Phase 10).
+func SetGlobalTerminologyLearner(learner *TerminologyLearner) {
+	globalTerminologyLearner = learner
+}
+
+// GetGlobalTerminologyLearner returns the global terminology learner (Phase 10).
+func GetGlobalTerminologyLearner() *TerminologyLearner {
+	return globalTerminologyLearner
+}
+
 // generateSQLEmbedding generates embedding for SQL query
+// Phase 10: Enhanced with LNN terminology layer
 func generateSQLEmbedding(ctx context.Context, sql string) ([]float32, error) {
 	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed.py", "--artifact-type", "sql", "--sql", sql)
 
@@ -52,6 +76,15 @@ func generateSQLEmbedding(ctx context.Context, sql string) ([]float32, error) {
 	var embedding []float32
 	if err := json.Unmarshal(output, &embedding); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal SQL embedding: %w", err)
+	}
+
+	// Phase 10: Apply terminology enhancement if available
+	if globalTerminologyLearner != nil {
+		enhanced, err := globalTerminologyLearner.EnhanceEmbedding(ctx, sql, embedding, "relational_transformer")
+		if err == nil {
+			return enhanced, nil
+		}
+		// Fallback to original embedding if enhancement fails
 	}
 
 	return embedding, nil
@@ -110,6 +143,14 @@ func generateTableEmbedding(ctx context.Context, node Node) ([]float32, []float3
 		return nil, nil, fmt.Errorf("failed to unmarshal table embedding: %w", err)
 	}
 
+	// Phase 10: Apply terminology enhancement to relational embedding
+	if globalTerminologyLearner != nil {
+		enhanced, err := globalTerminologyLearner.EnhanceEmbedding(ctx, node.Label, relationalEmbedding, "relational_transformer")
+		if err == nil {
+			relationalEmbedding = enhanced
+		}
+	}
+
 	// Try to generate sap-rpt-1-oss semantic embedding if enabled
 	var semanticEmbedding []float32
 	if os.Getenv("USE_SAP_RPT_EMBEDDINGS") == "true" {
@@ -124,6 +165,14 @@ func generateTableEmbedding(ctx context.Context, node Node) ([]float32, []float3
 			var semantic []float32
 			if err := json.Unmarshal(outputSemantic, &semantic); err == nil && len(semantic) > 0 {
 				semanticEmbedding = semantic
+				
+				// Phase 10: Apply terminology enhancement to semantic embedding
+				if globalTerminologyLearner != nil {
+					enhanced, err := globalTerminologyLearner.EnhanceEmbedding(ctx, node.Label, semanticEmbedding, "sap_rpt")
+					if err == nil {
+						semanticEmbedding = enhanced
+					}
+				}
 			}
 		}
 		// Non-fatal: continue with relational embedding if semantic fails

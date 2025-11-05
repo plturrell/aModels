@@ -13,10 +13,11 @@ import (
 
 // SemanticSchemaAnalyzer performs deep semantic understanding of schemas and data lineage.
 type SemanticSchemaAnalyzer struct {
-	logger            *log.Logger
+	logger              *log.Logger
 	useSAPRPTEmbeddings bool
 	useGloveEmbeddings  bool
 	extractServiceURL   string
+	terminologyLearner  *TerminologyLearner // Phase 10: LNN-based terminology learning
 }
 
 // NewSemanticSchemaAnalyzer creates a new semantic schema analyzer.
@@ -26,7 +27,13 @@ func NewSemanticSchemaAnalyzer(logger *log.Logger) *SemanticSchemaAnalyzer {
 		useSAPRPTEmbeddings: os.Getenv("USE_SAP_RPT_EMBEDDINGS") == "true",
 		useGloveEmbeddings:  os.Getenv("USE_GLOVE_EMBEDDINGS") == "true",
 		extractServiceURL:   os.Getenv("EXTRACT_SERVICE_URL"),
+		terminologyLearner:  nil, // Will be set via SetTerminologyLearner
 	}
+}
+
+// SetTerminologyLearner sets the terminology learner (Phase 10).
+func (ssa *SemanticSchemaAnalyzer) SetTerminologyLearner(learner *TerminologyLearner) {
+	ssa.terminologyLearner = learner
 }
 
 // SemanticColumnAnalysis contains semantic analysis results for a column.
@@ -69,18 +76,30 @@ func (ssa *SemanticSchemaAnalyzer) AnalyzeColumnSemantics(
 		ContextualFeatures: make(map[string]any),
 	}
 
-	// Analyze naming conventions
-	analysis.NamingConventions = ssa.analyzeNamingConventions(columnName, tableName)
+	// Phase 10: Use LNN-based terminology learning if available, otherwise fallback to fixed dictionaries
+	if ssa.terminologyLearner != nil {
+		// Use LNN for naming conventions
+		analysis.NamingConventions = ssa.terminologyLearner.AnalyzeNamingConvention(ctx, columnName)
 
-	// Infer business domain
-	domain, domainConf := ssa.inferBusinessDomain(columnName, tableName, tableContext)
-	analysis.InferredDomain = domain
-	analysis.DomainConfidence = domainConf
+		// Use LNN for domain inference
+		domain, domainConf := ssa.terminologyLearner.InferDomain(ctx, columnName, tableName, tableContext)
+		analysis.InferredDomain = domain
+		analysis.DomainConfidence = domainConf
 
-	// Infer business role
-	role, roleConf := ssa.inferBusinessRole(columnName, columnType, tableName, tableContext)
-	analysis.InferredBusinessRole = role
-	analysis.BusinessRoleConfidence = roleConf
+		// Use LNN for role inference
+		role, roleConf := ssa.terminologyLearner.InferRole(ctx, columnName, columnType, tableName, tableContext)
+		analysis.InferredBusinessRole = role
+		analysis.BusinessRoleConfidence = roleConf
+	} else {
+		// Fallback to fixed dictionaries
+		analysis.NamingConventions = ssa.analyzeNamingConventions(columnName, tableName)
+		domain, domainConf := ssa.inferBusinessDomain(columnName, tableName, tableContext)
+		analysis.InferredDomain = domain
+		analysis.DomainConfidence = domainConf
+		role, roleConf := ssa.inferBusinessRole(columnName, columnType, tableName, tableContext)
+		analysis.InferredBusinessRole = role
+		analysis.BusinessRoleConfidence = roleConf
+	}
 
 	// Generate semantic embeddings for similarity analysis
 	if ssa.useSAPRPTEmbeddings {

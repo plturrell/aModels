@@ -74,12 +74,21 @@ type TestingEndpoint struct {
 
 // AdvancedExtractor performs advanced extraction from parsed code.
 type AdvancedExtractor struct {
-	logger *log.Logger
+	logger            *log.Logger
+	terminologyLearner *TerminologyLearner // Phase 10: LNN-based terminology learning
 }
 
 // NewAdvancedExtractor creates a new advanced extractor.
 func NewAdvancedExtractor(logger *log.Logger) *AdvancedExtractor {
-	return &AdvancedExtractor{logger: logger}
+	return &AdvancedExtractor{
+		logger:            logger,
+		terminologyLearner: nil, // Will be set via SetTerminologyLearner
+	}
+}
+
+// SetTerminologyLearner sets the terminology learner (Phase 10).
+func (ae *AdvancedExtractor) SetTerminologyLearner(learner *TerminologyLearner) {
+	ae.terminologyLearner = learner
 }
 
 // ExtractAdvanced extracts advanced information from parsed data.
@@ -394,7 +403,35 @@ func (ae *AdvancedExtractor) classifyTable(tableName, context, sourceID string) 
 		// Fallback to pattern matching if sap-rpt-1-oss fails
 	}
 	
-	// Pattern-based classification (original implementation)
+	// Phase 10: Try LNN-based classification if available
+	if ae.terminologyLearner != nil {
+		ctx := context.Background()
+		domain, domainConf := ae.terminologyLearner.InferDomain(ctx, tableName, tableName, map[string]any{"context": context})
+		
+		// Map domain to table classification
+		if domainConf > 0.6 {
+			classification := TableClassification{
+				TableName:      tableName,
+				Classification: "unknown",
+				Confidence:     domainConf,
+				Evidence:       []string{fmt.Sprintf("LNN inferred domain: %s", domain)},
+				Patterns:       []string{},
+			}
+			
+			// Map domain to table type
+			if domain == "financial" || domain == "order" {
+				classification.Classification = "transaction"
+			} else if domain == "customer" || domain == "product" {
+				classification.Classification = "reference"
+			}
+			
+			if classification.Classification != "unknown" {
+				return classification
+			}
+		}
+	}
+	
+	// Pattern-based classification (original implementation - fallback)
 	classification := TableClassification{
 		TableName:      tableName,
 		Classification: "unknown",
