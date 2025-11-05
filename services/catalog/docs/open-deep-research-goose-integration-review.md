@@ -21,6 +21,7 @@
 2. **Gateway & Catalog Wiring** – Gateway proxies Deep Research traffic; catalog workflows invoke `DeepResearchClient.ResearchMetadata`, store reports, and surface summaries in the `BuildCompleteDataProduct` flow.  
 3. **Tooling** – SPARQL and semantic-search tools are auto-registered within the LangChain toolkit when `CATALOG_URL`/`CATALOG_SPARQL_URL` are set, enabling the agent to navigate ISO 11179 metadata without external services.  
 4. **Persistence** – Goose SQL migrations create `research_reports`, and the Go `ReportStore` records every generated report for audit and reuse.
+5. **Regression tests** – `pytest models/open_deep_research/tests/test_catalog_tools.py` guards the catalog-tool toggle logic so CI can catch misconfigurations early.
 
 ### Remaining Gaps
 - **Operational Hardening** – Add health/latency dashboards, request tracing, and auth controls before hosting the service externally.  
@@ -47,4 +48,6 @@
 ## Recommended Next Steps
 1. **Add CI smoke tests** that spin up LocalAI + Deep Research, trigger a sample research run, and assert a persisted `research_reports` row.  
 2. **Introduce observability hooks** (metrics, structured logs, tracing headers) across gateway and Deep Research containers.  
-3. **Publish operations runbooks** covering model installation, migration commands, and recovery procedures to close the final documentation gap.
+3. **Publish operations runbooks** covering model installation, migration commands, and recovery procedures to close the final documentation gap.  
+4. **GPU build validation**: run `docker compose -f infrastructure/docker/compose.yml build` on a host with Docker (GPU infra) to confirm the public base images compile end-to-end.
+5. **Test cadence**: run `pytest models/open_deep_research/tests/test_catalog_tools.py` after configuration changes to ensure catalog tools remain correctly gated.
