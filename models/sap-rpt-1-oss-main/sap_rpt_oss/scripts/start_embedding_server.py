@@ -20,28 +20,46 @@ def is_port_in_use(port: int) -> bool:
         return s.connect_ex(('localhost', port)) == 0
 
 
-def start_embedding_server(sentence_embedding_model_name: str, gpu_idx: Optional[int] = None):
-    if gpu_idx is None:
-        gpu_idx = 0
-    zmq_port = ZMQ_PORT_DEFAULT + gpu_idx
-    print('Start async server to compute embedding on port', zmq_port)
-    if is_port_in_use(zmq_port):
-        print('Port already in use, not starting again.')
-    else:
-        commands = [
-            sys.executable, '-m', 'sap_rpt_oss.scripts.zmq_server', '--port',
-            str(zmq_port), '--gpu_idx',
-            str(gpu_idx), '-semn', sentence_embedding_model_name
-        ]
-        process = Popen(commands)
+def start_embedding_server(sentence_embedding_model_name: str, gpu_idx: Optional[int] = None, device_ids: Optional[list] = None):
+    """Start embedding server(s) for sentence embedding generation.
+    
+    Args:
+        sentence_embedding_model_name: Name of the sentence embedding model
+        gpu_idx: Single GPU index (deprecated, use device_ids instead)
+        device_ids: List of GPU device IDs to use (if None, uses gpu_idx or defaults to 0)
+    """
+    # Support both old gpu_idx and new device_ids parameter
+    if device_ids is None:
+        if gpu_idx is None:
+            device_ids = [0]
+        else:
+            device_ids = [gpu_idx]
+    
+    processes = []
+    
+    # Start a server for each GPU
+    for idx, gpu_id in enumerate(device_ids):
+        zmq_port = ZMQ_PORT_DEFAULT + idx
+        print(f'Start async server to compute embedding on port {zmq_port} for GPU {gpu_id}')
+        if is_port_in_use(zmq_port):
+            print(f'Port {zmq_port} already in use, not starting again.')
+        else:
+            commands = [
+                sys.executable, '-m', 'sap_rpt_oss.scripts.zmq_server', '--port',
+                str(zmq_port), '--gpu_idx',
+                str(gpu_id), '-semn', sentence_embedding_model_name
+            ]
+            process = Popen(commands)
+            processes.append((process, zmq_port))
 
         # Register a function that kills the subprocess when the main process exits.
         # This is needed because otherwise the subprocess would keep running even
         # after the main process exits.
         def kill_subprocess():
-            if process is not None:
-                process.terminate()
-                print('Subprocess terminated')
+            for process, port in processes:
+                if process is not None:
+                    process.terminate()
+                    print(f'Subprocess on port {port} terminated')
 
         atexit.register(kill_subprocess)
 

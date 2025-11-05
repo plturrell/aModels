@@ -69,7 +69,9 @@ class SAP_RPT_OSS_Estimator(BaseEstimator, ABC):
                  bagging: Union[Literal['auto'], int] = 8,
                  max_context_size: int = 8192,
                  drop_constant_columns: bool = True,
-                 test_chunk_size: int = 1000):
+                 test_chunk_size: int = 1000,
+                 device_ids: Optional[list] = None,
+                 gpu_orchestrator_url: Optional[str] = None):
 
         self.model_size = ModelSize.base
         self.checkpoint = checkpoint
@@ -83,11 +85,34 @@ class SAP_RPT_OSS_Estimator(BaseEstimator, ABC):
         self.max_context_size = max_context_size
         self.num_regression_bins = 16
         self.model = RPT(self.model_size, regression_type=self.regression_type, classification_type=self.classification_type)
-        # We're using a single GPU here, even if more are available
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        start_embedding_server(Tokenizer.sentence_embedding_model_name)
+        
+        # GPU allocation via orchestrator if available
+        self.gpu_orchestrator_url = gpu_orchestrator_url or os.getenv("GPU_ORCHESTRATOR_URL")
+        self.device_ids = device_ids
+        self.allocation_id = None
+        
+        if self.gpu_orchestrator_url and not device_ids:
+            self._allocate_gpus()
+        
+        # Set device(s) - use first device_id if provided, otherwise default to cuda:0
         if torch.cuda.is_available():
-            if torch.cuda.get_device_capability(0)[0] >= 8:
+            if self.device_ids and len(self.device_ids) > 0:
+                self.device = torch.device(f'cuda:{self.device_ids[0]}')
+            else:
+                self.device = torch.device('cuda:0')
+        else:
+            self.device = torch.device('cpu')
+        
+        # Start embedding server(s) - use first GPU if multiple, otherwise use default
+        if self.device_ids and len(self.device_ids) > 0:
+            start_embedding_server(Tokenizer.sentence_embedding_model_name, device_ids=self.device_ids)
+        else:
+            start_embedding_server(Tokenizer.sentence_embedding_model_name)
+        
+        if torch.cuda.is_available():
+            # Use first device for capability check
+            device_idx = self.device_ids[0] if self.device_ids else 0
+            if torch.cuda.get_device_capability(device_idx)[0] >= 8:
                 self.dtype = torch.bfloat16
             else:
                 self.dtype = torch.float16
@@ -98,14 +123,89 @@ class SAP_RPT_OSS_Estimator(BaseEstimator, ABC):
         self.model.load_weights(Path(self._checkpoint_path), self.device)
         self.seed = 42
         self.drop_constant_columns = drop_constant_columns
+        
+        # Use first device_id for tokenizer if multiple GPUs are available
+        zmq_port = ZMQ_PORT_DEFAULT
+        if self.device_ids and len(self.device_ids) > 1:
+            # For multiple GPUs, we can use different ports or distribute embedding generation
+            # For now, use default port with first GPU
+            zmq_port = ZMQ_PORT_DEFAULT
+        
         self.tokenizer = Tokenizer(
             regression_type=self.regression_type,
             classification_type=self.classification_type,
-            zmq_port=ZMQ_PORT_DEFAULT,  # Only one GPU supported
+            zmq_port=zmq_port,
             random_seed=self.seed,
             num_regression_bins=self.num_regression_bins,
             is_valid=True)
         self.model.to(self.device).eval()
+        
+        # Wrap model with DataParallel if multiple GPUs are available
+        if self.device_ids and len(self.device_ids) > 1 and torch.cuda.is_available():
+            self.model = torch.nn.DataParallel(self.model, device_ids=self.device_ids)
+    
+    def _allocate_gpus(self):
+        """Allocate GPUs from GPU orchestrator."""
+        if not self.gpu_orchestrator_url:
+            return
+        
+        try:
+            import httpx
+            request_data = {
+                "service_name": "sap-rpt-oss",
+                "workload_type": "embedding",
+                "workload_data": {
+                    "model_size": "medium",
+                    "batch_size": 32
+                }
+            }
+            
+            response = httpx.post(
+                f"{self.gpu_orchestrator_url}/gpu/allocate",
+                json=request_data,
+                timeout=10.0
+            )
+            
+            if response.status_code == 200:
+                allocation = response.json()
+                self.allocation_id = allocation.get("id")
+                self.device_ids = allocation.get("gpu_ids", [])
+                import warnings
+                warnings.warn(f"Allocated GPUs {self.device_ids} from orchestrator (allocation ID: {self.allocation_id})")
+            else:
+                import warnings
+                warnings.warn(f"Failed to allocate GPUs: {response.status_code}")
+        except Exception as e:
+            import warnings
+            warnings.warn(f"Failed to allocate GPUs from orchestrator: {e}")
+    
+    def __del__(self):
+        """Cleanup GPU allocation on destruction."""
+        if self.allocation_id and self.gpu_orchestrator_url:
+            try:
+                import httpx
+                httpx.post(
+                    f"{self.gpu_orchestrator_url}/gpu/release",
+                    json={"allocation_id": self.allocation_id},
+                    timeout=5.0
+                )
+            except Exception:
+                pass  # Ignore errors during cleanup
+    
+    def release_gpus(self):
+        """Manually release GPU allocation."""
+        if self.allocation_id and self.gpu_orchestrator_url:
+            try:
+                import httpx
+                httpx.post(
+                    f"{self.gpu_orchestrator_url}/gpu/release",
+                    json={"allocation_id": self.allocation_id},
+                    timeout=5.0
+                )
+                self.allocation_id = None
+            except Exception as e:
+                import warnings
+                warnings.warn(f"Failed to release GPU allocation: {e}")
 
     @abstractmethod
     def task_specific_fit(self):
