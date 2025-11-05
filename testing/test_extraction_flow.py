@@ -118,6 +118,16 @@ def test_extract_service_available() -> bool:
 
 def test_localai_available() -> bool:
     """Test that LocalAI is available for domain detection."""
+    # Try /v1/domains first (localai-compat), fallback to /health
+    try:
+        r = httpx.get(f"{LOCALAI_URL}/v1/domains", timeout=HEALTH_TIMEOUT)
+        if r.status_code == 200:
+            print(f"✅ LocalAI is available (domains endpoint)")
+            return True
+    except Exception:
+        pass
+    
+    # Fallback to /health check
     if not check_service_health(f"{LOCALAI_URL}/health", "LocalAI"):
         print(f"⚠️  LocalAI not available at {LOCALAI_URL}")
         return False
