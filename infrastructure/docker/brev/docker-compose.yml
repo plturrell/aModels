@@ -134,7 +134,15 @@ services:
     image: amodels/training-base:latest
     container_name: training-shell
     restart: unless-stopped
-    command: ["sleep", "infinity"]
+    command: 
+      - /bin/bash
+      - -c
+      - |
+        if [ -d /workspace/testing ] && [ "$(ls -A /workspace/testing 2>/dev/null)" = "" ]; then
+          echo "Testing directory is empty, copying from host..."
+          cp -r /host-testing/* /workspace/testing/ 2>/dev/null || true
+        fi
+        exec sleep infinity
     working_dir: /workspace
     volumes:
       - ../../tools/scripts:/workspace/scripts:rw
@@ -142,7 +150,8 @@ services:
       - ../../models:/workspace/models:rw
       - ../../data:/workspace/data:rw
       - ../../tools:/workspace/tools:rw
-      - /home/aModels/testing:/workspace/testing:ro
+      - /home/aModels/testing:/host-testing:ro
+      - /home/aModels/testing:/workspace/testing:rw
     deploy:
       resources:
         reservations:
