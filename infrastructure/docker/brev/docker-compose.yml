@@ -142,7 +142,7 @@ services:
       - ../../models:/workspace/models:rw
       - ../../data:/workspace/data:rw
       - ../../tools:/workspace/tools:rw
-      - /home/aModels/testing:/workspace/testing:rw
+      - /home/aModels/testing:/workspace/testing:ro
     deploy:
       resources:
         reservations:
