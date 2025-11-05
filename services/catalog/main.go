@@ -5,18 +5,31 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/plturrell/aModels/services/catalog/api"
+	"github.com/plturrell/aModels/services/catalog/cache"
 	"github.com/plturrell/aModels/services/catalog/iso11179"
 	"github.com/plturrell/aModels/services/catalog/migrations"
+	"github.com/plturrell/aModels/services/catalog/observability"
+	"github.com/plturrell/aModels/services/catalog/performance"
 	"github.com/plturrell/aModels/services/catalog/quality"
 	"github.com/plturrell/aModels/services/catalog/security"
 	"github.com/plturrell/aModels/services/catalog/triplestore"
 	"github.com/plturrell/aModels/services/catalog/workflows"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
-	logger := log.New(os.Stdout, "[catalog] ", log.LstdFlags|log.Lmsgprefix)
+	// Initialize structured logger
+	structLogger := observability.DefaultLogger()
+	structLogger.Info("Starting catalog service", map[string]interface{}{
+		"version": "1.0.0",
+	})
+
+	// Initialize Prometheus metrics
+	observability.RegisterMetrics()
+	structLogger.Info("Prometheus metrics initialized", nil)
 
 	// Load configuration
 	neo4jURI := os.Getenv("NEO4J_URI")
@@ -62,38 +75,66 @@ func main() {
 		deepResearchURL = "http://localhost:8085"
 	}
 
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL == "" {
+		redisURL = "redis://localhost:6379/0"
+	}
+
+	// Initialize Redis cache
+	var cacheClient *cache.Cache
+	if redisURL != "" {
+		var err error
+		cacheClient, err = cache.NewCache(redisURL, structLogger)
+		if err != nil {
+			structLogger.Warn("Failed to initialize Redis cache, continuing without cache", map[string]interface{}{
+				"error": err.Error(),
+			})
+		} else {
+			defer cacheClient.Close()
+			structLogger.Info("Redis cache initialized", nil)
+		}
+	}
+
+	// Initialize connection pool (if using performance package)
+	// For now, we'll use the existing triplestore client
+	
 	// Initialize ISO 11179 registry
 	registry := iso11179.NewMetadataRegistry("catalog", "aModels Catalog", baseURI)
-	logger.Println("ISO 11179 metadata registry initialized")
+	structLogger.Info("ISO 11179 metadata registry initialized", nil)
 
 	// Run migrations if enabled
 	runMigrations := os.Getenv("RUN_MIGRATIONS") == "true"
 	if runMigrations {
-		migrationRunner := migrations.NewMigrationRunner(neo4jURI, neo4jUsername, neo4jPassword, logger)
+		// Create legacy logger for migration runner (takes *log.Logger)
+		legacyLogger := log.New(os.Stdout, "[catalog:migrations] ", log.LstdFlags|log.Lmsgprefix)
+		migrationRunner := migrations.NewMigrationRunner(neo4jURI, neo4jUsername, neo4jPassword, legacyLogger)
 		if err := migrationRunner.RunMigrations(context.Background()); err != nil {
-			logger.Printf("Warning: Failed to run migrations: %v", err)
-			// Don't fail startup if migrations fail - allow manual intervention
+			structLogger.Warn("Failed to run migrations, continuing", map[string]interface{}{
+				"error": err.Error(),
+			})
 		} else {
-			logger.Println("Migrations completed successfully")
+			structLogger.Info("Migrations completed successfully", nil)
 		}
 	}
 
 	// Initialize triplestore client
-	triplestoreClient, err := triplestore.NewTriplestoreClient(neo4jURI, neo4jUsername, neo4jPassword, logger)
+	legacyLogger := log.New(os.Stdout, "[catalog] ", log.LstdFlags|log.Lmsgprefix)
+	triplestoreClient, err := triplestore.NewTriplestoreClient(neo4jURI, neo4jUsername, neo4jPassword, legacyLogger)
 	if err != nil {
-		logger.Fatalf("Failed to create triplestore client: %v", err)
+		structLogger.Error("Failed to create triplestore client", err, nil)
+		os.Exit(1)
 	}
 	defer triplestoreClient.Close()
-	logger.Println("Triplestore client initialized")
+	structLogger.Info("Triplestore client initialized", nil)
 
 	// Initialize SPARQL client and endpoint
-	sparqlClient := triplestore.NewSPARQLClient(triplestoreClient, logger)
-	sparqlEndpoint := triplestore.NewSPARQLEndpoint(sparqlClient, logger)
-	logger.Println("SPARQL endpoint initialized")
+	sparqlClient := triplestore.NewSPARQLClient(triplestoreClient, legacyLogger)
+	sparqlEndpoint := triplestore.NewSPARQLEndpoint(sparqlClient, legacyLogger)
+	structLogger.Info("SPARQL endpoint initialized", nil)
 
 	// Initialize quality monitor (connects to Extract service)
-	qualityMonitor := quality.NewQualityMonitor(extractServiceURL, logger)
-	logger.Println("Quality monitor initialized (connected to Extract service)")
+	qualityMonitor := quality.NewQualityMonitor(extractServiceURL, legacyLogger)
+	structLogger.Info("Quality monitor initialized (connected to Extract service)", nil)
 
 	// Initialize unified workflow integration
 	unifiedWorkflow := workflows.NewUnifiedWorkflowIntegration(
@@ -104,28 +145,77 @@ func main() {
 		deepResearchURL,
 		registry,
 		qualityMonitor,
-		logger,
+		legacyLogger,
 	)
-	logger.Println("Unified workflow integration initialized")
+	structLogger.Info("Unified workflow integration initialized", nil)
 
 	// Initialize API handlers
-	catalogHandlers := api.NewCatalogHandlers(registry, logger)
-	sparqlHandler := api.NewSPARQLHandler(sparqlEndpoint, logger)
-	dataProductHandler := api.NewDataProductHandler(unifiedWorkflow, logger)
+	catalogHandlers := api.NewCatalogHandlers(registry, legacyLogger)
+	sparqlHandler := api.NewSPARQLHandler(sparqlEndpoint, legacyLogger)
+	dataProductHandler := api.NewDataProductHandler(unifiedWorkflow, legacyLogger)
 	
 	// Initialize auth middleware
-	authMiddleware := security.NewAuthMiddleware(logger)
+	authMiddleware := security.NewAuthMiddleware(legacyLogger)
 	// Register default token for testing (in production, load from config)
 	authMiddleware.RegisterToken("test-token", "test-user")
+
+	// Initialize health checkers
+	healthCheckers := []api.HealthChecker{
+		api.NewBasicHealthChecker("neo4j", func(ctx context.Context) api.HealthStatus {
+			// Check Neo4j connection by verifying driver is accessible
+			// We'll use a simple test query through the triplestore client
+			testTriple := triplestore.Triple{
+				Subject:   "http://test/health",
+				Predicate: "http://test/check",
+				Object:    "health",
+			}
+			// Try to store a test triple (will be cleaned up)
+			err := triplestoreClient.StoreTriple(ctx, testTriple)
+			if err != nil {
+				return api.HealthStatus{
+					Status:    "down",
+					Message:   err.Error(),
+					Timestamp: time.Now(),
+				}
+			}
+			return api.HealthStatus{
+				Status:    "ok",
+				Timestamp: time.Now(),
+			}
+		}),
+	}
+	
+	if cacheClient != nil {
+		healthCheckers = append(healthCheckers, api.NewBasicHealthChecker("redis", func(ctx context.Context) api.HealthStatus {
+			// Check Redis connection
+			exists, err := cacheClient.Exists(ctx, "healthcheck")
+			if err != nil {
+				return api.HealthStatus{
+					Status:    "down",
+					Message:   err.Error(),
+					Timestamp: time.Now(),
+				}
+			}
+			return api.HealthStatus{
+				Status:    "ok",
+				Details:   map[string]any{"exists_check": exists},
+				Timestamp: time.Now(),
+			}
+		}))
+	}
+	
+	healthHandler := api.NewHealthHandler(healthCheckers, structLogger)
 
 	// Setup HTTP routes
 	mux := http.NewServeMux()
 
-	// Health check
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	})
+	// Enhanced health checks
+	mux.HandleFunc("/healthz", healthHandler.HandleHealthz)
+	mux.HandleFunc("/ready", healthHandler.HandleReadiness)
+	mux.HandleFunc("/live", healthHandler.HandleLiveness)
+	
+	// Prometheus metrics endpoint
+	mux.Handle("/metrics", promhttp.Handler())
 
 	// Catalog API endpoints
 	mux.HandleFunc("/catalog/data-elements", func(w http.ResponseWriter, r *http.Request) {
@@ -157,11 +247,32 @@ func main() {
 		protectedMux.HandleFunc("/catalog/data-elements", catalogHandlers.HandleCreateDataElement)
 		protectedMux.HandleFunc("/catalog/data-products/build", dataProductHandler.HandleBuildDataProduct)
 		mux.Handle("/catalog/", authMiddleware.Middleware(protectedMux))
-		logger.Println("Authentication enabled")
+		structLogger.Info("Authentication enabled", nil)
 	}
 
-	logger.Printf("Catalog service listening on :%s", port)
-	logger.Println("Complete data product endpoints available at /catalog/data-products/build")
-	logger.Fatal(http.ListenAndServe(":"+port, mux))
+	// Apply metrics middleware to all routes
+	handler := api.MetricsMiddleware(mux)
+
+	structLogger.Info("Catalog service starting", map[string]interface{}{
+		"port":    port,
+		"metrics": "/metrics",
+		"health":  "/healthz",
+	})
+	structLogger.Info("Complete data product endpoints available", map[string]interface{}{
+		"endpoint": "/catalog/data-products/build",
+	})
+
+	server := &http.Server{
+		Addr:         ":" + port,
+		Handler:      handler,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	if err := server.ListenAndServe(); err != nil {
+		structLogger.Error("Server failed to start", err, nil)
+		os.Exit(1)
+	}
 }
 

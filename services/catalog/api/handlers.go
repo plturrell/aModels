@@ -14,6 +14,10 @@ import (
 type CatalogHandlers struct {
 	registry *iso11179.MetadataRegistry
 	logger   *log.Logger
+	cache    interface {
+		Get(ctx interface{}, key string, dest interface{}) error
+		Set(ctx interface{}, key string, value interface{}, ttl interface{}) error
+	}
 }
 
 // NewCatalogHandlers creates new catalog handlers.
@@ -22,6 +26,11 @@ func NewCatalogHandlers(registry *iso11179.MetadataRegistry, logger *log.Logger)
 		registry: registry,
 		logger:   logger,
 	}
+}
+
+// SetCache sets the cache for the handlers.
+func (h *CatalogHandlers) SetCache(cache CacheInterface) {
+	h.cache = cache
 }
 
 // HandleListDataElements handles GET /catalog/data-elements.
