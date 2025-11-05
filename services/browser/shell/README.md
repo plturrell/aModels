@@ -21,6 +21,7 @@ The shell launches a single window split into:
 - The bundled React UI talks directly to gateway endpoints via fetch; update `ui/src/App.jsx` if you need additional actions.
 - Browsing state persists in Electron’s default profile (`app.getPath('userData')`). Delete that directory to reset session data.
 - Use `Cmd/Ctrl+K` to open the command palette and trigger navigation, gateway calls, or benchmarks without leaving the keyboard.
+- Toggle light/dark appearance from the toolbar; the shell remembers your preference between sessions.
 - Regenerate the SGMI lineage dataset with `./scripts/generate_sgmi_flow.py` if the source files change.
 
 ## Next steps
