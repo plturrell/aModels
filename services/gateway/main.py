@@ -10,8 +10,7 @@ from redis import asyncio as aioredis
 
 GATEWAY_PORT = int(os.getenv("GATEWAY_PORT", "8000"))
 
-_hana_url = os.getenv("HANA_URL", "").strip()
-HANA_URL = _hana_url if _hana_url else None
+HANA_URL = os.getenv("HANA_URL", "http://localhost:8083")
 AGENTFLOW_URL = os.getenv("AGENTFLOW_URL", "http://localhost:9001")
 EXTRACT_URL = os.getenv("EXTRACT_URL", "http://localhost:9002")
 DATA_URL = os.getenv("DATA_URL", "http://localhost:9003")
@@ -52,14 +51,11 @@ app.add_middleware(
 async def healthz() -> Dict[str, Any]:
     statuses: Dict[str, Any] = {"gateway": "ok"}
     # HANA health
-    if HANA_URL:
-        try:
-            r = await client.get(f"{HANA_URL}/healthz")
-            statuses["hana"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
-        except Exception as e:
-            statuses["hana"] = f"error:{e}"
-    else:
-        statuses["hana"] = "disabled"
+    try:
+        r = await client.get(f"{HANA_URL}/healthz")
+        statuses["hana"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
+    except Exception as e:
+        statuses["hana"] = f"error:{e}"
     # AgentFlow health
     try:
         r = await client.get(f"{AGENTFLOW_URL}/healthz")
@@ -133,8 +129,6 @@ async def healthz() -> Dict[str, Any]:
 
 @app.post("/hana/sql")
 async def hana_sql(payload: Dict[str, Any]) -> Any:
-    if not HANA_URL:
-        raise HTTPException(status_code=503, detail="HANA integration is disabled")
     try:
         r = await client.post(f"{HANA_URL}/sql", json=payload)
         r.raise_for_status()
@@ -708,3 +702,4 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=GATEWAY_PORT)
+
