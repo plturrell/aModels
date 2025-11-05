@@ -138,11 +138,14 @@ services:
       - /bin/bash
       - -c
       - |
-        if [ -d /host-testing ] && [ "$(ls -A /host-testing 2>/dev/null)" != "" ]; then
-          echo "Copying testing files from /host-testing to /workspace/testing..."
-          cp -r /host-testing/* /workspace/testing/ 2>/dev/null || true
-          echo "Files copied. Listing /workspace/testing:"
-          ls -la /workspace/testing/ | head -10
+        # Initialize testing directory if empty
+        # Note: Bind mount to /host-testing may not work due to overlay filesystem
+        # Use 'docker cp /home/aModels/testing/. training-shell:/workspace/testing/' to sync files
+        if [ "$(ls -A /workspace/testing 2>/dev/null)" = "" ]; then
+          echo "WARNING: /workspace/testing is empty"
+          echo "To populate: docker cp /home/aModels/testing/. training-shell:/workspace/testing/"
+        else
+          echo "Testing directory has $(find /workspace/testing -type f | wc -l) files"
         fi
         exec sleep infinity
     working_dir: /workspace
@@ -153,7 +156,7 @@ services:
       - ../../data:/workspace/data:rw
       - ../../tools:/workspace/tools:rw
       - /home/aModels/testing:/host-testing:ro
-      - /home/aModels/testing:/workspace/testing:rw
+      - testing-files:/workspace/testing:rw
     deploy:
       resources:
         reservations:
@@ -352,3 +355,4 @@ volumes:
   postgresdata:
   redisdata:
   localai-config:
+  testing-files:
