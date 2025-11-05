@@ -38,14 +38,14 @@ func (awc *AdvancedWorkflowConverter) ConvertPetriNetToAdvancedLangGraph(net *Pe
 	workflow := &AdvancedLangGraphWorkflow{
 		LangGraphWorkflow: *baseWorkflow,
 		ParallelBranches:  []ParallelBranch{},
-		Checkpoints:        []Checkpoint{},
-		AgentGroups:        []AgentGroup{},
+		Checkpoints:       []Checkpoint{},
+		AgentGroups:       []AgentGroup{},
 	}
 	workflow.Metadata = map[string]any{
 		"advanced_features": map[string]any{
 			"parallel_execution": awc.enableParallelExecution,
-			"checkpointing":       awc.enableCheckpointing,
-			"dynamic_spawning":    awc.enableDynamicSpawning,
+			"checkpointing":      awc.enableCheckpointing,
+			"dynamic_spawning":   awc.enableDynamicSpawning,
 		},
 	}
 
@@ -94,11 +94,11 @@ type ParallelBranch struct {
 
 // Checkpoint represents a state checkpoint in the workflow.
 type Checkpoint struct {
-	ID          string                 `json:"id"`
-	NodeID      string                 `json:"node_id"`
-	StateKeys   []string               `json:"state_keys"`
-	Description string                 `json:"description"`
-	Config      map[string]any         `json:"config,omitempty"`
+	ID          string         `json:"id"`
+	NodeID      string         `json:"node_id"`
+	StateKeys   []string       `json:"state_keys"`
+	Description string         `json:"description"`
+	Config      map[string]any `json:"config,omitempty"`
 }
 
 // AgentGroup represents a group of agents that work together.
@@ -177,7 +177,7 @@ func (awc *AdvancedWorkflowConverter) createCheckpoints(
 				StateKeys:   []string{"workflow_state", "agent_results", "error_count"},
 				Description: fmt.Sprintf("Checkpoint before %s", node.Label),
 				Config: map[string]any{
-					"interval": awc.checkpointInterval.String(),
+					"interval":  awc.checkpointInterval.String(),
 					"auto_save": true,
 				},
 			}
@@ -252,7 +252,7 @@ func (awc *AdvancedWorkflowConverter) createDynamicSpawnNodes(net *PetriNet) []L
 				Label: fmt.Sprintf("Spawn Agents for %s", transition.Label),
 				Config: map[string]any{
 					"target_transition": transition.ID,
-					"spawn_condition":  "data_volume > threshold",
+					"spawn_condition":   "data_volume > threshold",
 					"max_agents":        awc.maxParallelAgents,
 					"agent_type":        awc.determineAgentType(&transition),
 				},
@@ -294,4 +294,3 @@ func parseDurationEnv(envVar string, defaultValue time.Duration) time.Duration {
 	}
 	return defaultValue
 }
-

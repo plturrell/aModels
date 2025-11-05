@@ -15,39 +15,39 @@ import (
 // SelfHealingSystem provides automatic error detection and recovery.
 // Phase 9.2: Enhanced with domain health monitoring for domain-aware self-healing.
 type SelfHealingSystem struct {
-	logger           *log.Logger
-	retryConfig      *RetryConfig
-	circuitBreakers  map[string]*CircuitBreaker
-	fallbackHandlers map[string]FallbackHandler
-	healthMonitors   map[string]*HealthMonitor
-	domainDetector   *DomainDetector // Phase 9.2: Domain detector for domain health
+	logger            *log.Logger
+	retryConfig       *RetryConfig
+	circuitBreakers   map[string]*CircuitBreaker
+	fallbackHandlers  map[string]FallbackHandler
+	healthMonitors    map[string]*HealthMonitor
+	domainDetector    *DomainDetector         // Phase 9.2: Domain detector for domain health
 	domainHealthCache map[string]DomainHealth // Phase 9.2: domain_id -> health score
-	mu               sync.RWMutex
+	mu                sync.RWMutex
 }
 
 // DomainHealth represents domain health status.
 type DomainHealth struct {
-	DomainID    string
-	Score       float64  // 0.0 to 1.0
-	Status      string   // "healthy", "degraded", "unhealthy"
-	LastCheck   time.Time
-	Metrics     map[string]any
+	DomainID  string
+	Score     float64 // 0.0 to 1.0
+	Status    string  // "healthy", "degraded", "unhealthy"
+	LastCheck time.Time
+	Metrics   map[string]any
 }
 
 // RetryConfig holds retry configuration.
 type RetryConfig struct {
-	MaxRetries      int
-	InitialDelay    time.Duration
-	MaxDelay        time.Duration
+	MaxRetries        int
+	InitialDelay      time.Duration
+	MaxDelay          time.Duration
 	BackoffMultiplier float64
 }
 
 // DefaultRetryConfig returns default retry configuration.
 func DefaultRetryConfig() *RetryConfig {
 	return &RetryConfig{
-		MaxRetries:       3,
-		InitialDelay:     2 * time.Second,
-		MaxDelay:         60 * time.Second,
+		MaxRetries:        3,
+		InitialDelay:      2 * time.Second,
+		MaxDelay:          60 * time.Second,
 		BackoffMultiplier: 2.0,
 	}
 }
@@ -68,8 +68,8 @@ type CircuitBreaker struct {
 type CircuitState string
 
 const (
-	CircuitStateClosed   CircuitState = "closed"   // Normal operation
-	CircuitStateOpen     CircuitState = "open"     // Failing, reject requests
+	CircuitStateClosed   CircuitState = "closed"    // Normal operation
+	CircuitStateOpen     CircuitState = "open"      // Failing, reject requests
 	CircuitStateHalfOpen CircuitState = "half_open" // Testing if recovered
 )
 
@@ -78,14 +78,14 @@ type FallbackHandler func(ctx context.Context, err error) (any, error)
 
 // HealthMonitor monitors the health of a service.
 type HealthMonitor struct {
-	serviceName    string
-	lastCheck      time.Time
-	lastStatus     bool
-	failureCount   int
-	successCount   int
-	checkInterval  time.Duration
-	healthCheck    func() error
-	mu             sync.RWMutex
+	serviceName   string
+	lastCheck     time.Time
+	lastStatus    bool
+	failureCount  int
+	successCount  int
+	checkInterval time.Duration
+	healthCheck   func() error
+	mu            sync.RWMutex
 }
 
 // NewSelfHealingSystem creates a new self-healing system.
@@ -95,14 +95,14 @@ func NewSelfHealingSystem(logger *log.Logger) *SelfHealingSystem {
 	if localaiURL != "" {
 		domainDetector = NewDomainDetector(localaiURL, logger)
 	}
-	
+
 	return &SelfHealingSystem{
-		logger:           logger,
-		retryConfig:      DefaultRetryConfig(),
-		circuitBreakers:  make(map[string]*CircuitBreaker),
-		fallbackHandlers: make(map[string]FallbackHandler),
-		healthMonitors:   make(map[string]*HealthMonitor),
-		domainDetector:   domainDetector, // Phase 9.2: Domain detector
+		logger:            logger,
+		retryConfig:       DefaultRetryConfig(),
+		circuitBreakers:   make(map[string]*CircuitBreaker),
+		fallbackHandlers:  make(map[string]FallbackHandler),
+		healthMonitors:    make(map[string]*HealthMonitor),
+		domainDetector:    domainDetector,                // Phase 9.2: Domain detector
 		domainHealthCache: make(map[string]DomainHealth), // Phase 9.2: Domain health cache
 	}
 }
@@ -120,15 +120,15 @@ func (shs *SelfHealingSystem) GetDomainHealth(domainID string) DomainHealth {
 		}
 	}
 	shs.mu.RUnlock()
-	
+
 	// Fetch fresh health data
 	health := shs.fetchDomainHealth(domainID)
-	
+
 	// Update cache
 	shs.mu.Lock()
 	shs.domainHealthCache[domainID] = health
 	shs.mu.Unlock()
-	
+
 	return health
 }
 
@@ -141,7 +141,7 @@ func (shs *SelfHealingSystem) fetchDomainHealth(domainID string) DomainHealth {
 		LastCheck: time.Now(),
 		Metrics:   make(map[string]any),
 	}
-	
+
 	// Try to get domain metrics from PostgreSQL
 	postgresDSN := os.Getenv("POSTGRES_DSN")
 	if postgresDSN != "" {
@@ -163,14 +163,14 @@ func (shs *SelfHealingSystem) fetchDomainHealth(domainID string) DomainHealth {
 							// Calculate health score from metrics
 							accuracy := 0.0
 							latency := 0.0
-							
+
 							if acc, ok := latest["accuracy"].(float64); ok {
 								accuracy = acc
 							}
 							if lat, ok := latest["latency_ms"].(float64); ok {
 								latency = lat
 							}
-							
+
 							// Health score: accuracy weighted, latency penalty
 							healthScore := accuracy * 0.8
 							if latency > 1000 {
@@ -179,10 +179,10 @@ func (shs *SelfHealingSystem) fetchDomainHealth(domainID string) DomainHealth {
 							if latency > 2000 {
 								healthScore *= 0.8
 							}
-							
+
 							health.Score = healthScore
 							health.Metrics = latest
-							
+
 							// Determine status
 							if healthScore >= 0.8 {
 								health.Status = "healthy"
@@ -197,7 +197,7 @@ func (shs *SelfHealingSystem) fetchDomainHealth(domainID string) DomainHealth {
 			}
 		}
 	}
-	
+
 	return health
 }
 
@@ -208,36 +208,36 @@ func (shs *SelfHealingSystem) ExecuteWithRetry(
 	operation func() error,
 ) error {
 	var lastErr error
-	
+
 	for attempt := 0; attempt <= shs.retryConfig.MaxRetries; attempt++ {
 		if attempt > 0 {
 			// Calculate backoff delay
-			delay := time.Duration(float64(shs.retryConfig.InitialDelay) * 
+			delay := time.Duration(float64(shs.retryConfig.InitialDelay) *
 				pow(shs.retryConfig.BackoffMultiplier, float64(attempt-1)))
 			if delay > shs.retryConfig.MaxDelay {
 				delay = shs.retryConfig.MaxDelay
 			}
-			
+
 			shs.logger.Printf("Retrying %s (attempt %d) after %v", operationName, attempt, delay)
-			
+
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(delay):
 			}
 		}
-		
+
 		// Execute operation
 		err := operation()
 		if err == nil {
 			shs.logger.Printf("Operation %s succeeded on attempt %d", operationName, attempt+1)
 			return nil
 		}
-		
+
 		lastErr = err
 		shs.logger.Printf("Operation %s failed (attempt %d): %v", operationName, attempt+1, err)
 	}
-	
+
 	shs.logger.Printf("Operation %s failed after %d retries", operationName, shs.retryConfig.MaxRetries)
 	return fmt.Errorf("operation %s failed after %d retries: %w", operationName, shs.retryConfig.MaxRetries, lastErr)
 }
@@ -253,7 +253,7 @@ func (shs *SelfHealingSystem) ExecuteWithCircuitBreaker(
 	// Phase 9.2: Check domain health if domainID provided
 	if domainID != "" && shs.domainDetector != nil {
 		domainHealth := shs.GetDomainHealth(domainID)
-		
+
 		if domainHealth.Score < 0.5 {
 			// Domain unhealthy, use fallback immediately
 			fallbackKey := fmt.Sprintf("%s_%s", serviceName, domainID)
@@ -274,15 +274,15 @@ func (shs *SelfHealingSystem) ExecuteWithCircuitBreaker(
 			}
 		}
 	}
-	
+
 	// Get or create circuit breaker
 	cb := shs.getOrCreateCircuitBreaker(serviceName)
-	
+
 	// Check circuit state
 	cb.mu.RLock()
 	state := cb.state
 	cb.mu.RUnlock()
-	
+
 	if state == CircuitStateOpen {
 		// Circuit is open, check if we should try half-open
 		cb.mu.Lock()
@@ -307,27 +307,27 @@ func (shs *SelfHealingSystem) ExecuteWithCircuitBreaker(
 			return nil, fmt.Errorf("circuit breaker %s is open", serviceName)
 		}
 	}
-	
+
 	// Execute operation
 	result, err := operation()
-	
+
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
-	
+
 	if err != nil {
 		// Operation failed
 		cb.failureCount++
 		cb.successCount = 0
 		cb.lastFailureTime = time.Now()
-		
+
 		if cb.failureCount >= cb.threshold {
 			cb.state = CircuitStateOpen
 			shs.logger.Printf("Circuit breaker %s: opened (failure count: %d)", serviceName, cb.failureCount)
 		}
-		
+
 		return result, err
 	}
-	
+
 	// Operation succeeded
 	cb.successCount++
 	if cb.state == CircuitStateHalfOpen {
@@ -336,7 +336,7 @@ func (shs *SelfHealingSystem) ExecuteWithCircuitBreaker(
 		cb.failureCount = 0
 		shs.logger.Printf("Circuit breaker %s: closed (recovered)", serviceName)
 	}
-	
+
 	return result, nil
 }
 
@@ -359,19 +359,19 @@ func (shs *SelfHealingSystem) RegisterHealthMonitor(
 ) {
 	shs.mu.Lock()
 	defer shs.mu.Unlock()
-	
+
 	monitor := &HealthMonitor{
 		serviceName:   serviceName,
 		checkInterval: checkInterval,
 		healthCheck:   healthCheck,
 		lastStatus:    true,
 	}
-	
+
 	shs.healthMonitors[serviceName] = monitor
-	
+
 	// Start monitoring goroutine
 	go shs.monitorHealth(monitor)
-	
+
 	shs.logger.Printf("Registered health monitor for %s (interval: %v)", serviceName, checkInterval)
 }
 
@@ -379,13 +379,13 @@ func (shs *SelfHealingSystem) RegisterHealthMonitor(
 func (shs *SelfHealingSystem) monitorHealth(monitor *HealthMonitor) {
 	ticker := time.NewTicker(monitor.checkInterval)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		err := monitor.healthCheck()
-		
+
 		monitor.mu.Lock()
 		monitor.lastCheck = time.Now()
-		
+
 		if err != nil {
 			monitor.lastStatus = false
 			monitor.failureCount++
@@ -407,14 +407,14 @@ func (shs *SelfHealingSystem) GetHealthStatus(serviceName string) (bool, error) 
 	shs.mu.RLock()
 	monitor, exists := shs.healthMonitors[serviceName]
 	shs.mu.RUnlock()
-	
+
 	if !exists {
 		return false, fmt.Errorf("health monitor not found for %s", serviceName)
 	}
-	
+
 	monitor.mu.RLock()
 	defer monitor.mu.RUnlock()
-	
+
 	return monitor.lastStatus, nil
 }
 
@@ -422,18 +422,18 @@ func (shs *SelfHealingSystem) GetHealthStatus(serviceName string) (bool, error) 
 func (shs *SelfHealingSystem) getOrCreateCircuitBreaker(serviceName string) *CircuitBreaker {
 	shs.mu.Lock()
 	defer shs.mu.Unlock()
-	
+
 	if cb, exists := shs.circuitBreakers[serviceName]; exists {
 		return cb
 	}
-	
+
 	cb := &CircuitBreaker{
-		name:            serviceName,
-		state:           CircuitStateClosed,
-		threshold:       5, // Open after 5 failures
-		timeout:         30 * time.Second, // Try half-open after 30 seconds
+		name:      serviceName,
+		state:     CircuitStateClosed,
+		threshold: 5,                // Open after 5 failures
+		timeout:   30 * time.Second, // Try half-open after 30 seconds
 	}
-	
+
 	shs.circuitBreakers[serviceName] = cb
 	return cb
 }
@@ -446,4 +446,3 @@ func pow(base, exp float64) float64 {
 	}
 	return result
 }
-

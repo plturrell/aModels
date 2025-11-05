@@ -294,15 +294,15 @@ func main() {
 	// Phase 10: Initialize terminology learner with LNN
 	terminologyStore := NewNeo4jTerminologyStore(server.neo4jPersistence, logger)
 	terminologyLearner := NewTerminologyLearner(terminologyStore, logger)
-	
+
 	// Load existing terminology from store
 	if err := terminologyLearner.LoadTerminology(context.Background()); err != nil {
 		logger.Printf("Warning: Failed to load existing terminology: %v", err)
 	}
-	
+
 	// Set global terminology learner for embedding enhancement
 	SetGlobalTerminologyLearner(terminologyLearner)
-	
+
 	// Wire terminology learner to components
 	server.semanticSchemaAnalyzer.SetTerminologyLearner(terminologyLearner)
 	logger.Println("Terminology learner initialized (Phase 10)")
@@ -314,7 +314,7 @@ func main() {
 	// Phase 9.2: Initialize self-healing system
 	server.selfHealingSystem = NewSelfHealingSystem(logger)
 	logger.Println("Self-healing system initialized (Phase 9.2)")
-	
+
 	// Register health monitors for critical services
 	if server.neo4jPersistence != nil {
 		server.selfHealingSystem.RegisterHealthMonitor(
@@ -383,31 +383,31 @@ func main() {
 	mux.HandleFunc("/healthz", server.handleHealthz)
 	mux.HandleFunc("/extract", server.handleExtract)
 	mux.HandleFunc("/generate/training", server.handleGenerateTraining)
-	mux.HandleFunc("/knowledge-graph", server.handleGraph)                           // Main knowledge graph processing endpoint
-	mux.HandleFunc("/graph", server.handleGraph)                                     // Legacy alias for backward compatibility
-	mux.HandleFunc("/knowledge-graph/query", server.handleNeo4jQuery)                // Neo4j Cypher query endpoint
-	mux.HandleFunc("/workflow/petri-to-langgraph", server.handlePetriNetToLangGraph) // Convert Petri net to LangGraph
+	mux.HandleFunc("/knowledge-graph", server.handleGraph)                                            // Main knowledge graph processing endpoint
+	mux.HandleFunc("/graph", server.handleGraph)                                                      // Legacy alias for backward compatibility
+	mux.HandleFunc("/knowledge-graph/query", server.handleNeo4jQuery)                                 // Neo4j Cypher query endpoint
+	mux.HandleFunc("/workflow/petri-to-langgraph", server.handlePetriNetToLangGraph)                  // Convert Petri net to LangGraph
 	mux.HandleFunc("/workflow/petri-to-langgraph-advanced", server.handlePetriNetToAdvancedLangGraph) // Convert Petri net to advanced LangGraph (Phase 7.3)
-	mux.HandleFunc("/workflow/petri-to-agentflow", server.handlePetriNetToAgentFlow) // Convert Petri net to AgentFlow
+	mux.HandleFunc("/workflow/petri-to-agentflow", server.handlePetriNetToAgentFlow)                  // Convert Petri net to AgentFlow
 	// Phase 10: Terminology learning endpoints
 	mux.HandleFunc("/terminology/domains", server.handleTerminologyDomains)     // List learned domains
-	mux.HandleFunc("/terminology/roles", server.handleTerminologyRoles)          // List learned roles
-	mux.HandleFunc("/terminology/patterns", server.handleTerminologyPatterns)    // List learned naming patterns
-	mux.HandleFunc("/terminology/learn", server.handleTerminologyLearn)          // Trigger manual learning
-	mux.HandleFunc("/terminology/evolution", server.handleTerminologyEvolution)  // Terminology evolution over time
+	mux.HandleFunc("/terminology/roles", server.handleTerminologyRoles)         // List learned roles
+	mux.HandleFunc("/terminology/patterns", server.handleTerminologyPatterns)   // List learned naming patterns
+	mux.HandleFunc("/terminology/learn", server.handleTerminologyLearn)         // Trigger manual learning
+	mux.HandleFunc("/terminology/evolution", server.handleTerminologyEvolution) // Terminology evolution over time
 	// SAP Business Data Cloud integration endpoints
-	mux.HandleFunc("/sap-bdc/extract", server.handleSAPBDCExtract)              // Extract from SAP BDC
+	mux.HandleFunc("/sap-bdc/extract", server.handleSAPBDCExtract)                  // Extract from SAP BDC
 	mux.HandleFunc("/semantic/analyze-column", server.handleAnalyzeColumnSemantics) // Semantic column analysis (Phase 8.1)
-	mux.HandleFunc("/semantic/analyze-lineage", server.handleAnalyzeDataLineage) // Semantic data lineage analysis (Phase 8.1)
-	mux.HandleFunc("/health/status", server.handleHealthStatus) // Health status for all services (Phase 9.2)
-	mux.HandleFunc("/knowledge-graph/queries", server.handleGraphQueryHelpers)       // Get common graph query helpers
-	mux.HandleFunc("/knowledge-graph/search", server.handleVectorSearch)             // Vector similarity search (RAG)
-	mux.HandleFunc("/knowledge-graph/embed", server.handleGenerateEmbedding)         // Generate embedding for text
-	mux.HandleFunc("/knowledge-graph/embed/", server.handleGetEmbedding)             // Get embedding by key
-	mux.HandleFunc("/training-data/stats", server.handleTrainingDataStats)           // Get training data statistics (Phase 4)
-	mux.HandleFunc("/training-data/export", server.handleExportTrainingData)         // Export training data (Phase 4)
-	mux.HandleFunc("/model/metrics", server.handleModelMetrics)                      // Get model performance metrics (Phase 5)
-	mux.HandleFunc("/model/uncertain", server.handleUncertainPredictions)            // Get uncertain predictions for review (Phase 5)
+	mux.HandleFunc("/semantic/analyze-lineage", server.handleAnalyzeDataLineage)    // Semantic data lineage analysis (Phase 8.1)
+	mux.HandleFunc("/health/status", server.handleHealthStatus)                     // Health status for all services (Phase 9.2)
+	mux.HandleFunc("/knowledge-graph/queries", server.handleGraphQueryHelpers)      // Get common graph query helpers
+	mux.HandleFunc("/knowledge-graph/search", server.handleVectorSearch)            // Vector similarity search (RAG)
+	mux.HandleFunc("/knowledge-graph/embed", server.handleGenerateEmbedding)        // Generate embedding for text
+	mux.HandleFunc("/knowledge-graph/embed/", server.handleGetEmbedding)            // Get embedding by key
+	mux.HandleFunc("/training-data/stats", server.handleTrainingDataStats)          // Get training data statistics (Phase 4)
+	mux.HandleFunc("/training-data/export", server.handleExportTrainingData)        // Export training data (Phase 4)
+	mux.HandleFunc("/model/metrics", server.handleModelMetrics)                     // Get model performance metrics (Phase 5)
+	mux.HandleFunc("/model/uncertain", server.handleUncertainPredictions)           // Get uncertain predictions for review (Phase 5)
 	mux.HandleFunc("/catalog/projects", server.handleGetProjects)
 	mux.HandleFunc("/catalog/projects/add", server.handleAddProject)
 	mux.HandleFunc("/catalog/systems", server.handleGetSystems)
@@ -455,17 +455,17 @@ type extractServer struct {
 	// Domain detector for associating extracted data with domains
 	domainDetector *DomainDetector
 
-	tablePersistence      TablePersistence
-	vectorPersistence     VectorPersistence
-	graphPersistence      GraphPersistence
-	neo4jPersistence      *Neo4jPersistence      // Direct Neo4j access for queries
-	realTimeGleanExporter *RealTimeGleanExporter // Real-time Glean synchronization
-	flight                *extractFlightServer
+	tablePersistence       TablePersistence
+	vectorPersistence      VectorPersistence
+	graphPersistence       GraphPersistence
+	neo4jPersistence       *Neo4jPersistence      // Direct Neo4j access for queries
+	realTimeGleanExporter  *RealTimeGleanExporter // Real-time Glean synchronization
+	flight                 *extractFlightServer
 	semanticSchemaAnalyzer *SemanticSchemaAnalyzer // Phase 8.1: Semantic schema understanding
 	selfHealingSystem      *SelfHealingSystem      // Phase 9.2: Self-healing system
 	sapBDCIntegration      *SAPBDCIntegration      // SAP Business Data Cloud integration
-	hanaReplication       *hanaReplication
-	postgresReplication   *postgresReplication
+	hanaReplication        *hanaReplication
+	postgresReplication    *postgresReplication
 
 	telemetry          *telemetryClient
 	telemetryOperation string
@@ -701,6 +701,7 @@ type graphRequest struct {
 	HiveDDLs            []string           `json:"hive_ddls"`
 	SqlQueries          []string           `json:"sql_queries"`
 	ControlMFiles       []string           `json:"control_m_files"`
+	SignavioBPMN        []string           `json:"signavio_bpmn"`
 	IdealDistribution   map[string]float64 `json:"ideal_distribution"`
 	ProjectID           string             `json:"project_id"`
 	SystemID            string             `json:"system_id"`
@@ -843,6 +844,94 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 					Props:    outCond.Properties(),
 				})
 			}
+		}
+	}
+
+	signavioCatalogUpdated := false
+	processedSignavio := 0
+	for idx, entry := range req.SignavioBPMN {
+		payloadRef := strings.TrimSpace(entry)
+		if payloadRef == "" {
+			continue
+		}
+
+		var (
+			payload     []byte
+			err         error
+			sourceLabel string
+		)
+
+		if strings.HasPrefix(payloadRef, "<") {
+			payload = []byte(payloadRef)
+			sourceLabel = fmt.Sprintf("inline_signavio_%d", idx+1)
+		} else {
+			payload, err = os.ReadFile(payloadRef)
+			if err != nil {
+				s.logger.Printf("failed to read signavio file %q: %v", payloadRef, err)
+				continue
+			}
+			sourceLabel = filepath.Base(payloadRef)
+		}
+
+		models, err := parseSignavioProcesses(payload)
+		if err != nil {
+			s.logger.Printf("failed to parse signavio payload %q: %v", payloadRef, err)
+			continue
+		}
+
+		ns, es := signavioModelsToGraph(models, sourceLabel)
+		nodes = append(nodes, ns...)
+		edges = append(edges, es...)
+		processedSignavio += len(models)
+
+		for _, model := range models {
+			if s.catalog != nil {
+				s.catalog.UpdateSignavioProcess(model.ID, SignavioCatalogEntry{
+					Name:      fallbackSignavioLabel(model.Name, model.ID),
+					Source:    sourceLabel,
+					TaskCount: len(model.Tasks),
+					LaneCount: len(model.Lanes),
+				})
+				signavioCatalogUpdated = true
+			}
+
+			summary := buildSignavioSummary(model)
+			if summary == "" || s.vectorPersistence == nil {
+				continue
+			}
+
+			embedding, err := generateSemanticEmbedding(ctx, summary)
+			if err != nil {
+				s.logger.Printf("failed to embed signavio process %q: %v", model.ID, err)
+				continue
+			}
+
+			vectorKey := fmt.Sprintf("signavio:process:%s", stableSignavioID(model.ID, model.Name))
+			metadata := map[string]any{
+				"artifact_type": "signavio-process",
+				"artifact_id":   model.ID,
+				"label":         fallbackSignavioLabel(model.Name, model.ID),
+				"source":        sourceLabel,
+				"summary":       summary,
+			}
+			if req.ProjectID != "" {
+				metadata["project_id"] = req.ProjectID
+			}
+			if req.SystemID != "" {
+				metadata["system_id"] = req.SystemID
+			}
+
+			if err := s.vectorPersistence.SaveVector(vectorKey, embedding, metadata); err != nil {
+				s.logger.Printf("failed to save signavio vector %q: %v", model.ID, err)
+			}
+		}
+	}
+
+	if signavioCatalogUpdated && s.catalog != nil {
+		if err := s.catalog.Save(); err != nil {
+			s.logger.Printf("failed to persist signavio catalog updates: %v", err)
+		} else if processedSignavio > 0 {
+			s.logger.Printf("registered %d signavio process definitions", processedSignavio)
 		}
 	}
 
@@ -1037,18 +1126,18 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	for _, warning := range validationWarnings {
 		s.logger.Printf("validation warning: %s", warning)
 	}
-	
+
 	// Associate domains with extracted nodes and edges
 	if s.domainDetector != nil {
 		s.domainDetector.AssociateDomainsWithNodes(nodes)
-		
+
 		// Create node map for edge association
 		nodeMap := make(map[string]*Node)
 		for i := range nodes {
 			nodeMap[nodes[i].ID] = &nodes[i]
 		}
 		s.domainDetector.AssociateDomainsWithEdges(edges, nodeMap)
-		
+
 		// Associate SQL queries with domains
 		sqlToAgentID := s.domainDetector.AssociateDomainsWithSQL(req.SqlQueries)
 		if len(sqlToAgentID) > 0 {
@@ -1277,12 +1366,12 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 
 	// Perform advanced extraction
 	advancedExtractor := NewAdvancedExtractor(s.logger)
-	
+
 	// Phase 10: Wire terminology learner to advanced extractor
 	if terminologyLearner := GetGlobalTerminologyLearner(); terminologyLearner != nil {
 		advancedExtractor.SetTerminologyLearner(terminologyLearner)
 	}
-	
+
 	advancedResult := advancedExtractor.ExtractAdvanced(
 		req.SqlQueries,
 		controlMContents,
@@ -2441,11 +2530,11 @@ func (s *extractServer) fuseSearchResults(relationalResults, semanticResults []V
 	for _, result := range relationalResults {
 		key := result.ArtifactID
 		if existing, exists := resultMap[key]; exists {
-		// If already exists, boost score (weighted average)
-		relationalWeight := 0.4
-		semanticWeight := 0.6
-		combinedScore := float32((float64(existing.Score) * semanticWeight) + (float64(result.Score) * relationalWeight))
-		result.Score = combinedScore
+			// If already exists, boost score (weighted average)
+			relationalWeight := 0.4
+			semanticWeight := 0.6
+			combinedScore := float32((float64(existing.Score) * semanticWeight) + (float64(result.Score) * relationalWeight))
+			result.Score = combinedScore
 			// Merge metadata
 			if result.Metadata != nil {
 				if existing.Metadata == nil {
@@ -2465,12 +2554,12 @@ func (s *extractServer) fuseSearchResults(relationalResults, semanticResults []V
 	for _, result := range semanticResults {
 		key := result.ArtifactID
 		if existing, exists := resultMap[key]; exists {
-		// If already exists, boost score (weighted average)
-		relationalWeight := 0.4
-		semanticWeight := 0.6
-		existingScore := scoreMap[key]
-		combinedScore := float32((float64(existingScore) * relationalWeight) + (float64(result.Score) * semanticWeight))
-		result.Score = combinedScore
+			// If already exists, boost score (weighted average)
+			relationalWeight := 0.4
+			semanticWeight := 0.6
+			existingScore := scoreMap[key]
+			combinedScore := float32((float64(existingScore) * relationalWeight) + (float64(result.Score) * semanticWeight))
+			result.Score = combinedScore
 			scoreMap[key] = combinedScore
 			// Merge metadata
 			if result.Metadata != nil {
@@ -2799,13 +2888,13 @@ func (s *extractServer) handleUnifiedExtraction(w http.ResponseWriter, r *http.R
 	}
 
 	var request struct {
-		ImagePath        string                 `json:"image_path"`
-		ImageBase64      string                 `json:"image_base64"`
-		TableName        string                 `json:"table_name"`
-		Columns          []map[string]any       `json:"columns"`
-		Text             string                 `json:"text"`
-		Prompt           string                 `json:"prompt"`
-		TrainingDataPath string                 `json:"training_data_path"`
+		ImagePath        string           `json:"image_path"`
+		ImageBase64      string           `json:"image_base64"`
+		TableName        string           `json:"table_name"`
+		Columns          []map[string]any `json:"columns"`
+		Text             string           `json:"text"`
+		Prompt           string           `json:"prompt"`
+		TrainingDataPath string           `json:"training_data_path"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -2851,10 +2940,10 @@ func (s *extractServer) handleMultimodalEmbeddings(w http.ResponseWriter, r *htt
 	}
 
 	var request struct {
-		Text      string                 `json:"text"`
-		ImagePath string                 `json:"image_path"`
-		TableName string                 `json:"table_name"`
-		Columns   []map[string]any       `json:"columns"`
+		Text      string           `json:"text"`
+		ImagePath string           `json:"image_path"`
+		TableName string           `json:"table_name"`
+		Columns   []map[string]any `json:"columns"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {

@@ -26,7 +26,7 @@ func (mp *MathematicalProcessor) ComputeStatistics(values []float64) map[string]
 	}
 
 	stats := make(map[string]float64)
-	
+
 	if len(values) == 0 {
 		return stats
 	}
@@ -74,7 +74,7 @@ func sqrt(x float64) float64 {
 	if x == 0 {
 		return 0
 	}
-	
+
 	// Newton's method approximation
 	guess := x
 	for i := 0; i < 10; i++ {
@@ -123,4 +123,3 @@ func (mp *MathematicalProcessor) ComputeCorrelation(x, y []float64) float64 {
 
 	return numerator / denominator
 }
-

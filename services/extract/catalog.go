@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Project represents a project in the catalog.
@@ -27,10 +28,11 @@ type InformationSystem struct {
 
 // Catalog represents the entire catalog of projects, systems, and information systems.
 type Catalog struct {
-	Projects           []Project           `json:"projects"`
-	Systems            []System            `json:"systems"`
-	InformationSystems []InformationSystem `json:"information_systems"`
-	PetriNets          map[string]any      `json:"petri_nets,omitempty"` // Petri net workflows
+	Projects           []Project                       `json:"projects"`
+	Systems            []System                        `json:"systems"`
+	InformationSystems []InformationSystem             `json:"information_systems"`
+	PetriNets          map[string]any                  `json:"petri_nets,omitempty"` // Petri net workflows
+	SignavioProcesses  map[string]SignavioCatalogEntry `json:"signavio_processes,omitempty"`
 
 	mu       sync.RWMutex
 	filePath string
@@ -132,4 +134,33 @@ func (c *Catalog) EnsureInformationSystem(id, name string) bool {
 	}
 	c.InformationSystems = append(c.InformationSystems, InformationSystem{ID: id, Name: name})
 	return true
+}
+
+// SignavioCatalogEntry captures metadata for Signavio processes persisted in the catalog.
+type SignavioCatalogEntry struct {
+	Name      string    `json:"name"`
+	Source    string    `json:"source,omitempty"`
+	TaskCount int       `json:"task_count"`
+	LaneCount int       `json:"lane_count"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// UpdateSignavioProcess upserts a Signavio process entry in the catalog.
+func (c *Catalog) UpdateSignavioProcess(id string, entry SignavioCatalogEntry) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return
+	}
+
+	if entry.Name = strings.TrimSpace(entry.Name); entry.Name == "" {
+		entry.Name = id
+	}
+	entry.UpdatedAt = time.Now().UTC()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.SignavioProcesses == nil {
+		c.SignavioProcesses = make(map[string]SignavioCatalogEntry)
+	}
+	c.SignavioProcesses[id] = entry
 }

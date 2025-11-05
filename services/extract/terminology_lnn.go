@@ -10,31 +10,31 @@ import (
 
 // TerminologyLNN represents a hierarchical Liquid Neural Network for terminology learning.
 type TerminologyLNN struct {
-	universalLNN    *UniversalTerminologyLNN
-	domainLNNs     map[string]*DomainTerminologyLNN
-	namingLNN       *NamingConventionLNN
-	roleLNN         *BusinessRoleLNN
-	mu              sync.RWMutex
-	logger          *log.Logger
+	universalLNN *UniversalTerminologyLNN
+	domainLNNs   map[string]*DomainTerminologyLNN
+	namingLNN    *NamingConventionLNN
+	roleLNN      *BusinessRoleLNN
+	mu           sync.RWMutex
+	logger       *log.Logger
 }
 
 // NewTerminologyLNN creates a new hierarchical terminology LNN.
 func NewTerminologyLNN(logger *log.Logger) *TerminologyLNN {
 	return &TerminologyLNN{
 		universalLNN: NewUniversalTerminologyLNN(logger),
-		domainLNNs:  make(map[string]*DomainTerminologyLNN),
-		namingLNN:   NewNamingConventionLNN(logger),
-		roleLNN:     NewBusinessRoleLNN(logger),
-		logger:      logger,
+		domainLNNs:   make(map[string]*DomainTerminologyLNN),
+		namingLNN:    NewNamingConventionLNN(logger),
+		roleLNN:      NewBusinessRoleLNN(logger),
+		logger:       logger,
 	}
 }
 
 // UniversalTerminologyLNN learns universal patterns common across all domains.
 type UniversalTerminologyLNN struct {
-	lnnLayer      *LiquidLayer
-	vocabulary    map[string]float32
-	mu            sync.RWMutex
-	logger        *log.Logger
+	lnnLayer   *LiquidLayer
+	vocabulary map[string]float32
+	mu         sync.RWMutex
+	logger     *log.Logger
 }
 
 // NewUniversalTerminologyLNN creates a new universal terminology LNN.
@@ -69,10 +69,10 @@ func NewDomainTerminologyLNN(domainName string, universalLNN *UniversalTerminolo
 
 // NamingConventionLNN learns naming convention patterns.
 type NamingConventionLNN struct {
-	lnnLayer   *LiquidLayer
-	patterns   map[string]float32
-	mu         sync.RWMutex
-	logger     *log.Logger
+	lnnLayer *LiquidLayer
+	patterns map[string]float32
+	mu       sync.RWMutex
+	logger   *log.Logger
 }
 
 // NewNamingConventionLNN creates a new naming convention LNN.
@@ -86,10 +86,10 @@ func NewNamingConventionLNN(logger *log.Logger) *NamingConventionLNN {
 
 // BusinessRoleLNN learns business role classification patterns.
 type BusinessRoleLNN struct {
-	lnnLayer   *LiquidLayer
-	roles      map[string]float32
-	mu         sync.RWMutex
-	logger     *log.Logger
+	lnnLayer *LiquidLayer
+	roles    map[string]float32
+	mu       sync.RWMutex
+	logger   *log.Logger
 }
 
 // NewBusinessRoleLNN creates a new business role LNN.
@@ -409,7 +409,7 @@ func generateTextEmbedding(text string) []float32 {
 		hash = hash*31 + int(char)
 	}
 	for i := range embedding {
-		embedding[i] = float32((hash+i*17) % 1000) / 1000.0
+		embedding[i] = float32((hash+i*17)%1000) / 1000.0
 	}
 	return embedding
 }
@@ -478,4 +478,3 @@ func randomFloat32() float32 {
 func tanh(x float32) float32 {
 	return float32(math.Tanh(float64(x)))
 }
-

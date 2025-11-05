@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -17,51 +18,51 @@ type AdvancedExtractionResult struct {
 	TableProcessSequences []TableProcessSequence `json:"table_process_sequences"`
 	CodeParameters        []CodeParameter        `json:"code_parameters"`
 	HardcodedLists        []HardcodedList        `json:"hardcoded_lists"`
-	TableClassifications []TableClassification  `json:"table_classifications"`
+	TableClassifications  []TableClassification  `json:"table_classifications"`
 	TestingEndpoints      []TestingEndpoint      `json:"testing_endpoints"`
 }
 
 // CodeParameter represents a parameter found in code.
 type CodeParameter struct {
 	Name         string `json:"name"`
-	Type         string `json:"type"`          // string, int, boolean, etc.
-	Source       string `json:"source"`       // sql, controlm, json, etc.
+	Type         string `json:"type"`   // string, int, boolean, etc.
+	Source       string `json:"source"` // sql, controlm, json, etc.
 	SourceFile   string `json:"source_file"`
 	IsRequired   bool   `json:"is_required"`
 	DefaultValue string `json:"default_value,omitempty"`
-	Context      string `json:"context"`      // WHERE clause, JOIN condition, etc.
+	Context      string `json:"context"` // WHERE clause, JOIN condition, etc.
 }
 
 // HardcodedList represents a hardcoded list/constant found in code.
 type HardcodedList struct {
 	Name       string   `json:"name"`
 	Values     []string `json:"values"`
-	Source     string   `json:"source"`     // sql, controlm, json, etc.
+	Source     string   `json:"source"` // sql, controlm, json, etc.
 	SourceFile string   `json:"source_file"`
-	Type       string   `json:"type"`        // IN clause, enum, constant list, etc.
+	Type       string   `json:"type"` // IN clause, enum, constant list, etc.
 	Context    string   `json:"context"`
 }
 
 // TestingEndpoint represents a testing/test endpoint.
 type TestingEndpoint struct {
-	Endpoint      string   `json:"endpoint"`
-	Method        string   `json:"method"`        // GET, POST, etc.
-	Source        string   `json:"source"`        // api, controlm, etc.
-	SourceFile    string   `json:"source_file"`
-	IsTest        bool     `json:"is_test"`
+	Endpoint       string   `json:"endpoint"`
+	Method         string   `json:"method"` // GET, POST, etc.
+	Source         string   `json:"source"` // api, controlm, etc.
+	SourceFile     string   `json:"source_file"`
+	IsTest         bool     `json:"is_test"`
 	TestIndicators []string `json:"test_indicators"` // test, mock, stub, etc.
 }
 
 // AdvancedExtractor performs advanced extraction from parsed code.
 type AdvancedExtractor struct {
-	logger            *log.Logger
+	logger             *log.Logger
 	terminologyLearner *TerminologyLearner // Phase 10: LNN-based terminology learning
 }
 
 // NewAdvancedExtractor creates a new advanced extractor.
 func NewAdvancedExtractor(logger *log.Logger) *AdvancedExtractor {
 	return &AdvancedExtractor{
-		logger:            logger,
+		logger:             logger,
 		terminologyLearner: nil, // Will be set via SetTerminologyLearner
 	}
 }
@@ -81,19 +82,19 @@ func (ae *AdvancedExtractor) ExtractAdvanced(
 	result := &AdvancedExtractionResult{
 		TableProcessSequences: []TableProcessSequence{},
 		CodeParameters:        []CodeParameter{},
-		HardcodedLists:         []HardcodedList{},
-		TableClassifications:   []TableClassification{},
-		TestingEndpoints:       []TestingEndpoint{},
+		HardcodedLists:        []HardcodedList{},
+		TableClassifications:  []TableClassification{},
+		TestingEndpoints:      []TestingEndpoint{},
 	}
 
 	// Extract table process sequences from SQL
 	for i, sql := range sqlQueries {
 		sequences := ae.extractTableSequencesFromSQL(sql, fmt.Sprintf("sql_%d", i))
 		result.TableProcessSequences = append(result.TableProcessSequences, sequences...)
-		
+
 		params := ae.extractParametersFromSQL(sql, fmt.Sprintf("sql_%d", i))
 		result.CodeParameters = append(result.CodeParameters, params...)
-		
+
 		lists := ae.extractHardcodedListsFromSQL(sql, fmt.Sprintf("sql_%d", i))
 		result.HardcodedLists = append(result.HardcodedLists, lists...)
 	}
@@ -102,10 +103,10 @@ func (ae *AdvancedExtractor) ExtractAdvanced(
 	for i, file := range controlMFiles {
 		sequences := ae.extractTableSequencesFromControlM(file, fmt.Sprintf("controlm_%d", i))
 		result.TableProcessSequences = append(result.TableProcessSequences, sequences...)
-		
+
 		params := ae.extractParametersFromControlM(file, fmt.Sprintf("controlm_%d", i))
 		result.CodeParameters = append(result.CodeParameters, params...)
-		
+
 		endpoints := ae.extractTestingEndpointsFromControlM(file, fmt.Sprintf("controlm_%d", i))
 		result.TestingEndpoints = append(result.TestingEndpoints, endpoints...)
 	}
@@ -120,7 +121,7 @@ func (ae *AdvancedExtractor) ExtractAdvanced(
 	for i, jsonTable := range jsonTables {
 		classifications := ae.classifyTablesFromJSON(jsonTable, fmt.Sprintf("json_%d", i))
 		result.TableClassifications = append(result.TableClassifications, classifications...)
-		
+
 		lists := ae.extractHardcodedListsFromJSON(jsonTable, fmt.Sprintf("json_%d", i))
 		result.HardcodedLists = append(result.HardcodedLists, lists...)
 	}
@@ -134,13 +135,13 @@ func (ae *AdvancedExtractor) ExtractAdvanced(
 // extractTableSequencesFromSQL extracts table processing sequences from SQL queries.
 func (ae *AdvancedExtractor) extractTableSequencesFromSQL(sql, sourceID string) []TableProcessSequence {
 	sequences := []TableProcessSequence{}
-	
+
 	// Patterns to detect table processing order:
 	// 1. INSERT INTO ... SELECT FROM ... (target, then source)
 	// 2. UPDATE ... FROM ... (target, then source)
 	// 3. SELECT ... FROM ... JOIN ... (left to right)
 	// 4. CTEs (WITH ... AS ... SELECT) (sequential)
-	
+
 	// Detect INSERT INTO ... SELECT FROM pattern
 	insertPattern := regexp.MustCompile(`(?i)INSERT\s+INTO\s+(\w+)\s+.*?SELECT\s+.*?FROM\s+(\w+)`)
 	matches := insertPattern.FindAllStringSubmatch(sql, -1)
@@ -156,7 +157,7 @@ func (ae *AdvancedExtractor) extractTableSequencesFromSQL(sql, sourceID string) 
 			})
 		}
 	}
-	
+
 	// Detect UPDATE ... FROM pattern
 	updatePattern := regexp.MustCompile(`(?i)UPDATE\s+(\w+)\s+.*?FROM\s+(\w+)`)
 	matches = updatePattern.FindAllStringSubmatch(sql, -1)
@@ -172,7 +173,7 @@ func (ae *AdvancedExtractor) extractTableSequencesFromSQL(sql, sourceID string) 
 			})
 		}
 	}
-	
+
 	// Detect SELECT ... FROM ... JOIN pattern (left to right)
 	selectPattern := regexp.MustCompile(`(?i)SELECT\s+.*?FROM\s+(\w+)(?:\s+JOIN\s+(\w+))*`)
 	matches = selectPattern.FindAllStringSubmatch(sql, -1)
@@ -197,7 +198,7 @@ func (ae *AdvancedExtractor) extractTableSequencesFromSQL(sql, sourceID string) 
 			})
 		}
 	}
-	
+
 	// Detect CTE sequences (WITH ... AS ...)
 	ctePattern := regexp.MustCompile(`(?i)WITH\s+(\w+)\s+AS\s+\([^)]+\)\s*,?\s*(\w+)\s+AS\s+\([^)]+\)`)
 	matches = ctePattern.FindAllStringSubmatch(sql, -1)
@@ -213,14 +214,14 @@ func (ae *AdvancedExtractor) extractTableSequencesFromSQL(sql, sourceID string) 
 			})
 		}
 	}
-	
+
 	return sequences
 }
 
 // extractParametersFromSQL extracts parameters from SQL queries.
 func (ae *AdvancedExtractor) extractParametersFromSQL(sql, sourceID string) []CodeParameter {
 	params := []CodeParameter{}
-	
+
 	// Detect WHERE clause parameters
 	wherePattern := regexp.MustCompile(`(?i)WHERE\s+(\w+)\s*=\s*(\?|:(\w+)|@(\w+))`)
 	matches := wherePattern.FindAllStringSubmatch(sql, -1)
@@ -232,7 +233,7 @@ func (ae *AdvancedExtractor) extractParametersFromSQL(sql, sourceID string) []Co
 		if len(match) > 4 && match[4] != "" {
 			paramName = match[4] // @parameter
 		}
-		
+
 		params = append(params, CodeParameter{
 			Name:       paramName,
 			Type:       "unknown", // Would need type inference
@@ -242,7 +243,7 @@ func (ae *AdvancedExtractor) extractParametersFromSQL(sql, sourceID string) []Co
 			Context:    "WHERE clause",
 		})
 	}
-	
+
 	// Detect function parameters
 	funcPattern := regexp.MustCompile(`(?i)(\w+)\s*\([^)]*\)`)
 	matches = funcPattern.FindAllStringSubmatch(sql, -1)
@@ -257,14 +258,14 @@ func (ae *AdvancedExtractor) extractParametersFromSQL(sql, sourceID string) []Co
 			Context:    "function call",
 		})
 	}
-	
+
 	return params
 }
 
 // extractHardcodedListsFromSQL extracts hardcoded lists from SQL (e.g., IN clauses).
 func (ae *AdvancedExtractor) extractHardcodedListsFromSQL(sql, sourceID string) []HardcodedList {
 	lists := []HardcodedList{}
-	
+
 	// Detect IN clause hardcoded lists
 	inPattern := regexp.MustCompile(`(?i)IN\s*\(([^)]+)\)`)
 	matches := inPattern.FindAllStringSubmatch(sql, -1)
@@ -273,7 +274,7 @@ func (ae *AdvancedExtractor) extractHardcodedListsFromSQL(sql, sourceID string) 
 			valuesStr := match[1]
 			// Parse values (handle strings, numbers, etc.)
 			values := parseValueList(valuesStr)
-			
+
 			if len(values) > 0 {
 				lists = append(lists, HardcodedList{
 					Name:       fmt.Sprintf("in_clause_%d", i),
@@ -286,7 +287,7 @@ func (ae *AdvancedExtractor) extractHardcodedListsFromSQL(sql, sourceID string) 
 			}
 		}
 	}
-	
+
 	// Detect CASE WHEN ... THEN ... ELSE patterns (hardcoded logic)
 	casePattern := regexp.MustCompile(`(?i)CASE\s+WHEN\s+([^T]+)\s+THEN\s+([^E]+)\s+ELSE\s+([^E]+)`)
 	matches = casePattern.FindAllStringSubmatch(sql, -1)
@@ -302,18 +303,18 @@ func (ae *AdvancedExtractor) extractHardcodedListsFromSQL(sql, sourceID string) 
 			})
 		}
 	}
-	
+
 	return lists
 }
 
 // classifyTablesFromDDL classifies tables as transaction vs reference based on DDL patterns.
 func (ae *AdvancedExtractor) classifyTablesFromDDL(ddl, sourceID string) []TableClassification {
 	classifications := []TableClassification{}
-	
+
 	// Extract table names from DDL
 	createTablePattern := regexp.MustCompile(`(?i)CREATE\s+TABLE\s+(\w+)`)
 	matches := createTablePattern.FindAllStringSubmatch(ddl, -1)
-	
+
 	for _, match := range matches {
 		if len(match) >= 2 {
 			tableName := match[1]
@@ -321,14 +322,14 @@ func (ae *AdvancedExtractor) classifyTablesFromDDL(ddl, sourceID string) []Table
 			classifications = append(classifications, classification)
 		}
 	}
-	
+
 	return classifications
 }
 
 // classifyTablesFromJSON classifies tables from JSON schema.
 func (ae *AdvancedExtractor) classifyTablesFromJSON(jsonTable map[string]any, sourceID string) []TableClassification {
 	classifications := []TableClassification{}
-	
+
 	// Extract table information from JSON
 	for tableName, tableData := range jsonTable {
 		if tableDataMap, ok := tableData.(map[string]any); ok {
@@ -338,7 +339,7 @@ func (ae *AdvancedExtractor) classifyTablesFromJSON(jsonTable map[string]any, so
 			classifications = append(classifications, classification)
 		}
 	}
-	
+
 	return classifications
 }
 
@@ -353,20 +354,20 @@ func (ae *AdvancedExtractor) classifyTable(tableName, context, sourceID string) 
 			metadata := map[string]any{} // Could extract from context
 			classification, qualityScore, needsReview := ae.classifyTableWithAdvancedSAPRPT(
 				tableName, context, sourceID, trainingDataPath, metadata)
-			
+
 			// Store quality score in classification
 			if classification.Props == nil {
 				classification.Props = make(map[string]any)
 			}
 			classification.Props["quality_score"] = qualityScore
 			classification.Props["needs_review"] = needsReview
-			
+
 			if classification.Classification != "unknown" {
 				return classification
 			}
 		}
 	}
-	
+
 	// Try full SAP-RPT classifier if enabled and training data available (Phase 4)
 	if useSAPRPTClassification := os.Getenv("USE_SAP_RPT_CLASSIFICATION"); useSAPRPTClassification == "true" {
 		trainingDataPath := os.Getenv("SAP_RPT_TRAINING_DATA_PATH")
@@ -375,19 +376,19 @@ func (ae *AdvancedExtractor) classifyTable(tableName, context, sourceID string) 
 				return classification
 			}
 		}
-		
+
 		// Fallback to feature-based classification
 		if classification := ae.classifyTableWithSAPRPT(tableName, context, sourceID); classification.Classification != "unknown" {
 			return classification
 		}
 		// Fallback to pattern matching if sap-rpt-1-oss fails
 	}
-	
+
 	// Phase 10: Try LNN-based classification if available
 	if ae.terminologyLearner != nil {
 		ctx := stdctx.Background()
 		domain, domainConf := ae.terminologyLearner.InferDomain(ctx, tableName, tableName, map[string]any{"context": context})
-		
+
 		// Map domain to table classification
 		if domainConf > 0.6 {
 			classification := TableClassification{
@@ -397,20 +398,20 @@ func (ae *AdvancedExtractor) classifyTable(tableName, context, sourceID string) 
 				Evidence:       []string{fmt.Sprintf("LNN inferred domain: %s", domain)},
 				Patterns:       []string{},
 			}
-			
+
 			// Map domain to table type
 			if domain == "financial" || domain == "order" {
 				classification.Classification = "transaction"
 			} else if domain == "customer" || domain == "product" {
 				classification.Classification = "reference"
 			}
-			
+
 			if classification.Classification != "unknown" {
 				return classification
 			}
 		}
 	}
-	
+
 	// Pattern-based classification (original implementation - fallback)
 	classification := TableClassification{
 		TableName:      tableName,
@@ -419,37 +420,37 @@ func (ae *AdvancedExtractor) classifyTable(tableName, context, sourceID string) 
 		Evidence:       []string{},
 		Patterns:       []string{},
 	}
-	
+
 	tableLower := strings.ToLower(tableName)
-	
+
 	// Transaction table patterns
 	transactionPatterns := []string{
 		"trans", "txn", "tx", "order", "payment", "invoice", "receipt",
 		"event", "log", "audit", "history", "fact", "measurement",
 		"transaction", "settlement", "clearing",
 	}
-	
+
 	// Reference/lookup table patterns
 	referencePatterns := []string{
 		"ref", "lookup", "code", "dict", "master", "config", "setting",
 		"parameter", "type", "category", "status", "enum", "domain",
 		"dimension", "dim", "dim_",
 	}
-	
+
 	// Staging table patterns
 	stagingPatterns := []string{
 		"staging", "stage", "temp", "tmp", "intermediate", "landing",
 		"raw", "source", "extract",
 	}
-	
+
 	// Test table patterns
 	testPatterns := []string{
 		"test", "mock", "stub", "fake", "sample", "demo", "trial",
 	}
-	
+
 	evidence := []string{}
 	confidence := 0.0
-	
+
 	// Check transaction patterns
 	for _, pattern := range transactionPatterns {
 		if strings.Contains(tableLower, pattern) {
@@ -458,7 +459,7 @@ func (ae *AdvancedExtractor) classifyTable(tableName, context, sourceID string) 
 			classification.Patterns = append(classification.Patterns, pattern)
 		}
 	}
-	
+
 	// Check reference patterns
 	for _, pattern := range referencePatterns {
 		if strings.Contains(tableLower, pattern) {
@@ -467,7 +468,7 @@ func (ae *AdvancedExtractor) classifyTable(tableName, context, sourceID string) 
 			classification.Patterns = append(classification.Patterns, pattern)
 		}
 	}
-	
+
 	// Check staging patterns
 	for _, pattern := range stagingPatterns {
 		if strings.Contains(tableLower, pattern) {
@@ -476,7 +477,7 @@ func (ae *AdvancedExtractor) classifyTable(tableName, context, sourceID string) 
 			classification.Patterns = append(classification.Patterns, pattern)
 		}
 	}
-	
+
 	// Check test patterns
 	for _, pattern := range testPatterns {
 		if strings.Contains(tableLower, pattern) {
@@ -485,7 +486,7 @@ func (ae *AdvancedExtractor) classifyTable(tableName, context, sourceID string) 
 			classification.Patterns = append(classification.Patterns, pattern)
 		}
 	}
-	
+
 	// Analyze table structure from context
 	if strings.Contains(strings.ToLower(context), "primary key") {
 		// Reference tables often have simple primary keys
@@ -494,7 +495,7 @@ func (ae *AdvancedExtractor) classifyTable(tableName, context, sourceID string) 
 			confidence += 0.2
 		}
 	}
-	
+
 	// Determine final classification based on highest confidence
 	if confidence >= 0.6 {
 		if containsAny(tableLower, transactionPatterns) {
@@ -509,38 +510,37 @@ func (ae *AdvancedExtractor) classifyTable(tableName, context, sourceID string) 
 	} else {
 		classification.Classification = "unknown"
 	}
-	
+
 	classification.Confidence = confidence
 	if classification.Confidence > 1.0 {
 		classification.Confidence = 1.0
 	}
 	classification.Evidence = evidence
-	
+
 	return classification
 }
 
 // extractTableSequencesFromControlM extracts table processing sequences from Control-M files.
 func (ae *AdvancedExtractor) extractTableSequencesFromControlM(controlMContent, sourceID string) []TableProcessSequence {
 	sequences := []TableProcessSequence{}
-	
+
 	// Control-M files contain job dependencies which indicate processing order
 	// Look for job dependencies and extract table references from job commands
-	
-	// Pattern: Job dependencies indicate sequence
+
 	// Extract table names from SQL commands in jobs
 	tablePattern := regexp.MustCompile(`(?i)(?:table|from|into|update)\s+(\w+)`)
 	tableMatches := tablePattern.FindAllStringSubmatch(controlMContent, -1)
-	
+
 	tables := []string{}
 	for _, match := range tableMatches {
 		if len(match) >= 2 {
 			tableName := match[1]
-			if !contains(tables, tableName) {
+			if !slices.Contains(tables, tableName) {
 				tables = append(tables, tableName)
 			}
 		}
 	}
-	
+
 	if len(tables) > 0 {
 		sequences = append(sequences, TableProcessSequence{
 			SequenceID:   fmt.Sprintf("%s_controlm", sourceID),
@@ -551,18 +551,18 @@ func (ae *AdvancedExtractor) extractTableSequencesFromControlM(controlMContent, 
 			Order:        0,
 		})
 	}
-	
+
 	return sequences
 }
 
 // extractParametersFromControlM extracts parameters from Control-M files.
 func (ae *AdvancedExtractor) extractParametersFromControlM(controlMContent, sourceID string) []CodeParameter {
 	params := []CodeParameter{}
-	
+
 	// Extract variables from Control-M
 	varPattern := regexp.MustCompile(`(?i)(?:variable|var|param)\s*[=:]\s*(\w+)`)
 	matches := varPattern.FindAllStringSubmatch(controlMContent, -1)
-	
+
 	for _, match := range matches {
 		if len(match) >= 2 {
 			params = append(params, CodeParameter{
@@ -575,49 +575,49 @@ func (ae *AdvancedExtractor) extractParametersFromControlM(controlMContent, sour
 			})
 		}
 	}
-	
+
 	return params
 }
 
 // extractTestingEndpointsFromControlM extracts testing endpoints from Control-M files.
 func (ae *AdvancedExtractor) extractTestingEndpointsFromControlM(controlMContent, sourceID string) []TestingEndpoint {
 	endpoints := []TestingEndpoint{}
-	
+
 	// Look for test indicators in Control-M job names and descriptions
 	testPattern := regexp.MustCompile(`(?i)(test|mock|stub|fake|sample|demo|trial)`)
-	
+
 	// Extract endpoint patterns (HTTP URLs, API calls)
 	endpointPattern := regexp.MustCompile(`(?i)(https?://[^\s]+|/[a-z0-9/_-]+)`)
 	endpointMatches := endpointPattern.FindAllStringSubmatch(controlMContent, -1)
-	
+
 	for _, match := range endpointMatches {
 		if len(match) >= 2 {
 			endpoint := match[1]
 			isTest := testPattern.MatchString(endpoint) || testPattern.MatchString(controlMContent)
-			
+
 			indicators := []string{}
 			if isTest {
 				indicators = append(indicators, "test indicator in content")
 			}
-			
+
 			endpoints = append(endpoints, TestingEndpoint{
-				Endpoint:      endpoint,
-				Method:        "unknown", // Would need to parse HTTP method
-				Source:        "controlm",
-				SourceFile:    sourceID,
-				IsTest:        isTest,
+				Endpoint:       endpoint,
+				Method:         "unknown", // Would need to parse HTTP method
+				Source:         "controlm",
+				SourceFile:     sourceID,
+				IsTest:         isTest,
 				TestIndicators: indicators,
 			})
 		}
 	}
-	
+
 	return endpoints
 }
 
 // extractHardcodedListsFromJSON extracts hardcoded lists from JSON tables.
 func (ae *AdvancedExtractor) extractHardcodedListsFromJSON(jsonTable map[string]any, sourceID string) []HardcodedList {
 	lists := []HardcodedList{}
-	
+
 	// Look for enum-like structures in JSON
 	for key, value := range jsonTable {
 		if valueMap, ok := value.(map[string]any); ok {
@@ -642,7 +642,7 @@ func (ae *AdvancedExtractor) extractHardcodedListsFromJSON(jsonTable map[string]
 			}
 		}
 	}
-	
+
 	return lists
 }
 
@@ -650,7 +650,7 @@ func (ae *AdvancedExtractor) extractHardcodedListsFromJSON(jsonTable map[string]
 func (ae *AdvancedExtractor) mergeTableClassifications(classifications []TableClassification) []TableClassification {
 	// Group by table name
 	tableMap := make(map[string]*TableClassification)
-	
+
 	for i := range classifications {
 		tableName := classifications[i].TableName
 		if existing, ok := tableMap[tableName]; ok {
@@ -665,18 +665,18 @@ func (ae *AdvancedExtractor) mergeTableClassifications(classifications []TableCl
 			tableMap[tableName] = &classifications[i]
 		}
 	}
-	
+
 	// Convert back to slice
 	result := make([]TableClassification, 0, len(tableMap))
 	for _, classification := range tableMap {
 		result = append(result, *classification)
 	}
-	
+
 	// Sort by table name
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].TableName < result[j].TableName
 	})
-	
+
 	return result
 }
 
@@ -716,43 +716,45 @@ func (ae *AdvancedExtractor) classifyTableWithAdvancedSAPRPT(tableName, context,
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
+			Source:         sourceID,
 		}, 0.0, false
 	}
 
-	var resultData map[string]any
-	if err := json.Unmarshal(output, &resultData); err != nil {
+	var response map[string]any
+	if err := json.Unmarshal(output, &response); err != nil {
 		return TableClassification{
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
+			Source:         sourceID,
 		}, 0.0, false
 	}
 
 	classification := "unknown"
-	if cls, ok := resultData["classification"].(string); ok {
+	if cls, ok := response["classification"].(string); ok {
 		classification = cls
 	}
 
 	confidence := 0.0
-	if conf, ok := resultData["classification_confidence"].(float64); ok {
+	if conf, ok := response["classification_confidence"].(float64); ok {
 		confidence = conf
 	}
 
 	qualityScore := 0.0
-	if qs, ok := resultData["quality_score"].(float64); ok {
+	if qs, ok := response["quality_score"].(float64); ok {
 		qualityScore = qs
 	}
 
 	needsReview := false
-	if nr, ok := resultData["needs_review"].(bool); ok {
+	if nr, ok := response["needs_review"].(bool); ok {
 		needsReview = nr
 	}
 
 	evidence := []string{}
-	if ev, ok := resultData["uncertainty_reason"].(string); ok && ev != "" {
+	if ev, ok := response["uncertainty_reason"].(string); ok && ev != "" {
 		evidence = append(evidence, ev)
 	}
-	if method, ok := resultData["method"].(string); ok {
+	if method, ok := response["method"].(string); ok {
 		evidence = append(evidence, fmt.Sprintf("Method: %s", method))
 	}
 
@@ -761,6 +763,7 @@ func (ae *AdvancedExtractor) classifyTableWithAdvancedSAPRPT(tableName, context,
 		Classification: classification,
 		Confidence:     confidence,
 		Evidence:       evidence,
+		Source:         sourceID,
 		Props:          make(map[string]any),
 	}
 	classificationResult.Props["quality_score"] = qualityScore
@@ -793,6 +796,7 @@ func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sou
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
+			Source:         sourceID,
 		}
 	}
 
@@ -812,6 +816,7 @@ func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sou
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
+			Source:         sourceID,
 			Props:          make(map[string]any),
 		}
 	}
@@ -822,6 +827,7 @@ func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sou
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
+			Source:         sourceID,
 			Props:          make(map[string]any),
 		}
 	}
@@ -850,6 +856,7 @@ func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sou
 		Classification: classification,
 		Confidence:     confidence,
 		Evidence:       evidence,
+		Source:         sourceID,
 		Props:          make(map[string]any),
 	}
 }
@@ -873,22 +880,21 @@ func parseValueList(valuesStr string) []string {
 
 // containsAny returns true if s contains any of the substrings in patterns
 func containsAny(s string, patterns []string) bool {
-    for _, p := range patterns {
-        if strings.Contains(s, p) {
-            return true
-        }
-    }
-    return false
+	for _, p := range patterns {
+		if strings.Contains(s, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // classifyTableWithSAPRPT provides a basic fallback if full SAP-RPT classifier is unavailable
 func (ae *AdvancedExtractor) classifyTableWithSAPRPT(tableName, context, sourceID string) TableClassification {
-    return TableClassification{
-        TableName:      tableName,
-        Classification: "unknown",
-        Confidence:     0.0,
-        Evidence:       []string{"sap-rpt fallback used"},
-        Patterns:       []string{},
-    }
+	return TableClassification{
+		TableName:      tableName,
+		Classification: "unknown",
+		Confidence:     0.0,
+		Evidence:       []string{"sap-rpt fallback used"},
+		Patterns:       []string{},
+	}
 }
-

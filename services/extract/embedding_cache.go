@@ -12,12 +12,12 @@ import (
 
 // EmbeddingCacheEntry represents a cached embedding entry
 type EmbeddingCacheEntry struct {
-	Embedding    []float32
-	Relational   []float32 // For table embeddings that have both types
-	Semantic     []float32 // For table embeddings that have both types
-	Metadata     map[string]any
-	CachedAt     time.Time
-	ExpiresAt    time.Time
+	Embedding  []float32
+	Relational []float32 // For table embeddings that have both types
+	Semantic   []float32 // For table embeddings that have both types
+	Metadata   map[string]any
+	CachedAt   time.Time
+	ExpiresAt  time.Time
 }
 
 // EmbeddingCache provides caching for embeddings
@@ -167,9 +167,8 @@ func (ec *EmbeddingCache) Stats() map[string]interface{} {
 	defer ec.mu.RUnlock()
 
 	return map[string]interface{}{
-		"size":      len(ec.cache),
-		"max_size":  ec.maxSize,
-		"ttl":       ec.ttl.String(),
+		"size":     len(ec.cache),
+		"max_size": ec.maxSize,
+		"ttl":      ec.ttl.String(),
 	}
 }
-
