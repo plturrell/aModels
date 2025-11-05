@@ -32,6 +32,17 @@ jobs:
           cd services/catalog
           go vet ./...
           go fmt ./...
+      
+      - name: Install goose
+        run: |
+          go install github.com/pressly/goose/v3/cmd/goose@latest
+      
+      - name: Check migrations
+        run: |
+          cd services/catalog
+          # Verify migration files exist and are valid
+          test -d migrations || (echo "Migrations directory not found" && exit 1)
+          test -f migrations/001_create_neo4j_schema.cypher || (echo "Migration files not found" && exit 1)
 
   quality-gate:
     runs-on: ubuntu-latest

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
 
 	"github.com/plturrell/aModels/services/catalog/api"
 	"github.com/plturrell/aModels/services/catalog/iso11179"
+	"github.com/plturrell/aModels/services/catalog/migrations"
 	"github.com/plturrell/aModels/services/catalog/quality"
 	"github.com/plturrell/aModels/services/catalog/security"
 	"github.com/plturrell/aModels/services/catalog/triplestore"
@@ -63,6 +65,18 @@ func main() {
 	// Initialize ISO 11179 registry
 	registry := iso11179.NewMetadataRegistry("catalog", "aModels Catalog", baseURI)
 	logger.Println("ISO 11179 metadata registry initialized")
+
+	// Run migrations if enabled
+	runMigrations := os.Getenv("RUN_MIGRATIONS") == "true"
+	if runMigrations {
+		migrationRunner := migrations.NewMigrationRunner(neo4jURI, neo4jUsername, neo4jPassword, logger)
+		if err := migrationRunner.RunMigrations(context.Background()); err != nil {
+			logger.Printf("Warning: Failed to run migrations: %v", err)
+			// Don't fail startup if migrations fail - allow manual intervention
+		} else {
+			logger.Println("Migrations completed successfully")
+		}
+	}
 
 	// Initialize triplestore client
 	triplestoreClient, err := triplestore.NewTriplestoreClient(neo4jURI, neo4jUsername, neo4jPassword, logger)
