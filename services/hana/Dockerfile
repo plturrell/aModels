@@ -11,16 +11,25 @@ WORKDIR /workspace/services/hana
 
 RUN go build -o /hana-service ./cmd/hana-service
 
-FROM gcr.io/distroless/base-debian12
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN useradd --create-home --shell /usr/sbin/nologin appuser
+
+WORKDIR /home/appuser
+
+COPY --from=build /hana-service /usr/local/bin/hana-service
 
 ENV HANA_DSN="" \
     PORT=8083
 
-COPY --from=build /hana-service /hana-service
-
 EXPOSE 8083
 
-USER nonroot:nonroot
+USER appuser
 
-ENTRYPOINT ["/hana-service"]
-
+ENTRYPOINT ["/usr/local/bin/hana-service"]

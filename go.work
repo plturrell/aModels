@@ -2,10 +2,10 @@ go 1.25.3
 
 use (
 	.
+	./infrastructure/third_party/orchestration
 	./models/glove
 	./models/sentencepiece
 	./services/extract
-	./infrastructure/third_party/orchestration
 )
 
 // Removed mono-repo dependencies - not available in standalone aModels repo
@@ -16,3 +16,6 @@ use (
 // )
 
 // replace github.com/apache/arrow/go/v16 v16.0.0 => ../third_party/go-arrow
+replace github.com/apache/arrow/go/v16 => ./infrastructure/third_party/go-arrow
+
+replace github.com/SAP/go-hdb => ./infrastructure/third_party/go-hdb

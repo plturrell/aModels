@@ -1,12 +1,13 @@
 module ai_benchmarks
 
-go 1.23
+go 1.24.0
 
 require (
-	github.com/SAP/go-hdb v1.14.6
+	github.com/SAP/go-hdb v1.14.9
 	github.com/apache/arrow/go/v16 v16.0.0
 	github.com/gorilla/mux v1.8.1
 	github.com/joho/godotenv v1.5.1
+	github.com/lib/pq v1.10.9
 	golang.org/x/image v0.25.0
 	gonum.org/v1/gonum v0.16.0
 	gorgonia.org/gorgonia v0.9.18
@@ -19,9 +20,12 @@ require (
 
 replace github.com/apache/arrow/go/v16 => ./infrastructure/third_party/go-arrow
 
+replace github.com/SAP/go-hdb => ./infrastructure/third_party/go-hdb
+
 replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20250825161204-c5933d9347a5
 
 require (
+	github.com/apache/arrow-go/v18 v18.4.1 // indirect
 	github.com/apache/arrow/go/arrow v0.0.0-20211112161151-bc219186db40 // indirect
 	github.com/awalterschulze/gographviz v2.0.3+incompatible // indirect
 	github.com/chewxy/hm v1.0.0 // indirect

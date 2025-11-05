@@ -83,3 +83,4 @@ replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres => ../pos
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths => ../agenticAiETH_layer4_Models/maths
 
 replace github.com/apache/arrow/go/v16 => ../third_party/go-arrow
+replace github.com/SAP/go-hdb => ../../infrastructure/third_party/go-hdb

@@ -28,3 +28,5 @@ require (
 
 // Exclude HANA driver - only used with hana build tag, which requires Go 1.24+
 exclude github.com/SAP/go-hdb v1.14.9
+
+replace github.com/SAP/go-hdb => ../../infrastructure/third_party/go-hdb
