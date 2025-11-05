@@ -8,13 +8,16 @@ import (
 	"time"
 
 	"github.com/plturrell/aModels/services/catalog/ai"
+	"github.com/plturrell/aModels/services/catalog/analytics"
 	"github.com/plturrell/aModels/services/catalog/api"
 	"github.com/plturrell/aModels/services/catalog/cache"
 	"github.com/plturrell/aModels/services/catalog/iso11179"
 	"github.com/plturrell/aModels/services/catalog/migrations"
+	"github.com/plturrell/aModels/services/catalog/multimodal"
 	"github.com/plturrell/aModels/services/catalog/observability"
 	"github.com/plturrell/aModels/services/catalog/quality"
 	"github.com/plturrell/aModels/services/catalog/security"
+	"github.com/plturrell/aModels/services/catalog/streaming"
 	"github.com/plturrell/aModels/services/catalog/triplestore"
 	"github.com/plturrell/aModels/services/catalog/workflows"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -154,11 +157,47 @@ func main() {
 	qualityPredictor := ai.NewQualityPredictor(extractServiceURL, legacyLogger)
 	recommender := ai.NewRecommender(registry, legacyLogger)
 
+	// Initialize event streaming (if Redis available)
+	var eventStream *streaming.EventStream
+	if redisURL != "" && cacheClient != nil {
+		var err error
+		eventStream, err = streaming.NewEventStream(redisURL, legacyLogger)
+		if err != nil {
+			structLogger.Warn("Failed to initialize event stream, continuing without streaming", map[string]interface{}{
+				"error": err.Error(),
+			})
+		} else {
+			defer eventStream.Close()
+			structLogger.Info("Event streaming initialized", nil)
+		}
+	}
+
+	// Initialize multi-modal extractor
+	deepSeekOCRURL := os.Getenv("DEEPSEEK_OCR_URL")
+	if deepSeekOCRURL == "" {
+		deepSeekOCRURL = "http://localhost:8086"
+	}
+	multiModalExtractor := multimodal.NewMultiModalExtractor(deepSeekOCRURL, legacyLogger)
+	structLogger.Info("Multi-modal extractor initialized", nil)
+
+	// Initialize analytics dashboard
+	analyticsDashboard := analytics.NewAnalyticsDashboard(registry, recommender, legacyLogger)
+	structLogger.Info("Analytics dashboard initialized", nil)
+
 	// Initialize API handlers
 	catalogHandlers := api.NewCatalogHandlers(registry, legacyLogger)
 	sparqlHandler := api.NewSPARQLHandler(sparqlEndpoint, legacyLogger)
 	dataProductHandler := api.NewDataProductHandler(unifiedWorkflow, legacyLogger)
 	aiHandlers := api.NewAIHandlers(metadataDiscoverer, qualityPredictor, recommender, legacyLogger)
+	
+	// Initialize advanced handlers (Phase 3)
+	var advancedHandlers *api.AdvancedHandlers
+	var wsHandler *api.WebSocketHandler
+	if eventStream != nil {
+		wsHandler = api.NewWebSocketHandler(eventStream, legacyLogger)
+		advancedHandlers = api.NewAdvancedHandlers(eventStream, multiModalExtractor, analyticsDashboard, legacyLogger)
+		structLogger.Info("Advanced handlers initialized", nil)
+	}
 	
 	// Initialize auth middleware
 	authMiddleware := security.NewAuthMiddleware(legacyLogger)
@@ -251,6 +290,22 @@ func main() {
 	mux.HandleFunc("/catalog/ai/predict-quality", aiHandlers.HandlePredictQuality)
 	mux.HandleFunc("/catalog/ai/recommendations", aiHandlers.HandleGetRecommendations)
 	mux.HandleFunc("/catalog/ai/usage", aiHandlers.HandleRecordUsage)
+
+	// Advanced features endpoints (Phase 3)
+	if advancedHandlers != nil {
+		mux.HandleFunc("/catalog/multimodal/extract", advancedHandlers.HandleExtractMultimodal)
+		mux.HandleFunc("/catalog/analytics/dashboard", advancedHandlers.HandleGetDashboardStats)
+		mux.HandleFunc("/catalog/analytics/elements/", advancedHandlers.HandleGetElementAnalytics)
+		mux.HandleFunc("/catalog/analytics/top", advancedHandlers.HandleGetTopElements)
+		structLogger.Info("Advanced features endpoints registered", nil)
+	}
+
+	// WebSocket endpoints (Phase 3)
+	if wsHandler != nil {
+		mux.HandleFunc("/catalog/ws", wsHandler.HandleWebSocket)
+		mux.HandleFunc("/catalog/ws/subscribe", wsHandler.HandleWebSocketSubscribe)
+		structLogger.Info("WebSocket endpoints registered", nil)
+	}
 
 	// Apply auth middleware to protected endpoints (optional - can be enabled via env var)
 	useAuth := os.Getenv("ENABLE_AUTH") == "true"
