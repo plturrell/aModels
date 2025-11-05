@@ -68,6 +68,7 @@ The Open Deep Research agent vendored in `models/open_deep_research` now ships w
    ```bash
    python -m pytest models/open_deep_research/tests/test_catalog_tools.py
    ```
+4. For retention/anonymisation guidance on `research_reports`, see `services/catalog/docs/research-report-retention.md`. Cross-service Goose adoption tasks are captured in `docs/runbooks/goose-adoption-plan.md`.
 
 Future PRs that touch Deep Research or catalog integration should include this test (or the full suite in `models/open_deep_research/tests`) in their validation steps so we keep the intelligence layer reliable even without the full GPU runtime.
 
