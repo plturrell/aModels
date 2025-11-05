@@ -59,7 +59,7 @@ func NewConnectionPool(
 }
 
 // GetSession gets a new session from the pool.
-func (p *ConnectionPool) GetSession(ctx context.Context, config neo4j.SessionConfig) (neo4j.SessionWithContext, error) {
+func (p *ConnectionPool) GetSession(ctx context.Context, config neo4j.SessionConfig) neo4j.SessionWithContext {
 	session := p.driver.NewSession(ctx, config)
 	
 	p.mu.Lock()
@@ -72,7 +72,7 @@ func (p *ConnectionPool) GetSession(ctx context.Context, config neo4j.SessionCon
 		})
 	}
 
-	return session, nil
+	return session
 }
 
 // Close closes the connection pool.

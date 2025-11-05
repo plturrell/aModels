@@ -12,7 +12,6 @@ import (
 	"github.com/plturrell/aModels/services/catalog/iso11179"
 	"github.com/plturrell/aModels/services/catalog/migrations"
 	"github.com/plturrell/aModels/services/catalog/observability"
-	"github.com/plturrell/aModels/services/catalog/performance"
 	"github.com/plturrell/aModels/services/catalog/quality"
 	"github.com/plturrell/aModels/services/catalog/security"
 	"github.com/plturrell/aModels/services/catalog/triplestore"

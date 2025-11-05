@@ -10,14 +10,17 @@ import (
 	"github.com/plturrell/aModels/services/catalog/iso11179"
 )
 
+// CacheInterface defines the cache interface.
+type CacheInterface interface {
+	Get(ctx interface{}, key string, dest interface{}) error
+	Set(ctx interface{}, key string, value interface{}, ttl interface{}) error
+}
+
 // CatalogHandlers provides HTTP handlers for the catalog API.
 type CatalogHandlers struct {
 	registry *iso11179.MetadataRegistry
 	logger   *log.Logger
-	cache    interface {
-		Get(ctx interface{}, key string, dest interface{}) error
-		Set(ctx interface{}, key string, value interface{}, ttl interface{}) error
-	}
+	cache    CacheInterface
 }
 
 // NewCatalogHandlers creates new catalog handlers.

@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
-
-	"github.com/plturrell/aModels/services/catalog/observability"
 )
 
 // Logger interface for health handler logging
