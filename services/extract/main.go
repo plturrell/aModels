@@ -105,7 +105,7 @@ func main() {
 
 		// DeepAgents client (enabled by default, 10/10 integration)
 		deepAgentsClient: NewDeepAgentsClient(logger),
-		
+
 		// Domain detector for associating extracted data with domains
 		domainDetector: NewDomainDetector(os.Getenv("LOCALAI_URL"), logger),
 	}
@@ -297,15 +297,15 @@ func main() {
 	// Phase 10: Initialize terminology learner with LNN
 	terminologyStore := NewNeo4jTerminologyStore(server.neo4jPersistence, logger)
 	terminologyLearner := NewTerminologyLearner(terminologyStore, logger)
-	
+
 	// Load existing terminology from store
 	if err := terminologyLearner.LoadTerminology(context.Background()); err != nil {
 		logger.Printf("Warning: Failed to load existing terminology: %v", err)
 	}
-	
+
 	// Set global terminology learner for embedding enhancement
 	SetGlobalTerminologyLearner(terminologyLearner)
-	
+
 	// Wire terminology learner to components
 	server.semanticSchemaAnalyzer.SetTerminologyLearner(terminologyLearner)
 	logger.Println("Terminology learner initialized (Phase 10)")
@@ -317,7 +317,7 @@ func main() {
 	// Phase 9.2: Initialize self-healing system
 	server.selfHealingSystem = NewSelfHealingSystem(logger)
 	logger.Println("Self-healing system initialized (Phase 9.2)")
-	
+
 	// Register health monitors for critical services
 	if server.neo4jPersistence != nil {
 		server.selfHealingSystem.RegisterHealthMonitor(
@@ -386,31 +386,31 @@ func main() {
 	mux.HandleFunc("/healthz", server.handleHealthz)
 	mux.HandleFunc("/extract", server.handleExtract)
 	mux.HandleFunc("/generate/training", server.handleGenerateTraining)
-	mux.HandleFunc("/knowledge-graph", server.handleGraph)                           // Main knowledge graph processing endpoint
-	mux.HandleFunc("/graph", server.handleGraph)                                     // Legacy alias for backward compatibility
-	mux.HandleFunc("/knowledge-graph/query", server.handleNeo4jQuery)                // Neo4j Cypher query endpoint
-	mux.HandleFunc("/workflow/petri-to-langgraph", server.handlePetriNetToLangGraph) // Convert Petri net to LangGraph
+	mux.HandleFunc("/knowledge-graph", server.handleGraph)                                            // Main knowledge graph processing endpoint
+	mux.HandleFunc("/graph", server.handleGraph)                                                      // Legacy alias for backward compatibility
+	mux.HandleFunc("/knowledge-graph/query", server.handleNeo4jQuery)                                 // Neo4j Cypher query endpoint
+	mux.HandleFunc("/workflow/petri-to-langgraph", server.handlePetriNetToLangGraph)                  // Convert Petri net to LangGraph
 	mux.HandleFunc("/workflow/petri-to-langgraph-advanced", server.handlePetriNetToAdvancedLangGraph) // Convert Petri net to advanced LangGraph (Phase 7.3)
-	mux.HandleFunc("/workflow/petri-to-agentflow", server.handlePetriNetToAgentFlow) // Convert Petri net to AgentFlow
+	mux.HandleFunc("/workflow/petri-to-agentflow", server.handlePetriNetToAgentFlow)                  // Convert Petri net to AgentFlow
 	// Phase 10: Terminology learning endpoints
 	mux.HandleFunc("/terminology/domains", server.handleTerminologyDomains)     // List learned domains
-	mux.HandleFunc("/terminology/roles", server.handleTerminologyRoles)          // List learned roles
-	mux.HandleFunc("/terminology/patterns", server.handleTerminologyPatterns)    // List learned naming patterns
-	mux.HandleFunc("/terminology/learn", server.handleTerminologyLearn)          // Trigger manual learning
-	mux.HandleFunc("/terminology/evolution", server.handleTerminologyEvolution)  // Terminology evolution over time
+	mux.HandleFunc("/terminology/roles", server.handleTerminologyRoles)         // List learned roles
+	mux.HandleFunc("/terminology/patterns", server.handleTerminologyPatterns)   // List learned naming patterns
+	mux.HandleFunc("/terminology/learn", server.handleTerminologyLearn)         // Trigger manual learning
+	mux.HandleFunc("/terminology/evolution", server.handleTerminologyEvolution) // Terminology evolution over time
 	// SAP Business Data Cloud integration endpoints
-	mux.HandleFunc("/sap-bdc/extract", server.handleSAPBDCExtract)              // Extract from SAP BDC
+	mux.HandleFunc("/sap-bdc/extract", server.handleSAPBDCExtract)                  // Extract from SAP BDC
 	mux.HandleFunc("/semantic/analyze-column", server.handleAnalyzeColumnSemantics) // Semantic column analysis (Phase 8.1)
-	mux.HandleFunc("/semantic/analyze-lineage", server.handleAnalyzeDataLineage) // Semantic data lineage analysis (Phase 8.1)
-	mux.HandleFunc("/health/status", server.handleHealthStatus) // Health status for all services (Phase 9.2)
-	mux.HandleFunc("/knowledge-graph/queries", server.handleGraphQueryHelpers)       // Get common graph query helpers
-	mux.HandleFunc("/knowledge-graph/search", server.handleVectorSearch)             // Vector similarity search (RAG)
-	mux.HandleFunc("/knowledge-graph/embed", server.handleGenerateEmbedding)         // Generate embedding for text
-	mux.HandleFunc("/knowledge-graph/embed/", server.handleGetEmbedding)             // Get embedding by key
-	mux.HandleFunc("/training-data/stats", server.handleTrainingDataStats)           // Get training data statistics (Phase 4)
-	mux.HandleFunc("/training-data/export", server.handleExportTrainingData)         // Export training data (Phase 4)
-	mux.HandleFunc("/model/metrics", server.handleModelMetrics)                      // Get model performance metrics (Phase 5)
-	mux.HandleFunc("/model/uncertain", server.handleUncertainPredictions)            // Get uncertain predictions for review (Phase 5)
+	mux.HandleFunc("/semantic/analyze-lineage", server.handleAnalyzeDataLineage)    // Semantic data lineage analysis (Phase 8.1)
+	mux.HandleFunc("/health/status", server.handleHealthStatus)                     // Health status for all services (Phase 9.2)
+	mux.HandleFunc("/knowledge-graph/queries", server.handleGraphQueryHelpers)      // Get common graph query helpers
+	mux.HandleFunc("/knowledge-graph/search", server.handleVectorSearch)            // Vector similarity search (RAG)
+	mux.HandleFunc("/knowledge-graph/embed", server.handleGenerateEmbedding)        // Generate embedding for text
+	mux.HandleFunc("/knowledge-graph/embed/", server.handleGetEmbedding)            // Get embedding by key
+	mux.HandleFunc("/training-data/stats", server.handleTrainingDataStats)          // Get training data statistics (Phase 4)
+	mux.HandleFunc("/training-data/export", server.handleExportTrainingData)        // Export training data (Phase 4)
+	mux.HandleFunc("/model/metrics", server.handleModelMetrics)                     // Get model performance metrics (Phase 5)
+	mux.HandleFunc("/model/uncertain", server.handleUncertainPredictions)           // Get uncertain predictions for review (Phase 5)
 	mux.HandleFunc("/catalog/projects", server.handleGetProjects)
 	mux.HandleFunc("/catalog/projects/add", server.handleAddProject)
 	mux.HandleFunc("/catalog/systems", server.handleGetSystems)
@@ -454,28 +454,25 @@ type extractServer struct {
 
 	// DeepAgents client
 	deepAgentsClient *DeepAgentsClient
-	
+
 	// Domain detector for associating extracted data with domains
 	domainDetector *DomainDetector
 
-	tablePersistence      TablePersistence
-	vectorPersistence     VectorPersistence
-	graphPersistence      GraphPersistence
-	neo4jPersistence      *Neo4jPersistence      // Direct Neo4j access for queries
-	realTimeGleanExporter *RealTimeGleanExporter // Real-time Glean synchronization
-	flight                *extractFlightServer
+	tablePersistence       TablePersistence
+	vectorPersistence      VectorPersistence
+	graphPersistence       GraphPersistence
+	neo4jPersistence       *Neo4jPersistence      // Direct Neo4j access for queries
+	realTimeGleanExporter  *RealTimeGleanExporter // Real-time Glean synchronization
+	flight                 *extractFlightServer
 	semanticSchemaAnalyzer *SemanticSchemaAnalyzer // Phase 8.1: Semantic schema understanding
 	selfHealingSystem      *SelfHealingSystem      // Phase 9.2: Self-healing system
 	sapBDCIntegration      *SAPBDCIntegration      // SAP Business Data Cloud integration
-	hanaReplication       *hanaReplication
-	postgresReplication   *postgresReplication
+	hanaReplication        *hanaReplication
+	postgresReplication    *postgresReplication
 
 	telemetry          *telemetryClient
 	telemetryOperation string
 	catalog            *Catalog
-
-	// DeepAgents client (enabled by default, 10/10 integration)
-	deepAgentsClient *DeepAgentsClient
 
 	// Orchestration chain matcher (for Phase 2 integration)
 	chainMatcher *OrchestrationChainMatcher
@@ -705,6 +702,7 @@ type graphRequest struct {
 	HiveDDLs            []string           `json:"hive_ddls"`
 	SqlQueries          []string           `json:"sql_queries"`
 	ControlMFiles       []string           `json:"control_m_files"`
+	SignavioFiles       []string           `json:"signavio_files"`
 	IdealDistribution   map[string]float64 `json:"ideal_distribution"`
 	ProjectID           string             `json:"project_id"`
 	SystemID            string             `json:"system_id"`
@@ -729,12 +727,44 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 
 	var nodes []Node
 	var edges []Edge
+	var rootID string
+	signavioMetadata := SignavioMetadata{}
+
+	if len(req.SignavioFiles) > 0 {
+		signavioNodes, signavioEdges, metadata := loadSignavioArtifacts(req.SignavioFiles, s.logger)
+		if len(signavioNodes) > 0 {
+			nodes = append(nodes, signavioNodes...)
+		}
+		if len(signavioEdges) > 0 {
+			edges = append(edges, signavioEdges...)
+		}
+		signavioMetadata = metadata
+
+		if metadata.ProcessCount > 0 {
+			s.logger.Printf("✅ Loaded %d Signavio processes from %d files", metadata.ProcessCount, metadata.SourceFiles)
+			if s.catalog != nil {
+				var signavioCatalogDirty bool
+				for _, proc := range metadata.Processes {
+					s.catalog.UpsertSignavioProcess(proc)
+					signavioCatalogDirty = true
+				}
+				if signavioCatalogDirty {
+					if err := s.catalog.Save(); err != nil {
+						s.logger.Printf("failed to persist Signavio processes to catalog: %v", err)
+					}
+				}
+			}
+		} else if len(metadata.Errors) > 0 {
+			for _, errMsg := range metadata.Errors {
+				s.logger.Printf("Signavio ingestion warning: %s", errMsg)
+			}
+		}
+	}
 
 	for _, path := range req.JSONTables {
 		if strings.TrimSpace(path) == "" {
 			continue
 		}
-
 		if s.docPersistence != nil {
 			if err := s.docPersistence.SaveDocument(path); err != nil {
 				s.logger.Printf("failed to save document %s: %v", path, err)
@@ -1016,7 +1046,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	})
 	nodes = normResult.Nodes
 	edges = normResult.Edges
-	rootID := normResult.RootNodeID
+	rootID = normResult.RootNodeID
 
 	for _, warning := range normResult.Warnings {
 		s.logger.Printf("normalization warning: %s", warning)
@@ -1027,18 +1057,18 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	for _, warning := range validationWarnings {
 		s.logger.Printf("validation warning: %s", warning)
 	}
-	
+
 	// Associate domains with extracted nodes and edges
 	if s.domainDetector != nil {
 		s.domainDetector.AssociateDomainsWithNodes(nodes)
-		
+
 		// Create node map for edge association
 		nodeMap := make(map[string]*Node)
 		for i := range nodes {
 			nodeMap[nodes[i].ID] = &nodes[i]
 		}
 		s.domainDetector.AssociateDomainsWithEdges(edges, nodeMap)
-		
+
 		// Associate SQL queries with domains
 		sqlToAgentID := s.domainDetector.AssociateDomainsWithSQL(req.SqlQueries)
 		if len(sqlToAgentID) > 0 {
@@ -1267,12 +1297,12 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 
 	// Perform advanced extraction
 	advancedExtractor := NewAdvancedExtractor(s.logger)
-	
+
 	// Phase 10: Wire terminology learner to advanced extractor
 	if terminologyLearner := GetGlobalTerminologyLearner(); terminologyLearner != nil {
 		advancedExtractor.SetTerminologyLearner(terminologyLearner)
 	}
-	
+
 	advancedResult := advancedExtractor.ExtractAdvanced(
 		req.SqlQueries,
 		controlMContents,
@@ -1612,6 +1642,37 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// Generate embeddings for Signavio processes
+		if signavioMetadata.ProcessCount > 0 {
+			for _, proc := range signavioMetadata.Processes {
+				embedding, err := generateSignavioProcessEmbedding(ctx, proc)
+				if err != nil {
+					s.logger.Printf("failed to generate embedding for Signavio process %q: %v", proc.Name, err)
+					continue
+				}
+
+				metadata := map[string]any{
+					"artifact_type":  "signavio-process",
+					"artifact_id":    proc.ID,
+					"label":          proc.Name,
+					"project_id":     req.ProjectID,
+					"system_id":      req.SystemID,
+					"process_id":     proc.ID,
+					"process_name":   proc.Name,
+					"element_count":  proc.ElementCount,
+					"element_types":  proc.ElementTypes,
+					"source_file":    proc.SourceFile,
+					"created_at":     time.Now().UTC().Format(time.RFC3339Nano),
+					"embedding_type": "semantic_process",
+				}
+
+				key := fmt.Sprintf("signavio-process:%s", proc.ID)
+				if err := s.vectorPersistence.SaveVector(key, embedding, metadata); err != nil {
+					s.logger.Printf("failed to save Signavio process embedding %q: %v", proc.Name, err)
+				}
+			}
+		}
+
 		// Generate embedding for Petri net (if available)
 		if len(allControlMJobs) > 0 {
 			petriNetConverter := NewPetriNetConverter(s.logger)
@@ -1704,6 +1765,30 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
+	if signavioMetadata.ProcessCount > 0 || len(req.SignavioFiles) > 0 {
+		signavioSummary := map[string]any{
+			"process_count": signavioMetadata.ProcessCount,
+			"source_files":  signavioMetadata.SourceFiles,
+		}
+		if len(signavioMetadata.Processes) > 0 {
+			processes := make([]map[string]any, 0, len(signavioMetadata.Processes))
+			for _, proc := range signavioMetadata.Processes {
+				processes = append(processes, map[string]any{
+					"id":            proc.ID,
+					"name":          proc.Name,
+					"source_file":   proc.SourceFile,
+					"element_count": proc.ElementCount,
+					"element_types": proc.ElementTypes,
+				})
+			}
+			signavioSummary["processes"] = processes
+		}
+		if len(signavioMetadata.Errors) > 0 {
+			signavioSummary["errors"] = signavioMetadata.Errors
+		}
+		response["signavio"] = signavioSummary
+	}
+
 	// Add DeepAgents analysis if available
 	if deepAgentsAnalysis != nil {
 		response["deepagents_analysis"] = map[string]any{
@@ -1737,19 +1822,21 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 				"hive_ddls_count":       len(req.HiveDDLs),
 				"sql_queries_count":     len(req.SqlQueries),
 				"control_m_files_count": len(req.ControlMFiles),
+				"signavio_files_count":  len(req.SignavioFiles),
 				"project_id":            req.ProjectID,
 				"system_id":             req.SystemID,
 				"information_system_id": req.InformationSystemID,
 			},
 			Output: map[string]any{
-				"nodes_count":         len(nodes),
-				"edges_count":         len(edges),
-				"metadata_entropy":    metadataEntropy,
-				"kl_divergence":       klDivergence,
-				"actual_distribution": actualDistribution,
-				"ideal_distribution":  idealDistribution,
-				"column_count":        len(columnDtypes),
-				"root_node_id":        rootID,
+				"nodes_count":            len(nodes),
+				"edges_count":            len(edges),
+				"metadata_entropy":       metadataEntropy,
+				"kl_divergence":          klDivergence,
+				"actual_distribution":    actualDistribution,
+				"ideal_distribution":     idealDistribution,
+				"column_count":           len(columnDtypes),
+				"root_node_id":           rootID,
+				"signavio_process_count": signavioMetadata.ProcessCount,
 			},
 			StartedAt:   started,
 			CompletedAt: time.Now(),
@@ -2432,8 +2519,8 @@ func (s *extractServer) fuseSearchResults(relationalResults, semanticResults []V
 		key := result.ArtifactID
 		if existing, exists := resultMap[key]; exists {
 			// If already exists, boost score (weighted average)
-			relationalWeight := 0.4
-			semanticWeight := 0.6
+			const relationalWeight float32 = 0.4
+			const semanticWeight float32 = 0.6
 			combinedScore := (existing.Score * semanticWeight) + (result.Score * relationalWeight)
 			result.Score = combinedScore
 			// Merge metadata
@@ -2456,8 +2543,8 @@ func (s *extractServer) fuseSearchResults(relationalResults, semanticResults []V
 		key := result.ArtifactID
 		if existing, exists := resultMap[key]; exists {
 			// If already exists, boost score (weighted average)
-			relationalWeight := 0.4
-			semanticWeight := 0.6
+			const relationalWeight float32 = 0.4
+			const semanticWeight float32 = 0.6
 			existingScore := scoreMap[key]
 			combinedScore := (existingScore * relationalWeight) + (result.Score * semanticWeight)
 			result.Score = combinedScore
@@ -2541,7 +2628,9 @@ func (s *extractServer) handleGenerateEmbedding(w http.ResponseWriter, r *http.R
 		embedding, err = generateSQLEmbedding(ctx, request.Text)
 	case "table":
 		node := Node{Label: request.Text, Type: "table"}
-		embedding, err = generateTableEmbedding(ctx, node)
+		var relational []float32
+		relational, _, err = generateTableEmbedding(ctx, node)
+		embedding = relational
 	case "column":
 		node := Node{Label: request.Text, Type: "column"}
 		embedding, err = generateColumnEmbedding(ctx, node)
@@ -2784,13 +2873,13 @@ func (s *extractServer) handleUnifiedExtraction(w http.ResponseWriter, r *http.R
 	}
 
 	var request struct {
-		ImagePath        string                 `json:"image_path"`
-		ImageBase64      string                 `json:"image_base64"`
-		TableName        string                 `json:"table_name"`
-		Columns          []map[string]any       `json:"columns"`
-		Text             string                 `json:"text"`
-		Prompt           string                 `json:"prompt"`
-		TrainingDataPath string                 `json:"training_data_path"`
+		ImagePath        string           `json:"image_path"`
+		ImageBase64      string           `json:"image_base64"`
+		TableName        string           `json:"table_name"`
+		Columns          []map[string]any `json:"columns"`
+		Text             string           `json:"text"`
+		Prompt           string           `json:"prompt"`
+		TrainingDataPath string           `json:"training_data_path"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -2836,10 +2925,10 @@ func (s *extractServer) handleMultimodalEmbeddings(w http.ResponseWriter, r *htt
 	}
 
 	var request struct {
-		Text      string                 `json:"text"`
-		ImagePath string                 `json:"image_path"`
-		TableName string                 `json:"table_name"`
-		Columns   []map[string]any       `json:"columns"`
+		Text      string           `json:"text"`
+		ImagePath string           `json:"image_path"`
+		TableName string           `json:"table_name"`
+		Columns   []map[string]any `json:"columns"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -3320,7 +3409,7 @@ func groupExtractions(extractions []extractionResult) map[string][]string {
 		if class == "" || text == "" {
 			continue
 		}
-		if !contains(grouped[class], text) {
+		if !containsString(grouped[class], text) {
 			grouped[class] = append(grouped[class], text)
 		}
 	}
@@ -3334,15 +3423,6 @@ func ensureEntityBuckets(grouped map[string][]string) {
 			grouped[key] = []string{}
 		}
 	}
-}
-
-func contains(values []string, candidate string) bool {
-	for _, v := range values {
-		if v == candidate {
-			return true
-		}
-	}
-	return false
 }
 
 // --- training generation ---
@@ -3872,4 +3952,186 @@ func (s *extractServer) handleSAPBDCExtract(w http.ResponseWriter, r *http.Reque
 		},
 		"source": "sap_bdc",
 	})
+}
+
+func (s *extractServer) handleTerminologyDomains(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		handlers.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	learner := GetGlobalTerminologyLearner()
+	if learner == nil {
+		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "terminology learner unavailable"})
+		return
+	}
+
+	domains, err := learner.GetLearnedDomains(r.Context())
+	if err != nil {
+		handlers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to retrieve domains: %v", err)})
+		return
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{"domains": domains})
+}
+
+func (s *extractServer) handleTerminologyRoles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		handlers.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	learner := GetGlobalTerminologyLearner()
+	if learner == nil {
+		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "terminology learner unavailable"})
+		return
+	}
+
+	roles, err := learner.GetLearnedRoles(r.Context())
+	if err != nil {
+		handlers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to retrieve roles: %v", err)})
+		return
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{"roles": roles})
+}
+
+func (s *extractServer) handleTerminologyPatterns(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		handlers.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	learner := GetGlobalTerminologyLearner()
+	if learner == nil {
+		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "terminology learner unavailable"})
+		return
+	}
+
+	patterns, err := learner.GetLearnedPatterns(r.Context())
+	if err != nil {
+		handlers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to retrieve patterns: %v", err)})
+		return
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{"patterns": patterns})
+}
+
+func (s *extractServer) handleTerminologyLearn(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		handlers.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	learner := GetGlobalTerminologyLearner()
+	if learner == nil {
+		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "terminology learner unavailable"})
+		return
+	}
+
+	if err := learner.LoadTerminology(r.Context()); err != nil {
+		handlers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("failed to reload terminology: %v", err)})
+		return
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{"status": "reload_triggered"})
+}
+
+func (s *extractServer) handleTerminologyEvolution(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		handlers.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{"status": "not_tracked"})
+}
+
+func (s *extractServer) handleAnalyzeColumnSemantics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		handlers.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	if s.semanticSchemaAnalyzer == nil {
+		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "semantic analyzer unavailable"})
+		return
+	}
+
+	var req struct {
+		ColumnName   string         `json:"column_name"`
+		ColumnType   string         `json:"column_type"`
+		TableName    string         `json:"table_name"`
+		TableContext map[string]any `json:"table_context"`
+		DomainID     string         `json:"domain_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		handlers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("invalid request: %v", err)})
+		return
+	}
+
+	if req.ColumnName == "" || req.TableName == "" {
+		handlers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "column_name and table_name are required"})
+		return
+	}
+
+	analysis, err := s.semanticSchemaAnalyzer.AnalyzeColumnSemantics(
+		r.Context(),
+		req.ColumnName,
+		req.ColumnType,
+		req.TableName,
+		req.TableContext,
+		req.DomainID,
+	)
+	if err != nil {
+		handlers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("analysis failed: %v", err)})
+		return
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, analysis)
+}
+
+func (s *extractServer) handleAnalyzeDataLineage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		handlers.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	if s.semanticSchemaAnalyzer == nil {
+		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "semantic analyzer unavailable"})
+		return
+	}
+
+	var req struct {
+		SourceTable   string   `json:"source_table"`
+		TargetTable   string   `json:"target_table"`
+		SourceColumns []string `json:"source_columns"`
+		TargetColumns []string `json:"target_columns"`
+		SQL           string   `json:"sql"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		handlers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("invalid request: %v", err)})
+		return
+	}
+
+	if req.SourceTable == "" || req.TargetTable == "" {
+		handlers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "source_table and target_table are required"})
+		return
+	}
+
+	analysis, err := s.semanticSchemaAnalyzer.AnalyzeDataLineage(
+		r.Context(),
+		req.SourceTable,
+		req.TargetTable,
+		req.SourceColumns,
+		req.TargetColumns,
+		req.SQL,
+	)
+	if err != nil {
+		handlers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": fmt.Sprintf("analysis failed: %v", err)})
+		return
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, analysis)
 }

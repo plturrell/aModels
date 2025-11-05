@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
+	"strings"
 )
 
 // generateEmbedding generates embedding for SQL query (legacy function, kept for backward compatibility)
@@ -159,13 +161,13 @@ func generateTableEmbedding(ctx context.Context, node Node) ([]float32, []float3
 			"--table-name", node.Label,
 			"--columns", string(columnsJSON),
 		)
-		
+
 		outputSemantic, err := cmdSemantic.Output()
 		if err == nil {
 			var semantic []float32
 			if err := json.Unmarshal(outputSemantic, &semantic); err == nil && len(semantic) > 0 {
 				semanticEmbedding = semantic
-				
+
 				// Phase 10: Apply terminology enhancement to semantic embedding
 				if globalTerminologyLearner != nil {
 					enhanced, err := globalTerminologyLearner.EnhanceEmbedding(ctx, node.Label, semanticEmbedding, "sap_rpt")
@@ -225,6 +227,40 @@ func generateColumnEmbedding(ctx context.Context, node Node) ([]float32, error) 
 	}
 
 	return embedding, nil
+}
+
+func generateSignavioProcessEmbedding(ctx context.Context, summary SignavioProcessSummary) ([]float32, error) {
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("Signavio process %s (%s)", summary.Name, summary.ID))
+	if summary.SourceFile != "" {
+		builder.WriteString(fmt.Sprintf(" sourced from %s", summary.SourceFile))
+	}
+	builder.WriteString(fmt.Sprintf(" with %d elements.", summary.ElementCount))
+
+	if len(summary.ElementTypes) > 0 {
+		typeCounts := make([]string, 0, len(summary.ElementTypes))
+		for elementType, count := range summary.ElementTypes {
+			typeCounts = append(typeCounts, fmt.Sprintf("%s:%d", elementType, count))
+		}
+		sort.Strings(typeCounts)
+		builder.WriteString(" Element types: ")
+		builder.WriteString(strings.Join(typeCounts, ", "))
+		builder.WriteString(".")
+	}
+
+	maxElements := len(summary.Elements)
+	if maxElements > 20 {
+		maxElements = 20
+	}
+	for i := 0; i < maxElements; i++ {
+		elem := summary.Elements[i]
+		builder.WriteString(fmt.Sprintf(" Step %d: %s (%s).", i+1, elem.Name, elem.Type))
+	}
+	if len(summary.Elements) > maxElements {
+		builder.WriteString(fmt.Sprintf(" ... %d additional steps omitted.", len(summary.Elements)-maxElements))
+	}
+
+	return generateSemanticEmbedding(ctx, builder.String())
 }
 
 // generateJobEmbedding generates embedding for Control-M job

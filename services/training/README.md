@@ -118,9 +118,21 @@ results = pipeline.run_full_pipeline(
     json_tables=["data/training/sgmi/json_with_changes.json"],
     hive_ddls=["data/training/sgmi/hive-ddl/sgmisit_all_tables_statement.hql"],
     control_m_files=["data/training/sgmi/sgmi-controlm/catalyst migration prod 640.xml"],
+    signavio_files=["processes/sgmi-signavio.bpmn"],
     glean_days_back=30,
-    enable_glean=True
+    enable_glean=True,
+    enable_temporal_analysis=True,
+    enable_digital_twin=True,
 )
+
+Signavio exports passed through `signavio_files` are ingested directly by the extract service, ensuring the processes land in Neo4j, Glean, and the vector search indices without additional preprocessing.
+
+# Optional: enable additional observability
+# export ENABLE_DIGITAL_TWIN=true
+# export DIGITAL_TWIN_SERVICE_URL="http://digital-twin:8082"
+# export ENABLE_LANGSMITH_LOGGING=true
+# export LANGSMITH_API_KEY="..."
+# export LANGSMITH_PROJECT="aModels-FMRP-pilot"
 ```
 
 ### Temporal Pattern Analysis
@@ -386,4 +398,3 @@ Returns dictionary with:
 Export training evaluation metrics to Glean Catalog.
 
 Returns dictionary with export information.
-

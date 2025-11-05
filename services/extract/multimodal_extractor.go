@@ -1,50 +1,48 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
 // MultiModalExtractionResult contains results from multi-modal extraction
 type MultiModalExtractionResult struct {
-	OCRResult      *OCRResult                 `json:"ocr_result,omitempty"`
-	Embeddings    *UnifiedEmbeddings         `json:"embeddings,omitempty"`
-	Classification *TableClassification      `json:"classification,omitempty"`
-	Tables        []ExtractedTable           `json:"tables,omitempty"`
-	Text          string                     `json:"text,omitempty"`
-	Method        string                     `json:"method"`
+	OCRResult      *OCRResult           `json:"ocr_result,omitempty"`
+	Embeddings     *UnifiedEmbeddings   `json:"embeddings,omitempty"`
+	Classification *TableClassification `json:"classification,omitempty"`
+	Tables         []ExtractedTable     `json:"tables,omitempty"`
+	Text           string               `json:"text,omitempty"`
+	Method         string               `json:"method"`
 }
 
 // OCRResult contains OCR extraction results
 type OCRResult struct {
-	Text    string           `json:"text"`
-	Tables  []ExtractedTable `json:"tables"`
-	Method  string           `json:"method"`
-	Error   string           `json:"error,omitempty"`
+	Text   string           `json:"text"`
+	Tables []ExtractedTable `json:"tables"`
+	Method string           `json:"method"`
+	Error  string           `json:"error,omitempty"`
 }
 
 // ExtractedTable represents a table extracted from OCR
 type ExtractedTable struct {
-	Headers    []string   `json:"headers"`
-	Rows       [][]string `json:"rows"`
-	RowCount   int        `json:"row_count"`
-	ColumnCount int       `json:"column_count"`
+	Headers     []string   `json:"headers"`
+	Rows        [][]string `json:"rows"`
+	RowCount    int        `json:"row_count"`
+	ColumnCount int        `json:"column_count"`
 }
 
 // UnifiedEmbeddings contains embeddings from multiple models
 type UnifiedEmbeddings struct {
-	RelationalEmbedding []float32            `json:"relational_embedding,omitempty"`
-	SemanticEmbedding   []float32            `json:"semantic_embedding,omitempty"`
-	TokenizedText       *TokenizedText       `json:"tokenized_text,omitempty"`
-	Embeddings          map[string]any       `json:"embeddings,omitempty"`
-	Errors              []string             `json:"errors,omitempty"`
+	RelationalEmbedding []float32      `json:"relational_embedding,omitempty"`
+	SemanticEmbedding   []float32      `json:"semantic_embedding,omitempty"`
+	TokenizedText       *TokenizedText `json:"tokenized_text,omitempty"`
+	Embeddings          map[string]any `json:"embeddings,omitempty"`
+	Errors              []string       `json:"errors,omitempty"`
 }
 
 // TokenizedText contains tokenization results
@@ -160,7 +158,7 @@ func (mme *MultiModalExtractor) GenerateUnifiedEmbeddings(
 		args = append(args, "--columns", string(columnsJSON))
 	}
 
-	cmd := exec.Command("python3", "./scripts/unified_multimodal_extraction.py", args...)
+	cmd := exec.Command("python3", append([]string{"./scripts/unified_multimodal_extraction.py"}, args...)...)
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -217,7 +215,7 @@ func (mme *MultiModalExtractor) ExtractUnified(
 		args = append(args, "--training-data", trainingDataPath)
 	}
 
-	cmd := exec.Command("python3", "./scripts/unified_multimodal_extraction.py", args...)
+	cmd := exec.Command("python3", append([]string{"./scripts/unified_multimodal_extraction.py"}, args...)...)
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -299,10 +297,10 @@ func (mme *MultiModalExtractor) ConvertExtractedTableToNodes(
 		Type:  "table",
 		Label: tableName,
 		Props: map[string]any{
-			"source":        "ocr",
-			"source_id":    sourceID,
-			"row_count":     table.RowCount,
-			"column_count":  table.ColumnCount,
+			"source":            "ocr",
+			"source_id":         sourceID,
+			"row_count":         table.RowCount,
+			"column_count":      table.ColumnCount,
 			"extraction_method": "deepseek-ocr",
 		},
 	}
@@ -315,9 +313,9 @@ func (mme *MultiModalExtractor) ConvertExtractedTableToNodes(
 			Type:  "column",
 			Label: header,
 			Props: map[string]any{
-				"table_name":       tableName,
-				"column_index":     i,
-				"source":           "ocr",
+				"table_name":        tableName,
+				"column_index":      i,
+				"source":            "ocr",
 				"source_id":         sourceID,
 				"extraction_method": "deepseek-ocr",
 			},
@@ -328,11 +326,10 @@ func (mme *MultiModalExtractor) ConvertExtractedTableToNodes(
 		edge := Edge{
 			SourceID: tableNode.ID,
 			TargetID: colNode.ID,
-			Type:     "HAS_COLUMN",
 			Label:    "HAS_COLUMN",
 			Props: map[string]any{
-				"source":        "ocr",
-				"column_index":  i,
+				"source":       "ocr",
+				"column_index": i,
 			},
 		}
 		edges = append(edges, edge)
@@ -340,4 +337,3 @@ func (mme *MultiModalExtractor) ConvertExtractedTableToNodes(
 
 	return nodes, edges
 }
-

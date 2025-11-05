@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -12,8 +11,8 @@ import (
 // CrossSystemExtractor extracts patterns across multiple systems and platforms.
 // Phase 8.3: Enhanced with domain normalization for domain-aware pattern extraction.
 type CrossSystemExtractor struct {
-	logger            *log.Logger
-	domainDetector    *DomainDetector     // Phase 8.3: Domain detector for domain normalization
+	logger             *log.Logger
+	domainDetector     *DomainDetector     // Phase 8.3: Domain detector for domain normalization
 	terminologyLearner *TerminologyLearner // Phase 10: LNN-based terminology learning
 }
 
@@ -24,11 +23,11 @@ func NewCrossSystemExtractor(logger *log.Logger) *CrossSystemExtractor {
 	if localaiURL != "" {
 		domainDetector = NewDomainDetector(localaiURL, logger)
 	}
-	
+
 	return &CrossSystemExtractor{
-		logger:            logger,
-		domainDetector:    domainDetector, // Phase 8.3: Domain detector
-		terminologyLearner: nil,           // Will be set via SetTerminologyLearner (Phase 10)
+		logger:             logger,
+		domainDetector:     domainDetector, // Phase 8.3: Domain detector
+		terminologyLearner: nil,            // Will be set via SetTerminologyLearner (Phase 10)
 	}
 }
 
@@ -39,50 +38,50 @@ func (cse *CrossSystemExtractor) SetTerminologyLearner(learner *TerminologyLearn
 
 // SystemSchema represents a schema from a specific system.
 type SystemSchema struct {
-	SystemType   string            `json:"system_type"`   // "postgres", "hana", "mysql", etc.
-	SystemName   string            `json:"system_name"`
-	DatabaseName string            `json:"database_name"`
-	SchemaName   string            `json:"schema_name"`
-	Tables       []TableSchema     `json:"tables"`
-	Metadata     map[string]any    `json:"metadata,omitempty"`
+	SystemType   string         `json:"system_type"` // "postgres", "hana", "mysql", etc.
+	SystemName   string         `json:"system_name"`
+	DatabaseName string         `json:"database_name"`
+	SchemaName   string         `json:"schema_name"`
+	Tables       []TableSchema  `json:"tables"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
 // TableSchema represents a table schema.
 type TableSchema struct {
-	TableName  string            `json:"table_name"`
-	Columns    []ColumnSchema    `json:"columns"`
-	PrimaryKey []string          `json:"primary_key,omitempty"`
+	TableName   string             `json:"table_name"`
+	Columns     []ColumnSchema     `json:"columns"`
+	PrimaryKey  []string           `json:"primary_key,omitempty"`
 	ForeignKeys []ForeignKeySchema `json:"foreign_keys,omitempty"`
-	Indexes    []string          `json:"indexes,omitempty"`
-	Metadata   map[string]any    `json:"metadata,omitempty"`
+	Indexes     []string           `json:"indexes,omitempty"`
+	Metadata    map[string]any     `json:"metadata,omitempty"`
 }
 
 // ColumnSchema represents a column schema.
 type ColumnSchema struct {
-	ColumnName string `json:"column_name"`
-	DataType   string `json:"data_type"`
-	Nullable   bool   `json:"nullable"`
-	Default    string `json:"default,omitempty"`
+	ColumnName string         `json:"column_name"`
+	DataType   string         `json:"data_type"`
+	Nullable   bool           `json:"nullable"`
+	Default    string         `json:"default,omitempty"`
 	Metadata   map[string]any `json:"metadata,omitempty"`
 }
 
 // ForeignKeySchema represents a foreign key relationship.
 type ForeignKeySchema struct {
-	Name            string `json:"name"`
-	Column          string `json:"column"`
-	ReferencedTable string `json:"referenced_table"`
+	Name             string `json:"name"`
+	Column           string `json:"column"`
+	ReferencedTable  string `json:"referenced_table"`
 	ReferencedColumn string `json:"referenced_column"`
 }
 
 // CrossSystemPattern represents a pattern found across multiple systems.
 type CrossSystemPattern struct {
-	PatternID       string            `json:"pattern_id"`
-	PatternType     string            `json:"pattern_type"`     // "table_structure", "naming_convention", "relationship", etc.
-	PatternName     string            `json:"pattern_name"`
-	AffectedSystems []string          `json:"affected_systems"`
+	PatternID       string              `json:"pattern_id"`
+	PatternType     string              `json:"pattern_type"` // "table_structure", "naming_convention", "relationship", etc.
+	PatternName     string              `json:"pattern_name"`
+	AffectedSystems []string            `json:"affected_systems"`
 	Occurrences     []PatternOccurrence `json:"occurrences"`
-	Confidence      float64           `json:"confidence"`       // 0.0 to 1.0
-	NormalizedForm  map[string]any    `json:"normalized_form"` // Universal pattern template
+	Confidence      float64             `json:"confidence"`      // 0.0 to 1.0
+	NormalizedForm  map[string]any      `json:"normalized_form"` // Universal pattern template
 }
 
 // PatternOccurrence represents an occurrence of a pattern in a specific system.
@@ -148,25 +147,25 @@ func (cse *CrossSystemExtractor) normalizePatternsWithDomain(
 		cse.normalizePatterns(patterns)
 		return
 	}
-	
+
 	// Get domain config
 	cse.domainDetector.mu.RLock()
 	domainConfig, exists := cse.domainDetector.domainConfigs[domainID]
 	cse.domainDetector.mu.RUnlock()
-	
+
 	if !exists {
 		cse.normalizePatterns(patterns)
 		return
 	}
-	
+
 	// Normalize patterns using domain keywords for pattern matching
 	for i := range patterns {
 		pattern := &patterns[i]
-		
+
 		// Use domain keywords for enhanced normalization
 		normalized := cse.normalizePatternWithDomainConfig(pattern, domainConfig)
 		pattern.NormalizedForm = normalized
-		
+
 		// Update confidence based on domain keyword matches
 		keywordMatches := 0
 		patternText := strings.ToLower(pattern.PatternName + " " + pattern.PatternType)
@@ -175,7 +174,7 @@ func (cse *CrossSystemExtractor) normalizePatternsWithDomain(
 				keywordMatches++
 			}
 		}
-		
+
 		// Boost confidence if matches domain keywords
 		if keywordMatches > 0 {
 			boost := float64(keywordMatches) / float64(len(domainConfig.Keywords)) * 0.2
@@ -190,18 +189,18 @@ func (cse *CrossSystemExtractor) normalizePatternWithDomainConfig(
 	domainConfig DomainConfig,
 ) map[string]any {
 	normalized := make(map[string]any)
-	
+
 	// Base normalization
 	normalized["pattern_type"] = pattern.PatternType
 	normalized["pattern_name"] = pattern.PatternName
 	normalized["domain_id"] = domainConfig.Name
 	normalized["domain_layer"] = domainConfig.Layer
 	normalized["domain_team"] = domainConfig.Team
-	
+
 	// Add domain-specific normalization rules
 	normalized["domain_keywords"] = domainConfig.Keywords
 	normalized["domain_tags"] = domainConfig.Tags
-	
+
 	// Normalize pattern occurrences
 	normalizedOccurrences := []map[string]any{}
 	for _, occ := range pattern.Occurrences {
@@ -215,15 +214,8 @@ func (cse *CrossSystemExtractor) normalizePatternWithDomainConfig(
 		normalizedOccurrences = append(normalizedOccurrences, normalizedOcc)
 	}
 	normalized["occurrences"] = normalizedOccurrences
-	
-	return normalized
-}
 
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
+	return normalized
 }
 
 // extractTableStructurePatterns extracts patterns in table structures.
@@ -246,7 +238,7 @@ func (cse *CrossSystemExtractor) extractTableStructurePatterns(
 				DatabaseName: schema.DatabaseName,
 				TableName:    table.TableName,
 				Details: map[string]any{
-					"column_count": len(table.Columns),
+					"column_count":      len(table.Columns),
 					"primary_key_count": len(table.PrimaryKey),
 					"foreign_key_count": len(table.ForeignKeys),
 				},
@@ -314,7 +306,7 @@ func (cse *CrossSystemExtractor) extractNamingConventionPatterns(
 					DatabaseName: schema.DatabaseName,
 					TableName:    table.TableName,
 					Details: map[string]any{
-						"column_name": column.ColumnName,
+						"column_name":    column.ColumnName,
 						"naming_pattern": namingPattern,
 					},
 				}
@@ -380,8 +372,8 @@ func (cse *CrossSystemExtractor) extractRelationshipPatterns(
 					DatabaseName: schema.DatabaseName,
 					TableName:    table.TableName,
 					Details: map[string]any{
-						"foreign_key": fk.Name,
-						"referenced_table": fk.ReferencedTable,
+						"foreign_key":       fk.Name,
+						"referenced_table":  fk.ReferencedTable,
 						"relationship_type": "foreign_key",
 					},
 				}
@@ -462,8 +454,6 @@ func (cse *CrossSystemExtractor) analyzeNamingConvention(columnName string) stri
 	}
 
 	// Fallback to fixed pattern matching
-	lower := strings.ToLower(columnName)
-
 	if strings.Contains(columnName, "_") {
 		return "snake_case"
 	} else if strings.Contains(columnName, "-") {
@@ -524,7 +514,6 @@ func (cse *CrossSystemExtractor) normalizeTableStructurePattern(pattern *CrossSy
 	}
 
 	// Get average structure from occurrences
-	firstOcc := pattern.Occurrences[0]
 	avgColumnCount := 0
 	avgPKCount := 0
 	avgFKCount := 0
@@ -549,10 +538,10 @@ func (cse *CrossSystemExtractor) normalizeTableStructurePattern(pattern *CrossSy
 	}
 
 	return map[string]any{
-		"avg_column_count": avgColumnCount,
+		"avg_column_count":      avgColumnCount,
 		"avg_primary_key_count": avgPKCount,
 		"avg_foreign_key_count": avgFKCount,
-		"system_agnostic": true,
+		"system_agnostic":       true,
 	}
 }
 
@@ -571,7 +560,7 @@ func (cse *CrossSystemExtractor) normalizeNamingConventionPattern(pattern *Cross
 
 	return map[string]any{
 		"naming_convention": namingPattern,
-		"system_agnostic": true,
+		"system_agnostic":   true,
 	}
 }
 
@@ -591,7 +580,7 @@ func (cse *CrossSystemExtractor) normalizeRelationshipPattern(pattern *CrossSyst
 
 	return map[string]any{
 		"relationship_type": relationshipType,
-		"system_agnostic": true,
+		"system_agnostic":   true,
 	}
 }
 
@@ -602,10 +591,10 @@ func (cse *CrossSystemExtractor) CompareSchemas(
 	schema2 SystemSchema,
 ) (map[string]any, error) {
 	comparison := map[string]any{
-		"system1": schema1.SystemType,
-		"system2": schema2.SystemType,
+		"system1":      schema1.SystemType,
+		"system2":      schema2.SystemType,
 		"similarities": []string{},
-		"differences": []string{},
+		"differences":  []string{},
 	}
 
 	// Compare table structures
@@ -659,10 +648,3 @@ func (cse *CrossSystemExtractor) CompareSchemas(
 }
 
 // Helper function
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-

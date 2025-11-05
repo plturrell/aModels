@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>aModels Browser Home</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: 'Inter', system-ui, sans-serif;
+        color: #e2e8f0;
+        background: radial-gradient(circle at top left, #1f2937 0%, #0f172a 60%);
+        min-height: 100vh;
+      }
+
+      .wrap {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 64px 24px 80px;
+      }
+
+      header {
+        text-align: center;
+        margin-bottom: 48px;
+      }
+
+      header h1 {
+        font-size: 40px;
+        font-weight: 700;
+        margin-bottom: 12px;
+        color: #f8fafc;
+      }
+
+      header p {
+        font-size: 16px;
+        color: #cbd5f5;
+        margin: 0;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 20px;
+      }
+
+      .card {
+        background: rgba(15, 23, 42, 0.88);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 18px;
+        padding: 22px 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.4);
+      }
+
+      .card h2 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        color: #f9fafb;
+      }
+
+      .card p {
+        margin: 0;
+        font-size: 14px;
+        line-height: 1.6;
+        color: #94a3b8;
+      }
+
+      .card a {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+        color: #a5b4fc;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 14px;
+      }
+
+      .card a svg {
+        width: 14px;
+        height: 14px;
+        fill: currentColor;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: rgba(59, 130, 246, 0.18);
+        color: #bfdbfe;
+        font-size: 12px;
+        font-weight: 500;
+      }
+
+      .lists {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 20px;
+        margin-top: 28px;
+      }
+
+      .list-card {
+        background: rgba(15, 23, 42, 0.82);
+        border: 1px solid rgba(148, 163, 184, 0.16);
+        border-radius: 16px;
+        padding: 20px;
+      }
+
+      .list-card h3 {
+        margin: 0 0 12px 0;
+        font-size: 16px;
+        font-weight: 600;
+        color: #f8fafc;
+      }
+
+      .list-card ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .list-card li {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: rgba(30, 41, 59, 0.9);
+        border: 1px solid rgba(148, 163, 184, 0.12);
+        font-size: 13px;
+        color: #cbd5f5;
+      }
+
+      .list-card li span {
+        font-weight: 500;
+      }
+
+      footer {
+        margin-top: 60px;
+        text-align: center;
+        color: #64748b;
+        font-size: 13px;
+      }
+
+      @media (max-width: 640px) {
+        .wrap {
+          padding: 40px 18px 60px;
+        }
+
+        header h1 {
+          font-size: 30px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="pill">aModels Workspace</div>
+        <h1>Welcome to the Browser Shell</h1>
+        <p>
+          Everything you see here lives inside the repository. Use the quick links to inspect local
+          dashboards, docs, and tooling without leaving the workspace.
+        </p>
+      </header>
+
+      <section class="grid">
+        <article class="card">
+          <h2>Training Dashboard</h2>
+          <p>
+            Monitor model training progress, metrics, and system logs with the bundled HTML dashboard.
+          </p>
+          <a href="../../../../web/training/dashboard.html" target="_self" rel="noreferrer">
+            Open dashboard
+            <svg viewBox="0 0 24 24"><path d="M7 17.01 7.01 17H17a1 1 0 0 0 1-1V7.01L17 7H8a1 1 0 0 0-1 1v9Z" opacity=".35"/><path d="M16 6h1v1h-1z" opacity=".35"/><path d="M16 6a1 1 0 0 0-1 1v5.59l-6.3-6.3a1 1 0 0 0-1.4 1.42l6.3 6.29H8a1 1 0 0 0 0 2h6a1 1 0 0 0 1-1V8h3a1 1 0 1 0 0-2h-4Z"/></svg>
+          </a>
+        </article>
+
+        <article class="card">
+          <h2>LocalAI Test UI</h2>
+          <p>
+            Exercise the LocalAI inference endpoints shipped with the repo. Useful for manual sanity
+            checks and demo flows.
+          </p>
+          <a href="../../../../services/localai/web/index.html" target="_self" rel="noreferrer">
+            Launch tester
+            <svg viewBox="0 0 24 24"><path d="M7 17.01 7.01 17H17a1 1 0 0 0 1-1V7.01L17 7H8a1 1 0 0 0-1 1v9Z" opacity=".35"/><path d="M16 6h1v1h-1z" opacity=".35"/><path d="M16 6a1 1 0 0 0-1 1v5.59l-6.3-6.3a1 1 0 0 0-1.4 1.42l6.3 6.29H8a1 1 0 0 0 0 2h6a1 1 0 0 0 1-1V8h3a1 1 0 1 0 0-2h-4Z"/></svg>
+          </a>
+        </article>
+
+        <article class="card">
+          <h2>Browser Extension Docs</h2>
+          <p>
+            Review setup notes for the Chromium extension that ships with the repo, including
+            gateway integration guidance.
+          </p>
+          <a href="extension-readme.html" target="_self" rel="noreferrer">
+            Read notes
+            <svg viewBox="0 0 24 24"><path d="M7 17.01 7.01 17H17a1 1 0 0 0 1-1V7.01L17 7H8a1 1 0 0 0-1 1v9Z" opacity=".35"/><path d="M16 6h1v1h-1z" opacity=".35"/><path d="M16 6a1 1 0 0 0-1 1v5.59l-6.3-6.3a1 1 0 0 0-1.4 1.42l6.3 6.29H8a1 1 0 0 0 0 2h6a1 1 0 0 0 1-1V8h3a1 1 0 1 0 0-2h-4Z"/></svg>
+          </a>
+        </article>
+
+        <article class="card">
+          <h2>Catalog Services</h2>
+          <p>
+            Explore Go services, migrations, and LocalAI orchestration directly from the repository
+            tree.
+          </p>
+          <a href="../../../" target="_self" rel="noreferrer">
+            Open services/
+            <svg viewBox="0 0 24 24"><path d="M7 17.01 7.01 17H17a1 1 0 0 0 1-1V7.01L17 7H8a1 1 0 0 0-1 1v9Z" opacity=".35"/><path d="M16 6h1v1h-1z" opacity=".35"/><path d="M16 6a1 1 0 0 0-1 1v5.59l-6.3-6.3a1 1 0 0 0-1.4 1.42l6.3 6.29H8a1 1 0 0 0 0 2h6a1 1 0 0 0 1-1V8h3a1 1 0 1 0 0-2h-4Z"/></svg>
+          </a>
+        </article>
+      </section>
+
+      <section class="lists">
+        <div class="list-card">
+          <h3>Essential Paths</h3>
+          <ul>
+            <li>
+              <span>Docs overview</span>
+              <a href="../../../../docs/README.md" target="_self" rel="noreferrer">docs/README.md</a>
+            </li>
+            <li>
+              <span>Gateway compose</span>
+              <a
+                href="../../../../infrastructure/docker/compose.yml"
+                target="_self"
+                rel="noreferrer"
+                >compose.yml</a
+              >
+            </li>
+            <li>
+              <span>Training config</span>
+              <a href="../../../../configs/rt.yaml" target="_self" rel="noreferrer">configs/rt.yaml</a>
+            </li>
+          </ul>
+        </div>
+        <div class="list-card">
+          <h3>Shell Tips</h3>
+          <ul>
+            <li>
+              <span>Back/Forward</span>
+              <small>Use the toolbar in the right panel or Cmd+[ / Cmd+]</small>
+            </li>
+            <li>
+              <span>Open reports</span>
+              <small>All HTML utilities live under <code>web/</code> and <code>services/**/web/</code></small>
+            </li>
+            <li>
+              <span>Toggle gateway</span>
+              <small>Point the panel at dev/staging gateways via the input field</small>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <footer>
+        Built from repository content only. Update <code>services/browser/shell/home/index.html</code>
+        to customize this launchpad.
+      </footer>
+    </div>
+  </body>
+</html>

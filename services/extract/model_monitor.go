@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -24,14 +23,14 @@ type ModelPrediction struct {
 
 // ModelPerformanceMetrics tracks model performance over time
 type ModelPerformanceMetrics struct {
-	TotalPredictions     int
+	TotalPredictions       int
 	CorrectClassifications int
 	ClassificationAccuracy float64
-	QualityScoreMAE       float64 // Mean Absolute Error
-	QualityScoreRMSE      float64 // Root Mean Squared Error
-	UncertainPredictions  int
-	LowConfidenceCount    int
-	LastUpdated           time.Time
+	QualityScoreMAE        float64 // Mean Absolute Error
+	QualityScoreRMSE       float64 // Root Mean Squared Error
+	UncertainPredictions   int
+	LowConfidenceCount     int
+	LastUpdated            time.Time
 }
 
 // ModelMonitor tracks model performance and enables active learning
@@ -50,7 +49,7 @@ func NewModelMonitor(metricsFilePath string, logger *log.Logger) *ModelMonitor {
 		predictions:     make([]ModelPrediction, 0),
 		logger:          logger,
 		metricsFilePath: metricsFilePath,
-		enabled:        os.Getenv("MODEL_MONITORING_ENABLED") == "true",
+		enabled:         os.Getenv("MODEL_MONITORING_ENABLED") == "true",
 	}
 
 	if monitor.enabled && metricsFilePath != "" {
@@ -111,7 +110,7 @@ func (mm *ModelMonitor) updateMetrics(pred ModelPrediction) {
 
 		// Update MAE (simplified - in practice would use proper running average)
 		mm.metrics.QualityScoreMAE = (mm.metrics.QualityScoreMAE*float64(mm.metrics.TotalPredictions-1) + absDiff) / float64(mm.metrics.TotalPredictions)
-		
+
 		// Update RMSE (simplified)
 		sqDiff := diff * diff
 		currentRMSE := mm.metrics.QualityScoreRMSE
@@ -224,5 +223,3 @@ func (mm *ModelMonitor) loadMetrics() {
 		mm.logger.Printf("failed to unmarshal metrics: %v", err)
 	}
 }
-
-

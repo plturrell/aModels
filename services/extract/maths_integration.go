@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 )
@@ -27,7 +26,7 @@ func (mp *MathematicalProcessor) ComputeStatistics(values []float64) map[string]
 	}
 
 	stats := make(map[string]float64)
-	
+
 	if len(values) == 0 {
 		return stats
 	}
@@ -65,23 +64,6 @@ func (mp *MathematicalProcessor) ComputeStatistics(values []float64) map[string]
 	stats["range"] = max - min
 
 	return stats
-}
-
-// sqrt computes square root (simplified implementation)
-func sqrt(x float64) float64 {
-	if x < 0 {
-		return 0
-	}
-	if x == 0 {
-		return 0
-	}
-	
-	// Newton's method approximation
-	guess := x
-	for i := 0; i < 10; i++ {
-		guess = (guess + x/guess) / 2
-	}
-	return guess
 }
 
 // ComputeCorrelation computes correlation coefficient between two datasets
@@ -124,4 +106,3 @@ func (mp *MathematicalProcessor) ComputeCorrelation(x, y []float64) float64 {
 
 	return numerator / denominator
 }
-

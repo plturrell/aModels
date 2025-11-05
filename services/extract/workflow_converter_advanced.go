@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -38,15 +37,17 @@ func (awc *AdvancedWorkflowConverter) ConvertPetriNetToAdvancedLangGraph(net *Pe
 	workflow := &AdvancedLangGraphWorkflow{
 		LangGraphWorkflow: *awc.ConvertPetriNetToLangGraph(net),
 		ParallelBranches:  []ParallelBranch{},
-		Checkpoints:        []Checkpoint{},
-		AgentGroups:        []AgentGroup{},
-		Metadata: map[string]any{
-			"advanced_features": map[string]any{
-				"parallel_execution": awc.enableParallelExecution,
-				"checkpointing":       awc.enableCheckpointing,
-				"dynamic_spawning":    awc.enableDynamicSpawning,
-			},
-		},
+		Checkpoints:       []Checkpoint{},
+		AgentGroups:       []AgentGroup{},
+	}
+
+	if workflow.Metadata == nil {
+		workflow.Metadata = make(map[string]any)
+	}
+	workflow.Metadata["advanced_features"] = map[string]any{
+		"parallel_execution": awc.enableParallelExecution,
+		"checkpointing":      awc.enableCheckpointing,
+		"dynamic_spawning":   awc.enableDynamicSpawning,
 	}
 
 	// Identify parallel branches (transitions that can run concurrently)
@@ -94,11 +95,11 @@ type ParallelBranch struct {
 
 // Checkpoint represents a state checkpoint in the workflow.
 type Checkpoint struct {
-	ID          string                 `json:"id"`
-	NodeID      string                 `json:"node_id"`
-	StateKeys   []string               `json:"state_keys"`
-	Description string                 `json:"description"`
-	Config      map[string]any         `json:"config,omitempty"`
+	ID          string         `json:"id"`
+	NodeID      string         `json:"node_id"`
+	StateKeys   []string       `json:"state_keys"`
+	Description string         `json:"description"`
+	Config      map[string]any `json:"config,omitempty"`
 }
 
 // AgentGroup represents a group of agents that work together.
@@ -177,7 +178,7 @@ func (awc *AdvancedWorkflowConverter) createCheckpoints(
 				StateKeys:   []string{"workflow_state", "agent_results", "error_count"},
 				Description: fmt.Sprintf("Checkpoint before %s", node.Label),
 				Config: map[string]any{
-					"interval": awc.checkpointInterval.String(),
+					"interval":  awc.checkpointInterval.String(),
 					"auto_save": true,
 				},
 			}
@@ -243,7 +244,7 @@ func (awc *AdvancedWorkflowConverter) createDynamicSpawnNodes(net *PetriNet) []L
 	// Create spawn node for each transition that might need dynamic spawning
 	for i, transition := range net.Transitions {
 		// Check if transition needs dynamic spawning (e.g., based on data volume)
-		if awc.shouldSpawnDynamically(transition) {
+		if awc.shouldSpawnDynamically(&transition) {
 			spawnNodeID := fmt.Sprintf("spawn_%d", i)
 
 			spawnNode := LangGraphNode{
@@ -252,9 +253,9 @@ func (awc *AdvancedWorkflowConverter) createDynamicSpawnNodes(net *PetriNet) []L
 				Label: fmt.Sprintf("Spawn Agents for %s", transition.Label),
 				Config: map[string]any{
 					"target_transition": transition.ID,
-					"spawn_condition":  "data_volume > threshold",
+					"spawn_condition":   "data_volume > threshold",
 					"max_agents":        awc.maxParallelAgents,
-					"agent_type":        awc.determineAgentType(transition),
+					"agent_type":        awc.determineAgentType(&transition),
 				},
 				Properties: map[string]any{
 					"dynamic_spawning": true,
@@ -284,18 +285,6 @@ func (awc *AdvancedWorkflowConverter) shouldSpawnDynamically(transition *Transit
 	return false
 }
 
-// Helper functions
-func parseIntEnv(envVar string, defaultValue int) int {
-	if envVar == "" {
-		return defaultValue
-	}
-	var val int
-	if _, err := fmt.Sscanf(envVar, "%d", &val); err == nil {
-		return val
-	}
-	return defaultValue
-}
-
 func parseDurationEnv(envVar string, defaultValue time.Duration) time.Duration {
 	if envVar == "" {
 		return defaultValue
@@ -305,4 +294,3 @@ func parseDurationEnv(envVar string, defaultValue time.Duration) time.Duration {
 	}
 	return defaultValue
 }
-

@@ -1,11 +1,9 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 )
 
 // GloveEmbeddingGenerator generates word embeddings using Glove
@@ -31,14 +29,13 @@ func (geg *GloveEmbeddingGenerator) GenerateWordEmbedding(word string) ([]float3
 	// Glove would be used for word-level embeddings
 	// Integration would depend on the specific Glove implementation
 	// For now, this is a placeholder for future integration
-	
+
 	geg.logger.Printf("Glove embedding generation requested for word: %s", word)
-	
+
 	// Placeholder - actual implementation would:
 	// 1. Load Glove model
 	// 2. Look up word embedding
 	// 3. Return embedding vector
-	
+
 	return nil, fmt.Errorf("Glove integration not yet implemented")
 }
-

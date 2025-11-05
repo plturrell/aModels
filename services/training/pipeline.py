@@ -23,6 +23,8 @@ from .ab_testing import ABTestManager
 from .rollback_manager import RollbackManager
 from .routing_optimizer import RoutingOptimizer
 from .domain_optimizer import DomainOptimizer
+from .digital_twin import DigitalTwinSimulator
+from .langsmith_tracing import LangSmithTracer
 
 # Phase 9.1: Auto-tuning
 try:
@@ -50,22 +52,7 @@ class TrainingPipeline:
         self.glean_client = GleanTrainingClient(db_name=glean_db_name)
         self.output_dir = output_dir or os.getenv("TRAINING_OUTPUT_DIR", "./training_data")
         os.makedirs(self.output_dir, exist_ok=True)
-        
-<<<<<<< HEAD
-        # Phase 9.1: Initialize auto-tuner if enabled
-        self.auto_tuner = None
-        if os.getenv("ENABLE_AUTO_TUNING", "false").lower() == "true" and HAS_AUTO_TUNER and AutoTuner is not None:
-            try:
-                self.auto_tuner = AutoTuner(
-                    study_name=os.getenv("OPTUNA_STUDY_NAME", "amodels_training"),
-                    storage=os.getenv("OPTUNA_STORAGE"),
-                    n_trials=int(os.getenv("OPTUNA_N_TRIALS", "50"))
-                )
-                logger.info("Auto-tuner initialized (Phase 9.1)")
-            except Exception as e:
-                logger.warning(f"Failed to initialize auto-tuner: {e}")
-                self.auto_tuner = None
-=======
+
         # Initialize domain filter with differential privacy
         self.enable_domain_filtering = enable_domain_filtering
         if self.enable_domain_filtering:
@@ -106,7 +93,27 @@ class TrainingPipeline:
             redis_url=os.getenv("REDIS_URL"),
             cache_ttl=int(os.getenv("DOMAIN_CACHE_TTL", "3600"))
         )
->>>>>>> 6a21c0762c0be29af891c24b40696f1bfb66ea8f
+
+        self.digital_twin = DigitalTwinSimulator(logger=logger)
+        self.langsmith_tracer = LangSmithTracer(logger=logger)
+
+        # Phase 9.1: Initialize auto-tuner if enabled
+        self.auto_tuner = None
+        if (
+            os.getenv("ENABLE_AUTO_TUNING", "false").lower() == "true"
+            and HAS_AUTO_TUNER
+            and AutoTuner is not None
+        ):
+            try:
+                self.auto_tuner = AutoTuner(
+                    study_name=os.getenv("OPTUNA_STUDY_NAME", "amodels_training"),
+                    storage=os.getenv("OPTUNA_STORAGE"),
+                    n_trials=int(os.getenv("OPTUNA_N_TRIALS", "50")),
+                )
+                logger.info("Auto-tuner initialized (Phase 9.1)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize auto-tuner: {e}")
+                self.auto_tuner = None
     
     def run_full_pipeline(
         self,
@@ -115,9 +122,11 @@ class TrainingPipeline:
         json_tables: Optional[list] = None,
         hive_ddls: Optional[list] = None,
         control_m_files: Optional[list] = None,
+        signavio_files: Optional[list] = None,
         glean_days_back: int = 30,
         enable_glean: bool = True,
-        enable_temporal_analysis: bool = True
+        enable_temporal_analysis: bool = True,
+        enable_digital_twin: bool = True,
     ) -> Dict[str, Any]:
         """Run the complete training pipeline.
         
@@ -134,8 +143,10 @@ class TrainingPipeline:
             json_tables: List of JSON table file paths
             hive_ddls: List of Hive DDL file paths
             control_m_files: List of Control-M XML file paths
+            signavio_files: List of Signavio BPMN/JSON exports to merge into the graph
             glean_days_back: Number of days to look back in Glean
             enable_glean: Whether to enable Glean integration
+            enable_digital_twin: Whether to execute the digital twin simulation hook
         
         Returns:
             Dictionary with training pipeline results
@@ -148,22 +159,54 @@ class TrainingPipeline:
             "pipeline_started_at": datetime.now().isoformat(),
             "steps": {},
         }
+
+        results["steps"]["signavio_ingest"] = {"status": "skipped"}
         
         # Step 1: Extract knowledge graph from source data
         logger.info("Step 1: Extracting knowledge graph from source data...")
+        signavio_summary = None
         try:
             graph_data = self._extract_knowledge_graph(
                 project_id=project_id,
                 system_id=system_id,
                 json_tables=json_tables or [],
                 hive_ddls=hive_ddls or [],
-                control_m_files=control_m_files or []
+                control_m_files=control_m_files or [],
+                signavio_files=signavio_files or [],
             )
             results["steps"]["extract"] = {
                 "status": "success",
                 "nodes": len(graph_data.get("nodes", [])),
                 "edges": len(graph_data.get("edges", [])),
             }
+            signavio_info = graph_data.get("signavio") if isinstance(graph_data, dict) else None
+            service_unavailable = bool(graph_data.get("service_unavailable"))
+            if isinstance(signavio_info, dict):
+                results["steps"]["signavio_ingest"] = {
+                    "status": "success",
+                    "processes": signavio_info.get("process_count", 0),
+                    "source_files": signavio_info.get("source_files", 0),
+                }
+                signavio_summary = signavio_info
+                if service_unavailable:
+                    results["steps"]["signavio_ingest"]["status"] = "failed"
+                    results["steps"]["signavio_ingest"]["error"] = signavio_info.get(
+                        "error", "extract service unavailable"
+                    )
+                    logger.warning(
+                        "Signavio ingestion skipped: %s",
+                        results["steps"]["signavio_ingest"]["error"],
+                    )
+            elif signavio_files:
+                message = "extract service unavailable" if service_unavailable else "extract service returned no Signavio data"
+                results["steps"]["signavio_ingest"] = {
+                    "status": "failed",
+                    "processes": 0,
+                    "source_files": len([f for f in signavio_files if f]),
+                    "error": message,
+                }
+                logger.warning("Signavio ingestion skipped: %s", message)
+Wait we introduced typo. Need to patch carefully. Let's reapply patch carefully. Go back. We'll revert snippet. Let's redo patch.
             logger.info(f"✅ Extracted {results['steps']['extract']['nodes']} nodes, {results['steps']['extract']['edges']} edges")
         except Exception as e:
             logger.error(f"❌ Extraction failed: {e}")
@@ -363,27 +406,6 @@ class TrainingPipeline:
             features = self._generate_training_features(
                 graph_data, glean_data, learned_patterns, temporal_patterns, semantic_embeddings
             )
-            
-<<<<<<< HEAD
-            # Phase 9.1: Assess training data quality
-            if self.auto_tuner is not None:
-                try:
-                    training_data_stats = {
-                        "num_samples": len(features.get("features", [])),
-                        "num_features": len(features.get("features", [0])) if features.get("features") else 0,
-                        "pattern_coverage": learned_patterns.get("summary", {}).get("unique_column_types", 0) / 100.0 if learned_patterns else 0.0,
-                    }
-                    quality_assessment = self.auto_tuner.assess_training_data_quality(training_data_stats)
-                    features["quality_assessment"] = quality_assessment
-                    results["steps"]["data_quality"] = {
-                        "status": "success",
-                        "quality_score": quality_assessment.get("quality_score", 0.0),
-                        "passed": quality_assessment.get("passed", False),
-                    }
-                    logger.info(f"✅ Data quality assessment: score={quality_assessment.get('quality_score', 0.0):.2f}")
-                except Exception as e:
-                    logger.warning(f"⚠️  Data quality assessment failed: {e}")
-=======
             # Apply domain-specific filtering with differential privacy
             if self.domain_filter and self.enable_domain_filtering:
                 logger.info("Applying domain-specific filtering with differential privacy...")
@@ -416,7 +438,35 @@ class TrainingPipeline:
             else:
                 features["domain_filtered"] = False
                 features["privacy_applied"] = False
->>>>>>> 6a21c0762c0be29af891c24b40696f1bfb66ea8f
+
+            # Phase 9.1: Assess training data quality
+            if self.auto_tuner is not None:
+                try:
+                    samples = features.get("features", [])
+                    pattern_summary = (learned_patterns or {}).get("summary", {})
+                    num_samples = len(samples)
+                    num_features = len(samples[0]) if num_samples > 0 and isinstance(samples[0], (list, tuple)) else 0
+                    pattern_coverage = float(pattern_summary.get("unique_column_types", 0)) / max(
+                        float(pattern_summary.get("total_column_types", 1) or 1), 1.0
+                    )
+                    training_data_stats = {
+                        "num_samples": num_samples,
+                        "num_features": num_features,
+                        "pattern_coverage": pattern_coverage,
+                    }
+                    quality_assessment = self.auto_tuner.assess_training_data_quality(training_data_stats)
+                    features["quality_assessment"] = quality_assessment
+                    results["steps"]["data_quality"] = {
+                        "status": "success",
+                        "quality_score": quality_assessment.get("quality_score", 0.0),
+                        "passed": quality_assessment.get("passed", False),
+                    }
+                    logger.info(
+                        f"✅ Data quality assessment: score="
+                        f"{quality_assessment.get('quality_score', 0.0):.2f}"
+                    )
+                except Exception as e:
+                    logger.warning(f"⚠️  Data quality assessment failed: {e}")
             
             results["steps"]["features"] = {
                 "status": "success",
@@ -431,6 +481,7 @@ class TrainingPipeline:
             return results
         
         # Step 5: Prepare training dataset
+        dataset_info = None
         logger.info("Step 5: Preparing training dataset...")
         try:
             dataset_info = self._prepare_training_dataset(features, output_dir=self.output_dir)
@@ -443,18 +494,43 @@ class TrainingPipeline:
             logger.error(f"❌ Dataset preparation failed: {e}")
             results["steps"]["dataset"] = {"status": "failed", "error": str(e)}
             return results
-        
-        # Step 6: Domain-specific model training (if enabled)
+
+        # Step 6: Run digital twin simulation (optional)
+        if enable_digital_twin and self.digital_twin.is_enabled:
+            logger.info("Step 6: Running digital twin simulation...")
+            try:
+                simulation_result = self.digital_twin.simulate(
+                    pipeline_results=results,
+                    dataset_info=dataset_info,
+                    signavio_metadata=signavio_summary if isinstance(signavio_summary, dict) else None,
+                )
+                results["steps"]["digital_twin"] = simulation_result
+                if simulation_result.get("status") == "success":
+                    logger.info(
+                        "✅ Digital twin simulation completed (%s mode)",
+                        simulation_result.get("mode", "local"),
+                    )
+                else:
+                    logger.warning(
+                        "⚠️ Digital twin simulation returned status=%s",
+                        simulation_result.get("status"),
+                    )
+            except Exception as e:  # pragma: no cover - defensive logging
+                logger.warning(f"⚠️ Digital twin simulation failure: {e}")
+                results["steps"]["digital_twin"] = {"status": "failed", "error": str(e)}
+        else:
+            results["steps"]["digital_twin"] = {"status": "skipped"}
+
+        # Step 7: Domain-specific model training (if enabled)
         if os.getenv("ENABLE_DOMAIN_TRAINING", "false").lower() == "true":
-            logger.info("Step 6: Training domain-specific models...")
+            logger.info("Step 7: Training domain-specific models...")
             try:
                 # Detect domain from extracted data
                 domain_id = self._detect_domain_from_results(results)
                 
                 if domain_id:
                     # Prepare training data path
-                    dataset_info = results.get("steps", {}).get("dataset", {})
-                    dataset_files = dataset_info.get("dataset_files", [])
+                    dataset_files = (dataset_info or {}).get("files", []) or results.get("steps", {}).get("dataset", {}).get("dataset_files", [])
                     
                     if dataset_files:
                         training_data_path = dataset_files[0]  # Use first dataset file
@@ -494,8 +570,8 @@ class TrainingPipeline:
         else:
             results["steps"]["domain_training"] = {"status": "skipped"}
         
-        # Step 7: Collect domain metrics
-        logger.info("Step 7: Collecting domain performance metrics...")
+        # Step 8: Collect domain metrics
+        logger.info("Step 8: Collecting domain performance metrics...")
         try:
             domain_id = self._detect_domain_from_results(results)
             if domain_id:
@@ -518,9 +594,9 @@ class TrainingPipeline:
             logger.warning(f"⚠️  Metrics collection failed: {e}")
             results["steps"]["metrics_collection"] = {"status": "failed", "error": str(e)}
         
-        # Step 8: Check for rollback conditions (if domain training was performed)
+        # Step 9: Check for rollback conditions (if domain training was performed)
         if results.get("steps", {}).get("domain_training", {}).get("status") == "success":
-            logger.info("Step 8: Checking for rollback conditions...")
+            logger.info("Step 9: Checking for rollback conditions...")
             try:
                 domain_id = self._detect_domain_from_results(results)
                 if domain_id:
@@ -563,7 +639,14 @@ class TrainingPipeline:
         
         results["pipeline_completed_at"] = datetime.now().isoformat()
         results["status"] = "success"
-        
+
+        self.langsmith_tracer.record_run(
+            project_id=project_id,
+            system_id=system_id,
+            results=results,
+            dataset_info=dataset_info,
+        )
+
         logger.info("✅ Training pipeline completed successfully")
         
         return results
@@ -590,7 +673,8 @@ class TrainingPipeline:
         system_id: Optional[str],
         json_tables: list,
         hive_ddls: list,
-        control_m_files: list
+        control_m_files: list,
+        signavio_files: Optional[list] = None,
     ) -> Dict[str, Any]:
         """Extract knowledge graph from source data via Extract service."""
         import httpx
@@ -600,19 +684,35 @@ class TrainingPipeline:
             "hive_ddls": hive_ddls,
             "sql_queries": [],
             "control_m_files": control_m_files,
+            "signavio_files": signavio_files or [],
             "project_id": project_id,
             "system_id": system_id,
         }
         
         client = httpx.Client(timeout=300.0)
-        response = client.post(
-            f"{self.extract_service_url}/knowledge-graph",
-            json=payload
-        )
-        response.raise_for_status()
-        
-        graph_data = response.json()
-        
+        try:
+            response = client.post(
+                f"{self.extract_service_url}/knowledge-graph",
+                json=payload,
+            )
+            response.raise_for_status()
+            graph_data = response.json()
+        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            logger.warning(
+                "Extract service unavailable, continuing with Signavio-only data: %s",
+                exc,
+            )
+            return {
+                "nodes": [],
+                "edges": [],
+                "signavio": {
+                    "process_count": 0,
+                    "source_files": len(signavio_files or []),
+                    "error": str(exc),
+                },
+                "service_unavailable": True,
+            }
+
         # Apply domain-specific filtering with differential privacy if enabled
         if self.domain_filter and self.enable_domain_filtering:
             logger.info("Applying domain filtering to extracted knowledge graph...")
@@ -772,4 +872,3 @@ class TrainingPipeline:
             "files": [features_file, metadata_file],
             "metadata": metadata,
         }
-

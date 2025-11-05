@@ -1,0 +1,25 @@
+{
+  "name": "am-models-browser-shell",
+  "version": "0.1.0",
+  "description": "Electron wrapper that hosts the aModels Chromium tools extension alongside a browsing surface.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "build:ui": "vite build",
+    "start": "npm run build:ui && electron ."
+  },
+  "dependencies": {
+    "@nivo/core": "^0.99.0",
+    "@nivo/network": "^0.99.0",
+    "@nivo/sankey": "^0.99.0",
+    "@nivo/tooltip": "^0.99.0",
+    "d3-sankey": "^0.12.3",
+    "electron": "^31.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.4",
+    "vite": "^5.3.5"
+  }
+}

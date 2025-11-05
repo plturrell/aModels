@@ -163,15 +163,20 @@ func (nts *Neo4jTerminologyStore) LoadTerminology(ctx context.Context) (*StoredT
 		for _, record := range records {
 			text, _ := record.Get("text")
 			domain, _ := record.Get("domain")
-			timestampStr, _ := record.Get("timestamp")
+			timestampVal, _ := record.Get("timestamp")
 			confidence, _ := record.Get("confidence")
 
 			if textStr, ok := text.(string); ok {
 				if domainStr, ok := domain.(string); ok {
 					example := TerminologyExample{
-						Text:      textStr,
-						Timestamp: time.Now(), // Would parse timestampStr
-						Confidence: 0.8,       // Would use confidence value
+						Text:       textStr,
+						Timestamp:  time.Now(),
+						Confidence: 0.8,
+					}
+					if tsStr, ok := timestampVal.(string); ok {
+						if parsed, err := time.Parse(time.RFC3339, tsStr); err == nil {
+							example.Timestamp = parsed
+						}
 					}
 					if conf, ok := confidence.(float64); ok {
 						example.Confidence = conf
@@ -230,9 +235,45 @@ func (nts *Neo4jTerminologyStore) GetTerminologyEvolution(
 		Roles:   []RoleEvolution{},
 	}
 
-	// Process results (simplified - would parse Neo4j result format)
-	// Calculate semantic drift
-	evolution.Drift = 0.1 // Placeholder
+	if records, ok := result.([]*neo4j.Record); ok {
+		for _, record := range records {
+			domainVal, _ := record.Get("domain")
+			firstSeenVal, _ := record.Get("first_seen")
+			lastSeenVal, _ := record.Get("last_seen")
+			exampleCountVal, _ := record.Get("example_count")
+			confidenceVal, _ := record.Get("confidence")
+
+			domainStr, _ := domainVal.(string)
+			firstSeen := parseNeo4jTime(firstSeenVal)
+			lastSeen := parseNeo4jTime(lastSeenVal)
+
+			exampleCount := 0
+			if count, ok := exampleCountVal.(int64); ok {
+				exampleCount = int(count)
+			}
+
+			confidence := 0.0
+			if conf, ok := confidenceVal.(float64); ok {
+				confidence = conf
+			}
+
+			evolution.Domains = append(evolution.Domains, DomainEvolution{
+				Domain:      domainStr,
+				FirstSeen:   firstSeen,
+				LastSeen:    lastSeen,
+				ExampleCount: exampleCount,
+				Confidence:   confidence,
+			})
+		}
+	}
+
+	if len(evolution.Domains) > 1 {
+		first := evolution.Domains[0]
+		last := evolution.Domains[len(evolution.Domains)-1]
+		if first.Confidence > 0 {
+			evolution.Drift = absFloat(first.Confidence - last.Confidence)
+		}
+	}
 
 	return evolution, nil
 }
@@ -263,3 +304,21 @@ func extractTerminologyNodes(nodes []Node, timestamp time.Time) []map[string]any
 	return terminologyNodes
 }
 
+func parseNeo4jTime(value any) time.Time {
+	switch v := value.(type) {
+	case time.Time:
+		return v
+	case string:
+		if parsed, err := time.Parse(time.RFC3339, v); err == nil {
+			return parsed
+		}
+	}
+	return time.Time{}
+}
+
+func absFloat(v float64) float64 {
+	if v < 0 {
+		return -v
+	}
+	return v
+}

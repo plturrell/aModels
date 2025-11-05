@@ -29,7 +29,7 @@ func NewSemanticSchemaAnalyzer(logger *log.Logger) *SemanticSchemaAnalyzer {
 	if localaiURL != "" {
 		domainDetector = NewDomainDetector(localaiURL, logger)
 	}
-	
+
 	return &SemanticSchemaAnalyzer{
 		logger:              logger,
 		useSAPRPTEmbeddings: os.Getenv("USE_SAP_RPT_EMBEDDINGS") == "true",
@@ -47,26 +47,26 @@ func (ssa *SemanticSchemaAnalyzer) SetTerminologyLearner(learner *TerminologyLea
 
 // SemanticColumnAnalysis contains semantic analysis results for a column.
 type SemanticColumnAnalysis struct {
-	ColumnName           string            `json:"column_name"`
-	TableName            string            `json:"table_name"`
-	InferredDomain       string            `json:"inferred_domain"`       // e.g., "financial", "customer", "product"
-	InferredBusinessRole string            `json:"inferred_business_role"` // e.g., "identifier", "amount", "date"
-	SemanticSimilarity   map[string]float64 `json:"semantic_similarity"`  // Similarity to known patterns
-	NamingConventions    []string          `json:"naming_conventions"`    // Detected naming patterns
-	DomainConfidence     float64           `json:"domain_confidence"`     // 0.0 to 1.0
-	BusinessRoleConfidence float64         `json:"business_role_confidence"` // 0.0 to 1.0
-	ContextualFeatures   map[string]any    `json:"contextual_features"`   // Context-aware features
+	ColumnName             string             `json:"column_name"`
+	TableName              string             `json:"table_name"`
+	InferredDomain         string             `json:"inferred_domain"`          // e.g., "financial", "customer", "product"
+	InferredBusinessRole   string             `json:"inferred_business_role"`   // e.g., "identifier", "amount", "date"
+	SemanticSimilarity     map[string]float64 `json:"semantic_similarity"`      // Similarity to known patterns
+	NamingConventions      []string           `json:"naming_conventions"`       // Detected naming patterns
+	DomainConfidence       float64            `json:"domain_confidence"`        // 0.0 to 1.0
+	BusinessRoleConfidence float64            `json:"business_role_confidence"` // 0.0 to 1.0
+	ContextualFeatures     map[string]any     `json:"contextual_features"`      // Context-aware features
 }
 
 // SemanticLineageAnalysis contains semantic lineage information.
 type SemanticLineageAnalysis struct {
-	SourceTable      string            `json:"source_table"`
-	TargetTable      string            `json:"target_table"`
-	LineageType      string            `json:"lineage_type"`      // "direct", "transformed", "aggregated"
-	SemanticSimilarity float64         `json:"semantic_similarity"` // Semantic similarity score
-	TransformationPattern string        `json:"transformation_pattern"` // Detected transformation type
-	DataFlowConfidence float64         `json:"data_flow_confidence"` // Confidence in lineage
-	ContextualClues   []string         `json:"contextual_clues"`     // Clues that led to lineage detection
+	SourceTable           string   `json:"source_table"`
+	TargetTable           string   `json:"target_table"`
+	LineageType           string   `json:"lineage_type"`           // "direct", "transformed", "aggregated"
+	SemanticSimilarity    float64  `json:"semantic_similarity"`    // Semantic similarity score
+	TransformationPattern string   `json:"transformation_pattern"` // Detected transformation type
+	DataFlowConfidence    float64  `json:"data_flow_confidence"`   // Confidence in lineage
+	ContextualClues       []string `json:"contextual_clues"`       // Clues that led to lineage detection
 }
 
 // AnalyzeColumnSemantics performs semantic analysis of a column.
@@ -133,13 +133,13 @@ func (ssa *SemanticSchemaAnalyzer) AnalyzeColumnSemantics(
 	if ssa.useSAPRPTEmbeddings {
 		var similarities map[string]float64
 		var err error
-		
+
 		if domainID != "" && ssa.domainDetector != nil {
 			similarities, err = ssa.calculateSemanticSimilarityWithDomain(ctx, columnName, tableName, domainID)
 		} else {
 			similarities, err = ssa.calculateSemanticSimilarity(ctx, columnName, tableName)
 		}
-		
+
 		if err == nil {
 			analysis.SemanticSimilarity = similarities
 		}
@@ -161,8 +161,8 @@ func (ssa *SemanticSchemaAnalyzer) AnalyzeDataLineage(
 	sqlQuery string,
 ) (*SemanticLineageAnalysis, error) {
 	analysis := &SemanticLineageAnalysis{
-		SourceTable:    sourceTable,
-		TargetTable:    targetTable,
+		SourceTable:     sourceTable,
+		TargetTable:     targetTable,
 		ContextualClues: []string{},
 	}
 
@@ -195,16 +195,16 @@ func (ssa *SemanticSchemaAnalyzer) analyzeNamingConventions(columnName, tableNam
 
 	// Check for common naming patterns
 	patterns := map[string]*regexp.Regexp{
-		"snake_case":     regexp.MustCompile(`^[a-z]+(_[a-z]+)*$`),
-		"camelCase":      regexp.MustCompile(`^[a-z]+[A-Z][a-zA-Z]*$`),
-		"PascalCase":    regexp.MustCompile(`^[A-Z][a-zA-Z]*$`),
-		"UPPER_SNAKE":    regexp.MustCompile(`^[A-Z]+(_[A-Z]+)*$`),
-		"has_id_suffix":  regexp.MustCompile(`_id$`),
-		"has_id_prefix":  regexp.MustCompile(`^id_`),
+		"snake_case":      regexp.MustCompile(`^[a-z]+(_[a-z]+)*$`),
+		"camelCase":       regexp.MustCompile(`^[a-z]+[A-Z][a-zA-Z]*$`),
+		"PascalCase":      regexp.MustCompile(`^[A-Z][a-zA-Z]*$`),
+		"UPPER_SNAKE":     regexp.MustCompile(`^[A-Z]+(_[A-Z]+)*$`),
+		"has_id_suffix":   regexp.MustCompile(`_id$`),
+		"has_id_prefix":   regexp.MustCompile(`^id_`),
 		"has_date_suffix": regexp.MustCompile(`_date$`),
 		"has_ts_suffix":   regexp.MustCompile(`_ts$|_timestamp$`),
-		"has_amount":     regexp.MustCompile(`amount|price|cost|value|total`),
-		"has_status":     regexp.MustCompile(`status|state|flag`),
+		"has_amount":      regexp.MustCompile(`amount|price|cost|value|total`),
+		"has_status":      regexp.MustCompile(`status|state|flag`),
 	}
 
 	for patternName, pattern := range patterns {
@@ -274,7 +274,7 @@ func (ssa *SemanticSchemaAnalyzer) inferBusinessRole(
 	// Role keywords mapping
 	roleKeywords := map[string][]string{
 		"identifier": {"id", "key", "code", "number", "ref", "reference"},
-		"amount":      {"amount", "price", "cost", "revenue", "value", "total", "sum", "balance"},
+		"amount":     {"amount", "price", "cost", "revenue", "value", "total", "sum", "balance"},
 		"date":       {"date", "time", "timestamp", "created", "updated", "modified", "when"},
 		"status":     {"status", "state", "flag", "active", "enabled", "deleted"},
 		"name":       {"name", "title", "label", "description", "text"},
@@ -307,15 +307,15 @@ func (ssa *SemanticSchemaAnalyzer) inferBusinessRole(
 	// Boost confidence based on column type
 	if columnType != "" {
 		typeRoleMap := map[string]string{
-			"int":        "identifier",
-			"bigint":     "identifier",
-			"decimal":    "amount",
-			"numeric":    "amount",
-			"date":       "date",
-			"timestamp":  "date",
-			"varchar":    "name",
-			"text":       "name",
-			"boolean":    "status",
+			"int":       "identifier",
+			"bigint":    "identifier",
+			"decimal":   "amount",
+			"numeric":   "amount",
+			"date":      "date",
+			"timestamp": "date",
+			"varchar":   "name",
+			"text":      "name",
+			"boolean":   "status",
 		}
 		if expectedRole, ok := typeRoleMap[strings.ToLower(columnType)]; ok && expectedRole == inferredRole {
 			confidence = min(1.0, confidence+0.3)
@@ -335,19 +335,19 @@ func (ssa *SemanticSchemaAnalyzer) inferDomainWithKeywords(
 	if ssa.domainDetector == nil {
 		return "unknown", 0.0
 	}
-	
+
 	// Get domain config from detector
 	ssa.domainDetector.mu.RLock()
 	domainConfig, exists := ssa.domainDetector.domainConfigs[domainID]
 	ssa.domainDetector.mu.RUnlock()
-	
+
 	if !exists {
 		return "unknown", 0.0
 	}
-	
+
 	text := strings.ToLower(columnName + " " + tableName)
 	domainKeywords := domainConfig.Keywords
-	
+
 	// Calculate keyword match score
 	matches := 0
 	for _, keyword := range domainKeywords {
@@ -355,16 +355,16 @@ func (ssa *SemanticSchemaAnalyzer) inferDomainWithKeywords(
 			matches++
 		}
 	}
-	
+
 	if len(domainKeywords) == 0 {
 		return domainConfig.Name, 0.5 // Default confidence if no keywords
 	}
-	
+
 	confidence := float64(matches) / float64(len(domainKeywords))
 	if confidence > 0.5 {
 		return domainConfig.Name, min(1.0, confidence)
 	}
-	
+
 	// Return detected domain but with lower confidence
 	return domainConfig.Name, confidence
 }
@@ -378,66 +378,66 @@ func (ssa *SemanticSchemaAnalyzer) calculateSemanticSimilarityWithDomain(
 	domainID string,
 ) (map[string]float64, error) {
 	similarities := make(map[string]float64)
-	
+
 	if ssa.domainDetector == nil {
 		// Fallback to regular similarity
 		return ssa.calculateSemanticSimilarity(ctx, columnName, tableName)
 	}
-	
+
 	// Get domain config
 	ssa.domainDetector.mu.RLock()
 	domainConfig, exists := ssa.domainDetector.domainConfigs[domainID]
 	ssa.domainDetector.mu.RUnlock()
-	
+
 	if !exists {
 		// Fallback to regular similarity
 		return ssa.calculateSemanticSimilarity(ctx, columnName, tableName)
 	}
-	
+
 	// Use domain tags as known patterns
 	domainTags := domainConfig.Tags
 	if len(domainTags) == 0 {
 		domainTags = domainConfig.Keywords // Fallback to keywords
 	}
-	
+
 	// Generate embedding for column/table
 	query := fmt.Sprintf("%s %s", columnName, tableName)
 	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
 		"--artifact-type", "text",
 		"--text", query,
 	)
-	
+
 	output, err := cmd.Output()
 	if err != nil {
 		return similarities, fmt.Errorf("failed to generate embedding: %w", err)
 	}
-	
+
 	var embedding []float32
 	if err := json.Unmarshal(output, &embedding); err != nil {
 		return similarities, fmt.Errorf("failed to unmarshal embedding: %w", err)
 	}
-	
+
 	// Calculate similarity to domain tags
 	for _, tag := range domainTags {
 		tagCmd := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
 			"--artifact-type", "text",
 			"--text", tag,
 		)
-		
+
 		tagOutput, err := tagCmd.Output()
 		if err != nil {
 			continue
 		}
-		
+
 		var tagEmbedding []float32
 		if err := json.Unmarshal(tagOutput, &tagEmbedding); err != nil {
 			continue
 		}
-		
+
 		similarity := cosineSimilarity(embedding, tagEmbedding)
 		similarities[tag] = similarity
 	}
-	
+
 	return similarities, nil
 }
 
@@ -453,7 +453,7 @@ func (ssa *SemanticSchemaAnalyzer) calculateSemanticSimilarity(
 	if ssa.extractServiceURL != "" {
 		// Query the Extract service for similar columns
 		query := fmt.Sprintf("%s %s", columnName, tableName)
-		
+
 		cmd := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
 			"--artifact-type", "text",
 			"--text", query,
@@ -471,11 +471,11 @@ func (ssa *SemanticSchemaAnalyzer) calculateSemanticSimilarity(
 
 		// Known patterns (would be loaded from knowledge base in production)
 		knownPatterns := map[string]string{
-			"customer_id":    "identifier customer",
-			"order_amount":   "amount financial",
-			"created_date":   "date time",
-			"status_flag":    "status boolean",
-			"product_name":   "name product",
+			"customer_id":  "identifier customer",
+			"order_amount": "amount financial",
+			"created_date": "date time",
+			"status_flag":  "status boolean",
+			"product_name": "name product",
 		}
 
 		// Calculate similarity to known patterns
@@ -553,14 +553,14 @@ func (ssa *SemanticSchemaAnalyzer) detectLineageType(
 	sqlQuery string,
 ) (string, float64) {
 	sqlUpper := strings.ToUpper(sqlQuery)
-	
+
 	// Direct copy (no transformation)
 	if strings.Contains(sqlUpper, "INSERT INTO") && strings.Contains(sqlUpper, "SELECT *") {
 		return "direct", 0.9
 	}
 
 	// Aggregation
-	if strings.Contains(sqlUpper, "GROUP BY") || strings.Contains(sqlUpper, "SUM(") || 
+	if strings.Contains(sqlUpper, "GROUP BY") || strings.Contains(sqlUpper, "SUM(") ||
 		strings.Contains(sqlUpper, "COUNT(") || strings.Contains(sqlUpper, "AVG(") {
 		return "aggregated", 0.85
 	}
@@ -660,50 +660,3 @@ func (ssa *SemanticSchemaAnalyzer) extractLineageClues(
 
 	return clues
 }
-
-// Helper function for cosine similarity
-func cosineSimilarity(a, b []float32) float64 {
-	if len(a) != len(b) {
-		return 0.0
-	}
-
-	var dotProduct float64
-	var normA, normB float64
-
-	for i := range a {
-		dotProduct += float64(a[i] * b[i])
-		normA += float64(a[i] * a[i])
-		normB += float64(b[i] * b[i])
-	}
-
-	if normA == 0 || normB == 0 {
-		return 0.0
-	}
-
-	return dotProduct / (sqrt(normA) * sqrt(normB))
-}
-
-// Helper functions
-func sqrt(x float64) float64 {
-	// Simple square root approximation (or use math.Sqrt)
-	if x == 0 {
-		return 0
-	}
-	if x < 0 {
-		return 0
-	}
-	// Use iterative approximation
-	result := x
-	for i := 0; i < 10; i++ {
-		result = 0.5 * (result + x/result)
-	}
-	return result
-}
-
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-

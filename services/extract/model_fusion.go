@@ -12,13 +12,13 @@ import (
 // ModelFusionFramework combines predictions from multiple models for better accuracy.
 // Phase 8.2: Enhanced with domain-optimized weights for better domain-specific accuracy.
 type ModelFusionFramework struct {
-	logger            *log.Logger
+	logger                   *log.Logger
 	useRelationalTransformer bool
-	useSAPRPT         bool
-	useGlove          bool
-	weights           ModelWeights
-	domainDetector    *DomainDetector // Phase 8.2: Domain detector for domain-aware weights
-	domainWeights     map[string]ModelWeights // Phase 8.2: domain_id -> optimized weights
+	useSAPRPT                bool
+	useGlove                 bool
+	weights                  ModelWeights
+	domainDetector           *DomainDetector         // Phase 8.2: Domain detector for domain-aware weights
+	domainWeights            map[string]ModelWeights // Phase 8.2: domain_id -> optimized weights
 }
 
 // ModelWeights holds weights for ensemble predictions.
@@ -32,8 +32,8 @@ type ModelWeights struct {
 func DefaultModelWeights() ModelWeights {
 	return ModelWeights{
 		RelationalTransformer: 0.4,
-		SAPRPT:               0.4,
-		Glove:                0.2,
+		SAPRPT:                0.4,
+		Glove:                 0.2,
 	}
 }
 
@@ -44,41 +44,41 @@ func NewModelFusionFramework(logger *log.Logger) *ModelFusionFramework {
 	if localaiURL != "" {
 		domainDetector = NewDomainDetector(localaiURL, logger)
 	}
-	
+
 	return &ModelFusionFramework{
-		logger:                  logger,
+		logger:                   logger,
 		useRelationalTransformer: true,
-		useSAPRPT:               os.Getenv("USE_SAP_RPT_EMBEDDINGS") == "true",
-		useGlove:                os.Getenv("USE_GLOVE_EMBEDDINGS") == "true",
-		weights:                 DefaultModelWeights(),
-		domainDetector:          domainDetector, // Phase 8.2: Domain detector
-		domainWeights:           make(map[string]ModelWeights), // Phase 8.2: Domain-specific weights
+		useSAPRPT:                os.Getenv("USE_SAP_RPT_EMBEDDINGS") == "true",
+		useGlove:                 os.Getenv("USE_GLOVE_EMBEDDINGS") == "true",
+		weights:                  DefaultModelWeights(),
+		domainDetector:           domainDetector,                // Phase 8.2: Domain detector
+		domainWeights:            make(map[string]ModelWeights), // Phase 8.2: Domain-specific weights
 	}
 }
 
-// ModelPrediction represents a prediction from a single model.
-type ModelPrediction struct {
-	ModelName  string            `json:"model_name"`
-	Prediction any               `json:"prediction"`
-	Confidence float64           `json:"confidence"`
-	Embedding  []float32         `json:"embedding,omitempty"`
-	Metadata   map[string]any    `json:"metadata,omitempty"`
+// FusionModelPrediction represents a prediction from a single model.
+type FusionModelPrediction struct {
+	ModelName  string         `json:"model_name"`
+	Prediction any            `json:"prediction"`
+	Confidence float64        `json:"confidence"`
+	Embedding  []float32      `json:"embedding,omitempty"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
 }
 
 // FusedPrediction represents a combined prediction from multiple models.
 type FusedPrediction struct {
-	FinalPrediction any               `json:"final_prediction"`
-	Confidence      float64           `json:"confidence"`
-	ModelPredictions []ModelPrediction `json:"model_predictions"`
-	FusionMethod    string            `json:"fusion_method"` // "weighted_average", "consensus", "majority_vote"
-	Weights         ModelWeights      `json:"weights"`
+	FinalPrediction  any                     `json:"final_prediction"`
+	Confidence       float64                 `json:"confidence"`
+	ModelPredictions []FusionModelPrediction `json:"model_predictions"`
+	FusionMethod     string                  `json:"fusion_method"` // "weighted_average", "consensus", "majority_vote"
+	Weights          ModelWeights            `json:"weights"`
 }
 
 // FusePredictions combines predictions from multiple models.
 // Phase 8.2: Enhanced with domain-aware weight optimization.
 func (mff *ModelFusionFramework) FusePredictions(
 	ctx context.Context,
-	predictions []ModelPrediction,
+	predictions []FusionModelPrediction,
 	fusionMethod string,
 	domainID string, // Phase 8.2: Optional domain ID for domain-optimized weights
 ) (*FusedPrediction, error) {
@@ -132,28 +132,28 @@ func (mff *ModelFusionFramework) FusePredictions(
 // Phase 8.2: Domain-specific weight optimization.
 func (mff *ModelFusionFramework) optimizeWeightsForDomain(
 	domainID string,
-	predictions []ModelPrediction,
+	predictions []FusionModelPrediction,
 ) ModelWeights {
 	if mff.domainDetector == nil {
 		return DefaultModelWeights()
 	}
-	
+
 	// Get domain config
 	mff.domainDetector.mu.RLock()
 	domainConfig, exists := mff.domainDetector.domainConfigs[domainID]
 	mff.domainDetector.mu.RUnlock()
-	
+
 	if !exists {
 		return DefaultModelWeights()
 	}
-	
+
 	// Optimize weights based on domain characteristics
 	weights := DefaultModelWeights()
-	
+
 	// Check if domain is semantic-rich (has many keywords/tags)
 	keywordCount := len(domainConfig.Keywords)
 	tagCount := len(domainConfig.Tags)
-	
+
 	// Semantic-rich domains benefit more from SAP RPT
 	if keywordCount > 5 || tagCount > 3 {
 		weights.SAPRPT = 0.5
@@ -165,7 +165,7 @@ func (mff *ModelFusionFramework) optimizeWeightsForDomain(
 		weights.SAPRPT = 0.3
 		weights.Glove = 0.2
 	}
-	
+
 	// Adjust based on layer
 	switch domainConfig.Layer {
 	case "data":
@@ -181,16 +181,16 @@ func (mff *ModelFusionFramework) optimizeWeightsForDomain(
 	default:
 		// Default weights
 	}
-	
+
 	mff.logger.Printf("Optimized weights for domain %s: RT=%.2f, SAP=%.2f, Glove=%.2f",
 		domainID, weights.RelationalTransformer, weights.SAPRPT, weights.Glove)
-	
+
 	return weights
 }
 
 // weightedAverageFusion performs weighted average fusion of predictions.
 func (mff *ModelFusionFramework) weightedAverageFusion(
-	predictions []ModelPrediction,
+	predictions []FusionModelPrediction,
 ) (*FusedPrediction, error) {
 	// For embedding predictions, compute weighted average
 	if len(predictions) > 0 && predictions[0].Embedding != nil {
@@ -226,7 +226,7 @@ func (mff *ModelFusionFramework) weightedAverageFusion(
 
 // fuseEmbeddings fuses embeddings from multiple models.
 func (mff *ModelFusionFramework) fuseEmbeddings(
-	predictions []ModelPrediction,
+	predictions []FusionModelPrediction,
 ) (*FusedPrediction, error) {
 	if len(predictions) == 0 {
 		return nil, fmt.Errorf("no predictions to fuse")
@@ -264,20 +264,20 @@ func (mff *ModelFusionFramework) fuseEmbeddings(
 
 	return &FusedPrediction{
 		FinalPrediction:  fusedEmbedding,
-		Confidence:        float64(totalWeight) / float64(len(predictions)),
+		Confidence:       float64(totalWeight) / float64(len(predictions)),
 		ModelPredictions: predictions,
 	}, nil
 }
 
 // consensusFusion performs consensus-based fusion.
 func (mff *ModelFusionFramework) consensusFusion(
-	predictions []ModelPrediction,
+	predictions []FusionModelPrediction,
 ) (*FusedPrediction, error) {
 	// Find predictions that agree (within threshold)
 	consensusThreshold := 0.8
 
 	// Group predictions by similarity
-	predictionGroups := make(map[string][]ModelPrediction)
+	predictionGroups := make(map[string][]FusionModelPrediction)
 	for _, pred := range predictions {
 		predStr := fmt.Sprintf("%v", pred.Prediction)
 		predictionGroups[predStr] = append(predictionGroups[predStr], pred)
@@ -310,11 +310,11 @@ func (mff *ModelFusionFramework) consensusFusion(
 
 // majorityVoteFusion performs majority vote fusion.
 func (mff *ModelFusionFramework) majorityVoteFusion(
-	predictions []ModelPrediction,
+	predictions []FusionModelPrediction,
 ) (*FusedPrediction, error) {
 	// Count votes for each prediction
 	voteCount := make(map[string]int)
-	predictionMap := make(map[string]ModelPrediction)
+	predictionMap := make(map[string]FusionModelPrediction)
 
 	for _, pred := range predictions {
 		predStr := fmt.Sprintf("%v", pred.Prediction)
@@ -350,7 +350,7 @@ func (mff *ModelFusionFramework) PredictWithMultipleModels(
 	artifactType string,
 	artifactData map[string]any,
 ) (*FusedPrediction, error) {
-	predictions := []ModelPrediction{}
+	predictions := []FusionModelPrediction{}
 
 	// Generate prediction from RelationalTransformer
 	if mff.useRelationalTransformer {
@@ -395,7 +395,7 @@ func (mff *ModelFusionFramework) predictWithRelationalTransformer(
 	ctx context.Context,
 	artifactType string,
 	artifactData map[string]any,
-) (*ModelPrediction, error) {
+) (*FusionModelPrediction, error) {
 	// Call embedding script
 	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed.py",
 		"--artifact-type", artifactType,
@@ -419,7 +419,7 @@ func (mff *ModelFusionFramework) predictWithRelationalTransformer(
 		return nil, fmt.Errorf("failed to unmarshal embedding: %w", err)
 	}
 
-	return &ModelPrediction{
+	return &FusionModelPrediction{
 		ModelName:  "relational_transformer",
 		Prediction: embedding,
 		Confidence: 0.8,
@@ -432,7 +432,7 @@ func (mff *ModelFusionFramework) predictWithSAPRPT(
 	ctx context.Context,
 	artifactType string,
 	artifactData map[string]any,
-) (*ModelPrediction, error) {
+) (*FusionModelPrediction, error) {
 	// Extract text for embedding
 	text := ""
 	if tableName, ok := artifactData["table_name"].(string); ok {
@@ -454,7 +454,7 @@ func (mff *ModelFusionFramework) predictWithSAPRPT(
 		return nil, fmt.Errorf("failed to unmarshal embedding: %w", err)
 	}
 
-	return &ModelPrediction{
+	return &FusionModelPrediction{
 		ModelName:  "sap_rpt",
 		Prediction: embedding,
 		Confidence: 0.85,
@@ -467,10 +467,10 @@ func (mff *ModelFusionFramework) predictWithGlove(
 	ctx context.Context,
 	artifactType string,
 	artifactData map[string]any,
-) (*ModelPrediction, error) {
+) (*FusionModelPrediction, error) {
 	// Placeholder for Glove embedding
 	// Would call Go Glove package
-	return &ModelPrediction{
+	return &FusionModelPrediction{
 		ModelName:  "glove",
 		Prediction: []float32{},
 		Confidence: 0.7,
@@ -511,7 +511,7 @@ func (mff *ModelFusionFramework) SelectBestModel(taskType string) string {
 
 // ValidateCrossModel validates predictions across models.
 func (mff *ModelFusionFramework) ValidateCrossModel(
-	predictions []ModelPrediction,
+	predictions []FusionModelPrediction,
 	threshold float64,
 ) bool {
 	if len(predictions) < 2 {
@@ -533,7 +533,7 @@ func (mff *ModelFusionFramework) ValidateCrossModel(
 
 // calculatePredictionSimilarity calculates similarity between two predictions.
 func (mff *ModelFusionFramework) calculatePredictionSimilarity(
-	pred1, pred2 ModelPrediction,
+	pred1, pred2 FusionModelPrediction,
 ) float64 {
 	// If both have embeddings, use cosine similarity
 	if len(pred1.Embedding) > 0 && len(pred2.Embedding) > 0 {
@@ -549,45 +549,3 @@ func (mff *ModelFusionFramework) calculatePredictionSimilarity(
 }
 
 // Helper functions
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func cosineSimilarity(a, b []float32) float64 {
-	if len(a) != len(b) {
-		return 0.0
-	}
-
-	var dotProduct float64
-	var normA, normB float64
-
-	for i := range a {
-		dotProduct += float64(a[i] * b[i])
-		normA += float64(a[i] * a[i])
-		normB += float64(b[i] * b[i])
-	}
-
-	if normA == 0 || normB == 0 {
-		return 0.0
-	}
-
-	return dotProduct / (sqrt(normA) * sqrt(normB))
-}
-
-func sqrt(x float64) float64 {
-	if x == 0 {
-		return 0
-	}
-	if x < 0 {
-		return 0
-	}
-	result := x
-	for i := 0; i < 10; i++ {
-		result = 0.5 * (result + x/result)
-	}
-	return result
-}
-
