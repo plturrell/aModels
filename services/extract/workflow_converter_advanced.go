@@ -35,17 +35,18 @@ func NewAdvancedWorkflowConverter(logger *log.Logger) *AdvancedWorkflowConverter
 // ConvertPetriNetToAdvancedLangGraph converts a Petri net to an advanced LangGraph workflow
 // with multi-agent support, parallel execution, and checkpointing.
 func (awc *AdvancedWorkflowConverter) ConvertPetriNetToAdvancedLangGraph(net *PetriNet) *AdvancedLangGraphWorkflow {
+	baseWorkflow := awc.ConvertPetriNetToLangGraph(net)
 	workflow := &AdvancedLangGraphWorkflow{
-		LangGraphWorkflow: *awc.ConvertPetriNetToLangGraph(net),
+		LangGraphWorkflow: *baseWorkflow,
 		ParallelBranches:  []ParallelBranch{},
 		Checkpoints:        []Checkpoint{},
 		AgentGroups:        []AgentGroup{},
-		Metadata: map[string]any{
-			"advanced_features": map[string]any{
-				"parallel_execution": awc.enableParallelExecution,
-				"checkpointing":       awc.enableCheckpointing,
-				"dynamic_spawning":    awc.enableDynamicSpawning,
-			},
+	}
+	workflow.Metadata = map[string]any{
+		"advanced_features": map[string]any{
+			"parallel_execution": awc.enableParallelExecution,
+			"checkpointing":       awc.enableCheckpointing,
+			"dynamic_spawning":    awc.enableDynamicSpawning,
 		},
 	}
 
@@ -243,7 +244,7 @@ func (awc *AdvancedWorkflowConverter) createDynamicSpawnNodes(net *PetriNet) []L
 	// Create spawn node for each transition that might need dynamic spawning
 	for i, transition := range net.Transitions {
 		// Check if transition needs dynamic spawning (e.g., based on data volume)
-		if awc.shouldSpawnDynamically(transition) {
+		if awc.shouldSpawnDynamically(&transition) {
 			spawnNodeID := fmt.Sprintf("spawn_%d", i)
 
 			spawnNode := LangGraphNode{
@@ -254,7 +255,7 @@ func (awc *AdvancedWorkflowConverter) createDynamicSpawnNodes(net *PetriNet) []L
 					"target_transition": transition.ID,
 					"spawn_condition":  "data_volume > threshold",
 					"max_agents":        awc.maxParallelAgents,
-					"agent_type":        awc.determineAgentType(transition),
+					"agent_type":        awc.determineAgentType(&transition),
 				},
 				Properties: map[string]any{
 					"dynamic_spawning": true,
