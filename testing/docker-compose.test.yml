@@ -1,0 +1,42 @@
+# Docker Compose for running integration tests
+# This ensures all services are running before tests execute
+
+version: "3.9"
+
+services:
+  test-runner:
+    image: python:3.11-slim
+    container_name: test-runner
+    depends_on:
+      - localai
+      - deepagents
+      - graph
+      - search-inference
+      - extract
+      - gateway
+      - transformers
+    environment:
+      - LOCALAI_URL=http://localai:8081
+      - DEEPAGENTS_URL=http://deepagents-service:9004
+      - GRAPH_URL=http://graph-server:8080
+      - SEARCH_URL=http://search-inference:8090
+      - EXTRACT_URL=http://extract-service:8082
+      - GATEWAY_URL=http://gateway:8000
+      - TRANSFORMERS_URL=http://transformers-service:9090
+    volumes:
+      - ../testing:/workspace/tests:ro
+      - ../scripts:/workspace/scripts:ro
+    working_dir: /workspace/tests
+    command: >
+      sh -c "
+        pip install httpx &&
+        python3 test_localai_integration_suite.py
+      "
+    networks:
+      - default
+
+networks:
+  default:
+    external: true
+    name: brev_default
+

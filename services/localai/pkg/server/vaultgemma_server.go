@@ -865,21 +865,45 @@ func (s *VaultGemmaServer) getModelsInfo() []map[string]interface{} {
 func (s *VaultGemmaServer) HandleListDomains(w http.ResponseWriter, r *http.Request) {
 	domains := make([]map[string]interface{}, 0)
 
-	for domain, model := range s.models {
-		config, _ := s.domainManager.GetDomainConfig(domain)
-
+	// Include all domains from domain manager, not just loaded models
+	allDomains := s.domainManager.ListDomainConfigs()
+	for domainID, config := range allDomains {
 		domainInfo := map[string]interface{}{
-			"id":          domain,
-			"loaded":      true,
-			"layers":      model.Config.NumLayers,
-			"hidden_size": model.Config.HiddenSize,
+			"id":     domainID,
+			"loaded":  false,
 		}
 
 		if config != nil {
 			domainInfo["name"] = config.Name
-			domainInfo["max_tokens"] = config.MaxTokens
+			domainInfo["agent_id"] = config.AgentID
+			domainInfo["keywords"] = config.Keywords
 			domainInfo["tags"] = config.DomainTags
+			domainInfo["layer"] = config.Layer
+			domainInfo["team"] = config.Team
+			domainInfo["max_tokens"] = config.MaxTokens
 			domainInfo["fallback_model"] = config.FallbackModel
+			
+			// Include full config for domain detection
+			domainInfo["config"] = map[string]interface{}{
+				"agent_id": config.AgentID,
+				"keywords": config.Keywords,
+				"tags":     config.DomainTags,
+				"layer":    config.Layer,
+				"team":     config.Team,
+			}
+		}
+
+		// Check if model is loaded
+		if _, ok := s.models[domainID]; ok {
+			domainInfo["loaded"] = true
+			if model, ok := s.models[domainID]; ok {
+				domainInfo["layers"] = model.Config.NumLayers
+				domainInfo["hidden_size"] = model.Config.HiddenSize
+			}
+		} else if _, ok := s.ggufModels[domainID]; ok {
+			domainInfo["loaded"] = true
+		} else if _, ok := s.transformerClients[domainID]; ok {
+			domainInfo["loaded"] = true
 		}
 
 		domains = append(domains, domainInfo)
