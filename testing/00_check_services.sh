@@ -153,15 +153,12 @@ echo "============================================================"
 echo "Step 2: Service Accessibility"
 echo "============================================================"
 
-# Get port mappings
-LOCALAI_PORT=$(docker port localai 8080 2>/dev/null | cut -d: -f2 || echo "8081")
-EXTRACT_PORT=$(docker port extract-service 19080 2>/dev/null | cut -d: -f2 || echo "19080")
-TRAINING_PORT=$(docker port training-service 8080 2>/dev/null | cut -d: -f2 || echo "8080")
-
-# Set environment variables
-export LOCALAI_URL="http://localhost:${LOCALAI_PORT}"
-export EXTRACT_SERVICE_URL="http://localhost:${EXTRACT_PORT}"
-export TRAINING_SERVICE_URL="http://localhost:${TRAINING_PORT}"
+# Detect container environment and set service URLs accordingly
+if [ -f "/.dockerenv" ] || grep -qa docker /proc/1/cgroup 2>/dev/null; then
+  export LOCALAI_URL="http://localai:8080"
+  export EXTRACT_SERVICE_URL="http://extract-service:19080"
+  export TRAINING_SERVICE_URL="http://training-service:8080"
+fi
 
 echo "Using service URLs:"
 echo "  LOCALAI_URL: $LOCALAI_URL"
@@ -233,61 +230,49 @@ check_service "Training Service" "${TRAINING_SERVICE_URL}/health" 10 false
 
 # Check PostgreSQL
 echo "Checking PostgreSQL..."
-PG_CHECK_RESULT=$(python3 -c "
-import sys
+PG_CHECK_RESULT=$(python3 - << 'PY'
+import os, sys, re
+import urllib.parse as up
 try:
-    import psycopg2
-    try:
-        conn = psycopg2.connect('postgresql://postgres:postgres@localhost:5432/postgres', connect_timeout=5)
-        conn.close()
-        print('✅ PostgreSQL accessible')
+    dsn = os.getenv('POSTGRES_DSN', 'postgresql://postgres:postgres@localhost:5432/postgres')
+    up.uses_netloc.append('postgres')
+    up.uses_netloc.append('postgresql')
+    p = up.urlparse(dsn)
+    host = p.hostname or 'localhost'
+    port = p.port or 5432
+    import socket
+    with socket.create_connection((host, int(port)), timeout=5):
+        print('✅ PostgreSQL accessible ({}:{})'.format(host, port))
         sys.exit(0)
-    except Exception as e:
-        print(f'⚠️  PostgreSQL connection error: {str(e)[:50]}')
-        sys.exit(1)
-except ImportError:
-    # psycopg2 not installed - check if container is running instead
-    print('⚠️  psycopg2 not installed (checking container status only)')
-    sys.exit(0)
-" 2>&1)
+except Exception as e:
+    print('⚠️  PostgreSQL connection error:', str(e)[:80])
+    sys.exit(1)
+PY
+)
 PG_CHECK_EXIT=$?
-if [ $PG_CHECK_EXIT -eq 0 ]; then
-    echo "$PG_CHECK_RESULT"
-    SERVICES_READY=$((SERVICES_READY + 1))
-else
-    echo "$PG_CHECK_RESULT"
-    # PostgreSQL container is running (checked in Step 1), so mark as ready
-    SERVICES_READY=$((SERVICES_READY + 1))
-fi
+[ $PG_CHECK_EXIT -eq 0 ] && echo "$PG_CHECK_RESULT" && SERVICES_READY=$((SERVICES_READY + 1)) || (echo "$PG_CHECK_RESULT"; SERVICES_FAILED=$((SERVICES_FAILED + 1)); ALL_SERVICES_READY=false)
 
 # Check Redis
 echo "Checking Redis..."
-REDIS_CHECK_RESULT=$(python3 -c "
-import sys
+REDIS_CHECK_RESULT=$(python3 - << 'PY'
+import os, sys
+import urllib.parse as up
 try:
-    import redis
-    try:
-        r = redis.Redis(host='localhost', port=6379, db=0, socket_timeout=5)
-        r.ping()
-        print('✅ Redis accessible')
+    url = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+    p = up.urlparse(url)
+    host = p.hostname or 'localhost'
+    port = p.port or 6379
+    import socket
+    with socket.create_connection((host, int(port)), timeout=5):
+        print('✅ Redis accessible ({}:{})'.format(host, port))
         sys.exit(0)
-    except Exception as e:
-        print(f'⚠️  Redis connection error: {str(e)[:50]}')
-        sys.exit(1)
-except ImportError:
-    # redis not installed - check if container is running instead
-    print('⚠️  redis not installed (checking container status only)')
-    sys.exit(0)
-" 2>&1)
+except Exception as e:
+    print('⚠️  Redis connection error:', str(e)[:80])
+    sys.exit(1)
+PY
+)
 REDIS_CHECK_EXIT=$?
-if [ $REDIS_CHECK_EXIT -eq 0 ]; then
-    echo "$REDIS_CHECK_RESULT"
-    SERVICES_READY=$((SERVICES_READY + 1))
-else
-    echo "$REDIS_CHECK_RESULT"
-    # Redis container is running (checked in Step 1), so mark as ready
-    SERVICES_READY=$((SERVICES_READY + 1))
-fi
+[ $REDIS_CHECK_EXIT -eq 0 ] && echo "$REDIS_CHECK_RESULT" && SERVICES_READY=$((SERVICES_READY + 1)) || (echo "$REDIS_CHECK_RESULT"; SERVICES_FAILED=$((SERVICES_FAILED + 1)); ALL_SERVICES_READY=false)
 
 echo ""
 

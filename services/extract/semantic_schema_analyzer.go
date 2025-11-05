@@ -92,27 +92,18 @@ func (ssa *SemanticSchemaAnalyzer) AnalyzeColumnSemantics(
 		// Use LNN for naming conventions
 		analysis.NamingConventions = ssa.terminologyLearner.AnalyzeNamingConvention(ctx, columnName)
 
-<<<<<<< HEAD
 		// Use LNN for domain inference
 		domain, domainConf := ssa.terminologyLearner.InferDomain(ctx, columnName, tableName, tableContext)
+		// Phase 8.1: enhance with domain detector if domainID provided
+		if domainID != "" && ssa.domainDetector != nil {
+			enhancedDomain, enhancedConf := ssa.inferDomainWithKeywords(columnName, tableName, domainID)
+			if enhancedConf > domainConf {
+				domain = enhancedDomain
+				domainConf = enhancedConf
+			}
+		}
 		analysis.InferredDomain = domain
 		analysis.DomainConfidence = domainConf
-=======
-	// Infer business domain (enhanced with domain detector if domainID provided)
-	domain, domainConf := ssa.inferBusinessDomain(columnName, tableName, tableContext)
-	
-	// Phase 8.1: Use domain detector if domainID provided
-	if domainID != "" && ssa.domainDetector != nil {
-		enhancedDomain, enhancedConf := ssa.inferDomainWithKeywords(columnName, tableName, domainID)
-		if enhancedConf > domainConf {
-			domain = enhancedDomain
-			domainConf = enhancedConf
-		}
-	}
-	
-	analysis.InferredDomain = domain
-	analysis.DomainConfidence = domainConf
->>>>>>> a455e4b4 (Complete Phases 7-9: Domain-aware pattern learning, extraction, and automation)
 
 		// Use LNN for role inference
 		role, roleConf := ssa.terminologyLearner.InferRole(ctx, columnName, columnType, tableName, tableContext)
@@ -122,6 +113,14 @@ func (ssa *SemanticSchemaAnalyzer) AnalyzeColumnSemantics(
 		// Fallback to fixed dictionaries
 		analysis.NamingConventions = ssa.analyzeNamingConventions(columnName, tableName)
 		domain, domainConf := ssa.inferBusinessDomain(columnName, tableName, tableContext)
+		// Phase 8.1: enhance with domain detector if domainID provided
+		if domainID != "" && ssa.domainDetector != nil {
+			enhancedDomain, enhancedConf := ssa.inferDomainWithKeywords(columnName, tableName, domainID)
+			if enhancedConf > domainConf {
+				domain = enhancedDomain
+				domainConf = enhancedConf
+			}
+		}
 		analysis.InferredDomain = domain
 		analysis.DomainConfidence = domainConf
 		role, roleConf := ssa.inferBusinessRole(columnName, columnType, tableName, tableContext)

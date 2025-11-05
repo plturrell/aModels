@@ -1405,8 +1405,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			s.logger.Printf("Using batch processing for %d tables...", len(tableNodes))
 			batchResults, err := s.batchEmbeddingGen.GenerateBatchTableEmbeddings(ctx, tableNodes)
 			if err != nil {
-				s.logger.Printf("batch embedding generation failed: %v, falling back to individual", err)
-				goto individualTableEmbeddings
+				s.logger.Printf("batch embedding generation failed: %v, continuing without batch", err)
 			}
 
 			// Process batch results
@@ -1462,8 +1461,6 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
-
-		tableEmbeddingsDone:
 		}
 
 		// Generate embeddings for columns (with batch processing and caching)
@@ -1479,8 +1476,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			s.logger.Printf("Using batch processing for %d columns...", len(columnNodes))
 			batchResults, err := s.batchEmbeddingGen.GenerateBatchColumnEmbeddings(ctx, columnNodes)
 			if err != nil {
-				s.logger.Printf("batch column embedding generation failed: %v, falling back to individual", err)
-				goto individualColumnEmbeddings
+				s.logger.Printf("batch column embedding generation failed: %v, continuing without batch", err)
 			}
 
 			// Process batch results

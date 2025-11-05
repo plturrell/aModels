@@ -31,6 +31,22 @@ DEFAULT_TIMEOUT = 30
 HEALTH_TIMEOUT = 5
 
 
+def fetch_domains_or_models(localai_url: str) -> Tuple[bool, Optional[dict]]:
+    try:
+        r = httpx.get(localai_url.rstrip('/') + "/v1/domains", timeout=HEALTH_TIMEOUT)
+        if r.status_code == 200:
+            return True, r.json()
+    except Exception:
+        pass
+    try:
+        r = httpx.get(localai_url.rstrip('/') + "/v1/models", timeout=HEALTH_TIMEOUT)
+        if r.status_code == 200:
+            return True, {"models": r.json()}
+    except Exception:
+        pass
+    return False, None
+
+
 class TestResult(Enum):
     PASS = "✅"
     FAIL = "❌"

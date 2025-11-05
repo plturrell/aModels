@@ -45,26 +45,21 @@ services:
             - capabilities: ["gpu"]
 
   localai:
-    # Use official LocalAI from GitHub instead of custom build
-    # See https://github.com/mudler/LocalAI for available tags
-    # Available tags: latest, v3.7.0, latest-cuda, etc.
-    image: quay.io/go-skynet/local-ai:latest  # Start with latest, can use latest-cuda if GPU needed
+    build:
+      context: ../../..
+      dockerfile: services/localai/Dockerfile.local
+      args: []
+    image: amodels/localai:vendored
     container_name: localai
     restart: unless-stopped
     environment:
       - MODELS_PATH=/models
-      # Use local embedding model
       - EMBEDDINGS_MODEL=all-MiniLM-L6-v2
-      # Redis config (preferred over file-based)
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - REDIS_PREFIX=localai
-      # Enable debug if needed
       - DEBUG=true
-      # Threads for inference
       - THREADS=4
-      # Context size
       - CONTEXT_SIZE=512
-      # Port
       - PORT=8080
     volumes:
       - ../../models:/models:ro
@@ -220,8 +215,8 @@ services:
 
   extract:
     build:
-      context: ../..
-      dockerfile: services/extract/Dockerfile
+      context: ../../..
+      dockerfile: ./services/extract/Dockerfile
     image: amodels/extract:latest
     container_name: extract-service
     restart: unless-stopped
@@ -249,9 +244,7 @@ services:
       - ../../data:/workspace/data:rw
       - ../../logs:/workspace/logs:rw
     ports:
-      - "8082:8082"
-      - "9090:9090"
-      - "8815:8815"
+      - "8083:8082"
     depends_on:
       - elasticsearch
       - neo4j
@@ -319,6 +312,22 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  localai-compat:
+    build:
+      context: ../../..
+      dockerfile: services/localai/shim/Dockerfile
+    image: amodels/localai-compat:latest
+    container_name: localai-compat
+    environment:
+      - LOCALAI_CORE_URL=http://localai:8080
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_DOMAIN_CONFIG_KEY=localai:domains:config
+    depends_on:
+      localai:
+        condition: service_started
+    ports:
+      - "8082:8080"
 
 networks:
   default:

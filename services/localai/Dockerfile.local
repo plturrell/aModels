@@ -1,0 +1,41 @@
+# syntax=docker/dockerfile:1
+FROM docker.io/library/ubuntu:22.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential ca-certificates curl git unzip python3 python-is-python3 \
+    libopenblas-dev ffmpeg espeak-ng && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Go
+RUN curl -L -s https://go.dev/dl/go1.22.6.linux-amd64.tar.gz | tar -C /usr/local -xz
+ENV GOPATH=/root/go
+ENV PATH="/usr/local/go/bin:${GOPATH}/bin:${PATH}"
+
+# Install protoc plugins required by LocalAI build
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2 && \
+    go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.4.0
+
+# Copy vendored LocalAI source
+WORKDIR /src
+COPY services/localai/LocalAI/ /src/
+
+# Disable VCS stamping and force ldflags version/commit
+ENV GOFLAGS=-buildvcs=false
+ENV CGO_LDFLAGS=""
+
+# Build
+RUN make build || \
+    (echo "Retrying build without VCS" && \
+     GOFLAGS=-buildvcs=false make build)
+
+# Runtime image
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl ffmpeg libopenblas-base espeak-ng && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /workspace
+COPY --from=builder /src/local-ai /usr/local/bin/local-ai
+EXPOSE 8080
+ENV PORT=8080
+CMD ["/usr/local/bin/local-ai"]

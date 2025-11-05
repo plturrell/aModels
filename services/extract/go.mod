@@ -7,7 +7,7 @@ require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/SAP/go-hdb v1.14.9
 	github.com/alicebob/miniredis/v2 v2.31.1
-	github.com/apache/arrow/go/v16 v16.0.0
+	github.com/apache/arrow-go/v18 v18.4.1
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
@@ -23,8 +23,6 @@ replace github.com/plturrell/aModels/services/postgres => ../postgres
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration => ../../infrastructure/third_party/orchestration
 
 replace github.com/Chahine-tech/sql-parser-go => ../../infrastructure/third_party/sql-parser-go
-
-replace github.com/apache/arrow/go/v16 => ../../infrastructure/third_party/go-arrow
 
 require (
 	github.com/Code-Hex/go-generics-cache v1.3.1 // indirect
