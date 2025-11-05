@@ -20,6 +20,7 @@ BROWSER_URL = os.getenv("BROWSER_URL", "http://localhost:8070")
 DEEPAGENTS_URL = os.getenv("DEEPAGENTS_URL", "http://localhost:9004")
 GRAPH_SERVICE_URL = os.getenv("GRAPH_SERVICE_URL", "http://localhost:8081")
 SAP_BDC_URL = os.getenv("SAP_BDC_URL", "http://localhost:8083")
+CATALOG_URL = os.getenv("CATALOG_URL", "http://localhost:8084")
 
 client = httpx.AsyncClient(timeout=30.0)
 
@@ -100,6 +101,12 @@ async def healthz() -> Dict[str, Any]:
         statuses["sap_bdc"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
     except Exception as e:
         statuses["sap_bdc"] = f"error:{e}"
+    # Catalog health
+    try:
+        r = await client.get(f"{CATALOG_URL}/healthz")
+        statuses["catalog"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
+    except Exception as e:
+        statuses["catalog"] = f"error:{e}"
     return statuses
 
 
@@ -512,6 +519,101 @@ async def sap_bdc_formation() -> Any:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except httpx.RequestError as e:
         raise HTTPException(status_code=502, detail=f"SAP BDC service error: {e}")
+
+
+@app.get("/catalog/data-elements")
+async def catalog_data_elements() -> Any:
+    """List all data elements in the catalog."""
+    try:
+        r = await client.get(f"{CATALOG_URL}/catalog/data-elements")
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Catalog service error: {e}")
+
+
+@app.get("/catalog/data-elements/{element_id}")
+async def catalog_get_data_element(element_id: str) -> Any:
+    """Get a specific data element by ID."""
+    try:
+        r = await client.get(f"{CATALOG_URL}/catalog/data-elements/{element_id}")
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Catalog service error: {e}")
+
+
+@app.post("/catalog/data-elements")
+async def catalog_create_data_element(payload: Dict[str, Any]) -> Any:
+    """Register a new data element in the catalog."""
+    try:
+        r = await client.post(f"{CATALOG_URL}/catalog/data-elements", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Catalog service error: {e}")
+
+
+@app.get("/catalog/ontology")
+async def catalog_ontology() -> Any:
+    """Get the OWL ontology metadata."""
+    try:
+        r = await client.get(f"{CATALOG_URL}/catalog/ontology")
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Catalog service error: {e}")
+
+
+@app.post("/catalog/semantic-search")
+async def catalog_semantic_search(payload: Dict[str, Any]) -> Any:
+    """Perform semantic search on the catalog."""
+    try:
+        r = await client.post(f"{CATALOG_URL}/catalog/semantic-search", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Catalog service error: {e}")
+
+
+@app.post("/catalog/sparql")
+async def catalog_sparql(payload: Dict[str, Any] = None, query: str = Query(None)) -> Any:
+    """Execute a SPARQL query against the catalog triplestore."""
+    try:
+        # Support both POST body and GET query parameter
+        if query:
+            r = await client.get(f"{CATALOG_URL}/catalog/sparql", params={"query": query})
+        else:
+            r = await client.post(f"{CATALOG_URL}/catalog/sparql", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Catalog service error: {e}")
+
+
+@app.get("/catalog/sparql")
+async def catalog_sparql_get(query: str = Query(...)) -> Any:
+    """Execute a SPARQL query via GET request."""
+    try:
+        r = await client.get(f"{CATALOG_URL}/catalog/sparql", params={"query": query})
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Catalog service error: {e}")
 
 
 if __name__ == "__main__":
