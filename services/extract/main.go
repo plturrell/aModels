@@ -105,6 +105,9 @@ func main() {
 
 		// DeepAgents client (enabled by default, 10/10 integration)
 		deepAgentsClient: NewDeepAgentsClient(logger),
+		
+		// Domain detector for associating extracted data with domains
+		domainDetector: NewDomainDetector(os.Getenv("LOCALAI_URL"), logger),
 	}
 
 	// Create persistence layer
@@ -398,6 +401,9 @@ type extractServer struct {
 
 	// DeepAgents client
 	deepAgentsClient *DeepAgentsClient
+	
+	// Domain detector for associating extracted data with domains
+	domainDetector *DomainDetector
 
 	tablePersistence      TablePersistence
 	vectorPersistence     VectorPersistence
@@ -964,6 +970,24 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	validationWarnings := validateGraph(nodes, edges)
 	for _, warning := range validationWarnings {
 		s.logger.Printf("validation warning: %s", warning)
+	}
+	
+	// Associate domains with extracted nodes and edges
+	if s.domainDetector != nil {
+		s.domainDetector.AssociateDomainsWithNodes(nodes)
+		
+		// Create node map for edge association
+		nodeMap := make(map[string]*Node)
+		for i := range nodes {
+			nodeMap[nodes[i].ID] = &nodes[i]
+		}
+		s.domainDetector.AssociateDomainsWithEdges(edges, nodeMap)
+		
+		// Associate SQL queries with domains
+		sqlToAgentID := s.domainDetector.AssociateDomainsWithSQL(req.SqlQueries)
+		if len(sqlToAgentID) > 0 {
+			s.logger.Printf("✅ Associated %d SQL queries with domains", len(sqlToAgentID))
+		}
 	}
 
 	columnDtypes := make([]string, 0)

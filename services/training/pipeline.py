@@ -16,6 +16,13 @@ from datetime import datetime
 from .glean_integration import GleanTrainingClient, ingest_glean_data_for_training
 from .pattern_learning import PatternLearningEngine, WorkflowPatternLearner
 from .temporal_analysis import TemporalPatternLearner, SchemaEvolutionAnalyzer
+from .domain_filter import DomainFilter, PrivacyConfig
+from .domain_trainer import DomainTrainer
+from .domain_metrics import DomainMetricsCollector
+from .ab_testing import ABTestManager
+from .rollback_manager import RollbackManager
+from .routing_optimizer import RoutingOptimizer
+from .domain_optimizer import DomainOptimizer
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +34,55 @@ class TrainingPipeline:
         self,
         extract_service_url: Optional[str] = None,
         glean_db_name: Optional[str] = None,
-        output_dir: Optional[str] = None
+        output_dir: Optional[str] = None,
+        enable_domain_filtering: bool = True,
+        privacy_level: str = "medium"
     ):
         self.extract_service_url = extract_service_url or os.getenv("EXTRACT_SERVICE_URL", "http://localhost:19080")
         self.glean_client = GleanTrainingClient(db_name=glean_db_name)
         self.output_dir = output_dir or os.getenv("TRAINING_OUTPUT_DIR", "./training_data")
         os.makedirs(self.output_dir, exist_ok=True)
+        
+        # Initialize domain filter with differential privacy
+        self.enable_domain_filtering = enable_domain_filtering
+        if self.enable_domain_filtering:
+            privacy_config = PrivacyConfig(privacy_level=privacy_level)
+            self.domain_filter = DomainFilter(
+                localai_url=os.getenv("LOCALAI_URL", "http://localai:8080"),
+                privacy_config=privacy_config
+            )
+        else:
+            self.domain_filter = None
+        
+        # Initialize domain trainer and metrics collector
+        self.domain_trainer = DomainTrainer(
+            localai_url=os.getenv("LOCALAI_URL", "http://localai:8080"),
+            postgres_dsn=os.getenv("POSTGRES_DSN"),
+            redis_url=os.getenv("REDIS_URL")
+        )
+        self.metrics_collector = DomainMetricsCollector(
+            localai_url=os.getenv("LOCALAI_URL", "http://localai:8080"),
+            postgres_dsn=os.getenv("POSTGRES_DSN")
+        )
+        
+        # Initialize Phase 3 components
+        self.ab_test_manager = ABTestManager(
+            postgres_dsn=os.getenv("POSTGRES_DSN"),
+            redis_url=os.getenv("REDIS_URL")
+        )
+        self.rollback_manager = RollbackManager(
+            postgres_dsn=os.getenv("POSTGRES_DSN"),
+            redis_url=os.getenv("REDIS_URL"),
+            localai_url=os.getenv("LOCALAI_URL", "http://localai:8080")
+        )
+        self.routing_optimizer = RoutingOptimizer(
+            postgres_dsn=os.getenv("POSTGRES_DSN"),
+            learning_rate=float(os.getenv("ROUTING_LEARNING_RATE", "0.1"))
+        )
+        self.domain_optimizer = DomainOptimizer(
+            redis_url=os.getenv("REDIS_URL"),
+            cache_ttl=int(os.getenv("DOMAIN_CACHE_TTL", "3600"))
+        )
     
     def run_full_pipeline(
         self,
@@ -289,9 +339,45 @@ class TrainingPipeline:
             features = self._generate_training_features(
                 graph_data, glean_data, learned_patterns, temporal_patterns, semantic_embeddings
             )
+            
+            # Apply domain-specific filtering with differential privacy
+            if self.domain_filter and self.enable_domain_filtering:
+                logger.info("Applying domain-specific filtering with differential privacy...")
+                domain_features = features.get("features", [])
+                
+                # Filter features by domain (auto-detect domain from graph)
+                filtered_features = self.domain_filter.filter_features_by_domain(
+                    domain_features,
+                    domain_id=None  # Auto-detect
+                )
+                
+                if filtered_features:
+                    features["features"] = filtered_features
+                    features["domain_filtered"] = True
+                    features["privacy_applied"] = True
+                    
+                    # Add privacy stats
+                    privacy_stats = self.domain_filter.get_privacy_stats()
+                    features["privacy_stats"] = privacy_stats
+                    
+                    logger.info(
+                        f"✅ Applied domain filtering: {len(filtered_features)}/{len(domain_features)} "
+                        f"features (privacy: ε={self.domain_filter.privacy_config.epsilon}, "
+                        f"δ={self.domain_filter.privacy_config.delta})"
+                    )
+                else:
+                    logger.warning("⚠️  No features matched domain filter, using all features")
+                    features["domain_filtered"] = False
+                    features["privacy_applied"] = False
+            else:
+                features["domain_filtered"] = False
+                features["privacy_applied"] = False
+            
             results["steps"]["features"] = {
                 "status": "success",
                 "feature_count": len(features.get("features", [])),
+                "domain_filtered": features.get("domain_filtered", False),
+                "privacy_applied": features.get("privacy_applied", False),
             }
             logger.info(f"✅ Generated {results['steps']['features']['feature_count']} training features")
         except Exception as e:
@@ -313,12 +399,145 @@ class TrainingPipeline:
             results["steps"]["dataset"] = {"status": "failed", "error": str(e)}
             return results
         
+        # Step 6: Domain-specific model training (if enabled)
+        if os.getenv("ENABLE_DOMAIN_TRAINING", "false").lower() == "true":
+            logger.info("Step 6: Training domain-specific models...")
+            try:
+                # Detect domain from extracted data
+                domain_id = self._detect_domain_from_results(results)
+                
+                if domain_id:
+                    # Prepare training data path
+                    dataset_info = results.get("steps", {}).get("dataset", {})
+                    dataset_files = dataset_info.get("dataset_files", [])
+                    
+                    if dataset_files:
+                        training_data_path = dataset_files[0]  # Use first dataset file
+                        
+                        # Train domain-specific model
+                        training_result = self.domain_trainer.train_domain_model(
+                            domain_id=domain_id,
+                            training_data_path=training_data_path,
+                            fine_tune=True
+                        )
+                        
+                        results["steps"]["domain_training"] = {
+                            "status": "success",
+                            "domain_id": domain_id,
+                            "training_run_id": training_result.get("training_run_id"),
+                            "should_deploy": training_result.get("should_deploy", False),
+                            "deployment": training_result.get("deployment"),
+                        }
+                        
+                        if training_result.get("should_deploy"):
+                            logger.info(f"✅ Domain model trained and deployed for {domain_id}")
+                        else:
+                            logger.info(f"✅ Domain model trained for {domain_id} (deployment threshold not met)")
+                    else:
+                        results["steps"]["domain_training"] = {
+                            "status": "skipped",
+                            "reason": "No training dataset available"
+                        }
+                else:
+                    results["steps"]["domain_training"] = {
+                        "status": "skipped",
+                        "reason": "Could not detect domain"
+                    }
+            except Exception as e:
+                logger.error(f"❌ Domain training failed: {e}")
+                results["steps"]["domain_training"] = {"status": "failed", "error": str(e)}
+        else:
+            results["steps"]["domain_training"] = {"status": "skipped"}
+        
+        # Step 7: Collect domain metrics
+        logger.info("Step 7: Collecting domain performance metrics...")
+        try:
+            domain_id = self._detect_domain_from_results(results)
+            if domain_id:
+                metrics = self.metrics_collector.collect_domain_metrics(
+                    domain_id=domain_id,
+                    time_window_days=30
+                )
+                results["domain_metrics"] = metrics
+                results["steps"]["metrics_collection"] = {
+                    "status": "success",
+                    "domain_id": domain_id,
+                }
+                logger.info(f"✅ Collected metrics for domain {domain_id}")
+            else:
+                results["steps"]["metrics_collection"] = {
+                    "status": "skipped",
+                    "reason": "Could not detect domain"
+                }
+        except Exception as e:
+            logger.warning(f"⚠️  Metrics collection failed: {e}")
+            results["steps"]["metrics_collection"] = {"status": "failed", "error": str(e)}
+        
+        # Step 8: Check for rollback conditions (if domain training was performed)
+        if results.get("steps", {}).get("domain_training", {}).get("status") == "success":
+            logger.info("Step 8: Checking for rollback conditions...")
+            try:
+                domain_id = self._detect_domain_from_results(results)
+                if domain_id:
+                    # Get current metrics from training
+                    training_result = results["steps"]["domain_training"]
+                    if training_result.get("deployment"):
+                        deployment_metrics = training_result["deployment"].get("metrics", {})
+                        
+                        # Check rollback
+                        rollback_result = self.rollback_manager.check_and_rollback(
+                            domain_id=domain_id,
+                            current_metrics=deployment_metrics
+                        )
+                        
+                        results["steps"]["rollback_check"] = {
+                            "status": "success",
+                            "rollback_triggered": rollback_result.get("rollback_triggered", False),
+                            "reason": rollback_result.get("reason"),
+                        }
+                        
+                        if rollback_result.get("rollback_triggered"):
+                            logger.warning(f"⚠️  Rollback triggered for {domain_id}: {rollback_result.get('reason')}")
+                        else:
+                            logger.info(f"✅ No rollback needed for {domain_id}")
+                    else:
+                        results["steps"]["rollback_check"] = {
+                            "status": "skipped",
+                            "reason": "No deployment performed"
+                        }
+                else:
+                    results["steps"]["rollback_check"] = {
+                        "status": "skipped",
+                        "reason": "Could not detect domain"
+                    }
+            except Exception as e:
+                logger.warning(f"⚠️  Rollback check failed: {e}")
+                results["steps"]["rollback_check"] = {"status": "failed", "error": str(e)}
+        else:
+            results["steps"]["rollback_check"] = {"status": "skipped"}
+        
         results["pipeline_completed_at"] = datetime.now().isoformat()
         results["status"] = "success"
         
         logger.info("✅ Training pipeline completed successfully")
         
         return results
+    
+    def _detect_domain_from_results(self, results: Dict[str, Any]) -> Optional[str]:
+        """Detect domain ID from pipeline results."""
+        # Try to get domain from filtered features
+        features = results.get("steps", {}).get("features", {})
+        if features.get("domain_filtered"):
+            # Domain was detected during filtering
+            # Try to extract from graph data
+            extract_step = results.get("steps", {}).get("extract", {})
+            if extract_step.get("status") == "success":
+                # Would need to query graph data for domain
+                # For now, return None and let user specify
+                pass
+        
+        # Return None if can't detect (user can specify manually)
+        return None
     
     def _extract_knowledge_graph(
         self,
@@ -347,7 +566,36 @@ class TrainingPipeline:
         )
         response.raise_for_status()
         
-        return response.json()
+        graph_data = response.json()
+        
+        # Apply domain-specific filtering with differential privacy if enabled
+        if self.domain_filter and self.enable_domain_filtering:
+            logger.info("Applying domain filtering to extracted knowledge graph...")
+            nodes = graph_data.get("nodes", [])
+            edges = graph_data.get("edges", [])
+            
+            # Filter by domain (auto-detect)
+            filtered_nodes, filtered_edges = self.domain_filter.filter_by_domain(
+                nodes, edges, domain_id=None
+            )
+            
+            if filtered_nodes or filtered_edges:
+                graph_data["nodes"] = filtered_nodes
+                graph_data["edges"] = filtered_edges
+                graph_data["domain_filtered"] = True
+                graph_data["privacy_applied"] = True
+                logger.info(
+                    f"✅ Filtered graph: {len(filtered_nodes)} nodes, {len(filtered_edges)} edges "
+                    f"(privacy: ε={self.domain_filter.privacy_config.epsilon})"
+                )
+            else:
+                graph_data["domain_filtered"] = False
+                graph_data["privacy_applied"] = False
+        else:
+            graph_data["domain_filtered"] = False
+            graph_data["privacy_applied"] = False
+        
+        return graph_data
     
     def _generate_training_features(
         self,

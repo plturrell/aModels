@@ -96,16 +96,40 @@ func (p *Neo4jPersistence) SaveGraph(nodes []Node, edges []Edge) error {
 				}
 			}
 			
+			// Extract agent_id and domain from properties for separate storage (if available)
+			var agentID string
+			var domainID string
+			if node.Props != nil {
+				if aid, ok := node.Props["agent_id"].(string); ok {
+					agentID = aid
+				}
+				if did, ok := node.Props["domain"].(string); ok {
+					domainID = did
+				}
+			}
+			
 			// Add updated_at timestamp to node for temporal analysis
-			_, err := tx.Run(ctx,
-				"MERGE (n:Node {id: $id}) SET n.type = $type, n.label = $label, n.properties_json = $props, n.updated_at = $updated_at",
-				map[string]any{
-					"id":        node.ID,
-					"type":      node.Type,
-					"label":     node.Label,
-					"props":     propsJSON,
-					"updated_at": now,
-				})
+			// Store agent_id and domain as separate properties for easier querying
+			query := "MERGE (n:Node {id: $id}) SET n.type = $type, n.label = $label, n.properties_json = $props, n.updated_at = $updated_at"
+			params := map[string]any{
+				"id":        node.ID,
+				"type":      node.Type,
+				"label":     node.Label,
+				"props":     propsJSON,
+				"updated_at": now,
+			}
+			
+			// Add agent_id and domain as separate properties if available
+			if agentID != "" {
+				query += ", n.agent_id = $agent_id"
+				params["agent_id"] = agentID
+			}
+			if domainID != "" {
+				query += ", n.domain = $domain"
+				params["domain"] = domainID
+			}
+			
+			_, err := tx.Run(ctx, query, params)
 			if err != nil {
 				return nil, fmt.Errorf("failed to save node %s: %w", node.ID, err)
 			}
@@ -120,16 +144,40 @@ func (p *Neo4jPersistence) SaveGraph(nodes []Node, edges []Edge) error {
 				}
 			}
 			
+			// Extract agent_id and domain from edge properties (if available)
+			var agentID string
+			var domainID string
+			if edge.Props != nil {
+				if aid, ok := edge.Props["agent_id"].(string); ok {
+					agentID = aid
+				}
+				if did, ok := edge.Props["domain"].(string); ok {
+					domainID = did
+				}
+			}
+			
 			// Add updated_at timestamp to edge for temporal analysis
-			_, err := tx.Run(ctx,
-				"MATCH (source:Node {id: $source_id}) MATCH (target:Node {id: $target_id}) MERGE (source)-[r:RELATIONSHIP]->(target) SET r.label = $label, r.properties_json = $props, r.updated_at = $updated_at",
-				map[string]any{
-					"source_id":  edge.SourceID,
-					"target_id":  edge.TargetID,
-					"label":      edge.Label,
-					"props":      propsJSON,
-					"updated_at": now,
-				})
+			// Store agent_id and domain as separate properties for easier querying
+			query := "MATCH (source:Node {id: $source_id}) MATCH (target:Node {id: $target_id}) MERGE (source)-[r:RELATIONSHIP]->(target) SET r.label = $label, r.properties_json = $props, r.updated_at = $updated_at"
+			params := map[string]any{
+				"source_id":  edge.SourceID,
+				"target_id":  edge.TargetID,
+				"label":      edge.Label,
+				"props":      propsJSON,
+				"updated_at": now,
+			}
+			
+			// Add agent_id and domain as separate properties if available
+			if agentID != "" {
+				query += ", r.agent_id = $agent_id"
+				params["agent_id"] = agentID
+			}
+			if domainID != "" {
+				query += ", r.domain = $domain"
+				params["domain"] = domainID
+			}
+			
+			_, err := tx.Run(ctx, query, params)
 			if err != nil {
 				return nil, fmt.Errorf("failed to save edge %s->%s: %w", edge.SourceID, edge.TargetID, err)
 			}

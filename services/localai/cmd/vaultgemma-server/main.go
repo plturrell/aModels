@@ -1,7 +1,7 @@
 package main
 
 import (
-    // "context"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -205,6 +205,40 @@ func main() {
 	http.HandleFunc("/v1/chat/completions/function-calling", server.EnableCORS(vgServer.RateLimitMiddleware(vgServer.HandleFunctionCalling)))
 	http.HandleFunc("/v1/models", server.EnableCORS(vgServer.HandleModels))
 	http.HandleFunc("/v1/domains", server.EnableCORS(vgServer.HandleListDomains))
+	
+	// Phase 3: Domain lifecycle management API
+	// Initialize PostgreSQL and Redis stores if available
+	var postgresStore *domain.PostgresConfigStore
+	var redisLoader *domain.RedisConfigLoader
+	
+	postgresDSN := os.Getenv("POSTGRES_DSN")
+	if postgresDSN != "" {
+		if store, err := domain.NewPostgresConfigStore(postgresDSN); err == nil {
+			postgresStore = store
+			log.Printf("✅ PostgreSQL config store initialized")
+		} else {
+			log.Printf("⚠️  Failed to initialize PostgreSQL store: %v", err)
+		}
+	}
+	
+	redisURL := os.Getenv("REDIS_URL")
+	if redisURL != "" {
+		if loader, err := domain.NewRedisConfigLoader(redisURL, "localai:domains:config"); err == nil {
+			redisLoader = loader
+			log.Printf("✅ Redis config loader initialized")
+		} else {
+			log.Printf("⚠️  Failed to initialize Redis loader: %v", err)
+		}
+	}
+	
+	if postgresStore != nil || redisLoader != nil {
+		lifecycleManager := domain.NewLifecycleManager(domainManager, postgresStore, redisLoader)
+		lifecycleAPI := domain.NewDomainLifecycleAPI(lifecycleManager)
+		http.HandleFunc("/v1/domains/create", server.EnableCORS(lifecycleAPI.HandleCreateDomain))
+		http.HandleFunc("/v1/domains/list", server.EnableCORS(lifecycleAPI.HandleListDomains))
+		// Note: Update, archive, delete would need domain ID in path - handled via mux or query params
+		log.Printf("✅ Domain lifecycle API enabled")
+	}
 	http.HandleFunc("/v1/domain-registry", server.EnableCORS(vgServer.HandleDomainRegistry))
 	http.HandleFunc("/v1/agent-catalog", server.EnableCORS(handleAgentCatalog(vgServer)))
 	http.HandleFunc("/health", server.EnableCORS(vgServer.HandleHealth))

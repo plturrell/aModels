@@ -17,6 +17,7 @@ services:
       - HANA_URL=http://hana:8083
       - GATEWAY_PORT=8000
       - DEEPAGENTS_URL=http://deepagents:9004
+      # Model Configuration - LocalAI only (no external LLM dependencies)
       - LOCALAI_URL=http://localai:8080
     ports:
       - "8000:8000"
@@ -60,9 +61,11 @@ services:
       - EXTRACT_SERVICE_URL=http://extract-service:19080
       - AGENTFLOW_SERVICE_URL=http://agentflow-service:9001
       - GRAPH_SERVICE_URL=http://graph-service:8081
+      # Model Configuration - LocalAI only (no external LLM dependencies)
       - LOCALAI_URL=http://localai:8080
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Disable external LLM providers
+      - ANTHROPIC_API_KEY=
+      - OPENAI_API_KEY=
       - DEEPAGENTS_PORT=9004
       # DeepAgents is enabled by default (10/10 integration)
       # Set DEEPAGENTS_ENABLED=false to disable

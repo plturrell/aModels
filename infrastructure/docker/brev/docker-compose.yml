@@ -7,11 +7,16 @@ services:
       - discovery.type=single-node
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
       - xpack.security.enabled=false
+      # Disable external inference services - use local models only
+      # Note: External inference services (OpenAI, Anthropic, etc.) are disabled
+      # All embeddings must use local inference endpoint (search-python:8091)
     ports:
       - "9200:9200"
       - "9300:9300"
     volumes:
       - esdata:/usr/share/elasticsearch/data
+      # Mount elasticsearch config to disable external inference if needed
+      # - ../../configs/elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
 
   transformers:
     build:
@@ -54,6 +59,8 @@ services:
       # Redis config (preferred over file-based)
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - REDIS_DOMAIN_CONFIG_KEY=${REDIS_DOMAIN_CONFIG_KEY:-localai:domains:config}
+      # Enable domains that require env vars
+      - ENABLE_GEMMA7B=1
       # Fallback to file if Redis not available
       - DOMAIN_CONFIG_PATH=/workspace/config/domains.json
     volumes:
@@ -77,15 +84,20 @@ services:
   search-inference:
     build:
       context: ../..
-      dockerfile: legacy/stage3/search/search-inference/Dockerfile
+      dockerfile: services/search/search-inference/Dockerfile
     image: amodels/search-inference:latest
     container_name: search-inference
     restart: unless-stopped
     environment:
       - SEARCH_CONFIG=/workspace/config/search-inference.yaml
       - ELASTICSEARCH_HOST=http://elasticsearch:9200
+      # Model Configuration - LocalAI only (no external LLM dependencies)
+      - LOCALAI_BASE_URL=http://localai:8080
+      - LOCALAI_API_KEY=not-needed
+      # Elasticsearch configuration - use local inference only
+      - ELASTICSEARCH_ADDRESSES=http://elasticsearch:9200
     volumes:
-      - ../../legacy/stage3/search/search-inference/config:/workspace/config:ro
+      - ../../services/search/search-inference/config:/workspace/config:ro
       - ../../models:/workspace/models:ro
     ports:
       - "8090:8090"
@@ -218,6 +230,14 @@ services:
       # Set DEEPAGENTS_ENABLED=false to disable
       - DEEPAGENTS_ENABLED=${DEEPAGENTS_ENABLED:-true}
       - DEEPAGENTS_URL=${DEEPAGENTS_URL:-http://deepagents-service:9004}
+      # Domain Detection - LocalAI integration for domain association during extraction
+      - LOCALAI_URL=${LOCALAI_URL:-http://localai:8080}
+      # Model Configuration - LocalAI only (no external LLM dependencies)
+      # langextract-api: Disabled by default (empty URL = disabled)
+      # To enable with LocalAI: set LANGEXTRACT_API_URL=http://localai:8081/v1
+      # See configs/langextract-config.md for details
+      - LANGEXTRACT_API_URL=${LANGEXTRACT_API_URL:-}
+      - LANGEXTRACT_API_KEY=${LANGEXTRACT_API_KEY:-}
     volumes:
       - ../../data:/workspace/data:rw
       - ../../logs:/workspace/logs:rw
@@ -242,6 +262,8 @@ services:
       - NEO4J_URI=bolt://neo4j:7687
       - NEO4J_USERNAME=neo4j
       - NEO4J_PASSWORD=amodels123
+      # Model Configuration - LocalAI only (no external LLM dependencies)
+      - LOCALAI_URL=http://localai:8081
     volumes:
       - ../../configs:/workspace/config:ro
       - ../../artifacts/model-release:/workspace/assets:ro
