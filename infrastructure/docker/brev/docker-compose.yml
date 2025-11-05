@@ -138,9 +138,11 @@ services:
       - /bin/bash
       - -c
       - |
-        if [ -d /workspace/testing ] && [ "$(ls -A /workspace/testing 2>/dev/null)" = "" ]; then
-          echo "Testing directory is empty, copying from host..."
+        if [ -d /host-testing ] && [ "$(ls -A /host-testing 2>/dev/null)" != "" ]; then
+          echo "Copying testing files from /host-testing to /workspace/testing..."
           cp -r /host-testing/* /workspace/testing/ 2>/dev/null || true
+          echo "Files copied. Listing /workspace/testing:"
+          ls -la /workspace/testing/ | head -10
         fi
         exec sleep infinity
     working_dir: /workspace
