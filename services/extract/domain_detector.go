@@ -78,66 +78,8 @@ func (dd *DomainDetector) LoadDomains() error {
 	defer dd.mu.Unlock()
 	
 	dd.domainConfigs = make(map[string]DomainConfig)
-	for _, domain := range domainsResponse.Data {
-		config := DomainConfig{
-			Name: domain.Name,
-		}
-		
-		// Try direct fields first
-		if domain.AgentID != "" {
-			config.AgentID = domain.AgentID
-		}
-		if len(domain.Keywords) > 0 {
-			config.Keywords = domain.Keywords
-		}
-		if len(domain.Tags) > 0 {
-			config.Tags = domain.Tags
-		}
-		if domain.Layer != "" {
-			config.Layer = domain.Layer
-		}
-		if domain.Team != "" {
-			config.Team = domain.Team
-		}
-		
-		// Fallback to nested config if direct fields not available
-		if domain.Config != nil {
-			if config.AgentID == "" {
-				if agentID, ok := domain.Config["agent_id"].(string); ok {
-					config.AgentID = agentID
-				}
-			}
-			if len(config.Keywords) == 0 {
-				if keywords, ok := domain.Config["keywords"].([]interface{}); ok {
-					for _, kw := range keywords {
-						if kwStr, ok := kw.(string); ok {
-							config.Keywords = append(config.Keywords, kwStr)
-						}
-					}
-				}
-			}
-			if len(config.Tags) == 0 {
-				if tags, ok := domain.Config["tags"].([]interface{}); ok {
-					for _, tag := range tags {
-						if tagStr, ok := tag.(string); ok {
-							config.Tags = append(config.Tags, tagStr)
-						}
-					}
-				}
-			}
-			if config.Layer == "" {
-				if layer, ok := domain.Config["layer"].(string); ok {
-					config.Layer = layer
-				}
-			}
-			if config.Team == "" {
-				if team, ok := domain.Config["team"].(string); ok {
-					config.Team = team
-				}
-			}
-		}
-		
-		dd.domainConfigs[domain.ID] = config
+	for _, d := range domainsResponse.Data {
+		dd.domainConfigs[d.ID] = d.Config
 	}
 	
 	dd.logger.Printf("✅ Loaded %d domains for detection", len(dd.domainConfigs))

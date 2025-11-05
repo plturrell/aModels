@@ -163,17 +163,19 @@ func (nts *Neo4jTerminologyStore) LoadTerminology(ctx context.Context) (*StoredT
 		for _, record := range records {
 			text, _ := record.Get("text")
 			domain, _ := record.Get("domain")
-			timestampStr, _ := record.Get("timestamp")
-			confidence, _ := record.Get("confidence")
+			timestampVal, _ := record.Get("timestamp") // timestampStr unused for now
+			confidenceVal, _ := record.Get("confidence") // confidence unused for now
+			_ = timestampVal
+			_ = confidenceVal
 
 			if textStr, ok := text.(string); ok {
 				if domainStr, ok := domain.(string); ok {
 					example := TerminologyExample{
 						Text:      textStr,
-						Timestamp: time.Now(), // Would parse timestampStr
-						Confidence: 0.8,       // Would use confidence value
+						Timestamp: time.Now(), // Would parse timestampVal if needed
+						Confidence: 0.8,       // Would use confidenceVal if needed
 					}
-					if conf, ok := confidence.(float64); ok {
+					if conf, ok := confidenceVal.(float64); ok {
 						example.Confidence = conf
 					}
 					terminology.Domains[domainStr] = append(terminology.Domains[domainStr], example)
@@ -214,7 +216,7 @@ func (nts *Neo4jTerminologyStore) GetTerminologyEvolution(
 	session := nts.neo4jPersistence.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
 
-	result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+	_, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 		result, err := tx.Run(ctx, query, params)
 		if err != nil {
 			return nil, err

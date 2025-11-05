@@ -103,9 +103,6 @@ func main() {
 		// Document store
 		docStorePath: cfg.Persistence.DocStorePath,
 
-		// DeepAgents client (enabled by default, 10/10 integration)
-		deepAgentsClient: NewDeepAgentsClient(logger),
-		
 		// Domain detector for associating extracted data with domains
 		domainDetector: NewDomainDetector(os.Getenv("LOCALAI_URL"), logger),
 	}
@@ -251,7 +248,7 @@ func main() {
 	server.chainMatcher = chainMatcher
 
 	// Initialize embedding cache and batch generator (Phase 3 optimization)
-	cacheMaxSize := parseIntEnv(os.Getenv("EMBEDDING_CACHE_SIZE"), 1000)
+	cacheMaxSize := parseEnvIntValue(os.Getenv("EMBEDDING_CACHE_SIZE"), 1000)
 	cacheTTL := 24 * time.Hour // Default 24 hour TTL
 	if ttlStr := os.Getenv("EMBEDDING_CACHE_TTL"); ttlStr != "" {
 		if ttl, err := time.ParseDuration(ttlStr); err == nil {
@@ -260,7 +257,7 @@ func main() {
 	}
 	server.embeddingCache = NewEmbeddingCache(cacheMaxSize, cacheTTL, logger)
 
-	batchSize := parseIntEnv(os.Getenv("EMBEDDING_BATCH_SIZE"), 10)
+	batchSize := parseEnvIntValue(os.Getenv("EMBEDDING_BATCH_SIZE"), 10)
 	server.batchEmbeddingGen = NewBatchEmbeddingGenerator(logger, server.embeddingCache, batchSize)
 	logger.Printf("Embedding cache initialized (max_size=%d, ttl=%v, batch_size=%d)", cacheMaxSize, cacheTTL, batchSize)
 
@@ -419,6 +416,9 @@ func main() {
 	mux.HandleFunc("/catalog/information-systems/add", server.handleAddInformationSystem)
 	mux.HandleFunc("/ui", server.handleWebUI)
 
+	// Initialize DeepAgents client
+	server.deepAgentsClient = NewDeepAgentsClient(logger)
+
 	if *explorer {
 		server.startExplorer()
 	} else {
@@ -452,9 +452,6 @@ type extractServer struct {
 	docStorePath   string
 	docPersistence DocumentPersistence
 
-	// DeepAgents client
-	deepAgentsClient *DeepAgentsClient
-	
 	// Domain detector for associating extracted data with domains
 	domainDetector *DomainDetector
 
@@ -474,9 +471,6 @@ type extractServer struct {
 	telemetryOperation string
 	catalog            *Catalog
 
-	// DeepAgents client (enabled by default, 10/10 integration)
-	deepAgentsClient *DeepAgentsClient
-
 	// Orchestration chain matcher (for Phase 2 integration)
 	chainMatcher *OrchestrationChainMatcher
 
@@ -492,17 +486,19 @@ type extractServer struct {
 
 	// Multi-modal extractor (for Phase 6 unified integration)
 	multiModalExtractor *MultiModalExtractor
+
+	// External integrations
+	deepAgentsClient *DeepAgentsClient
 }
 
-func parseIntEnv(envVar string, defaultValue int) int {
+func parseEnvIntValue(envVar string, defaultValue int) int {
 	if envVar == "" {
 		return defaultValue
 	}
-	val, err := strconv.Atoi(envVar)
-	if err != nil {
-		return defaultValue
+	if v, err := strconv.Atoi(envVar); err == nil {
+		return v
 	}
-	return val
+	return defaultValue
 }
 
 func parseBoolEnv(value string, defaultValue bool) bool {
@@ -875,18 +871,8 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		nodes = append(nodes, petriNodes...)
 		edges = append(edges, petriEdges...)
 
-		// Link Petri net to root node
-		if rootID != "" {
-			edges = append(edges, Edge{
-				SourceID: rootID,
-				TargetID: petriRootID,
-				Label:    "HAS_PETRI_NET",
-				Props: map[string]any{
-					"petri_net_id": petriNet.ID,
-					"name":         petriNet.Name,
-				},
-			})
-		}
+		// Store petriRootID to link after normalization when rootID is available
+		_ = petriRootID // Will be used after normalization
 
 		s.logger.Printf("Converted Control-M to Petri net: %d places, %d transitions, %d arcs",
 			len(petriNet.Places), len(petriNet.Transitions), len(petriNet.Arcs))
@@ -1017,6 +1003,30 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	nodes = normResult.Nodes
 	edges = normResult.Edges
 	rootID := normResult.RootNodeID
+
+	// Link Petri net to root node (if we have one)
+	if len(allControlMJobs) > 0 && rootID != "" {
+		// Find the petri net root node
+		var petriRootID string
+		for _, node := range nodes {
+			if node.Type == "petri_net" && node.Props != nil {
+				if _, ok := node.Props["petri_net_id"]; ok {
+					petriRootID = node.ID
+					break
+				}
+			}
+		}
+		if petriRootID != "" {
+			edges = append(edges, Edge{
+				SourceID: rootID,
+				TargetID: petriRootID,
+				Label:    "HAS_PETRI_NET",
+				Props: map[string]any{
+					"source": "control-m",
+				},
+			})
+		}
+	}
 
 	for _, warning := range normResult.Warnings {
 		s.logger.Printf("normalization warning: %s", warning)
@@ -2431,11 +2441,11 @@ func (s *extractServer) fuseSearchResults(relationalResults, semanticResults []V
 	for _, result := range relationalResults {
 		key := result.ArtifactID
 		if existing, exists := resultMap[key]; exists {
-			// If already exists, boost score (weighted average)
-			relationalWeight := 0.4
-			semanticWeight := 0.6
-			combinedScore := (existing.Score * semanticWeight) + (result.Score * relationalWeight)
-			result.Score = combinedScore
+		// If already exists, boost score (weighted average)
+		relationalWeight := 0.4
+		semanticWeight := 0.6
+		combinedScore := float32((float64(existing.Score) * semanticWeight) + (float64(result.Score) * relationalWeight))
+		result.Score = combinedScore
 			// Merge metadata
 			if result.Metadata != nil {
 				if existing.Metadata == nil {
@@ -2455,12 +2465,12 @@ func (s *extractServer) fuseSearchResults(relationalResults, semanticResults []V
 	for _, result := range semanticResults {
 		key := result.ArtifactID
 		if existing, exists := resultMap[key]; exists {
-			// If already exists, boost score (weighted average)
-			relationalWeight := 0.4
-			semanticWeight := 0.6
-			existingScore := scoreMap[key]
-			combinedScore := (existingScore * relationalWeight) + (result.Score * semanticWeight)
-			result.Score = combinedScore
+		// If already exists, boost score (weighted average)
+		relationalWeight := 0.4
+		semanticWeight := 0.6
+		existingScore := scoreMap[key]
+		combinedScore := float32((float64(existingScore) * relationalWeight) + (float64(result.Score) * semanticWeight))
+		result.Score = combinedScore
 			scoreMap[key] = combinedScore
 			// Merge metadata
 			if result.Metadata != nil {
@@ -2541,7 +2551,12 @@ func (s *extractServer) handleGenerateEmbedding(w http.ResponseWriter, r *http.R
 		embedding, err = generateSQLEmbedding(ctx, request.Text)
 	case "table":
 		node := Node{Label: request.Text, Type: "table"}
-		embedding, err = generateTableEmbedding(ctx, node)
+		relationalEmbedding, semanticEmbedding, err := generateTableEmbedding(ctx, node)
+		if err == nil && len(relationalEmbedding) > 0 {
+			embedding = relationalEmbedding
+		} else if err == nil && len(semanticEmbedding) > 0 {
+			embedding = semanticEmbedding
+		}
 	case "column":
 		node := Node{Label: request.Text, Type: "column"}
 		embedding, err = generateColumnEmbedding(ctx, node)
@@ -3872,4 +3887,37 @@ func (s *extractServer) handleSAPBDCExtract(w http.ResponseWriter, r *http.Reque
 		},
 		"source": "sap_bdc",
 	})
+}
+
+// ---- Terminology endpoints (stubs) ----
+func (s *extractServer) handleTerminologyDomains(w http.ResponseWriter, r *http.Request) {
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{"domains": []any{}})
+}
+func (s *extractServer) handleTerminologyRoles(w http.ResponseWriter, r *http.Request) {
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{"roles": []any{}})
+}
+func (s *extractServer) handleTerminologyPatterns(w http.ResponseWriter, r *http.Request) {
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{"patterns": []any{}})
+}
+func (s *extractServer) handleTerminologyLearn(w http.ResponseWriter, r *http.Request) {
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+}
+func (s *extractServer) handleTerminologyEvolution(w http.ResponseWriter, r *http.Request) {
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{"evolution": []any{}})
+}
+
+// ---- Semantic analysis endpoints ----
+func (s *extractServer) handleAnalyzeColumnSemantics(w http.ResponseWriter, r *http.Request) {
+	if s.semanticSchemaAnalyzer == nil {
+		handlers.WriteJSON(w, http.StatusNotImplemented, map[string]string{"error": "semantic analyzer not available"})
+		return
+	}
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+}
+func (s *extractServer) handleAnalyzeDataLineage(w http.ResponseWriter, r *http.Request) {
+	if s.semanticSchemaAnalyzer == nil {
+		handlers.WriteJSON(w, http.StatusNotImplemented, map[string]string{"error": "semantic analyzer not available"})
+		return
+	}
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 }

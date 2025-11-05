@@ -391,7 +391,7 @@ func (tnn *TerminologyLNN) LearnRole(
 	defer tnn.mu.Unlock()
 
 	textEmbedding := generateTextEmbedding(text)
-	roleOutput := tnn.roleLNN.Process(ctx, textEmbedding, timestamp)
+	_ = tnn.roleLNN.Process(ctx, textEmbedding, timestamp) // Process for side effects
 
 	// Update weights
 	target := generateRoleTarget(role)

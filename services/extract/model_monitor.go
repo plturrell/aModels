@@ -10,18 +10,6 @@ import (
 	"time"
 )
 
-// ModelPrediction represents a single prediction with ground truth
-type ModelPrediction struct {
-	TableName           string
-	PredictedClass      string
-	PredictedConfidence float64
-	PredictedQuality    float64
-	ActualClass         string
-	ActualQuality       float64
-	Timestamp           time.Time
-	Features            map[string]any
-}
-
 // ModelPerformanceMetrics tracks model performance over time
 type ModelPerformanceMetrics struct {
 	TotalPredictions     int
@@ -36,7 +24,7 @@ type ModelPerformanceMetrics struct {
 
 // ModelMonitor tracks model performance and enables active learning
 type ModelMonitor struct {
-	predictions     []ModelPrediction
+	predictions     []MonitoredPrediction
 	metrics         ModelPerformanceMetrics
 	mu              sync.RWMutex
 	logger          *log.Logger
@@ -47,7 +35,7 @@ type ModelMonitor struct {
 // NewModelMonitor creates a new model performance monitor
 func NewModelMonitor(metricsFilePath string, logger *log.Logger) *ModelMonitor {
 	monitor := &ModelMonitor{
-		predictions:     make([]ModelPrediction, 0),
+		predictions:     make([]MonitoredPrediction, 0),
 		logger:          logger,
 		metricsFilePath: metricsFilePath,
 		enabled:        os.Getenv("MODEL_MONITORING_ENABLED") == "true",
@@ -66,8 +54,18 @@ func NewModelMonitor(metricsFilePath string, logger *log.Logger) *ModelMonitor {
 	return monitor
 }
 
+// MonitoredPrediction is the monitoring-focused view of a prediction
+type MonitoredPrediction struct {
+	PredictedClass      string
+	ActualClass         string
+	PredictedQuality    float64
+	ActualQuality       float64
+	PredictedConfidence float64
+	Timestamp           time.Time
+}
+
 // RecordPrediction records a prediction for monitoring
-func (mm *ModelMonitor) RecordPrediction(pred ModelPrediction) {
+func (mm *ModelMonitor) RecordPrediction(pred MonitoredPrediction) {
 	if !mm.enabled {
 		return
 	}
@@ -90,7 +88,7 @@ func (mm *ModelMonitor) RecordPrediction(pred ModelPrediction) {
 }
 
 // updateMetrics updates performance metrics based on a prediction with ground truth
-func (mm *ModelMonitor) updateMetrics(pred ModelPrediction) {
+func (mm *ModelMonitor) updateMetrics(pred MonitoredPrediction) {
 	mm.metrics.TotalPredictions++
 
 	// Classification accuracy
@@ -172,11 +170,11 @@ func (mm *ModelMonitor) GetMetrics() ModelPerformanceMetrics {
 }
 
 // GetUncertainPredictions returns predictions that need review
-func (mm *ModelMonitor) GetUncertainPredictions(limit int) []ModelPrediction {
+func (mm *ModelMonitor) GetUncertainPredictions(limit int) []MonitoredPrediction {
 	mm.mu.RLock()
 	defer mm.mu.RUnlock()
 
-	uncertain := make([]ModelPrediction, 0)
+	uncertain := make([]MonitoredPrediction, 0)
 	for _, pred := range mm.predictions {
 		if pred.PredictedConfidence < 0.7 && pred.ActualClass == "" {
 			uncertain = append(uncertain, pred)

@@ -434,7 +434,7 @@ func (ssa *SemanticSchemaAnalyzer) calculateSemanticSimilarityWithDomain(
 			continue
 		}
 		
-		similarity := cosineSimilarity(embedding, tagEmbedding)
+		similarity := cosineSimilarity64(embedding, tagEmbedding)
 		similarities[tag] = similarity
 	}
 	
@@ -496,7 +496,7 @@ func (ssa *SemanticSchemaAnalyzer) calculateSemanticSimilarity(
 			}
 
 			// Calculate cosine similarity
-			similarity := cosineSimilarity(embedding, patternEmbedding)
+			similarity := cosineSimilarity64(embedding, patternEmbedding)
 			similarities[patternName] = similarity
 		}
 	}
@@ -542,7 +542,7 @@ func (ssa *SemanticSchemaAnalyzer) calculateTableSimilarity(
 	}
 
 	// Calculate cosine similarity
-	similarity := cosineSimilarity(sourceEmbedding, targetEmbedding)
+	similarity := cosineSimilarity64(sourceEmbedding, targetEmbedding)
 	return similarity, nil
 }
 
@@ -662,7 +662,7 @@ func (ssa *SemanticSchemaAnalyzer) extractLineageClues(
 }
 
 // Helper function for cosine similarity
-func cosineSimilarity(a, b []float32) float64 {
+func cosineSimilarity64(a, b []float32) float64 {
 	if len(a) != len(b) {
 		return 0.0
 	}
@@ -681,29 +681,5 @@ func cosineSimilarity(a, b []float32) float64 {
 	}
 
 	return dotProduct / (sqrt(normA) * sqrt(normB))
-}
-
-// Helper functions
-func sqrt(x float64) float64 {
-	// Simple square root approximation (or use math.Sqrt)
-	if x == 0 {
-		return 0
-	}
-	if x < 0 {
-		return 0
-	}
-	// Use iterative approximation
-	result := x
-	for i := 0; i < 10; i++ {
-		result = 0.5 * (result + x/result)
-	}
-	return result
-}
-
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
 }
 

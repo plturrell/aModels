@@ -537,7 +537,7 @@ func (mff *ModelFusionFramework) calculatePredictionSimilarity(
 ) float64 {
 	// If both have embeddings, use cosine similarity
 	if len(pred1.Embedding) > 0 && len(pred2.Embedding) > 0 {
-		return cosineSimilarity(pred1.Embedding, pred2.Embedding)
+		return cosineSimilarity64(pred1.Embedding, pred2.Embedding)
 	}
 
 	// Otherwise, compare predictions directly
@@ -549,45 +549,4 @@ func (mff *ModelFusionFramework) calculatePredictionSimilarity(
 }
 
 // Helper functions
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func cosineSimilarity(a, b []float32) float64 {
-	if len(a) != len(b) {
-		return 0.0
-	}
-
-	var dotProduct float64
-	var normA, normB float64
-
-	for i := range a {
-		dotProduct += float64(a[i] * b[i])
-		normA += float64(a[i] * a[i])
-		normB += float64(b[i] * b[i])
-	}
-
-	if normA == 0 || normB == 0 {
-		return 0.0
-	}
-
-	return dotProduct / (sqrt(normA) * sqrt(normB))
-}
-
-func sqrt(x float64) float64 {
-	if x == 0 {
-		return 0
-	}
-	if x < 0 {
-		return 0
-	}
-	result := x
-	for i := 0; i < 10; i++ {
-		result = 0.5 * (result + x/result)
-	}
-	return result
-}
 

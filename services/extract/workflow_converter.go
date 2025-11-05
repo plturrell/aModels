@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
 	"strings"
 )
 
@@ -147,7 +150,7 @@ func (wc *WorkflowConverter) ConvertPetriNetToLangGraph(net *PetriNet) *LangGrap
 		nodeCounter++
 
 		// Determine agent type using semantic search and classifications
-		agentType := wc.determineAgentType(transition)
+		agentType := wc.determineAgentType(&transition)
 
 		node := LangGraphNode{
 			ID:        nodeID,
@@ -283,7 +286,7 @@ func (wc *WorkflowConverter) ConvertPetriNetToAgentFlow(net *PetriNet) *AgentFlo
 		nodeCounter++
 
 		// Determine agent type using semantic search and classifications
-		agentType := wc.determineAgentType(transition)
+		agentType := wc.determineAgentType(&transition)
 		
 		// Map agent type to AgentFlow node type
 		switch agentType {

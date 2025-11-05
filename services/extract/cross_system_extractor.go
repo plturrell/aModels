@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -462,7 +461,7 @@ func (cse *CrossSystemExtractor) analyzeNamingConvention(columnName string) stri
 	}
 
 	// Fallback to fixed pattern matching
-	lower := strings.ToLower(columnName)
+	// lower := strings.ToLower(columnName)
 
 	if strings.Contains(columnName, "_") {
 		return "snake_case"
@@ -524,7 +523,7 @@ func (cse *CrossSystemExtractor) normalizeTableStructurePattern(pattern *CrossSy
 	}
 
 	// Get average structure from occurrences
-	firstOcc := pattern.Occurrences[0]
+	// firstOcc := pattern.Occurrences[0]
 	avgColumnCount := 0
 	avgPKCount := 0
 	avgFKCount := 0
@@ -563,9 +562,9 @@ func (cse *CrossSystemExtractor) normalizeNamingConventionPattern(pattern *Cross
 	}
 
 	// Extract naming pattern from first occurrence
-	firstOcc := pattern.Occurrences[0]
+	// firstOcc := pattern.Occurrences[0]
 	namingPattern := "unknown"
-	if pattern, ok := firstOcc.Details["naming_pattern"].(string); ok {
+	if pattern, ok := pattern.Occurrences[0].Details["naming_pattern"].(string); ok {
 		namingPattern = pattern
 	}
 
@@ -656,13 +655,5 @@ func (cse *CrossSystemExtractor) CompareSchemas(
 	comparison["structure_similarities"] = structureSimilarities
 
 	return comparison, nil
-}
-
-// Helper function
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
 }
 
