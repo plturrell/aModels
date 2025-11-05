@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/domain"
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/gpu"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/hanapool"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/inference"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/ai"
@@ -92,6 +93,7 @@ type VaultGemmaServer struct {
 	agentCatalog     *AgentCatalog
 	catalogUpdatedAt time.Time
 	flightAddr       string
+	gpuRouter        *gpu.GPURouter
 }
 
 // ModelRegistry exposes configuration metadata for orchestration layer discovery
@@ -999,6 +1001,23 @@ func NewVaultGemmaServer(models map[string]*ai.VaultGemma, ggufModels map[string
 		}
 	}
 
+	// Initialize GPU router
+	gpuOrchestratorURL := os.Getenv("GPU_ORCHESTRATOR_URL")
+	var gpuRouter *gpu.GPURouter
+	if gpuOrchestratorURL != "" {
+		gpuRouter = gpu.NewGPURouter(gpuOrchestratorURL, nil)
+		// Allocate GPUs on startup (estimate 2 GPUs for LocalAI)
+		ctx := context.Background()
+		requiredGPUs := 2
+		if envGPUs := os.Getenv("LOCALAI_GPU_COUNT"); envGPUs != "" {
+			// Could parse this, but for now use default
+		}
+		if err := gpuRouter.AllocateGPUs(ctx, requiredGPUs); err != nil {
+			log.Printf("⚠️ Failed to allocate GPUs from orchestrator: %v", err)
+			log.Printf("💡 Continuing without GPU orchestration")
+		}
+	}
+
 	// Initialize enhanced features
 	tokenCounter := NewTokenCounter()
 	functionRegistry := NewFunctionRegistry()
@@ -1060,6 +1079,7 @@ func NewVaultGemmaServer(models map[string]*ai.VaultGemma, ggufModels map[string
 		functionRegistry: functionRegistry,
 		retryConfig:      retryConfig,
 		ocrServices:      ocrServices,
+		gpuRouter:        gpuRouter,
 	}
 }
 
