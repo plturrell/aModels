@@ -17,7 +17,6 @@ require (
 	go.opentelemetry.io/otel v1.28.0 // indirect
 	go.opentelemetry.io/otel/metric v1.28.0 // indirect
 	go.opentelemetry.io/otel/trace v1.28.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
 )
 
 // Removed replace directives for unavailable agenticAiETH dependencies
