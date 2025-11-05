@@ -25,6 +25,9 @@ import (
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Initialize structured logger
 	structLogger := observability.DefaultLogger()
 	structLogger.Info("Starting catalog service", map[string]interface{}{
@@ -113,7 +116,7 @@ func main() {
 	runMigrations := os.Getenv("RUN_MIGRATIONS") == "true"
 	if runMigrations {
 		migrationRunner := migrations.NewMigrationRunner(neo4jURI, neo4jUsername, neo4jPassword, migrationLogger)
-		if err := migrationRunner.RunMigrations(context.Background()); err != nil {
+		if err := migrationRunner.RunMigrations(ctx); err != nil {
 			structLogger.Warn("Failed to run Neo4j migrations, continuing", map[string]interface{}{
 				"error": err.Error(),
 			})
@@ -166,8 +169,9 @@ func main() {
 			"error": err.Error(),
 		})
 	} else if reportStore != nil {
-		defer reportStore.Close(context.Background())
+		defer reportStore.Close(ctx)
 		structLogger.Info("Research report store initialized", nil)
+		reportStore.StartRetentionJob(ctx, 24*time.Hour)
 	}
 
 	// Initialize unified workflow integration

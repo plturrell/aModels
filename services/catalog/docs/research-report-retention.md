@@ -40,7 +40,7 @@ Open Deep Research now persists responses in the `research_reports` table (see m
 
 ## Operator Checklist
 
-- [ ] Set retention env vars (e.g., `RESEARCH_REPORT_RETENTION_DAYS=30`).
+- [ ] Set retention env vars (e.g., `RESEARCH_REPORT_RETENTION_DAYS=30`; default is 30 days, set to `0` to disable automatic pruning).
 - [ ] Enable the clean-up job in production deployments.
 - [ ] Add monitoring/alerting when the table grows unexpectedly.
 - [ ] Ensure documentation for subject access requests is linked in the team runbook.
