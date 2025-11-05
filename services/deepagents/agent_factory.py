@@ -10,6 +10,10 @@ from tools import (
     query_knowledge_graph,
     run_agentflow_flow,
     run_orchestration_chain,
+    allocate_gpu,
+    release_gpu,
+    query_gpu_status,
+    analyze_workload,
 )
 
 
@@ -39,6 +43,12 @@ Your capabilities include:
   - Data quality analysis
   - Pipeline analysis
   - SQL analysis
+
+### GPU Orchestration
+- `allocate_gpu`: Request GPU allocation for services based on workload requirements
+- `release_gpu`: Release GPU resources back to the orchestrator
+- `query_gpu_status`: Query current GPU availability, utilization, and allocations
+- `analyze_workload`: Analyze workload to determine GPU requirements
 
 ## Planning and Task Decomposition
 
@@ -121,6 +131,10 @@ def create_amodels_deep_agent(
         query_knowledge_graph,
         run_agentflow_flow,
         run_orchestration_chain,
+        allocate_gpu,
+        release_gpu,
+        query_gpu_status,
+        analyze_workload,
     ]
     
     if custom_tools:
