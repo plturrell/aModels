@@ -21,6 +21,7 @@ DEEPAGENTS_URL = os.getenv("DEEPAGENTS_URL", "http://localhost:9004")
 GRAPH_SERVICE_URL = os.getenv("GRAPH_SERVICE_URL", "http://localhost:8081")
 SAP_BDC_URL = os.getenv("SAP_BDC_URL", "http://localhost:8083")
 CATALOG_URL = os.getenv("CATALOG_URL", "http://localhost:8084")
+DEEP_RESEARCH_URL = os.getenv("DEEP_RESEARCH_URL", "http://localhost:8085")
 
 client = httpx.AsyncClient(timeout=30.0)
 
@@ -107,6 +108,12 @@ async def healthz() -> Dict[str, Any]:
         statuses["catalog"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
     except Exception as e:
         statuses["catalog"] = f"error:{e}"
+    # Deep Research health
+    try:
+        r = await client.get(f"{DEEP_RESEARCH_URL}/healthz")
+        statuses["deep-research"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
+    except Exception as e:
+        statuses["deep-research"] = f"error:{e}"
     return statuses
 
 
@@ -648,6 +655,41 @@ async def catalog_get_data_product(product_id: str) -> Any:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except httpx.RequestError as e:
         raise HTTPException(status_code=502, detail=f"Catalog service error: {e}")
+
+
+@app.post("/deep-research/research")
+async def deep_research_research(payload: Dict[str, Any]) -> Any:
+    """
+    Perform deep research using Open Deep Research.
+    
+    Request format:
+    {
+        "query": "What data elements exist for customer data?",
+        "context": {"topic": "customer_data"},
+        "tools": ["sparql_query", "catalog_search"]
+    }
+    """
+    try:
+        r = await client.post(f"{DEEP_RESEARCH_URL}/research", json=payload, timeout=300.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Deep Research service error: {e}")
+
+
+@app.get("/deep-research/healthz")
+async def deep_research_healthz() -> Any:
+    """Check Deep Research service health."""
+    try:
+        r = await client.get(f"{DEEP_RESEARCH_URL}/healthz")
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Deep Research service error: {e}")
 
 
 if __name__ == "__main__":

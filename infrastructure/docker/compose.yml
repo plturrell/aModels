@@ -82,3 +82,37 @@ services:
       retries: 3
       start_period: 40s
 
+  deep-research:
+    build:
+      context: ../../models/open_deep_research
+      dockerfile: Dockerfile
+    environment:
+      # Catalog Integration (for tools)
+      - CATALOG_URL=http://catalog:8084
+      - CATALOG_SPARQL_URL=http://catalog:8084/catalog/sparql
+      # Model Configuration - LocalAI only (no external LLM dependencies)
+      - LOCALAI_URL=http://localai:8080
+      # Disable external LLM providers
+      - ANTHROPIC_API_KEY=
+      - OPENAI_API_KEY=
+      # Search API (optional - can use Tavily or none)
+      - SEARCH_API=${SEARCH_API:-none}
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      # Research Configuration
+      - MAX_RESEARCHER_ITERATIONS=${MAX_RESEARCHER_ITERATIONS:-6}
+      - MAX_CONCURRENT_RESEARCH_UNITS=${MAX_CONCURRENT_RESEARCH_UNITS:-5}
+      - ALLOW_CLARIFICATION=${ALLOW_CLARIFICATION:-true}
+      # LangGraph Configuration
+      - LANGGRAPH_API_KEY=${LANGGRAPH_API_KEY:-}
+    ports:
+      - "8085:2024"
+    depends_on:
+      - catalog
+      - localai
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2024/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+

@@ -54,6 +54,11 @@ func main() {
 	if localaiURL == "" {
 		localaiURL = "http://localhost:8081"
 	}
+	
+	deepResearchURL := os.Getenv("DEEP_RESEARCH_URL")
+	if deepResearchURL == "" {
+		deepResearchURL = "http://localhost:8085"
+	}
 
 	// Initialize ISO 11179 registry
 	registry := iso11179.NewMetadataRegistry("catalog", "aModels Catalog", baseURI)
@@ -82,6 +87,7 @@ func main() {
 		graphServiceURL, // Orchestration via graph service
 		"http://localhost:9001", // AgentFlow
 		localaiURL,
+		deepResearchURL,
 		registry,
 		qualityMonitor,
 		logger,

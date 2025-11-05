@@ -11,6 +11,7 @@ import (
 
 	"github.com/plturrell/aModels/services/catalog/iso11179"
 	"github.com/plturrell/aModels/services/catalog/quality"
+	"github.com/plturrell/aModels/services/catalog/research"
 	"github.com/plturrell/aModels/services/catalog/security"
 )
 
@@ -20,9 +21,11 @@ type UnifiedWorkflowIntegration struct {
 	orchestrationURL     string
 	agentflowURL         string
 	localaiURL           string
+	deepResearchURL      string
 	httpClient           *http.Client
 	registry             *iso11179.MetadataRegistry
 	qualityMonitor       *quality.QualityMonitor
+	deepResearchClient   *research.DeepResearchClient
 	logger               *log.Logger
 }
 
@@ -32,19 +35,25 @@ func NewUnifiedWorkflowIntegration(
 	orchestrationURL string,
 	agentflowURL string,
 	localaiURL string,
+	deepResearchURL string,
 	registry *iso11179.MetadataRegistry,
 	qualityMonitor *quality.QualityMonitor,
 	logger *log.Logger,
 ) *UnifiedWorkflowIntegration {
+	// Create Deep Research client
+	deepResearchClient := research.NewDeepResearchClient(deepResearchURL, logger)
+	
 	return &UnifiedWorkflowIntegration{
-		graphServiceURL:  graphServiceURL,
-		orchestrationURL: orchestrationURL,
-		agentflowURL:     agentflowURL,
-		localaiURL:       localaiURL,
-		httpClient:       &http.Client{Timeout: 60 * time.Second},
-		registry:         registry,
-		qualityMonitor:   qualityMonitor,
-		logger:           logger,
+		graphServiceURL:    graphServiceURL,
+		orchestrationURL:   orchestrationURL,
+		agentflowURL:       agentflowURL,
+		localaiURL:         localaiURL,
+		deepResearchURL:    deepResearchURL,
+		httpClient:         &http.Client{Timeout: 60 * time.Second},
+		registry:           registry,
+		qualityMonitor:     qualityMonitor,
+		deepResearchClient: deepResearchClient,
+		logger:             logger,
 	}
 }
 
@@ -311,42 +320,75 @@ func (uwi *UnifiedWorkflowIntegration) getDataLineage(ctx context.Context, eleme
 	}, nil
 }
 
-// generateResearchReport generates a research report using Open Deep Research via unified workflow.
+// generateResearchReport generates a research report using Open Deep Research.
 func (uwi *UnifiedWorkflowIntegration) generateResearchReport(ctx context.Context, topic string, element *iso11179.DataElement) (*ResearchReport, error) {
-	// Use unified workflow to trigger Open Deep Research
-	// This would call the research service via orchestration
-	payload := map[string]any{
-		"unified_request": map[string]any{
-			"orchestration_request": map[string]any{
-				"chain": "metadata-research",
-				"input": map[string]any{
-					"topic": topic,
-					"data_element": element.Identifier,
-				},
+	// Use Deep Research client to generate report
+	if uwi.deepResearchClient == nil {
+		// Fallback if client not initialized
+		if uwi.logger != nil {
+			uwi.logger.Printf("Warning: Deep Research client not initialized, using placeholder")
+		}
+		return &ResearchReport{
+			Topic:     topic,
+			Summary:   fmt.Sprintf("Research report for %s data product", topic),
+			Sections:  []ReportSection{
+				{Title: "Overview", Content: fmt.Sprintf("Data product for %s", topic)},
+				{Title: "Quality", Content: "Quality metrics from Extract service"},
 			},
-		},
+			Generated: time.Now(),
+		}, nil
 	}
 
-	jsonData, _ := json.Marshal(payload)
-	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/unified/process", uwi.graphServiceURL), bytes.NewReader(jsonData))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := uwi.httpClient.Do(req)
+	// Call Deep Research service
+	report, err := uwi.deepResearchClient.ResearchMetadata(ctx, topic, true, true)
 	if err != nil {
-		return nil, err
+		if uwi.logger != nil {
+			uwi.logger.Printf("Warning: Deep Research failed: %v, using fallback", err)
+		}
+		// Return fallback report
+		return &ResearchReport{
+			Topic:     topic,
+			Summary:   fmt.Sprintf("Research report for %s data product", topic),
+			Sections:  []ReportSection{
+				{Title: "Overview", Content: fmt.Sprintf("Data product for %s", topic)},
+				{Title: "Quality", Content: "Quality metrics from Extract service"},
+			},
+			Generated: time.Now(),
+		}, nil
 	}
-	defer resp.Body.Close()
 
-	// Parse research report (simplified)
+	// Convert research report to our format
+	if report.Report != nil {
+		return &ResearchReport{
+			Topic:     report.Report.Topic,
+			Summary:   report.Report.Summary,
+			Sections:  convertSections(report.Report.Sections),
+			Generated: report.Report.Generated,
+		}, nil
+	}
+
+	// Fallback if report structure is unexpected
 	return &ResearchReport{
 		Topic:     topic,
 		Summary:   fmt.Sprintf("Research report for %s data product", topic),
 		Sections:  []ReportSection{
 			{Title: "Overview", Content: fmt.Sprintf("Data product for %s", topic)},
-			{Title: "Quality", Content: "Quality metrics from Extract service"},
 		},
 		Generated: time.Now(),
 	}, nil
+}
+
+// convertSections converts research.ReportSection to workflows.ReportSection.
+func convertSections(sections []research.ReportSection) []ReportSection {
+	result := make([]ReportSection, len(sections))
+	for i, s := range sections {
+		result[i] = ReportSection{
+			Title:   s.Title,
+			Content: s.Content,
+			Sources: s.Sources,
+		}
+	}
+	return result
 }
 
 // createUsageExamples creates usage examples for the data product.
