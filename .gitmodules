@@ -34,3 +34,6 @@
 [submodule "infrastructure/third_party/sql-parser-go"]
 	path = infrastructure/third_party/sql-parser-go
 	url = https://github.com/Chahine-tech/sql-parser-go.git
+[submodule "models/open_deep_research"]
+	path = models/open_deep_research
+	url = https://github.com/langchain-ai/open_deep_research.git

@@ -7,7 +7,10 @@ import (
 
 	"github.com/plturrell/aModels/services/catalog/api"
 	"github.com/plturrell/aModels/services/catalog/iso11179"
+	"github.com/plturrell/aModels/services/catalog/quality"
+	"github.com/plturrell/aModels/services/catalog/security"
 	"github.com/plturrell/aModels/services/catalog/triplestore"
+	"github.com/plturrell/aModels/services/catalog/workflows"
 )
 
 func main() {
@@ -37,6 +40,21 @@ func main() {
 		port = "8084"
 	}
 
+	extractServiceURL := os.Getenv("EXTRACT_SERVICE_URL")
+	if extractServiceURL == "" {
+		extractServiceURL = "http://localhost:9002"
+	}
+	
+	graphServiceURL := os.Getenv("GRAPH_SERVICE_URL")
+	if graphServiceURL == "" {
+		graphServiceURL = "http://localhost:8081"
+	}
+	
+	localaiURL := os.Getenv("LOCALAI_URL")
+	if localaiURL == "" {
+		localaiURL = "http://localhost:8081"
+	}
+
 	// Initialize ISO 11179 registry
 	registry := iso11179.NewMetadataRegistry("catalog", "aModels Catalog", baseURI)
 	logger.Println("ISO 11179 metadata registry initialized")
@@ -54,9 +72,31 @@ func main() {
 	sparqlEndpoint := triplestore.NewSPARQLEndpoint(sparqlClient, logger)
 	logger.Println("SPARQL endpoint initialized")
 
+	// Initialize quality monitor (connects to Extract service)
+	qualityMonitor := quality.NewQualityMonitor(extractServiceURL, logger)
+	logger.Println("Quality monitor initialized (connected to Extract service)")
+
+	// Initialize unified workflow integration
+	unifiedWorkflow := workflows.NewUnifiedWorkflowIntegration(
+		graphServiceURL,
+		graphServiceURL, // Orchestration via graph service
+		"http://localhost:9001", // AgentFlow
+		localaiURL,
+		registry,
+		qualityMonitor,
+		logger,
+	)
+	logger.Println("Unified workflow integration initialized")
+
 	// Initialize API handlers
 	catalogHandlers := api.NewCatalogHandlers(registry, logger)
 	sparqlHandler := api.NewSPARQLHandler(sparqlEndpoint, logger)
+	dataProductHandler := api.NewDataProductHandler(unifiedWorkflow, logger)
+	
+	// Initialize auth middleware
+	authMiddleware := security.NewAuthMiddleware(logger)
+	// Register default token for testing (in production, load from config)
+	authMiddleware.RegisterToken("test-token", "test-user")
 
 	// Setup HTTP routes
 	mux := http.NewServeMux()
@@ -86,7 +126,22 @@ func main() {
 	// SPARQL endpoint
 	mux.HandleFunc("/catalog/sparql", sparqlHandler.HandleSPARQL)
 
+	// Complete data product endpoints (thin slice approach)
+	mux.HandleFunc("/catalog/data-products/build", dataProductHandler.HandleBuildDataProduct)
+	mux.HandleFunc("/catalog/data-products/", dataProductHandler.HandleGetDataProduct)
+
+	// Apply auth middleware to protected endpoints (optional - can be enabled via env var)
+	useAuth := os.Getenv("ENABLE_AUTH") == "true"
+	if useAuth {
+		protectedMux := http.NewServeMux()
+		protectedMux.HandleFunc("/catalog/data-elements", catalogHandlers.HandleCreateDataElement)
+		protectedMux.HandleFunc("/catalog/data-products/build", dataProductHandler.HandleBuildDataProduct)
+		mux.Handle("/catalog/", authMiddleware.Middleware(protectedMux))
+		logger.Println("Authentication enabled")
+	}
+
 	logger.Printf("Catalog service listening on :%s", port)
+	logger.Println("Complete data product endpoints available at /catalog/data-products/build")
 	logger.Fatal(http.ListenAndServe(":"+port, mux))
 }
 

@@ -616,6 +616,40 @@ async def catalog_sparql_get(query: str = Query(...)) -> Any:
         raise HTTPException(status_code=502, detail=f"Catalog service error: {e}")
 
 
+@app.post("/catalog/data-products/build")
+async def catalog_build_data_product(payload: Dict[str, Any]) -> Any:
+    """
+    Build a complete, end-to-end data product (thin slice approach).
+    
+    Request format:
+    {
+        "topic": "customer_data",
+        "customer_need": "I need to analyze customer purchase patterns"
+    }
+    """
+    try:
+        r = await client.post(f"{CATALOG_URL}/catalog/data-products/build", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Catalog service error: {e}")
+
+
+@app.get("/catalog/data-products/{product_id}")
+async def catalog_get_data_product(product_id: str) -> Any:
+    """Get a complete data product by ID."""
+    try:
+        r = await client.get(f"{CATALOG_URL}/catalog/data-products/{product_id}")
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Catalog service error: {e}")
+
+
 if __name__ == "__main__":
     import uvicorn
 
