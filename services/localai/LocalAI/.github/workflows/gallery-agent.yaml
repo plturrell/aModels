@@ -1,0 +1,126 @@
+name: Gallery Agent
+on:
+
+  schedule:
+    - cron: '0 */1 * * *'  # Run every 4 hours
+  workflow_dispatch:
+    inputs:
+      search_term:
+        description: 'Search term for models'
+        required: false
+        default: 'GGUF'
+        type: string
+      limit:
+        description: 'Maximum number of models to process'
+        required: false
+        default: '15'
+        type: string
+      quantization:
+        description: 'Preferred quantization format'
+        required: false
+        default: 'Q4_K_M'
+        type: string
+      max_models:
+        description: 'Maximum number of models to add to the gallery'
+        required: false
+        default: '1'
+        type: string
+jobs:
+  gallery-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build gallery agent
+        run: |
+          cd .github/gallery-agent
+          go mod download
+          go build -o gallery-agent .
+
+      - name: Run gallery agent
+        env:
+          OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          SEARCH_TERM: ${{ github.event.inputs.search_term || 'GGUF' }}
+          LIMIT: ${{ github.event.inputs.limit || '15' }}
+          QUANTIZATION: ${{ github.event.inputs.quantization || 'Q4_K_M' }}
+          MAX_MODELS: ${{ github.event.inputs.max_models || '1' }}
+        run: |
+          export GALLERY_INDEX_PATH=$PWD/gallery/index.yaml
+          cd .github/gallery-agent
+          ./gallery-agent
+          rm -rf gallery-agent
+
+      - name: Check for changes
+        id: check_changes
+        run: |
+          if git diff --quiet gallery/index.yaml; then
+            echo "changes=false" >> $GITHUB_OUTPUT
+            echo "No changes detected in gallery/index.yaml"
+          else
+            echo "changes=true" >> $GITHUB_OUTPUT
+            echo "Changes detected in gallery/index.yaml"
+            git diff gallery/index.yaml
+          fi
+
+      - name: Read gallery agent summary
+        id: read_summary
+        if: steps.check_changes.outputs.changes == 'true'
+        run: |
+          if [ -f ".github/gallery-agent/gallery-agent-summary.json" ]; then
+            echo "summary_exists=true" >> $GITHUB_OUTPUT
+            # Extract summary data using jq
+            echo "search_term=$(jq -r '.search_term' .github/gallery-agent/gallery-agent-summary.json)" >> $GITHUB_OUTPUT
+            echo "total_found=$(jq -r '.total_found' .github/gallery-agent/gallery-agent-summary.json)" >> $GITHUB_OUTPUT
+            echo "models_added=$(jq -r '.models_added' .github/gallery-agent/gallery-agent-summary.json)" >> $GITHUB_OUTPUT
+            echo "quantization=$(jq -r '.quantization' .github/gallery-agent/gallery-agent-summary.json)" >> $GITHUB_OUTPUT
+            echo "processing_time=$(jq -r '.processing_time' .github/gallery-agent/gallery-agent-summary.json)" >> $GITHUB_OUTPUT
+            
+            # Create a formatted list of added models with URLs
+            added_models=$(jq -r 'range(0; .added_model_ids | length) as $i | "- [\(.added_model_ids[$i])](\(.added_model_urls[$i]))"' .github/gallery-agent/gallery-agent-summary.json | tr '\n' '\n')
+            echo "added_models<<EOF" >> $GITHUB_OUTPUT
+            echo "$added_models" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+            rm -f .github/gallery-agent/gallery-agent-summary.json
+          else
+            echo "summary_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.check_changes.outputs.changes == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.UPDATE_BOT_TOKEN }}
+          push-to-fork: ci-forks/LocalAI
+          commit-message: 'chore(model gallery): :robot: add new models via gallery agent'
+          title: 'chore(model gallery): :robot: add ${{ steps.read_summary.outputs.models_added || 0 }} new models via gallery agent'
+          # Branch has to be unique so PRs are not overriding each other
+          branch-suffix: timestamp
+          body: |
+            This PR was automatically created by the gallery agent workflow.
+            
+            **Summary:**
+            - **Search Term:** ${{ steps.read_summary.outputs.search_term || github.event.inputs.search_term || 'GGUF' }}
+            - **Models Found:** ${{ steps.read_summary.outputs.total_found || 'N/A' }}
+            - **Models Added:** ${{ steps.read_summary.outputs.models_added || '0' }}
+            - **Quantization:** ${{ steps.read_summary.outputs.quantization || github.event.inputs.quantization || 'Q4_K_M' }}
+            - **Processing Time:** ${{ steps.read_summary.outputs.processing_time || 'N/A' }}
+            
+            **Added Models:**
+            ${{ steps.read_summary.outputs.added_models || '- No models added' }}
+            
+            **Workflow Details:**
+            - Triggered by: `${{ github.event_name }}`
+            - Run ID: `${{ github.run_id }}`
+            - Commit: `${{ github.sha }}`
+          signoff: true
+          delete-branch: true
