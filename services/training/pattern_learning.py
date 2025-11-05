@@ -6,10 +6,21 @@ Glean Catalog data, and source data to enable predictive modeling.
 
 import json
 import logging
+import os
 from typing import Dict, List, Optional, Any, Tuple
 from collections import defaultdict, Counter
 from datetime import datetime
 import statistics
+
+# Import deep learning pattern learners (Phase 7.1)
+try:
+    from .pattern_learning_gnn import GNNRelationshipPatternLearner
+    from .sequence_pattern_transformer import SequencePatternTransformer
+    HAS_DEEP_LEARNING = True
+except ImportError:
+    HAS_DEEP_LEARNING = False
+    GNNRelationshipPatternLearner = None
+    SequencePatternTransformer = None
 
 logger = logging.getLogger(__name__)
 
@@ -721,11 +732,76 @@ class SemanticPatternLearner:
 class PatternLearningEngine:
     """Main engine for learning patterns from knowledge graphs and Glean data."""
     
-    def __init__(self):
+    def __init__(self, use_gnn: bool = None, use_transformer: bool = None):
+        """Initialize pattern learning engine.
+        
+        Args:
+            use_gnn: Whether to use GNN for relationship patterns (default: from env USE_GNN_PATTERNS)
+            use_transformer: Whether to use Transformer for sequence patterns (default: from env USE_TRANSFORMER_SEQUENCES)
+        """
         self.column_learner = ColumnTypePatternLearner()
         self.relationship_learner = RelationshipPatternLearner()
         self.metrics_learner = MetadataEntropyPatternLearner()
         self.all_patterns = {}
+        
+        # Initialize deep learning models if enabled (Phase 7.1)
+        self.use_gnn = use_gnn if use_gnn is not None else os.getenv("USE_GNN_PATTERNS", "false").lower() == "true"
+        self.use_transformer = use_transformer if use_transformer is not None else os.getenv("USE_TRANSFORMER_SEQUENCES", "false").lower() == "true"
+        
+        self.gnn_learner = None
+        self.transformer_learner = None
+        self.meta_pattern_learner = None
+        self.active_pattern_learner = None
+        
+        # Initialize meta-pattern learner if enabled (Phase 7.2)
+        use_meta_patterns = os.getenv("USE_META_PATTERNS", "false").lower() == "true"
+        if use_meta_patterns and HAS_META_PATTERNS and MetaPatternLearner is not None:
+            try:
+                self.meta_pattern_learner = MetaPatternLearner()
+                logger.info("Meta-pattern learner initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize meta-pattern learner: {e}")
+                self.meta_pattern_learner = None
+        
+        # Initialize active pattern learner if enabled (Phase 7.4)
+        use_active_learning = os.getenv("USE_ACTIVE_LEARNING", "false").lower() == "true"
+        if use_active_learning and HAS_ACTIVE_LEARNING and ActivePatternLearner is not None:
+            try:
+                self.active_pattern_learner = ActivePatternLearner(
+                    confidence_threshold=float(os.getenv("ACTIVE_LEARNING_CONFIDENCE_THRESHOLD", "0.7")),
+                    rarity_threshold=float(os.getenv("ACTIVE_LEARNING_RARITY_THRESHOLD", "0.1"))
+                )
+                logger.info("Active pattern learner initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize active pattern learner: {e}")
+                self.active_pattern_learner = None
+        
+        if self.use_gnn and HAS_DEEP_LEARNING and GNNRelationshipPatternLearner is not None:
+            try:
+                self.gnn_learner = GNNRelationshipPatternLearner(
+                    hidden_dim=int(os.getenv("GNN_HIDDEN_DIM", "64")),
+                    num_layers=int(os.getenv("GNN_NUM_LAYERS", "2")),
+                    dropout=float(os.getenv("GNN_DROPOUT", "0.1")),
+                    use_gat=os.getenv("GNN_USE_GAT", "false").lower() == "true"
+                )
+                logger.info("GNN pattern learner initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize GNN learner: {e}")
+                self.gnn_learner = None
+        
+        if self.use_transformer and HAS_DEEP_LEARNING and SequencePatternTransformer is not None:
+            try:
+                self.transformer_learner = SequencePatternTransformer(
+                    hidden_dim=int(os.getenv("TRANSFORMER_HIDDEN_DIM", "256")),
+                    num_layers=int(os.getenv("TRANSFORMER_NUM_LAYERS", "4")),
+                    num_heads=int(os.getenv("TRANSFORMER_NUM_HEADS", "8")),
+                    max_seq_length=int(os.getenv("TRANSFORMER_MAX_SEQ_LENGTH", "512")),
+                    dropout=float(os.getenv("TRANSFORMER_DROPOUT", "0.1"))
+                )
+                logger.info("Transformer pattern learner initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Transformer learner: {e}")
+                self.transformer_learner = None
     
     def learn_patterns(
         self,
@@ -755,24 +831,93 @@ class PatternLearningEngine:
         # Learn column type patterns
         column_patterns = self.column_learner.learn_from_graph(nodes)
         
-        # Learn relationship patterns
+        # Learn relationship patterns (traditional + GNN if enabled)
         relationship_patterns = self.relationship_learner.learn_from_graph(nodes, edges)
+        
+        # Phase 7.1: GNN-based relationship pattern learning
+        gnn_patterns = {}
+        if self.gnn_learner is not None:
+            try:
+                logger.info("Learning relationship patterns using GNN...")
+                gnn_patterns = self.gnn_learner.learn_patterns(nodes, edges)
+                relationship_patterns["gnn_patterns"] = gnn_patterns
+                logger.info("GNN relationship pattern learning completed")
+            except Exception as e:
+                logger.error(f"GNN pattern learning failed: {e}", exc_info=True)
         
         # Learn metrics patterns
         glean_metrics = glean_data.get("metrics", {}) if glean_data else None
         metrics_patterns = self.metrics_learner.learn_from_metrics(metrics, glean_metrics)
+        
+        # Phase 7.1: Transformer-based sequence pattern learning
+        sequence_patterns = {}
+        if self.transformer_learner is not None:
+            try:
+                logger.info("Learning sequence patterns using Transformer...")
+                # Extract sequences from graph (Control-M → SQL → Tables)
+                sequences = self._extract_sequences_from_graph(nodes, edges)
+                if sequences:
+                    sequence_patterns = self.transformer_learner.learn_sequence_patterns(
+                        sequences, sequence_type="process"
+                    )
+                    logger.info(f"Transformer sequence pattern learning completed: {len(sequences)} sequences")
+            except Exception as e:
+                logger.error(f"Transformer pattern learning failed: {e}", exc_info=True)
+        
+        # Phase 7.2: Meta-pattern learning (learn patterns of patterns)
+        meta_patterns = {}
+        if self.meta_pattern_learner is not None:
+            try:
+                logger.info("Learning meta-patterns (patterns of patterns)...")
+                # First combine all learned patterns
+                all_learned = {
+                    "column_patterns": column_patterns,
+                    "relationship_patterns": relationship_patterns,
+                    "metrics_patterns": metrics_patterns,
+                    "sequence_patterns": sequence_patterns,
+                }
+                meta_patterns = self.meta_pattern_learner.learn_meta_patterns(all_learned)
+                logger.info("Meta-pattern learning completed")
+            except Exception as e:
+                logger.error(f"Meta-pattern learning failed: {e}", exc_info=True)
+        
+        # Phase 7.4: Active pattern discovery
+        active_patterns = {}
+        if self.active_pattern_learner is not None:
+            try:
+                logger.info("Discovering patterns using active learning...")
+                all_learned = {
+                    "column_patterns": column_patterns,
+                    "relationship_patterns": relationship_patterns,
+                    "metrics_patterns": metrics_patterns,
+                    "sequence_patterns": sequence_patterns,
+                }
+                active_patterns = self.active_pattern_learner.discover_patterns(
+                    all_learned, nodes, edges
+                )
+                logger.info("Active pattern discovery completed")
+            except Exception as e:
+                logger.error(f"Active pattern discovery failed: {e}", exc_info=True)
         
         # Combine all patterns
         self.all_patterns = {
             "column_patterns": column_patterns,
             "relationship_patterns": relationship_patterns,
             "metrics_patterns": metrics_patterns,
+            "sequence_patterns": sequence_patterns,
+            "meta_patterns": meta_patterns,
+            "active_patterns": active_patterns,
             "summary": {
                 "total_nodes": len(nodes),
                 "total_edges": len(edges),
                 "unique_column_types": column_patterns.get("unique_types", 0),
                 "unique_edge_labels": relationship_patterns.get("unique_labels", 0),
                 "has_historical_data": glean_data is not None,
+                "has_gnn_patterns": bool(gnn_patterns),
+                "has_transformer_patterns": bool(sequence_patterns),
+                "has_meta_patterns": bool(meta_patterns),
+                "has_active_patterns": bool(active_patterns),
+                "patterns_for_review": active_patterns.get("total_for_review", 0) if active_patterns else 0,
                 "learned_at": datetime.now().isoformat(),
             },
         }
@@ -780,6 +925,67 @@ class PatternLearningEngine:
         logger.info(f"Pattern learning completed: {len(self.all_patterns)} pattern categories")
         
         return self.all_patterns
+    
+    def _extract_sequences_from_graph(
+        self,
+        nodes: List[Dict[str, Any]],
+        edges: List[Dict[str, Any]]
+    ) -> List[List[Dict[str, Any]]]:
+        """Extract processing sequences from graph (Control-M → SQL → Tables).
+        
+        Args:
+            nodes: Graph nodes
+            edges: Graph edges
+        
+        Returns:
+            List of sequences, where each sequence is a list of items
+        """
+        sequences = []
+        
+        # Find Control-M job nodes
+        control_m_nodes = {}
+        sql_nodes = {}
+        table_nodes = {}
+        
+        for node in nodes:
+            node_id = node.get("id", node.get("key", {}).get("id", ""))
+            node_type = node.get("type", node.get("label", ""))
+            
+            if "control-m" in node_type.lower() or "job" in node_type.lower():
+                control_m_nodes[node_id] = node
+            elif "sql" in node_type.lower():
+                sql_nodes[node_id] = node
+            elif node_type == "table":
+                table_nodes[node_id] = node
+        
+        # Build sequences: Control-M → SQL → Table
+        for cm_id, cm_node in control_m_nodes.items():
+            sequence = [cm_node]
+            
+            # Find connected SQL nodes
+            for edge in edges:
+                source_id = edge.get("source_id", edge.get("source", ""))
+                target_id = edge.get("target_id", edge.get("target", ""))
+                
+                if source_id == cm_id and target_id in sql_nodes:
+                    sql_node = sql_nodes[target_id]
+                    if sql_node not in sequence:
+                        sequence.append(sql_node)
+                    
+                    # Find connected table nodes
+                    for edge2 in edges:
+                        source_id2 = edge2.get("source_id", edge2.get("source", ""))
+                        target_id2 = edge2.get("target_id", edge2.get("target", ""))
+                        
+                        if source_id2 == target_id and target_id2 in table_nodes:
+                            table_node = table_nodes[target_id2]
+                            if table_node not in sequence:
+                                sequence.append(table_node)
+            
+            if len(sequence) > 1:  # Only add sequences with at least 2 items
+                sequences.append(sequence)
+        
+        return sequences
     
     def get_patterns(self) -> Dict[str, Any]:
         """Get all learned patterns."""

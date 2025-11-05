@@ -287,6 +287,27 @@ func main() {
 		logger.Printf("Multi-modal extraction enabled (OCR: %v)", os.Getenv("USE_DEEPSEEK_OCR") == "true")
 	}
 
+	// Phase 8.1: Initialize semantic schema analyzer
+	server.semanticSchemaAnalyzer = NewSemanticSchemaAnalyzer(logger)
+	logger.Println("Semantic schema analyzer initialized (Phase 8.1)")
+
+	// Phase 9.2: Initialize self-healing system
+	server.selfHealingSystem = NewSelfHealingSystem(logger)
+	logger.Println("Self-healing system initialized (Phase 9.2)")
+	
+	// Register health monitors for critical services
+	if server.neo4jPersistence != nil {
+		server.selfHealingSystem.RegisterHealthMonitor(
+			"neo4j",
+			30*time.Second,
+			func() error {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				return server.neo4jPersistence.driver.VerifyConnectivity(ctx)
+			},
+		)
+	}
+
 	server.telemetryOperation = cfg.Telemetry.Operation
 
 	if cfg.Telemetry.Enabled && cfg.Telemetry.Address != "" {
@@ -346,7 +367,11 @@ func main() {
 	mux.HandleFunc("/graph", server.handleGraph)                                     // Legacy alias for backward compatibility
 	mux.HandleFunc("/knowledge-graph/query", server.handleNeo4jQuery)                // Neo4j Cypher query endpoint
 	mux.HandleFunc("/workflow/petri-to-langgraph", server.handlePetriNetToLangGraph) // Convert Petri net to LangGraph
+	mux.HandleFunc("/workflow/petri-to-langgraph-advanced", server.handlePetriNetToAdvancedLangGraph) // Convert Petri net to advanced LangGraph (Phase 7.3)
 	mux.HandleFunc("/workflow/petri-to-agentflow", server.handlePetriNetToAgentFlow) // Convert Petri net to AgentFlow
+	mux.HandleFunc("/semantic/analyze-column", server.handleAnalyzeColumnSemantics) // Semantic column analysis (Phase 8.1)
+	mux.HandleFunc("/semantic/analyze-lineage", server.handleAnalyzeDataLineage) // Semantic data lineage analysis (Phase 8.1)
+	mux.HandleFunc("/health/status", server.handleHealthStatus) // Health status for all services (Phase 9.2)
 	mux.HandleFunc("/knowledge-graph/queries", server.handleGraphQueryHelpers)       // Get common graph query helpers
 	mux.HandleFunc("/knowledge-graph/search", server.handleVectorSearch)             // Vector similarity search (RAG)
 	mux.HandleFunc("/knowledge-graph/embed", server.handleGenerateEmbedding)         // Generate embedding for text
@@ -405,6 +430,8 @@ type extractServer struct {
 	neo4jPersistence      *Neo4jPersistence      // Direct Neo4j access for queries
 	realTimeGleanExporter *RealTimeGleanExporter // Real-time Glean synchronization
 	flight                *extractFlightServer
+	semanticSchemaAnalyzer *SemanticSchemaAnalyzer // Phase 8.1: Semantic schema understanding
+	selfHealingSystem      *SelfHealingSystem      // Phase 9.2: Self-healing system
 	hanaReplication       *hanaReplication
 	postgresReplication   *postgresReplication
 
@@ -1924,6 +1951,99 @@ func (s *extractServer) handlePetriNetToAgentFlow(w http.ResponseWriter, r *http
 	agentFlowWorkflow := converter.ConvertPetriNetToAgentFlow(&petriNet)
 
 	handlers.WriteJSON(w, http.StatusOK, agentFlowWorkflow)
+}
+
+// handlePetriNetToAdvancedLangGraph converts a Petri net to an advanced LangGraph workflow (Phase 7.3).
+func (s *extractServer) handlePetriNetToAdvancedLangGraph(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+
+	var req struct {
+		PetriNetID string `json:"petri_net_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("failed to decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Get Petri net from catalog
+	if s.catalog == nil {
+		http.Error(w, "catalog not available", http.StatusInternalServerError)
+		return
+	}
+
+	s.catalog.mu.RLock()
+	petriNetData, exists := s.catalog.PetriNets[req.PetriNetID]
+	s.catalog.mu.RUnlock()
+
+	if !exists {
+		handlers.WriteJSON(w, http.StatusNotFound, map[string]any{
+			"error": fmt.Sprintf("Petri net '%s' not found in catalog", req.PetriNetID),
+		})
+		return
+	}
+
+	// Convert catalog data to PetriNet struct
+	petriNetJSON, err := json.Marshal(petriNetData)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to marshal petri net: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	var petriNet PetriNet
+	if err := json.Unmarshal(petriNetJSON, &petriNet); err != nil {
+		http.Error(w, fmt.Sprintf("failed to unmarshal petri net: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Convert to advanced LangGraph workflow
+	converter := NewAdvancedWorkflowConverter(s.logger)
+
+	// Set Extract service URL for semantic search
+	baseURL := fmt.Sprintf("http://localhost:%s", os.Getenv("PORT"))
+	if baseURL == "http://localhost:" {
+		baseURL = "http://localhost:8081"
+	}
+	converter.SetExtractServiceURL(baseURL)
+
+	advancedWorkflow := converter.ConvertPetriNetToAdvancedLangGraph(&petriNet)
+
+	handlers.WriteJSON(w, http.StatusOK, advancedWorkflow)
+}
+
+// handleHealthStatus returns health status for all monitored services (Phase 9.2).
+func (s *extractServer) handleHealthStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		handlers.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	if s.selfHealingSystem == nil {
+		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "Self-healing system not configured",
+		})
+		return
+	}
+
+	// Get health status for Neo4j
+	healthStatus := map[string]any{
+		"services": make(map[string]any),
+	}
+
+	if s.neo4jPersistence != nil {
+		neo4jHealthy, err := s.selfHealingSystem.GetHealthStatus("neo4j")
+		if err == nil {
+			healthStatus["services"].(map[string]any)["neo4j"] = map[string]any{
+				"healthy": neo4jHealthy,
+				"status":  "healthy",
+			}
+		}
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, healthStatus)
 }
 
 // handleVectorSearch performs vector similarity search (RAG endpoint).

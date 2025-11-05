@@ -17,6 +17,33 @@ from .pattern_learning import (
     RelationshipPatternLearner,
     MetadataEntropyPatternLearner,
 )
+
+# Deep learning pattern learners (Phase 7.1)
+try:
+    from .pattern_learning_gnn import GNNRelationshipPatternLearner
+    from .sequence_pattern_transformer import SequencePatternTransformer
+    HAS_DEEP_LEARNING = True
+except ImportError:
+    HAS_DEEP_LEARNING = False
+    GNNRelationshipPatternLearner = None
+    SequencePatternTransformer = None
+
+# Meta-pattern learner (Phase 7.2)
+try:
+    from .meta_pattern_learner import MetaPatternLearner
+    HAS_META_PATTERNS = True
+except ImportError:
+    HAS_META_PATTERNS = False
+    MetaPatternLearner = None
+
+# Active pattern learner (Phase 7.4)
+try:
+    from .active_pattern_learner import ActivePatternLearner
+    HAS_ACTIVE_LEARNING = True
+except ImportError:
+    HAS_ACTIVE_LEARNING = False
+    ActivePatternLearner = None
+
 from .evaluation import (
     evaluate_training_results,
     export_training_metrics_to_glean,
@@ -47,4 +74,47 @@ __all__ = [
     "SchemaEvolutionAnalyzer",
     "DomainIntelligenceEvaluator",
 ]
+
+# Add deep learning learners if available (Phase 7.1)
+if HAS_DEEP_LEARNING:
+    if GNNRelationshipPatternLearner is not None:
+        __all__.append("GNNRelationshipPatternLearner")
+    if SequencePatternTransformer is not None:
+        __all__.append("SequencePatternTransformer")
+
+# Add meta-pattern learner if available (Phase 7.2)
+if HAS_META_PATTERNS:
+    if MetaPatternLearner is not None:
+        __all__.append("MetaPatternLearner")
+
+# Add active pattern learner if available (Phase 7.4)
+if HAS_ACTIVE_LEARNING:
+    if ActivePatternLearner is not None:
+        __all__.append("ActivePatternLearner")
+
+# Pattern transfer learner (Phase 8.4)
+try:
+    from .pattern_transfer import PatternTransferLearner
+    HAS_PATTERN_TRANSFER = True
+except ImportError:
+    HAS_PATTERN_TRANSFER = False
+    PatternTransferLearner = None
+
+# Add pattern transfer learner if available (Phase 8.4)
+if HAS_PATTERN_TRANSFER:
+    if PatternTransferLearner is not None:
+        __all__.append("PatternTransferLearner")
+
+# Auto-tuner (Phase 9.1)
+try:
+    from .auto_tuner import AutoTuner
+    HAS_AUTO_TUNER = True
+except ImportError:
+    HAS_AUTO_TUNER = False
+    AutoTuner = None
+
+# Add auto-tuner if available (Phase 9.1)
+if HAS_AUTO_TUNER:
+    if AutoTuner is not None:
+        __all__.append("AutoTuner")
 

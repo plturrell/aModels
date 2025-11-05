@@ -17,6 +17,14 @@ from .glean_integration import GleanTrainingClient, ingest_glean_data_for_traini
 from .pattern_learning import PatternLearningEngine, WorkflowPatternLearner
 from .temporal_analysis import TemporalPatternLearner, SchemaEvolutionAnalyzer
 
+# Phase 9.1: Auto-tuning
+try:
+    from .auto_tuner import AutoTuner
+    HAS_AUTO_TUNER = True
+except ImportError:
+    HAS_AUTO_TUNER = False
+    AutoTuner = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,6 +41,20 @@ class TrainingPipeline:
         self.glean_client = GleanTrainingClient(db_name=glean_db_name)
         self.output_dir = output_dir or os.getenv("TRAINING_OUTPUT_DIR", "./training_data")
         os.makedirs(self.output_dir, exist_ok=True)
+        
+        # Phase 9.1: Initialize auto-tuner if enabled
+        self.auto_tuner = None
+        if os.getenv("ENABLE_AUTO_TUNING", "false").lower() == "true" and HAS_AUTO_TUNER and AutoTuner is not None:
+            try:
+                self.auto_tuner = AutoTuner(
+                    study_name=os.getenv("OPTUNA_STUDY_NAME", "amodels_training"),
+                    storage=os.getenv("OPTUNA_STORAGE"),
+                    n_trials=int(os.getenv("OPTUNA_N_TRIALS", "50"))
+                )
+                logger.info("Auto-tuner initialized (Phase 9.1)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize auto-tuner: {e}")
+                self.auto_tuner = None
     
     def run_full_pipeline(
         self,
@@ -289,6 +311,26 @@ class TrainingPipeline:
             features = self._generate_training_features(
                 graph_data, glean_data, learned_patterns, temporal_patterns, semantic_embeddings
             )
+            
+            # Phase 9.1: Assess training data quality
+            if self.auto_tuner is not None:
+                try:
+                    training_data_stats = {
+                        "num_samples": len(features.get("features", [])),
+                        "num_features": len(features.get("features", [0])) if features.get("features") else 0,
+                        "pattern_coverage": learned_patterns.get("summary", {}).get("unique_column_types", 0) / 100.0 if learned_patterns else 0.0,
+                    }
+                    quality_assessment = self.auto_tuner.assess_training_data_quality(training_data_stats)
+                    features["quality_assessment"] = quality_assessment
+                    results["steps"]["data_quality"] = {
+                        "status": "success",
+                        "quality_score": quality_assessment.get("quality_score", 0.0),
+                        "passed": quality_assessment.get("passed", False),
+                    }
+                    logger.info(f"✅ Data quality assessment: score={quality_assessment.get('quality_score', 0.0):.2f}")
+                except Exception as e:
+                    logger.warning(f"⚠️  Data quality assessment failed: {e}")
+            
             results["steps"]["features"] = {
                 "status": "success",
                 "feature_count": len(features.get("features", [])),
@@ -354,7 +396,8 @@ class TrainingPipeline:
         graph_data: Dict[str, Any],
         glean_data: Optional[Dict[str, Any]],
         learned_patterns: Optional[Dict[str, Any]] = None,
-        temporal_patterns: Optional[Dict[str, Any]] = None
+        temporal_patterns: Optional[Dict[str, Any]] = None,
+        semantic_embeddings: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Generate training features from graph data and Glean patterns."""
         features = []
