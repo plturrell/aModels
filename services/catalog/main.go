@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/plturrell/aModels/services/catalog/ai"
 	"github.com/plturrell/aModels/services/catalog/api"
 	"github.com/plturrell/aModels/services/catalog/cache"
 	"github.com/plturrell/aModels/services/catalog/iso11179"
@@ -148,10 +149,16 @@ func main() {
 	)
 	structLogger.Info("Unified workflow integration initialized", nil)
 
+	// Initialize AI capabilities
+	metadataDiscoverer := ai.NewMetadataDiscoverer(deepResearchURL, extractServiceURL, legacyLogger)
+	qualityPredictor := ai.NewQualityPredictor(extractServiceURL, legacyLogger)
+	recommender := ai.NewRecommender(registry, legacyLogger)
+
 	// Initialize API handlers
 	catalogHandlers := api.NewCatalogHandlers(registry, legacyLogger)
 	sparqlHandler := api.NewSPARQLHandler(sparqlEndpoint, legacyLogger)
 	dataProductHandler := api.NewDataProductHandler(unifiedWorkflow, legacyLogger)
+	aiHandlers := api.NewAIHandlers(metadataDiscoverer, qualityPredictor, recommender, legacyLogger)
 	
 	// Initialize auth middleware
 	authMiddleware := security.NewAuthMiddleware(legacyLogger)
@@ -238,6 +245,12 @@ func main() {
 	// Complete data product endpoints (thin slice approach)
 	mux.HandleFunc("/catalog/data-products/build", dataProductHandler.HandleBuildDataProduct)
 	mux.HandleFunc("/catalog/data-products/", dataProductHandler.HandleGetDataProduct)
+
+	// AI capabilities endpoints
+	mux.HandleFunc("/catalog/ai/discover", aiHandlers.HandleDiscoverMetadata)
+	mux.HandleFunc("/catalog/ai/predict-quality", aiHandlers.HandlePredictQuality)
+	mux.HandleFunc("/catalog/ai/recommendations", aiHandlers.HandleGetRecommendations)
+	mux.HandleFunc("/catalog/ai/usage", aiHandlers.HandleRecordUsage)
 
 	// Apply auth middleware to protected endpoints (optional - can be enabled via env var)
 	useAuth := os.Getenv("ENABLE_AUTH") == "true"
