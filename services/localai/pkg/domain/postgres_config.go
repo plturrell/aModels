@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"time"
 
 	_ "github.com/lib/pq"
 )
@@ -153,7 +152,7 @@ func (p *PostgresConfigStore) SyncToRedis(ctx context.Context, redisLoader *Redi
 	}
 
 	domainsConfig := DomainsConfig{
-		Domains:      configs,
+		Domains:       configs,
 		DefaultDomain: defaultDomain,
 	}
 
@@ -208,4 +207,3 @@ func (p *PostgresConfigStore) GetDomainConfigByTrainingRun(ctx context.Context, 
 func (p *PostgresConfigStore) Close() error {
 	return p.db.Close()
 }
-

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"log"
 )
 
 // DomainLifecycleAPI provides HTTP API for domain lifecycle management
@@ -45,9 +44,9 @@ func (api *DomainLifecycleAPI) HandleCreateDomain(w http.ResponseWriter, r *http
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":   "success",
+		"status":    "success",
 		"domain_id": req.DomainID,
-		"message":  "Domain created successfully",
+		"message":   "Domain created successfully",
 	})
 }
 
@@ -75,9 +74,9 @@ func (api *DomainLifecycleAPI) HandleUpdateDomain(w http.ResponseWriter, r *http
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":   "success",
+		"status":    "success",
 		"domain_id": domainID,
-		"message":  "Domain updated successfully",
+		"message":   "Domain updated successfully",
 	})
 }
 
@@ -104,9 +103,9 @@ func (api *DomainLifecycleAPI) HandleArchiveDomain(w http.ResponseWriter, r *htt
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":   "success",
+		"status":    "success",
 		"domain_id": domainID,
-		"message":  "Domain archived successfully",
+		"message":   "Domain archived successfully",
 	})
 }
 
@@ -126,9 +125,9 @@ func (api *DomainLifecycleAPI) HandleDeleteDomain(w http.ResponseWriter, r *http
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":   "success",
+		"status":    "success",
 		"domain_id": domainID,
-		"message":  "Domain deleted successfully",
+		"message":   "Domain deleted successfully",
 	})
 }
 
@@ -147,8 +146,7 @@ func (api *DomainLifecycleAPI) HandleListDomains(w http.ResponseWriter, r *http.
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status": "success",
+		"status":  "success",
 		"domains": statuses,
 	})
 }
-
