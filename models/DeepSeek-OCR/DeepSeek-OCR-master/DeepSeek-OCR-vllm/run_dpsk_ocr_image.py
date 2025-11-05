@@ -7,7 +7,48 @@ if torch.version.cuda == '11.8':
     os.environ["TRITON_PTXAS_PATH"] = "/usr/local/cuda-11.8/bin/ptxas"
 
 os.environ['VLLM_USE_V1'] = '0'
-os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+
+# Dynamic GPU allocation via orchestrator
+def _allocate_gpu_for_ocr():
+    """Allocate GPU from orchestrator if available."""
+    gpu_orchestrator_url = os.getenv("GPU_ORCHESTRATOR_URL")
+    if not gpu_orchestrator_url:
+        # Default to GPU 0 if orchestrator not available
+        os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+        return [0]
+    
+    try:
+        import httpx
+        request_data = {
+            "service_name": "deepseek-ocr",
+            "workload_type": "ocr",
+            "workload_data": {
+                "image_count": 1
+            }
+        }
+        
+        response = httpx.post(
+            f"{gpu_orchestrator_url}/gpu/allocate",
+            json=request_data,
+            timeout=10.0
+        )
+        
+        if response.status_code == 200:
+            allocation = response.json()
+            device_ids = allocation.get("gpu_ids", [0])
+            # Set CUDA_VISIBLE_DEVICES to comma-separated list
+            os.environ["CUDA_VISIBLE_DEVICES"] = ','.join(map(str, device_ids))
+            return device_ids
+        else:
+            # Fallback to GPU 0
+            os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+            return [0]
+    except Exception as e:
+        print(f"Warning: Failed to allocate GPU from orchestrator: {e}, using GPU 0")
+        os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+        return [0]
+
+_allocated_gpus = _allocate_gpu_for_ocr()
 
 from vllm import AsyncLLMEngine, SamplingParams
 from vllm.engine.arg_utils import AsyncEngineArgs
