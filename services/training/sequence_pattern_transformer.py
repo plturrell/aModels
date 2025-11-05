@@ -52,7 +52,10 @@ class SequencePatternTransformer:
         num_heads: int = 8,
         max_seq_length: int = 512,
         dropout: float = 0.1,
-        localai_url: Optional[str] = None
+        localai_url: Optional[str] = None,
+        gpu_strategy: str = "single",
+        gpu_orchestrator_url: Optional[str] = None,
+        device_ids: Optional[List[int]] = None
     ):
         """Initialize sequence pattern transformer.
         
@@ -63,6 +66,9 @@ class SequencePatternTransformer:
             max_seq_length: Maximum sequence length
             dropout: Dropout rate
             localai_url: LocalAI URL for domain config fetching (optional)
+            gpu_strategy: GPU strategy - "single", "data_parallel", or "distributed"
+            gpu_orchestrator_url: URL to GPU orchestrator service (optional)
+            device_ids: List of GPU device IDs to use (optional, auto-detect if not provided)
         """
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
@@ -70,7 +76,23 @@ class SequencePatternTransformer:
         self.max_seq_length = max_seq_length
         self.dropout = dropout
         self.model = None
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if HAS_TORCH else None
+        self.gpu_strategy = gpu_strategy
+        self.gpu_orchestrator_url = gpu_orchestrator_url or os.getenv("GPU_ORCHESTRATOR_URL")
+        self.device_ids = device_ids
+        self.allocation_id = None
+        
+        # Initialize GPU allocation if orchestrator is available
+        if self.gpu_orchestrator_url and gpu_strategy != "single":
+            self._allocate_gpus()
+        
+        # Set device(s)
+        if HAS_TORCH and torch.cuda.is_available():
+            if self.device_ids:
+                self.device = torch.device(f"cuda:{self.device_ids[0]}")
+            else:
+                self.device = torch.device("cuda:0")
+        else:
+            self.device = torch.device("cpu") if HAS_TORCH else None
         
         # Domain awareness
         self.localai_url = localai_url or os.getenv("LOCALAI_URL", "http://localai:8080")
@@ -82,6 +104,67 @@ class SequencePatternTransformer:
             self._build_model()
         else:
             logger.warning("PyTorch not available. Transformer features will be limited.")
+    
+    def _allocate_gpus(self):
+        """Allocate GPUs from GPU orchestrator."""
+        if not self.gpu_orchestrator_url:
+            return
+        
+        try:
+            import httpx
+            request_data = {
+                "service_name": "training-transformer",
+                "workload_type": "training",
+                "workload_data": {
+                    "model_size": "medium",
+                    "multi_gpu": self.gpu_strategy != "single"
+                }
+            }
+            
+            response = httpx.post(
+                f"{self.gpu_orchestrator_url}/gpu/allocate",
+                json=request_data,
+                timeout=10.0
+            )
+            
+            if response.status_code == 200:
+                allocation = response.json()
+                self.allocation_id = allocation.get("id")
+                self.device_ids = allocation.get("gpu_ids", [])
+                logger.info(f"Allocated GPUs {self.device_ids} from orchestrator (allocation ID: {self.allocation_id})")
+            else:
+                logger.warning(f"Failed to allocate GPUs: {response.status_code}")
+        except Exception as e:
+            logger.warning(f"Failed to allocate GPUs from orchestrator: {e}")
+    
+    def __del__(self):
+        """Cleanup GPU allocation on destruction."""
+        if self.allocation_id and self.gpu_orchestrator_url:
+            try:
+                import httpx
+                httpx.post(
+                    f"{self.gpu_orchestrator_url}/gpu/release",
+                    json={"allocation_id": self.allocation_id},
+                    timeout=5.0
+                )
+                logger.info(f"Released GPU allocation {self.allocation_id}")
+            except Exception as e:
+                logger.warning(f"Failed to release GPU allocation: {e}")
+    
+    def release_gpus(self):
+        """Manually release GPU allocation."""
+        if self.allocation_id and self.gpu_orchestrator_url:
+            try:
+                import httpx
+                httpx.post(
+                    f"{self.gpu_orchestrator_url}/gpu/release",
+                    json={"allocation_id": self.allocation_id},
+                    timeout=5.0
+                )
+                self.allocation_id = None
+                logger.info("Released GPU allocation")
+            except Exception as e:
+                logger.warning(f"Failed to release GPU allocation: {e}")
     
     def _build_model(self):
         """Build the transformer model."""
@@ -103,6 +186,16 @@ class SequencePatternTransformer:
             num_layers=self.num_layers
         ).to(self.device)
         
+        # Wrap model with DataParallel if multi-GPU
+        if self.gpu_strategy == "data_parallel" and torch.cuda.device_count() > 1:
+            if self.device_ids:
+                self.model = nn.DataParallel(self.model, device_ids=self.device_ids)
+            else:
+                self.model = nn.DataParallel(self.model)
+            logger.info(f"Wrapped transformer with DataParallel on {torch.cuda.device_count()} GPUs")
+        elif self.gpu_strategy == "distributed":
+            logger.info("DistributedDataParallel mode - ensure process group is initialized")
+        
         # Positional encoding
         self.pos_encoder = PositionalEncoding(self.hidden_dim, self.dropout).to(self.device)
         
@@ -111,7 +204,7 @@ class SequencePatternTransformer:
         
         logger.info(
             f"Built Transformer model: {self.num_layers} layers, "
-            f"{self.num_heads} heads, hidden_dim={self.hidden_dim}"
+            f"{self.num_heads} heads, hidden_dim={self.hidden_dim}, strategy={self.gpu_strategy}"
         )
     
     def convert_sequence_to_tensor(
