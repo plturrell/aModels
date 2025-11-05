@@ -12,6 +12,7 @@ import (
 )
 
 // AutoPipelineOrchestrator orchestrates end-to-end automation of extraction → training → deployment.
+// Phase 9.3: Enhanced with domain-aware orchestration for domain-specific pipelines.
 type AutoPipelineOrchestrator struct {
 	logger            *log.Logger
 	extractServiceURL string
@@ -19,10 +20,31 @@ type AutoPipelineOrchestrator struct {
 	gleanClient      *GleanClient
 	modelRegistry    *ModelRegistry
 	abTestManager    *ABTestManager
+	domainDetector   *DomainDetector // Phase 9.3: Domain detector for domain-aware orchestration
+}
+
+// DomainDetector is a placeholder - would import from extract service
+type DomainDetector struct {
+	localaiURL string
+	logger     *log.Logger
+}
+
+// NewDomainDetector creates a domain detector (placeholder).
+func NewDomainDetector(localaiURL string, logger *log.Logger) *DomainDetector {
+	return &DomainDetector{
+		localaiURL: localaiURL,
+		logger:     logger,
+	}
 }
 
 // NewAutoPipelineOrchestrator creates a new auto-pipeline orchestrator.
 func NewAutoPipelineOrchestrator(logger *log.Logger) *AutoPipelineOrchestrator {
+	localaiURL := os.Getenv("LOCALAI_URL")
+	var domainDetector *DomainDetector
+	if localaiURL != "" {
+		domainDetector = NewDomainDetector(localaiURL, logger)
+	}
+	
 	return &AutoPipelineOrchestrator{
 		logger:             logger,
 		extractServiceURL:  os.Getenv("EXTRACT_SERVICE_URL"),
@@ -30,16 +52,22 @@ func NewAutoPipelineOrchestrator(logger *log.Logger) *AutoPipelineOrchestrator {
 		gleanClient:       NewGleanClient(logger),
 		modelRegistry:     NewModelRegistry(logger),
 		abTestManager:     NewABTestManager(logger),
+		domainDetector:    domainDetector, // Phase 9.3: Domain detector
 	}
 }
 
 // TriggerTrainingOnNewData automatically triggers training when new data arrives.
+// Phase 9.3: Enhanced with domain-aware training orchestration.
 func (apo *AutoPipelineOrchestrator) TriggerTrainingOnNewData(
 	ctx context.Context,
 	projectID string,
 	systemID string,
+	domainID string, // Phase 9.3: Optional domain ID for domain-specific training
 ) error {
-	apo.logger.Printf("Auto-triggering training for project=%s, system=%s", projectID, systemID)
+	apo.logger.Printf(
+		"Auto-triggering training for project=%s, system=%s, domain=%s",
+		projectID, systemID, domainID,
+	)
 	
 	// Check for new data
 	hasNewData, err := apo.checkForNewData(ctx, projectID, systemID)
@@ -52,21 +80,31 @@ func (apo *AutoPipelineOrchestrator) TriggerTrainingOnNewData(
 		return nil
 	}
 	
-	// Trigger training pipeline
-	trainingResult, err := apo.runTrainingPipeline(ctx, projectID, systemID)
+	// Phase 9.3: Auto-detect domain if not provided
+	if domainID == "" && apo.domainDetector != nil {
+		// Try to detect domain from project/system metadata
+		// This would query the knowledge graph or use domain detector
+		domainID = "" // Placeholder - would implement domain detection
+	}
+	
+	// Trigger training pipeline with domain
+	trainingResult, err := apo.runTrainingPipeline(ctx, projectID, systemID, domainID)
 	if err != nil {
 		return fmt.Errorf("training pipeline failed: %w", err)
 	}
 	
-	// Deploy model if training successful
+	// Deploy model if training successful (with domain context)
 	if trainingResult.Success {
-		deploymentResult, err := apo.deployModel(ctx, trainingResult.ModelPath)
+		deploymentResult, err := apo.deployModel(ctx, trainingResult.ModelPath, domainID)
 		if err != nil {
 			apo.logger.Printf("Model deployment failed: %v", err)
 			return err
 		}
 		
-		apo.logger.Printf("Model deployed successfully: %s", deploymentResult.Version)
+		apo.logger.Printf(
+			"Model deployed successfully: %s (domain: %s)",
+			deploymentResult.Version, domainID,
+		)
 	}
 	
 	return nil
@@ -85,19 +123,31 @@ func (apo *AutoPipelineOrchestrator) checkForNewData(
 }
 
 // runTrainingPipeline runs the training pipeline.
+// Phase 9.3: Enhanced with domain-aware training configuration.
 func (apo *AutoPipelineOrchestrator) runTrainingPipeline(
 	ctx context.Context,
 	projectID string,
 	systemID string,
+	domainID string, // Phase 9.3: Domain ID for domain-specific training
 ) (*TrainingResult, error) {
-	apo.logger.Printf("Running training pipeline...")
+	apo.logger.Printf("Running training pipeline (domain: %s)...", domainID)
 	
-	// Call training service
-	cmd := exec.CommandContext(ctx, "python3", "./tools/scripts/train_relational_transformer.py",
+	// Build command arguments
+	args := []string{
+		"./tools/scripts/train_relational_transformer.py",
 		"--training-pipeline-enable",
 		"--extract-project-id", projectID,
 		"--extract-system-id", systemID,
-	)
+	}
+	
+	// Phase 9.3: Add domain-specific arguments if domainID provided
+	if domainID != "" {
+		args = append(args, "--domain-id", domainID)
+		args = append(args, "--enable-domain-filtering", "true")
+	}
+	
+	// Call training service
+	cmd := exec.CommandContext(ctx, "python3", args...)
 	
 	output, err := cmd.Output()
 	if err != nil {
@@ -109,25 +159,32 @@ func (apo *AutoPipelineOrchestrator) runTrainingPipeline(
 		return nil, fmt.Errorf("failed to parse training result: %w", err)
 	}
 	
+	// Phase 9.3: Add domain context to result
+	if domainID != "" {
+		result.DomainID = domainID
+	}
+	
 	return &result, nil
 }
 
 // deployModel deploys a trained model.
+// Phase 9.3: Enhanced with domain-aware deployment.
 func (apo *AutoPipelineOrchestrator) deployModel(
 	ctx context.Context,
 	modelPath string,
+	domainID string, // Phase 9.3: Domain ID for domain-specific deployment
 ) (*DeploymentResult, error) {
-	apo.logger.Printf("Deploying model from %s", modelPath)
+	apo.logger.Printf("Deploying model from %s (domain: %s)", modelPath, domainID)
 	
-	// Register model in registry
-	version, err := apo.modelRegistry.RegisterModel(modelPath)
+	// Register model in registry (with domain context)
+	version, err := apo.modelRegistry.RegisterModel(modelPath, domainID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to register model: %w", err)
 	}
 	
-	// Start A/B test if enabled
+	// Phase 9.3: Start domain-specific A/B test if enabled
 	if os.Getenv("ENABLE_AB_TESTING") == "true" {
-		err = apo.abTestManager.StartABTest(version)
+		err = apo.abTestManager.StartABTest(version, domainID)
 		if err != nil {
 			apo.logger.Printf("A/B test start failed: %v", err)
 		}
@@ -136,6 +193,7 @@ func (apo *AutoPipelineOrchestrator) deployModel(
 	return &DeploymentResult{
 		Version:    version,
 		ModelPath:  modelPath,
+		DomainID:   domainID, // Phase 9.3: Include domain in result
 		DeployedAt: time.Now(),
 	}, nil
 }
@@ -145,12 +203,14 @@ type TrainingResult struct {
 	Success   bool   `json:"success"`
 	ModelPath string `json:"model_path"`
 	Metrics   map[string]any `json:"metrics"`
+	DomainID  string `json:"domain_id,omitempty"` // Phase 9.3: Domain context
 }
 
 // DeploymentResult represents the result of a model deployment.
 type DeploymentResult struct {
 	Version    string    `json:"version"`
 	ModelPath  string    `json:"model_path"`
+	DomainID   string    `json:"domain_id,omitempty"` // Phase 9.3: Domain context
 	DeployedAt time.Time `json:"deployed_at"`
 }
 
@@ -173,13 +233,15 @@ func NewModelRegistry(logger *log.Logger) *ModelRegistry {
 type ModelVersion struct {
 	Version     string    `json:"version"`
 	ModelPath   string    `json:"model_path"`
+	DomainID    string    `json:"domain_id,omitempty"` // Phase 9.3: Domain context
 	Metrics     map[string]any `json:"metrics"`
 	CreatedAt   time.Time `json:"created_at"`
 	IsActive    bool      `json:"is_active"`
 }
 
 // RegisterModel registers a new model version.
-func (mr *ModelRegistry) RegisterModel(modelPath string) (string, error) {
+// Phase 9.3: Enhanced with domain context.
+func (mr *ModelRegistry) RegisterModel(modelPath string, domainID string) (string, error) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 	
@@ -188,12 +250,13 @@ func (mr *ModelRegistry) RegisterModel(modelPath string) (string, error) {
 	modelVersion := ModelVersion{
 		Version:   version,
 		ModelPath: modelPath,
+		DomainID:  domainID, // Phase 9.3: Domain context
 		CreatedAt: time.Now(),
 		IsActive:  false, // New models start inactive for A/B testing
 	}
 	
 	mr.models[version] = modelVersion
-	mr.logger.Printf("Registered model version: %s", version)
+	mr.logger.Printf("Registered model version: %s (domain: %s)", version, domainID)
 	
 	return version, nil
 }
@@ -216,6 +279,7 @@ func NewABTestManager(logger *log.Logger) *ABTestManager {
 // ABTest represents an A/B test.
 type ABTest struct {
 	TestID        string    `json:"test_id"`
+	DomainID      string    `json:"domain_id,omitempty"` // Phase 9.3: Domain context
 	ControlVersion string   `json:"control_version"`
 	TreatmentVersion string `json:"treatment_version"`
 	StartTime     time.Time `json:"start_time"`
@@ -224,17 +288,19 @@ type ABTest struct {
 }
 
 // StartABTest starts an A/B test for a new model version.
-func (abtm *ABTestManager) StartABTest(newVersion string) error {
+// Phase 9.3: Enhanced with domain-specific A/B testing.
+func (abtm *ABTestManager) StartABTest(newVersion string, domainID string) error {
 	abtm.mu.Lock()
 	defer abtm.mu.Unlock()
 	
-	// Find current active version as control
-	controlVersion := "v1" // Would find actual active version
+	// Find current active version as control (for this domain)
+	controlVersion := "v1" // Would find actual active version for domain
 	
-	testID := fmt.Sprintf("ab_test_%s_%s", controlVersion, newVersion)
+	testID := fmt.Sprintf("ab_test_%s_%s_%s", domainID, controlVersion, newVersion)
 	
 	test := &ABTest{
 		TestID:          testID,
+		DomainID:       domainID, // Phase 9.3: Domain context
 		ControlVersion:  controlVersion,
 		TreatmentVersion: newVersion,
 		StartTime:       time.Now(),
@@ -243,7 +309,7 @@ func (abtm *ABTestManager) StartABTest(newVersion string) error {
 	}
 	
 	abtm.activeTests[testID] = test
-	abtm.logger.Printf("Started A/B test: %s", testID)
+	abtm.logger.Printf("Started A/B test: %s (domain: %s)", testID, domainID)
 	
 	return nil
 }

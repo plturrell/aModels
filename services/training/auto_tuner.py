@@ -2,6 +2,11 @@
 
 This module implements hyperparameter auto-tuning using Optuna, automated model architecture
 selection, training data quality auto-assessment, and automated feature engineering.
+
+Domain-aware enhancements:
+- Domain-specific Optuna studies per domain
+- Domain-aware hyperparameter constraints
+- Domain-specific architecture selection
 """
 
 import logging
@@ -9,6 +14,7 @@ import os
 import json
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
+import httpx
 
 try:
     import optuna
@@ -21,13 +27,20 @@ logger = logging.getLogger(__name__)
 
 
 class AutoTuner:
-    """Automated hyperparameter tuning and model optimization."""
+    """Automated hyperparameter tuning and model optimization.
+    
+    Domain-aware enhancements:
+    - Domain-specific Optuna studies
+    - Domain-aware hyperparameter constraints
+    - Domain-specific architecture selection
+    """
     
     def __init__(
         self,
         study_name: Optional[str] = None,
         storage: Optional[str] = None,
-        n_trials: int = 50
+        n_trials: int = 50,
+        localai_url: Optional[str] = None
     ):
         """Initialize auto-tuner.
         
@@ -35,11 +48,17 @@ class AutoTuner:
             study_name: Name for Optuna study
             storage: Storage backend for Optuna (e.g., "sqlite:///optuna.db")
             n_trials: Number of optimization trials
+            localai_url: LocalAI URL for domain config fetching (optional)
         """
         self.study_name = study_name or "amodels_training_optimization"
         self.storage = storage or os.getenv("OPTUNA_STORAGE", "sqlite:///optuna.db")
         self.n_trials = n_trials
         self.study = None
+        
+        # Domain awareness
+        self.localai_url = localai_url or os.getenv("LOCALAI_URL", "http://localai:8080")
+        self.domain_configs = {}  # domain_id -> domain config
+        self.domain_studies = {}  # domain_id -> Optuna study
         
         if HAS_OPTUNA:
             try:
@@ -94,11 +113,122 @@ class AutoTuner:
             logger.error(f"Hyperparameter optimization failed: {e}", exc_info=True)
             return self._get_default_hyperparameters()
     
-    def suggest_hyperparameters(self, trial) -> Dict[str, Any]:
-        """Suggest hyperparameters for a trial.
+    def _load_domain_config(self, domain_id: str) -> Optional[Dict[str, Any]]:
+        """Load domain configuration from LocalAI.
+        
+        Args:
+            domain_id: Domain identifier
+        
+        Returns:
+            Domain configuration or None if not found
+        """
+        if domain_id in self.domain_configs:
+            return self.domain_configs[domain_id]
+        
+        try:
+            response = httpx.get(
+                f"{self.localai_url}/v1/domains",
+                timeout=5.0
+            )
+            if response.status_code == 200:
+                domains_data = response.json()
+                domains = domains_data.get("domains", {})
+                
+                if domain_id in domains:
+                    domain_info = domains[domain_id]
+                    config = domain_info.get("config", domain_info)
+                    self.domain_configs[domain_id] = config
+                    return config
+        except Exception as e:
+            logger.warning(f"Failed to load domain config for {domain_id}: {e}")
+        
+        return None
+    
+    def optimize_for_domain(
+        self,
+        domain_id: str,
+        objective_func,
+        training_data_stats: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Optimize hyperparameters for a specific domain.
+        
+        Args:
+            domain_id: Domain identifier
+            objective_func: Function that takes a trial and returns a score
+            training_data_stats: Statistics about training data
+        
+        Returns:
+            Dictionary with best hyperparameters and score for the domain
+        """
+        logger.info(f"Optimizing hyperparameters for domain: {domain_id}")
+        
+        # Get or create domain-specific study
+        if domain_id not in self.domain_studies:
+            if HAS_OPTUNA:
+                try:
+                    study_name = f"{self.study_name}_{domain_id}"
+                    study = optuna.create_study(
+                        study_name=study_name,
+                        storage=self.storage,
+                        direction="maximize",
+                        load_if_exists=True
+                    )
+                    self.domain_studies[domain_id] = study
+                    logger.info(f"Created domain-specific Optuna study: {study_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to create domain study for {domain_id}: {e}")
+                    self.domain_studies[domain_id] = None
+        
+        study = self.domain_studies.get(domain_id)
+        if study is None:
+            # Fallback to generic optimization
+            logger.warning(f"Domain study not available for {domain_id}, using generic optimization")
+            return self.optimize_hyperparameters(objective_func)
+        
+        # Get domain configuration for constraints
+        domain_config = self._load_domain_config(domain_id)
+        
+        # Create domain-aware objective
+        def domain_objective(trial):
+            # Suggest hyperparameters with domain constraints
+            params = self.suggest_hyperparameters_with_domain(
+                trial, domain_config, training_data_stats
+            )
+            return objective_func(trial, params)
+        
+        # Run optimization
+        try:
+            study.optimize(domain_objective, n_trials=self.n_trials)
+            
+            return {
+                "domain_id": domain_id,
+                "best_hyperparameters": study.best_params,
+                "best_score": study.best_value,
+                "n_trials": self.n_trials,
+                "optimization_complete": True,
+            }
+        except Exception as e:
+            logger.error(f"Domain optimization failed for {domain_id}: {e}", exc_info=True)
+            return {
+                "domain_id": domain_id,
+                "best_hyperparameters": self._get_default_hyperparameters(),
+                "best_score": 0.0,
+                "optimization_complete": False,
+                "error": str(e),
+            }
+    
+    def suggest_hyperparameters_with_domain(
+        self,
+        trial,
+        domain_config: Optional[Dict[str, Any]],
+        training_data_stats: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Suggest hyperparameters with domain-specific constraints.
         
         Args:
             trial: Optuna trial object
+            domain_config: Optional domain configuration
+            training_data_stats: Training data statistics
         
         Returns:
             Dictionary with suggested hyperparameters
@@ -106,6 +236,7 @@ class AutoTuner:
         if not HAS_OPTUNA:
             return self._get_default_hyperparameters()
         
+        # Base hyperparameters
         hyperparameters = {
             "learning_rate": trial.suggest_float("learning_rate", 1e-5, 1e-2, log=True),
             "batch_size": trial.suggest_categorical("batch_size", [16, 32, 64, 128]),
@@ -117,7 +248,52 @@ class AutoTuner:
             "warmup_steps": trial.suggest_int("warmup_steps", 100, 1000),
         }
         
+        # Apply domain-specific constraints
+        if domain_config:
+            layer = domain_config.get("layer", "")
+            
+            # Adjust based on domain layer
+            if layer == "data":
+                # Data layer: prefer smaller models, faster training
+                hyperparameters["hidden_dim"] = trial.suggest_categorical(
+                    "hidden_dim", [128, 256, 512]
+                )
+                hyperparameters["num_layers"] = trial.suggest_int("num_layers", 2, 4)
+                hyperparameters["batch_size"] = trial.suggest_categorical(
+                    "batch_size", [32, 64, 128]
+                )
+            elif layer == "application":
+                # Application layer: balanced
+                hyperparameters["hidden_dim"] = trial.suggest_categorical(
+                    "hidden_dim", [256, 512, 768]
+                )
+            elif layer == "business":
+                # Business layer: can use larger models
+                hyperparameters["hidden_dim"] = trial.suggest_categorical(
+                    "hidden_dim", [512, 768, 1024]
+                )
+                hyperparameters["num_layers"] = trial.suggest_int("num_layers", 4, 8)
+            
+            # Adjust based on domain keywords (semantic richness)
+            keywords = domain_config.get("keywords", [])
+            if len(keywords) > 10:
+                # Semantic-rich domain: can benefit from more attention heads
+                hyperparameters["num_heads"] = trial.suggest_categorical(
+                    "num_heads", [8, 16]
+                )
+        
         return hyperparameters
+    
+    def suggest_hyperparameters(self, trial) -> Dict[str, Any]:
+        """Suggest hyperparameters for a trial (generic, no domain).
+        
+        Args:
+            trial: Optuna trial object
+        
+        Returns:
+            Dictionary with suggested hyperparameters
+        """
+        return self.suggest_hyperparameters_with_domain(trial, None, {})
     
     def _get_default_hyperparameters(self) -> Dict[str, Any]:
         """Get default hyperparameters."""
@@ -136,13 +312,15 @@ class AutoTuner:
     def select_model_architecture(
         self,
         training_data_stats: Dict[str, Any],
-        task_type: str = "pattern_learning"
+        task_type: str = "pattern_learning",
+        domain_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Automatically select optimal model architecture.
         
         Args:
             training_data_stats: Statistics about training data
             task_type: Type of task (pattern_learning, classification, regression, etc.)
+            domain_id: Optional domain identifier for domain-specific architecture
         
         Returns:
             Dictionary with recommended architecture
@@ -151,6 +329,11 @@ class AutoTuner:
         data_size = training_data_stats.get("total_samples", 0)
         feature_dim = training_data_stats.get("feature_dim", 0)
         num_classes = training_data_stats.get("num_classes", 0)
+        
+        # Get domain config if domain_id provided
+        domain_config = None
+        if domain_id:
+            domain_config = self._load_domain_config(domain_id)
         
         # Architecture selection logic
         if data_size < 1000:
@@ -178,6 +361,29 @@ class AutoTuner:
                 "recommendation": "large_dataset",
             }
         
+        # Phase 9.1: Adjust based on domain configuration
+        if domain_config:
+            layer = domain_config.get("layer", "")
+            
+            # Adjust based on domain layer
+            if layer == "data":
+                # Data layer: prefer smaller, faster models
+                architecture["hidden_dim"] = min(architecture["hidden_dim"], 256)
+                architecture["num_layers"] = min(architecture["num_layers"], 4)
+            elif layer == "business":
+                # Business layer: can use larger models
+                architecture["hidden_dim"] = max(architecture["hidden_dim"], 512)
+                architecture["num_layers"] = max(architecture["num_layers"], 4)
+            
+            # Adjust based on semantic richness (keywords)
+            keywords = domain_config.get("keywords", [])
+            if len(keywords) > 10:
+                # Semantic-rich: benefit from more attention
+                architecture["num_heads"] = max(architecture["num_heads"], 8)
+            
+            architecture["domain_id"] = domain_id
+            architecture["domain_layer"] = layer
+        
         # Adjust based on task type
         if task_type == "classification" and num_classes > 100:
             architecture["hidden_dim"] = max(architecture["hidden_dim"], 512)
@@ -185,7 +391,10 @@ class AutoTuner:
         architecture["task_type"] = task_type
         architecture["data_size"] = data_size
         
-        logger.info(f"Selected architecture: {architecture['recommendation']} for {task_type}")
+        logger.info(
+            f"Selected architecture: {architecture['recommendation']} for {task_type}"
+            + (f" (domain: {domain_id})" if domain_id else "")
+        )
         
         return architecture
     

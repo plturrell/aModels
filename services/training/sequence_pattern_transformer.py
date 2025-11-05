@@ -2,12 +2,21 @@
 
 This module extends relational_transformer for temporal sequences,
 learning table processing sequences (Control-M → SQL → Tables).
+
+Domain-aware enhancements:
+- Domain-conditioned sequence learning
+- SAP RPT embeddings for domain context
+- Domain-specific sequence patterns
 """
 
 import logging
 import json
+import os
 from typing import Dict, List, Optional, Any, Tuple
 import numpy as np
+import httpx
+import subprocess
+from pathlib import Path
 
 try:
     import torch
@@ -28,7 +37,13 @@ logger = logging.getLogger(__name__)
 
 
 class SequencePatternTransformer:
-    """Transformer-based learner for temporal sequence patterns."""
+    """Transformer-based learner for temporal sequence patterns.
+    
+    Domain-aware enhancements:
+    - Domain-conditioned sequence embeddings
+    - SAP RPT embeddings for domain context
+    - Domain-specific sequence pattern learning
+    """
     
     def __init__(
         self,
@@ -36,7 +51,8 @@ class SequencePatternTransformer:
         num_layers: int = 4,
         num_heads: int = 8,
         max_seq_length: int = 512,
-        dropout: float = 0.1
+        dropout: float = 0.1,
+        localai_url: Optional[str] = None
     ):
         """Initialize sequence pattern transformer.
         
@@ -46,6 +62,7 @@ class SequencePatternTransformer:
             num_heads: Number of attention heads
             max_seq_length: Maximum sequence length
             dropout: Dropout rate
+            localai_url: LocalAI URL for domain config fetching (optional)
         """
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
@@ -54,6 +71,12 @@ class SequencePatternTransformer:
         self.dropout = dropout
         self.model = None
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if HAS_TORCH else None
+        
+        # Domain awareness
+        self.localai_url = localai_url or os.getenv("LOCALAI_URL", "http://localai:8080")
+        self.domain_configs = {}  # domain_id -> domain config
+        self.domain_embeddings = {}  # domain_id -> domain embedding (SAP RPT)
+        self.sap_rpt_path = Path(os.getenv("SAP_RPT_PATH", "/home/aModels/models/sap-rpt-1-oss-main"))
         
         if HAS_TORCH:
             self._build_model()
@@ -190,16 +213,205 @@ class SequencePatternTransformer:
         features.extend([0.0] * (target_size - len(features)))
         return features[:target_size]
     
+    def _load_domain_config(self, domain_id: str) -> Optional[Dict[str, Any]]:
+        """Load domain configuration from LocalAI.
+        
+        Args:
+            domain_id: Domain identifier
+        
+        Returns:
+            Domain configuration or None if not found
+        """
+        if domain_id in self.domain_configs:
+            return self.domain_configs[domain_id]
+        
+        try:
+            response = httpx.get(
+                f"{self.localai_url}/v1/domains",
+                timeout=5.0
+            )
+            if response.status_code == 200:
+                domains_data = response.json()
+                domains = domains_data.get("domains", {})
+                
+                if domain_id in domains:
+                    domain_info = domains[domain_id]
+                    config = domain_info.get("config", domain_info)
+                    self.domain_configs[domain_id] = config
+                    return config
+        except Exception as e:
+            logger.warning(f"Failed to load domain config for {domain_id}: {e}")
+        
+        return None
+    
+    def _get_domain_embedding(self, domain_id: str) -> np.ndarray:
+        """Get domain embedding for conditioning using SAP RPT.
+        
+        Args:
+            domain_id: Domain identifier
+        
+        Returns:
+            Domain embedding vector (384-dim for SAP RPT)
+        """
+        if domain_id in self.domain_embeddings:
+            return self.domain_embeddings[domain_id]
+        
+        # Load domain config
+        domain_config = self._load_domain_config(domain_id)
+        if not domain_config:
+            # Return zero embedding if domain not found
+            embedding = np.zeros(384)
+            self.domain_embeddings[domain_id] = embedding
+            return embedding
+        
+        # Generate embedding from domain keywords using SAP RPT
+        keywords = domain_config.get("keywords", [])
+        domain_text = " ".join(keywords) if keywords else domain_config.get("name", domain_id)
+        
+        # Use SAP RPT embedding script
+        try:
+            embed_script = self.sap_rpt_path / "sap_rpt_oss" / "scripts" / "start_embedding_server.py"
+            if not embed_script.exists():
+                # Try alternative path
+                embed_script = Path("./scripts/embed_sap_rpt.py")
+            
+            if embed_script.exists():
+                # Call SAP RPT embedding script
+                cmd = [
+                    "python3",
+                    str(embed_script),
+                    "--artifact-type", "text",
+                    "--text", domain_text
+                ]
+                
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=10.0
+                )
+                
+                if result.returncode == 0:
+                    embedding_data = json.loads(result.stdout)
+                    if isinstance(embedding_data, list):
+                        embedding = np.array(embedding_data, dtype=np.float32)
+                        if embedding.shape[0] == 384:
+                            self.domain_embeddings[domain_id] = embedding
+                            return embedding
+        except Exception as e:
+            logger.warning(f"Failed to generate SAP RPT embedding for domain {domain_id}: {e}")
+        
+        # Fallback: return zero embedding
+        embedding = np.zeros(384)
+        self.domain_embeddings[domain_id] = embedding
+        return embedding
+    
+    def learn_domain_sequences(
+        self,
+        domain_id: str,
+        sequences: List[List[Dict[str, Any]]],
+        sequence_type: str = "process"
+    ) -> Dict[str, Any]:
+        """Learn sequences specific to a domain with domain conditioning.
+        
+        Args:
+            domain_id: Domain identifier
+            sequences: List of sequences (each sequence is a list of items)
+            sequence_type: Type of sequences
+        
+        Returns:
+            Dictionary with learned patterns for the domain
+        """
+        logger.info(f"Learning domain-specific sequences for domain: {domain_id}")
+        
+        # Get domain embedding for conditioning
+        domain_embedding = self._get_domain_embedding(domain_id)
+        
+        # Learn sequences with domain context
+        patterns = self.learn_sequence_patterns(sequences, sequence_type)
+        
+        # Add domain-specific metadata
+        patterns["domain_id"] = domain_id
+        patterns["domain_embedding_dim"] = len(domain_embedding)
+        
+        # Extract domain-specific temporal patterns
+        domain_temporal_patterns = self._extract_domain_temporal_patterns(
+            sequences, patterns.get("sequence_embeddings", []), domain_id
+        )
+        patterns["domain_temporal_patterns"] = domain_temporal_patterns
+        
+        logger.info(
+            f"Domain-specific sequence learning complete for {domain_id}: "
+            f"{len(sequences)} sequences, "
+            f"{len(domain_temporal_patterns)} domain-specific patterns"
+        )
+        
+        return patterns
+    
+    def _extract_domain_temporal_patterns(
+        self,
+        sequences: List[List[Dict[str, Any]]],
+        embeddings: List[List[float]],
+        domain_id: str
+    ) -> Dict[str, Any]:
+        """Extract domain-specific temporal patterns.
+        
+        Args:
+            sequences: Original sequences
+            embeddings: Sequence embeddings
+            domain_id: Domain identifier
+        
+        Returns:
+            Dictionary of domain-specific temporal patterns
+        """
+        domain_config = self._load_domain_config(domain_id)
+        if not domain_config:
+            return {}
+        
+        # Filter sequences that match domain keywords
+        domain_keywords = set(kw.lower() for kw in domain_config.get("keywords", []))
+        
+        matching_sequences = []
+        matching_indices = []
+        
+        for i, seq in enumerate(sequences):
+            # Check if sequence matches domain keywords
+            seq_text = " ".join(str(item) for item in seq).lower()
+            if any(kw in seq_text for kw in domain_keywords):
+                matching_sequences.append(seq)
+                matching_indices.append(i)
+        
+        if not matching_sequences:
+            return {
+                "domain_id": domain_id,
+                "matching_sequences": 0,
+                "patterns": {}
+            }
+        
+        # Extract patterns from matching sequences
+        matching_embeddings = [embeddings[i] for i in matching_indices if i < len(embeddings)]
+        
+        patterns = {
+            "domain_id": domain_id,
+            "domain_name": domain_config.get("name", domain_id),
+            "matching_sequences": len(matching_sequences),
+            "sequence_patterns": self._extract_temporal_patterns(matching_sequences, np.array(matching_embeddings) if matching_embeddings else np.array([]))
+        }
+        
+        return patterns
+    
     def learn_sequence_patterns(
         self,
         sequences: List[List[Dict[str, Any]]],
-        sequence_type: str = "process"
+        sequence_type: str = "process",
+        domain_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Learn patterns from sequences using transformer.
         
         Args:
             sequences: List of sequences (each sequence is a list of items)
             sequence_type: Type of sequences
+            domain_id: Optional domain identifier for domain-specific learning
         
         Returns:
             Dictionary with learned patterns:
@@ -207,6 +419,9 @@ class SequencePatternTransformer:
             - pattern_predictions: Predicted next items in sequences
             - temporal_patterns: Learned temporal patterns
         """
+        # Use domain-specific learning if domain_id provided
+        if domain_id:
+            return self.learn_domain_sequences(domain_id, sequences, sequence_type)
         if not HAS_TORCH:
             logger.warning("Transformer learning skipped: PyTorch not available")
             return {

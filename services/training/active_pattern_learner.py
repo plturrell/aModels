@@ -3,25 +3,44 @@
 This module implements automated pattern discovery with active learning,
 identifying rare patterns requiring human review, unsupervised pattern discovery,
 and automated pattern taxonomy generation.
+
+Domain-aware enhancements:
+- Domain filtering for pattern discovery
+- Domain keyword validation
+- Domain-specific pattern taxonomy
 """
 
 import logging
+import os
 from typing import Dict, List, Optional, Any, Tuple
 from collections import defaultdict, Counter
 import json
+import httpx
 
 logger = logging.getLogger(__name__)
 
 
 class ActivePatternLearner:
-    """Active learning system for pattern discovery."""
+    """Active learning system for pattern discovery.
     
-    def __init__(self, confidence_threshold: float = 0.7, rarity_threshold: float = 0.1):
+    Domain-aware enhancements:
+    - Filters patterns by domain
+    - Validates patterns with domain keywords
+    - Generates domain-specific pattern taxonomy
+    """
+    
+    def __init__(
+        self,
+        confidence_threshold: float = 0.7,
+        rarity_threshold: float = 0.1,
+        localai_url: Optional[str] = None
+    ):
         """Initialize active pattern learner.
         
         Args:
             confidence_threshold: Minimum confidence for pattern acceptance
             rarity_threshold: Maximum frequency to consider a pattern "rare"
+            localai_url: LocalAI URL for domain config fetching (optional)
         """
         self.confidence_threshold = confidence_threshold
         self.rarity_threshold = rarity_threshold
@@ -29,12 +48,111 @@ class ActivePatternLearner:
         self.rare_patterns = []
         self.pattern_confidence = {}
         self.pattern_taxonomy = {}
+        
+        # Domain awareness
+        self.localai_url = localai_url or os.getenv("LOCALAI_URL", "http://localai:8080")
+        self.domain_configs = {}  # domain_id -> domain config
+    
+    def _load_domain_config(self, domain_id: str) -> Optional[Dict[str, Any]]:
+        """Load domain configuration from LocalAI.
+        
+        Args:
+            domain_id: Domain identifier
+        
+        Returns:
+            Domain configuration or None if not found
+        """
+        if domain_id in self.domain_configs:
+            return self.domain_configs[domain_id]
+        
+        try:
+            response = httpx.get(
+                f"{self.localai_url}/v1/domains",
+                timeout=5.0
+            )
+            if response.status_code == 200:
+                domains_data = response.json()
+                domains = domains_data.get("domains", {})
+                
+                if domain_id in domains:
+                    domain_info = domains[domain_id]
+                    config = domain_info.get("config", domain_info)
+                    self.domain_configs[domain_id] = config
+                    return config
+        except Exception as e:
+            logger.warning(f"Failed to load domain config for {domain_id}: {e}")
+        
+        return None
+    
+    def _filter_by_domain(
+        self,
+        items: List[Dict[str, Any]],
+        domain_id: str
+    ) -> List[Dict[str, Any]]:
+        """Filter items by domain keywords.
+        
+        Args:
+            items: List of items (nodes or edges)
+            domain_id: Domain identifier
+        
+        Returns:
+            Filtered list of items matching domain
+        """
+        domain_config = self._load_domain_config(domain_id)
+        if not domain_config:
+            return items  # Return all if domain not found
+        
+        domain_keywords = set(kw.lower() for kw in domain_config.get("keywords", []))
+        if not domain_keywords:
+            return items  # Return all if no keywords
+        
+        filtered = []
+        for item in items:
+            # Check if item matches domain keywords
+            item_text = str(item).lower()
+            if any(kw in item_text for kw in domain_keywords):
+                filtered.append(item)
+        
+        return filtered
+    
+    def _validate_with_domain_keywords(
+        self,
+        patterns: List[Dict[str, Any]],
+        domain_keywords: List[str]
+    ) -> List[Dict[str, Any]]:
+        """Validate patterns using domain keywords.
+        
+        Args:
+            patterns: List of discovered patterns
+            domain_keywords: Domain keywords for validation
+        
+        Returns:
+            Validated patterns with domain relevance scores
+        """
+        validated = []
+        keyword_set = set(kw.lower() for kw in domain_keywords)
+        
+        for pattern in patterns:
+            pattern_text = str(pattern).lower()
+            matches = sum(1 for kw in keyword_set if kw in pattern_text)
+            relevance = matches / len(keyword_set) if keyword_set else 0.0
+            
+            validated_pattern = pattern.copy()
+            validated_pattern["domain_relevance"] = relevance
+            validated_pattern["domain_keyword_matches"] = matches
+            
+            # Only include if relevant
+            if relevance > 0.0:
+                validated.append(validated_pattern)
+        
+        return validated
     
     def discover_patterns(
         self,
         learned_patterns: Dict[str, Any],
         graph_nodes: List[Dict[str, Any]],
-        graph_edges: List[Dict[str, Any]]
+        graph_edges: List[Dict[str, Any]],
+        domain_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Discover patterns using active learning.
         
@@ -42,6 +160,7 @@ class ActivePatternLearner:
             learned_patterns: Previously learned patterns
             graph_nodes: Current graph nodes
             graph_edges: Current graph edges
+            domain_id: Optional domain identifier for domain-specific discovery
         
         Returns:
             Dictionary with discovered patterns:
@@ -49,11 +168,29 @@ class ActivePatternLearner:
             - rare_patterns: Rare patterns requiring review
             - pattern_confidence: Confidence scores for patterns
             - pattern_taxonomy: Automated taxonomy
+            - domain_patterns: Domain-specific patterns (if domain_id provided)
         """
         logger.info("Starting active pattern discovery...")
         
-        # Discover new patterns
-        new_patterns = self._discover_new_patterns(graph_nodes, graph_edges, learned_patterns)
+        # NEW: Filter by domain if specified
+        domain_nodes = graph_nodes
+        domain_edges = graph_edges
+        if domain_id:
+            logger.info(f"Filtering patterns for domain: {domain_id}")
+            domain_nodes = self._filter_by_domain(graph_nodes, domain_id)
+            domain_edges = self._filter_by_domain(graph_edges, domain_id)
+            logger.info(f"Filtered to {len(domain_nodes)} nodes, {len(domain_edges)} edges for domain {domain_id}")
+        
+        # Discover new patterns (from filtered data)
+        new_patterns = self._discover_new_patterns(domain_nodes, domain_edges, learned_patterns)
+        
+        # NEW: Validate with domain keywords if domain_id provided
+        if domain_id:
+            domain_config = self._load_domain_config(domain_id)
+            if domain_config:
+                domain_keywords = domain_config.get("keywords", [])
+                validated_patterns = self._validate_with_domain_keywords(new_patterns, domain_keywords)
+                new_patterns = validated_patterns
         
         # Identify rare patterns
         rare_patterns = self._identify_rare_patterns(new_patterns, learned_patterns)
@@ -61,8 +198,11 @@ class ActivePatternLearner:
         # Calculate confidence scores
         pattern_confidence = self._calculate_pattern_confidence(new_patterns, learned_patterns)
         
-        # Generate pattern taxonomy
-        pattern_taxonomy = self._generate_pattern_taxonomy(new_patterns, learned_patterns)
+        # Generate pattern taxonomy (domain-aware if domain_id provided)
+        if domain_id:
+            pattern_taxonomy = self._generate_domain_pattern_taxonomy(new_patterns, learned_patterns, domain_id)
+        else:
+            pattern_taxonomy = self._generate_pattern_taxonomy(new_patterns, learned_patterns)
         
         # Filter patterns requiring review
         patterns_for_review = self._filter_patterns_for_review(
@@ -85,12 +225,61 @@ class ActivePatternLearner:
             "total_for_review": len(patterns_for_review),
         }
         
+        # NEW: Add domain-specific results
+        if domain_id:
+            result["domain_id"] = domain_id
+            result["domain_patterns"] = {
+                "total": len(new_patterns),
+                "rare": len([p for p in rare_patterns if p.get("domain_relevance", 0) > 0]),
+                "validated": len([p for p in new_patterns if p.get("domain_relevance", 0) > 0])
+            }
+        
         logger.info(
             f"Active pattern discovery complete: {len(new_patterns)} patterns discovered, "
             f"{len(rare_patterns)} rare patterns, {len(patterns_for_review)} require review"
+            + (f" (domain: {domain_id})" if domain_id else "")
         )
         
         return result
+    
+    def _generate_domain_pattern_taxonomy(
+        self,
+        new_patterns: List[Dict[str, Any]],
+        learned_patterns: Dict[str, Any],
+        domain_id: str
+    ) -> Dict[str, Any]:
+        """Generate domain-specific pattern taxonomy.
+        
+        Args:
+            new_patterns: Newly discovered patterns
+            learned_patterns: Previously learned patterns
+            domain_id: Domain identifier
+        
+        Returns:
+            Domain-specific pattern taxonomy
+        """
+        # Generate base taxonomy
+        taxonomy = self._generate_pattern_taxonomy(new_patterns, learned_patterns)
+        
+        # Add domain-specific metadata
+        domain_config = self._load_domain_config(domain_id)
+        if domain_config:
+            taxonomy["domain_id"] = domain_id
+            taxonomy["domain_name"] = domain_config.get("name", domain_id)
+            taxonomy["domain_layer"] = domain_config.get("layer", "unknown")
+            taxonomy["domain_team"] = domain_config.get("team", "unknown")
+            
+            # Filter patterns by domain relevance
+            domain_patterns = [
+                p for p in new_patterns
+                if p.get("domain_relevance", 0) > 0
+            ]
+            taxonomy["domain_specific_patterns"] = {
+                "count": len(domain_patterns),
+                "patterns": domain_patterns[:10]  # Top 10
+            }
+        
+        return taxonomy
     
     def _discover_new_patterns(
         self,

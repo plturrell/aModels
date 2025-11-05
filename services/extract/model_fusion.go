@@ -10,12 +10,15 @@ import (
 )
 
 // ModelFusionFramework combines predictions from multiple models for better accuracy.
+// Phase 8.2: Enhanced with domain-optimized weights for better domain-specific accuracy.
 type ModelFusionFramework struct {
 	logger            *log.Logger
 	useRelationalTransformer bool
 	useSAPRPT         bool
 	useGlove          bool
 	weights           ModelWeights
+	domainDetector    *DomainDetector // Phase 8.2: Domain detector for domain-aware weights
+	domainWeights     map[string]ModelWeights // Phase 8.2: domain_id -> optimized weights
 }
 
 // ModelWeights holds weights for ensemble predictions.
@@ -36,12 +39,20 @@ func DefaultModelWeights() ModelWeights {
 
 // NewModelFusionFramework creates a new model fusion framework.
 func NewModelFusionFramework(logger *log.Logger) *ModelFusionFramework {
+	localaiURL := os.Getenv("LOCALAI_URL")
+	var domainDetector *DomainDetector
+	if localaiURL != "" {
+		domainDetector = NewDomainDetector(localaiURL, logger)
+	}
+	
 	return &ModelFusionFramework{
 		logger:                  logger,
 		useRelationalTransformer: true,
 		useSAPRPT:               os.Getenv("USE_SAP_RPT_EMBEDDINGS") == "true",
 		useGlove:                os.Getenv("USE_GLOVE_EMBEDDINGS") == "true",
 		weights:                 DefaultModelWeights(),
+		domainDetector:          domainDetector, // Phase 8.2: Domain detector
+		domainWeights:           make(map[string]ModelWeights), // Phase 8.2: Domain-specific weights
 	}
 }
 
@@ -64,13 +75,28 @@ type FusedPrediction struct {
 }
 
 // FusePredictions combines predictions from multiple models.
+// Phase 8.2: Enhanced with domain-aware weight optimization.
 func (mff *ModelFusionFramework) FusePredictions(
 	ctx context.Context,
 	predictions []ModelPrediction,
 	fusionMethod string,
+	domainID string, // Phase 8.2: Optional domain ID for domain-optimized weights
 ) (*FusedPrediction, error) {
 	if len(predictions) == 0 {
 		return nil, fmt.Errorf("no predictions to fuse")
+	}
+
+	// Phase 8.2: Use domain-specific weights if domainID provided
+	if domainID != "" && mff.domainDetector != nil {
+		if domainWeights, exists := mff.domainWeights[domainID]; exists {
+			// Use cached domain-specific weights
+			mff.weights = domainWeights
+		} else {
+			// Optimize weights for domain
+			domainWeights = mff.optimizeWeightsForDomain(domainID, predictions)
+			mff.domainWeights[domainID] = domainWeights
+			mff.weights = domainWeights
+		}
 	}
 
 	// Select fusion method
@@ -100,6 +126,66 @@ func (mff *ModelFusionFramework) FusePredictions(
 	fusedPrediction.Weights = mff.weights
 
 	return fusedPrediction, nil
+}
+
+// optimizeWeightsForDomain optimizes model weights based on domain characteristics.
+// Phase 8.2: Domain-specific weight optimization.
+func (mff *ModelFusionFramework) optimizeWeightsForDomain(
+	domainID string,
+	predictions []ModelPrediction,
+) ModelWeights {
+	if mff.domainDetector == nil {
+		return DefaultModelWeights()
+	}
+	
+	// Get domain config
+	mff.domainDetector.mu.RLock()
+	domainConfig, exists := mff.domainDetector.domainConfigs[domainID]
+	mff.domainDetector.mu.RUnlock()
+	
+	if !exists {
+		return DefaultModelWeights()
+	}
+	
+	// Optimize weights based on domain characteristics
+	weights := DefaultModelWeights()
+	
+	// Check if domain is semantic-rich (has many keywords/tags)
+	keywordCount := len(domainConfig.Keywords)
+	tagCount := len(domainConfig.Tags)
+	
+	// Semantic-rich domains benefit more from SAP RPT
+	if keywordCount > 5 || tagCount > 3 {
+		weights.SAPRPT = 0.5
+		weights.RelationalTransformer = 0.3
+		weights.Glove = 0.2
+	} else {
+		// Less semantic domains benefit from RelationalTransformer
+		weights.RelationalTransformer = 0.5
+		weights.SAPRPT = 0.3
+		weights.Glove = 0.2
+	}
+	
+	// Adjust based on layer
+	switch domainConfig.Layer {
+	case "data":
+		// Data layer benefits from RelationalTransformer
+		weights.RelationalTransformer = 0.5
+		weights.SAPRPT = 0.3
+		weights.Glove = 0.2
+	case "application", "business":
+		// Application/business layers benefit from SAP RPT
+		weights.SAPRPT = 0.5
+		weights.RelationalTransformer = 0.3
+		weights.Glove = 0.2
+	default:
+		// Default weights
+	}
+	
+	mff.logger.Printf("Optimized weights for domain %s: RT=%.2f, SAP=%.2f, Glove=%.2f",
+		domainID, weights.RelationalTransformer, weights.SAPRPT, weights.Glove)
+	
+	return weights
 }
 
 // weightedAverageFusion performs weighted average fusion of predictions.
@@ -301,7 +387,7 @@ func (mff *ModelFusionFramework) PredictWithMultipleModels(
 	}
 
 	// Fuse predictions
-	return mff.FusePredictions(ctx, predictions, "weighted_average")
+	return mff.FusePredictions(ctx, predictions, "weighted_average", "")
 }
 
 // predictWithRelationalTransformer generates prediction using RelationalTransformer.

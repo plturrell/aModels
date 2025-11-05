@@ -10,16 +10,25 @@ import (
 )
 
 // CrossSystemExtractor extracts patterns across multiple systems and platforms.
+// Phase 8.3: Enhanced with domain normalization for domain-aware pattern extraction.
 type CrossSystemExtractor struct {
 	logger            *log.Logger
+	domainDetector    *DomainDetector     // Phase 8.3: Domain detector for domain normalization
 	terminologyLearner *TerminologyLearner // Phase 10: LNN-based terminology learning
 }
 
 // NewCrossSystemExtractor creates a new cross-system extractor.
 func NewCrossSystemExtractor(logger *log.Logger) *CrossSystemExtractor {
+	localaiURL := os.Getenv("LOCALAI_URL")
+	var domainDetector *DomainDetector
+	if localaiURL != "" {
+		domainDetector = NewDomainDetector(localaiURL, logger)
+	}
+	
 	return &CrossSystemExtractor{
 		logger:            logger,
-		terminologyLearner: nil, // Will be set via SetTerminologyLearner
+		domainDetector:    domainDetector, // Phase 8.3: Domain detector
+		terminologyLearner: nil,           // Will be set via SetTerminologyLearner (Phase 10)
 	}
 }
 
@@ -86,9 +95,11 @@ type PatternOccurrence struct {
 }
 
 // ExtractCrossSystemPatterns extracts patterns across multiple systems.
+// Phase 8.3: Enhanced with domain normalization.
 func (cse *CrossSystemExtractor) ExtractCrossSystemPatterns(
 	ctx context.Context,
 	schemas []SystemSchema,
+	domainID string, // Phase 8.3: Optional domain ID for domain-normalized extraction
 ) ([]CrossSystemPattern, error) {
 	patterns := []CrossSystemPattern{}
 
@@ -117,9 +128,102 @@ func (cse *CrossSystemExtractor) ExtractCrossSystemPatterns(
 	}
 
 	// Normalize patterns to universal templates
-	cse.normalizePatterns(patterns)
+	// Phase 8.3: Use domain config for normalization if domainID provided
+	if domainID != "" && cse.domainDetector != nil {
+		cse.normalizePatternsWithDomain(patterns, domainID)
+	} else {
+		cse.normalizePatterns(patterns)
+	}
 
 	return patterns, nil
+}
+
+// normalizePatternsWithDomain normalizes patterns using domain configuration.
+// Phase 8.3: Domain-aware pattern normalization.
+func (cse *CrossSystemExtractor) normalizePatternsWithDomain(
+	patterns []CrossSystemPattern,
+	domainID string,
+) {
+	if cse.domainDetector == nil {
+		cse.normalizePatterns(patterns)
+		return
+	}
+	
+	// Get domain config
+	cse.domainDetector.mu.RLock()
+	domainConfig, exists := cse.domainDetector.domainConfigs[domainID]
+	cse.domainDetector.mu.RUnlock()
+	
+	if !exists {
+		cse.normalizePatterns(patterns)
+		return
+	}
+	
+	// Normalize patterns using domain keywords for pattern matching
+	for i := range patterns {
+		pattern := &patterns[i]
+		
+		// Use domain keywords for enhanced normalization
+		normalized := cse.normalizePatternWithDomainConfig(pattern, domainConfig)
+		pattern.NormalizedForm = normalized
+		
+		// Update confidence based on domain keyword matches
+		keywordMatches := 0
+		patternText := strings.ToLower(pattern.PatternName + " " + pattern.PatternType)
+		for _, keyword := range domainConfig.Keywords {
+			if strings.Contains(patternText, strings.ToLower(keyword)) {
+				keywordMatches++
+			}
+		}
+		
+		// Boost confidence if matches domain keywords
+		if keywordMatches > 0 {
+			boost := float64(keywordMatches) / float64(len(domainConfig.Keywords)) * 0.2
+			pattern.Confidence = min(1.0, pattern.Confidence+boost)
+		}
+	}
+}
+
+// normalizePatternWithDomainConfig normalizes a single pattern using domain config.
+func (cse *CrossSystemExtractor) normalizePatternWithDomainConfig(
+	pattern *CrossSystemPattern,
+	domainConfig DomainConfig,
+) map[string]any {
+	normalized := make(map[string]any)
+	
+	// Base normalization
+	normalized["pattern_type"] = pattern.PatternType
+	normalized["pattern_name"] = pattern.PatternName
+	normalized["domain_id"] = domainConfig.Name
+	normalized["domain_layer"] = domainConfig.Layer
+	normalized["domain_team"] = domainConfig.Team
+	
+	// Add domain-specific normalization rules
+	normalized["domain_keywords"] = domainConfig.Keywords
+	normalized["domain_tags"] = domainConfig.Tags
+	
+	// Normalize pattern occurrences
+	normalizedOccurrences := []map[string]any{}
+	for _, occ := range pattern.Occurrences {
+		normalizedOcc := map[string]any{
+			"system_type":   occ.SystemType,
+			"system_name":   occ.SystemName,
+			"database_name": occ.DatabaseName,
+			"table_name":    occ.TableName,
+			"details":       occ.Details,
+		}
+		normalizedOccurrences = append(normalizedOccurrences, normalizedOcc)
+	}
+	normalized["occurrences"] = normalizedOccurrences
+	
+	return normalized
+}
+
+func min(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // extractTableStructurePatterns extracts patterns in table structures.

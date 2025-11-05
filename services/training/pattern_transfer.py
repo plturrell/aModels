@@ -2,29 +2,55 @@
 
 This module implements pattern transfer learning, adapting patterns from one domain
 to another, few-shot learning for new domains, and domain adaptation techniques.
+
+Domain-aware enhancements:
+- Integration with Phase 4 routing optimizer for domain similarity
+- Domain-aware pattern adaptation using domain configs
+- Enhanced similarity calculation with domain keywords
 """
 
 import logging
+import os
 from typing import Dict, List, Optional, Any, Tuple
 from collections import defaultdict
 import json
+import httpx
 
 logger = logging.getLogger(__name__)
 
 
 class PatternTransferLearner:
-    """Learns to transfer patterns across domains."""
+    """Learns to transfer patterns across domains.
     
-    def __init__(self, adaptation_rate: float = 0.5):
+    Domain-aware enhancements:
+    - Uses Phase 4 routing optimizer for domain similarity
+    - Domain-aware pattern adaptation
+    - Enhanced similarity with domain configs
+    """
+    
+    def __init__(self, adaptation_rate: float = 0.5, localai_url: Optional[str] = None):
         """Initialize pattern transfer learner.
         
         Args:
             adaptation_rate: Rate of adaptation for new domains (0.0 to 1.0)
+            localai_url: LocalAI URL for domain config fetching (optional)
         """
         self.adaptation_rate = adaptation_rate
         self.domain_patterns = {}
         self.transfer_rules = {}
         self.domain_similarities = {}
+        
+        # Domain awareness
+        self.localai_url = localai_url or os.getenv("LOCALAI_URL", "http://localai:8080")
+        self.domain_configs = {}  # domain_id -> domain config
+        
+        # Phase 4 routing optimizer integration
+        try:
+            from .routing_optimizer import RoutingOptimizer
+            self.routing_optimizer = RoutingOptimizer()
+        except ImportError:
+            self.routing_optimizer = None
+            logger.warning("RoutingOptimizer not available, using basic similarity")
     
     def transfer_patterns(
         self,
@@ -95,7 +121,30 @@ class PatternTransferLearner:
         Returns:
             Similarity score (0.0 to 1.0)
         """
-        # Domain keyword matching
+        # Phase 8.4: Use domain configs for enhanced similarity
+        source_config = self._load_domain_config(source_domain)
+        target_config = self._load_domain_config(target_domain)
+        
+        if source_config and target_config:
+            # Use domain keywords for similarity
+            source_keywords = set(source_config.get("keywords", []))
+            target_keywords = set(target_config.get("keywords", []))
+            
+            if source_keywords and target_keywords:
+                # Jaccard similarity
+                intersection = len(source_keywords & target_keywords)
+                union = len(source_keywords | target_keywords)
+                similarity = intersection / union if union > 0 else 0.0
+                
+                # Boost if same layer/team
+                if source_config.get("layer") == target_config.get("layer"):
+                    similarity = min(1.0, similarity + 0.2)
+                if source_config.get("team") == target_config.get("team"):
+                    similarity = min(1.0, similarity + 0.1)
+                
+                return similarity
+        
+        # Fallback to keyword matching (legacy)
         domain_keywords = {
             "financial": ["amount", "price", "cost", "revenue", "payment", "transaction"],
             "customer": ["customer", "client", "user", "person", "contact"],

@@ -12,22 +12,31 @@ import (
 )
 
 // SemanticSchemaAnalyzer performs deep semantic understanding of schemas and data lineage.
+// Phase 8.1: Enhanced with domain manager integration for domain-aware semantic analysis.
 type SemanticSchemaAnalyzer struct {
 	logger              *log.Logger
 	useSAPRPTEmbeddings bool
 	useGloveEmbeddings  bool
 	extractServiceURL   string
+	domainDetector      *DomainDetector     // Phase 8.1: Domain detector for domain-aware analysis
 	terminologyLearner  *TerminologyLearner // Phase 10: LNN-based terminology learning
 }
 
 // NewSemanticSchemaAnalyzer creates a new semantic schema analyzer.
 func NewSemanticSchemaAnalyzer(logger *log.Logger) *SemanticSchemaAnalyzer {
+	localaiURL := os.Getenv("LOCALAI_URL")
+	var domainDetector *DomainDetector
+	if localaiURL != "" {
+		domainDetector = NewDomainDetector(localaiURL, logger)
+	}
+	
 	return &SemanticSchemaAnalyzer{
 		logger:              logger,
 		useSAPRPTEmbeddings: os.Getenv("USE_SAP_RPT_EMBEDDINGS") == "true",
 		useGloveEmbeddings:  os.Getenv("USE_GLOVE_EMBEDDINGS") == "true",
 		extractServiceURL:   os.Getenv("EXTRACT_SERVICE_URL"),
-		terminologyLearner:  nil, // Will be set via SetTerminologyLearner
+		domainDetector:      domainDetector, // Phase 8.1: Domain detector
+		terminologyLearner:  nil,            // Will be set via SetTerminologyLearner (Phase 10)
 	}
 }
 
@@ -61,12 +70,14 @@ type SemanticLineageAnalysis struct {
 }
 
 // AnalyzeColumnSemantics performs semantic analysis of a column.
+// Phase 8.1: Enhanced with domain-aware analysis using domain detector.
 func (ssa *SemanticSchemaAnalyzer) AnalyzeColumnSemantics(
 	ctx context.Context,
 	columnName string,
 	columnType string,
 	tableName string,
 	tableContext map[string]any,
+	domainID string, // Phase 8.1: Optional domain ID for domain-aware analysis
 ) (*SemanticColumnAnalysis, error) {
 	analysis := &SemanticColumnAnalysis{
 		ColumnName:         columnName,
@@ -81,10 +92,27 @@ func (ssa *SemanticSchemaAnalyzer) AnalyzeColumnSemantics(
 		// Use LNN for naming conventions
 		analysis.NamingConventions = ssa.terminologyLearner.AnalyzeNamingConvention(ctx, columnName)
 
+<<<<<<< HEAD
 		// Use LNN for domain inference
 		domain, domainConf := ssa.terminologyLearner.InferDomain(ctx, columnName, tableName, tableContext)
 		analysis.InferredDomain = domain
 		analysis.DomainConfidence = domainConf
+=======
+	// Infer business domain (enhanced with domain detector if domainID provided)
+	domain, domainConf := ssa.inferBusinessDomain(columnName, tableName, tableContext)
+	
+	// Phase 8.1: Use domain detector if domainID provided
+	if domainID != "" && ssa.domainDetector != nil {
+		enhancedDomain, enhancedConf := ssa.inferDomainWithKeywords(columnName, tableName, domainID)
+		if enhancedConf > domainConf {
+			domain = enhancedDomain
+			domainConf = enhancedConf
+		}
+	}
+	
+	analysis.InferredDomain = domain
+	analysis.DomainConfidence = domainConf
+>>>>>>> a455e4b4 (Complete Phases 7-9: Domain-aware pattern learning, extraction, and automation)
 
 		// Use LNN for role inference
 		role, roleConf := ssa.terminologyLearner.InferRole(ctx, columnName, columnType, tableName, tableContext)
@@ -102,8 +130,17 @@ func (ssa *SemanticSchemaAnalyzer) AnalyzeColumnSemantics(
 	}
 
 	// Generate semantic embeddings for similarity analysis
+	// Phase 8.1: Use domain tags for enhanced similarity if domainID provided
 	if ssa.useSAPRPTEmbeddings {
-		similarities, err := ssa.calculateSemanticSimilarity(ctx, columnName, tableName)
+		var similarities map[string]float64
+		var err error
+		
+		if domainID != "" && ssa.domainDetector != nil {
+			similarities, err = ssa.calculateSemanticSimilarityWithDomain(ctx, columnName, tableName, domainID)
+		} else {
+			similarities, err = ssa.calculateSemanticSimilarity(ctx, columnName, tableName)
+		}
+		
 		if err == nil {
 			analysis.SemanticSimilarity = similarities
 		}
@@ -287,6 +324,122 @@ func (ssa *SemanticSchemaAnalyzer) inferBusinessRole(
 	}
 
 	return inferredRole, confidence
+}
+
+// inferDomainWithKeywords infers domain using domain detector keywords.
+// Phase 8.1: Enhanced domain inference using domain config keywords.
+func (ssa *SemanticSchemaAnalyzer) inferDomainWithKeywords(
+	columnName string,
+	tableName string,
+	domainID string,
+) (string, float64) {
+	if ssa.domainDetector == nil {
+		return "unknown", 0.0
+	}
+	
+	// Get domain config from detector
+	ssa.domainDetector.mu.RLock()
+	domainConfig, exists := ssa.domainDetector.domainConfigs[domainID]
+	ssa.domainDetector.mu.RUnlock()
+	
+	if !exists {
+		return "unknown", 0.0
+	}
+	
+	text := strings.ToLower(columnName + " " + tableName)
+	domainKeywords := domainConfig.Keywords
+	
+	// Calculate keyword match score
+	matches := 0
+	for _, keyword := range domainKeywords {
+		if strings.Contains(text, strings.ToLower(keyword)) {
+			matches++
+		}
+	}
+	
+	if len(domainKeywords) == 0 {
+		return domainConfig.Name, 0.5 // Default confidence if no keywords
+	}
+	
+	confidence := float64(matches) / float64(len(domainKeywords))
+	if confidence > 0.5 {
+		return domainConfig.Name, min(1.0, confidence)
+	}
+	
+	// Return detected domain but with lower confidence
+	return domainConfig.Name, confidence
+}
+
+// calculateSemanticSimilarityWithDomain calculates semantic similarity using domain context.
+// Phase 8.1: Enhanced similarity calculation with domain tags.
+func (ssa *SemanticSchemaAnalyzer) calculateSemanticSimilarityWithDomain(
+	ctx context.Context,
+	columnName string,
+	tableName string,
+	domainID string,
+) (map[string]float64, error) {
+	similarities := make(map[string]float64)
+	
+	if ssa.domainDetector == nil {
+		// Fallback to regular similarity
+		return ssa.calculateSemanticSimilarity(ctx, columnName, tableName)
+	}
+	
+	// Get domain config
+	ssa.domainDetector.mu.RLock()
+	domainConfig, exists := ssa.domainDetector.domainConfigs[domainID]
+	ssa.domainDetector.mu.RUnlock()
+	
+	if !exists {
+		// Fallback to regular similarity
+		return ssa.calculateSemanticSimilarity(ctx, columnName, tableName)
+	}
+	
+	// Use domain tags as known patterns
+	domainTags := domainConfig.Tags
+	if len(domainTags) == 0 {
+		domainTags = domainConfig.Keywords // Fallback to keywords
+	}
+	
+	// Generate embedding for column/table
+	query := fmt.Sprintf("%s %s", columnName, tableName)
+	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
+		"--artifact-type", "text",
+		"--text", query,
+	)
+	
+	output, err := cmd.Output()
+	if err != nil {
+		return similarities, fmt.Errorf("failed to generate embedding: %w", err)
+	}
+	
+	var embedding []float32
+	if err := json.Unmarshal(output, &embedding); err != nil {
+		return similarities, fmt.Errorf("failed to unmarshal embedding: %w", err)
+	}
+	
+	// Calculate similarity to domain tags
+	for _, tag := range domainTags {
+		tagCmd := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
+			"--artifact-type", "text",
+			"--text", tag,
+		)
+		
+		tagOutput, err := tagCmd.Output()
+		if err != nil {
+			continue
+		}
+		
+		var tagEmbedding []float32
+		if err := json.Unmarshal(tagOutput, &tagEmbedding); err != nil {
+			continue
+		}
+		
+		similarity := cosineSimilarity(embedding, tagEmbedding)
+		similarities[tag] = similarity
+	}
+	
+	return similarities, nil
 }
 
 // calculateSemanticSimilarity calculates semantic similarity to known patterns.

@@ -2,21 +2,37 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
 
 // SelfHealingSystem provides automatic error detection and recovery.
+// Phase 9.2: Enhanced with domain health monitoring for domain-aware self-healing.
 type SelfHealingSystem struct {
 	logger           *log.Logger
 	retryConfig      *RetryConfig
 	circuitBreakers  map[string]*CircuitBreaker
 	fallbackHandlers map[string]FallbackHandler
 	healthMonitors   map[string]*HealthMonitor
+	domainDetector   *DomainDetector // Phase 9.2: Domain detector for domain health
+	domainHealthCache map[string]DomainHealth // Phase 9.2: domain_id -> health score
 	mu               sync.RWMutex
+}
+
+// DomainHealth represents domain health status.
+type DomainHealth struct {
+	DomainID    string
+	Score       float64  // 0.0 to 1.0
+	Status      string   // "healthy", "degraded", "unhealthy"
+	LastCheck   time.Time
+	Metrics     map[string]any
 }
 
 // RetryConfig holds retry configuration.
@@ -75,13 +91,115 @@ type HealthMonitor struct {
 
 // NewSelfHealingSystem creates a new self-healing system.
 func NewSelfHealingSystem(logger *log.Logger) *SelfHealingSystem {
+	localaiURL := os.Getenv("LOCALAI_URL")
+	var domainDetector *DomainDetector
+	if localaiURL != "" {
+		domainDetector = NewDomainDetector(localaiURL, logger)
+	}
+	
 	return &SelfHealingSystem{
 		logger:           logger,
 		retryConfig:      DefaultRetryConfig(),
 		circuitBreakers:  make(map[string]*CircuitBreaker),
 		fallbackHandlers: make(map[string]FallbackHandler),
 		healthMonitors:   make(map[string]*HealthMonitor),
+		domainDetector:   domainDetector, // Phase 9.2: Domain detector
+		domainHealthCache: make(map[string]DomainHealth), // Phase 9.2: Domain health cache
 	}
+}
+
+// GetDomainHealth gets the health score for a domain.
+// Phase 9.2: Domain health monitoring using metrics collector.
+func (shs *SelfHealingSystem) GetDomainHealth(domainID string) DomainHealth {
+	// Check cache first
+	shs.mu.RLock()
+	if cached, exists := shs.domainHealthCache[domainID]; exists {
+		// Return cached if less than 5 minutes old
+		if time.Since(cached.LastCheck) < 5*time.Minute {
+			shs.mu.RUnlock()
+			return cached
+		}
+	}
+	shs.mu.RUnlock()
+	
+	// Fetch fresh health data
+	health := shs.fetchDomainHealth(domainID)
+	
+	// Update cache
+	shs.mu.Lock()
+	shs.domainHealthCache[domainID] = health
+	shs.mu.Unlock()
+	
+	return health
+}
+
+// fetchDomainHealth fetches domain health from PostgreSQL/metrics collector.
+func (shs *SelfHealingSystem) fetchDomainHealth(domainID string) DomainHealth {
+	health := DomainHealth{
+		DomainID:  domainID,
+		Score:     0.5, // Default
+		Status:    "unknown",
+		LastCheck: time.Now(),
+		Metrics:   make(map[string]any),
+	}
+	
+	// Try to get domain metrics from PostgreSQL
+	postgresDSN := os.Getenv("POSTGRES_DSN")
+	if postgresDSN != "" {
+		// Query PostgreSQL for domain metrics
+		// This would call DomainMetricsCollector in Python or query directly
+		// For now, use a simple HTTP call to training service if available
+		trainingURL := os.Getenv("TRAINING_SERVICE_URL")
+		if trainingURL != "" {
+			metricsURL := fmt.Sprintf("%s/domain-metrics/%s", trainingURL, domainID)
+			resp, err := http.Get(metricsURL)
+			if err == nil && resp.StatusCode == 200 {
+				defer resp.Body.Close()
+				body, _ := io.ReadAll(resp.Body)
+				var metricsData map[string]any
+				if json.Unmarshal(body, &metricsData) == nil {
+					// Extract health score from metrics
+					if performance, ok := metricsData["performance"].(map[string]any); ok {
+						if latest, ok := performance["latest"].(map[string]any); ok {
+							// Calculate health score from metrics
+							accuracy := 0.0
+							latency := 0.0
+							
+							if acc, ok := latest["accuracy"].(float64); ok {
+								accuracy = acc
+							}
+							if lat, ok := latest["latency_ms"].(float64); ok {
+								latency = lat
+							}
+							
+							// Health score: accuracy weighted, latency penalty
+							healthScore := accuracy * 0.8
+							if latency > 1000 {
+								healthScore *= 0.9 // Penalty for high latency
+							}
+							if latency > 2000 {
+								healthScore *= 0.8
+							}
+							
+							health.Score = healthScore
+							health.Metrics = latest
+							
+							// Determine status
+							if healthScore >= 0.8 {
+								health.Status = "healthy"
+							} else if healthScore >= 0.5 {
+								health.Status = "degraded"
+							} else {
+								health.Status = "unhealthy"
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	return health
 }
 
 // ExecuteWithRetry executes a function with automatic retry.
@@ -126,11 +244,38 @@ func (shs *SelfHealingSystem) ExecuteWithRetry(
 }
 
 // ExecuteWithCircuitBreaker executes a function with circuit breaker protection.
+// Phase 9.2: Enhanced with domain health monitoring.
 func (shs *SelfHealingSystem) ExecuteWithCircuitBreaker(
 	ctx context.Context,
 	serviceName string,
 	operation func() (any, error),
+	domainID string, // Phase 9.2: Optional domain ID for domain health check
 ) (any, error) {
+	// Phase 9.2: Check domain health if domainID provided
+	if domainID != "" && shs.domainDetector != nil {
+		domainHealth := shs.GetDomainHealth(domainID)
+		
+		if domainHealth.Score < 0.5 {
+			// Domain unhealthy, use fallback immediately
+			fallbackKey := fmt.Sprintf("%s_%s", serviceName, domainID)
+			if fallback, exists := shs.fallbackHandlers[fallbackKey]; exists {
+				shs.logger.Printf(
+					"Domain %s health low (%.2f), using fallback for %s",
+					domainID, domainHealth.Score, serviceName,
+				)
+				return fallback(ctx, fmt.Errorf("domain_unhealthy: score=%.2f", domainHealth.Score))
+			}
+			// Try generic fallback
+			if fallback, exists := shs.fallbackHandlers[serviceName]; exists {
+				shs.logger.Printf(
+					"Domain %s health low (%.2f), using generic fallback for %s",
+					domainID, domainHealth.Score, serviceName,
+				)
+				return fallback(ctx, fmt.Errorf("domain_unhealthy: score=%.2f", domainHealth.Score))
+			}
+		}
+	}
+	
 	// Get or create circuit breaker
 	cb := shs.getOrCreateCircuitBreaker(serviceName)
 	
@@ -149,6 +294,13 @@ func (shs *SelfHealingSystem) ExecuteWithCircuitBreaker(
 		} else {
 			cb.mu.Unlock()
 			// Check for fallback
+			fallbackKey := fmt.Sprintf("%s_%s", serviceName, domainID)
+			if domainID != "" {
+				if fallback, exists := shs.fallbackHandlers[fallbackKey]; exists {
+					shs.logger.Printf("Circuit breaker %s: using domain-specific fallback for %s", serviceName, domainID)
+					return fallback(ctx, fmt.Errorf("circuit breaker is open"))
+				}
+			}
 			if fallback, exists := shs.fallbackHandlers[serviceName]; exists {
 				shs.logger.Printf("Circuit breaker %s: using fallback handler", serviceName)
 				return fallback(ctx, fmt.Errorf("circuit breaker is open"))
