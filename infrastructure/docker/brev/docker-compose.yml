@@ -138,14 +138,18 @@ services:
       - /bin/bash
       - -c
       - |
-        # Initialize testing directory if empty
+        # Initialize testing directory
         # Note: Bind mount to /host-testing may not work due to overlay filesystem
-        # Use 'docker cp /home/aModels/testing/. training-shell:/workspace/testing/' to sync files
+        # Use './sync-testing.sh' or 'docker cp /home/aModels/testing/. training-shell:/workspace/testing/' to sync files
         if [ "$(ls -A /workspace/testing 2>/dev/null)" = "" ]; then
           echo "WARNING: /workspace/testing is empty"
-          echo "To populate: docker cp /home/aModels/testing/. training-shell:/workspace/testing/"
+          echo "To populate, run: ./infrastructure/docker/brev/sync-testing.sh"
         else
           echo "Testing directory has $(find /workspace/testing -type f | wc -l) files"
+          # Bootstrap Python environment if needed
+          if [ -f /workspace/testing/bootstrap_training_shell.sh ]; then
+            bash /workspace/testing/bootstrap_training_shell.sh 2>/dev/null || true
+          fi
         fi
         exec sleep infinity
     working_dir: /workspace
