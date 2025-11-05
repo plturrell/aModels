@@ -10,8 +10,8 @@ RUN apk add --no-cache git build-base
 
 # Copy LocalAI source and the local model modules required by go.mod replaces
 COPY services/localai/ /workspace/services/localai/
-COPY models/glove/ /workspace/models/glove/
-COPY models/sentencepiece/ /workspace/models/sentencepiece/
+COPY models/glove/ /workspace/services/models/glove/
+COPY models/sentencepiece/ /workspace/services/models/sentencepiece/
 
 WORKDIR /workspace/services/localai
 
