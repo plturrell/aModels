@@ -19,6 +19,7 @@ LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localhost:8081")
 BROWSER_URL = os.getenv("BROWSER_URL", "http://localhost:8070")
 DEEPAGENTS_URL = os.getenv("DEEPAGENTS_URL", "http://localhost:9004")
 GRAPH_SERVICE_URL = os.getenv("GRAPH_SERVICE_URL", "http://localhost:8081")
+SAP_BDC_URL = os.getenv("SAP_BDC_URL", "http://localhost:8083")
 
 client = httpx.AsyncClient(timeout=30.0)
 
@@ -93,6 +94,12 @@ async def healthz() -> Dict[str, Any]:
         statuses["deepagents"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
     except Exception as e:
         statuses["deepagents"] = f"error:{e}"
+    # SAP BDC health
+    try:
+        r = await client.get(f"{SAP_BDC_URL}/healthz")
+        statuses["sap_bdc"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
+    except Exception as e:
+        statuses["sap_bdc"] = f"error:{e}"
     return statuses
 
 
@@ -440,6 +447,71 @@ async def telemetry_recent() -> Any:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except httpx.RequestError as e:
         raise HTTPException(status_code=502, detail=f"Data service error: {e}")
+
+
+@app.post("/sap-bdc/extract")
+async def sap_bdc_extract(payload: Dict[str, Any]) -> Any:
+    """
+    Extract data and schema from SAP Business Data Cloud.
+    
+    Request format:
+    {
+        "formation_id": "formation-123",
+        "source_system": "SAP S/4HANA Cloud",
+        "data_product_id": "product-456",
+        "space_id": "space-789",
+        "database": "HANADB",
+        "include_views": true,
+        "options": {}
+    }
+    """
+    try:
+        r = await client.post(f"{SAP_BDC_URL}/extract", json=payload)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"SAP BDC service error: {e}")
+
+
+@app.get("/sap-bdc/data-products")
+async def sap_bdc_data_products() -> Any:
+    """List all available data products in the formation."""
+    try:
+        r = await client.get(f"{SAP_BDC_URL}/data-products")
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"SAP BDC service error: {e}")
+
+
+@app.get("/sap-bdc/intelligent-applications")
+async def sap_bdc_intelligent_applications() -> Any:
+    """List all available intelligent applications."""
+    try:
+        r = await client.get(f"{SAP_BDC_URL}/intelligent-applications")
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"SAP BDC service error: {e}")
+
+
+@app.get("/sap-bdc/formation")
+async def sap_bdc_formation() -> Any:
+    """Get formation details including components and data sources."""
+    try:
+        r = await client.get(f"{SAP_BDC_URL}/formation")
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"SAP BDC service error: {e}")
 
 
 if __name__ == "__main__":

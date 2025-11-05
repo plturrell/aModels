@@ -310,6 +310,10 @@ func main() {
 	server.semanticSchemaAnalyzer.SetTerminologyLearner(terminologyLearner)
 	logger.Println("Terminology learner initialized (Phase 10)")
 
+	// Initialize SAP BDC integration
+	server.sapBDCIntegration = NewSAPBDCIntegration(logger)
+	logger.Println("SAP Business Data Cloud integration initialized")
+
 	// Phase 9.2: Initialize self-healing system
 	server.selfHealingSystem = NewSelfHealingSystem(logger)
 	logger.Println("Self-healing system initialized (Phase 9.2)")
@@ -394,6 +398,8 @@ func main() {
 	mux.HandleFunc("/terminology/patterns", server.handleTerminologyPatterns)    // List learned naming patterns
 	mux.HandleFunc("/terminology/learn", server.handleTerminologyLearn)          // Trigger manual learning
 	mux.HandleFunc("/terminology/evolution", server.handleTerminologyEvolution)  // Terminology evolution over time
+	// SAP Business Data Cloud integration endpoints
+	mux.HandleFunc("/sap-bdc/extract", server.handleSAPBDCExtract)              // Extract from SAP BDC
 	mux.HandleFunc("/semantic/analyze-column", server.handleAnalyzeColumnSemantics) // Semantic column analysis (Phase 8.1)
 	mux.HandleFunc("/semantic/analyze-lineage", server.handleAnalyzeDataLineage) // Semantic data lineage analysis (Phase 8.1)
 	mux.HandleFunc("/health/status", server.handleHealthStatus) // Health status for all services (Phase 9.2)
@@ -460,6 +466,7 @@ type extractServer struct {
 	flight                *extractFlightServer
 	semanticSchemaAnalyzer *SemanticSchemaAnalyzer // Phase 8.1: Semantic schema understanding
 	selfHealingSystem      *SelfHealingSystem      // Phase 9.2: Self-healing system
+	sapBDCIntegration      *SAPBDCIntegration      // SAP Business Data Cloud integration
 	hanaReplication       *hanaReplication
 	postgresReplication   *postgresReplication
 
@@ -3743,4 +3750,130 @@ func RegisterAllCatalogOutputs(db *sql.DB, kind string, manifest map[string]any,
 		}
 	}
 	return nil
+}
+
+// handleSAPBDCExtract handles extraction requests from SAP Business Data Cloud.
+func (s *extractServer) handleSAPBDCExtract(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		FormationID   string `json:"formation_id"`
+		SourceSystem  string `json:"source_system"`
+		DataProductID string `json:"data_product_id,omitempty"`
+		SpaceID       string `json:"space_id,omitempty"`
+		Database      string `json:"database,omitempty"`
+		ProjectID     string `json:"project_id"`
+		SystemID      string `json:"system_id"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	if req.FormationID == "" {
+		http.Error(w, "formation_id is required", http.StatusBadRequest)
+		return
+	}
+	if req.SourceSystem == "" {
+		http.Error(w, "source_system is required", http.StatusBadRequest)
+		return
+	}
+	if req.ProjectID == "" {
+		req.ProjectID = "default"
+	}
+	if req.SystemID == "" {
+		req.SystemID = "sap_bdc"
+	}
+
+	// Extract from SAP BDC
+	nodes, edges, err := s.sapBDCIntegration.ExtractFromSAPBDC(
+		r.Context(),
+		req.FormationID,
+		req.SourceSystem,
+		req.DataProductID,
+		req.SpaceID,
+		req.Database,
+		req.ProjectID,
+		req.SystemID,
+	)
+	if err != nil {
+		s.logger.Printf("Failed to extract from SAP BDC: %v", err)
+		http.Error(w, fmt.Sprintf("Extraction failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Process the extracted graph through the normal pipeline
+	// Save graph to persistence layers
+	if s.graphPersistence != nil {
+		if err := s.graphPersistence.SaveGraph(nodes, edges); err != nil {
+			s.logger.Printf("failed to save SAP BDC graph: %v", err)
+			http.Error(w, fmt.Sprintf("failed to save graph: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		// Phase 10: Learn terminology from this extraction run
+		if terminologyLearner := GetGlobalTerminologyLearner(); terminologyLearner != nil {
+			if err := terminologyLearner.LearnFromExtraction(r.Context(), nodes, edges); err != nil {
+				s.logger.Printf("Warning: Failed to learn terminology from SAP BDC extraction: %v", err)
+			}
+		}
+	}
+
+	// Generate embeddings for tables and columns
+	if s.vectorPersistence != nil {
+		ctx := r.Context()
+		for _, node := range nodes {
+			if node.Type == "table" {
+				relationalEmbedding, semanticEmbedding, err := generateTableEmbedding(ctx, node)
+				if err == nil {
+					metadata := map[string]any{
+						"artifact_type":  "table",
+						"artifact_id":    node.ID,
+						"label":          node.Label,
+						"properties":     node.Props,
+						"project_id":     req.ProjectID,
+						"system_id":      req.SystemID,
+						"graph_node_id":  node.ID,
+						"created_at":     time.Now().UTC().Format(time.RFC3339Nano),
+						"table_name":     node.Label,
+						"embedding_type": "relational_transformer",
+						"source":         "sap_bdc",
+					}
+
+					key := fmt.Sprintf("table:%s", node.ID)
+					if err := s.vectorPersistence.SaveVector(key, relationalEmbedding, metadata); err != nil {
+						s.logger.Printf("failed to save SAP BDC table embedding %q: %v", node.Label, err)
+					}
+
+					if len(semanticEmbedding) > 0 {
+						semanticMetadata := make(map[string]any)
+						for k, v := range metadata {
+							semanticMetadata[k] = v
+						}
+						semanticMetadata["embedding_type"] = "sap_rpt_semantic"
+						semanticKey := fmt.Sprintf("table_semantic:%s", node.ID)
+						if err := s.vectorPersistence.SaveVector(semanticKey, semanticEmbedding, semanticMetadata); err != nil {
+							s.logger.Printf("failed to save SAP BDC semantic table embedding %q: %v", node.Label, err)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Return response
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"nodes":   nodes,
+		"edges":   edges,
+		"count": map[string]int{
+			"nodes": len(nodes),
+			"edges": len(edges),
+		},
+		"source": "sap_bdc",
+	})
 }
