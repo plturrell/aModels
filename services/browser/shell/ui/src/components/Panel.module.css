@@ -1,0 +1,73 @@
+.panel {
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 24px 40px rgba(8, 15, 34, 0.32);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border 0.18s ease;
+}
+
+.panel:hover {
+  transform: translateY(-2px);
+  border-color: rgba(129, 140, 248, 0.45);
+  box-shadow: 0 28px 48px rgba(15, 23, 42, 0.4);
+}
+
+.dense {
+  padding: 14px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(148, 163, 184, 0.96);
+}
+
+.header p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: rgba(148, 163, 184, 0.8);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+:global(body.theme-light) .panel {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(148, 163, 184, 0.24);
+  box-shadow: 0 14px 32px rgba(148, 163, 184, 0.18);
+}
+
+:global(body.theme-light) .panel:hover {
+  border-color: rgba(79, 70, 229, 0.36);
+  box-shadow: 0 16px 36px rgba(79, 70, 229, 0.2);
+}
+
+:global(body.theme-light) .header h2 {
+  color: rgba(71, 85, 105, 0.86);
+}
+
+:global(body.theme-light) .header p {
+  color: rgba(100, 116, 139, 0.75);
+}
