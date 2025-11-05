@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Any, Dict
 
@@ -15,13 +16,22 @@ EXTRACT_URL = os.getenv("EXTRACT_URL", "http://localhost:9002")
 DATA_URL = os.getenv("DATA_URL", "http://localhost:9003")
 OPENSEARCH_URL = os.getenv("OPENSEARCH_URL", "http://localhost:9200")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localhost:8081")
+LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localhost:8080")
 BROWSER_URL = os.getenv("BROWSER_URL", "http://localhost:8070")
 DEEPAGENTS_URL = os.getenv("DEEPAGENTS_URL", "http://localhost:9004")
 GRAPH_SERVICE_URL = os.getenv("GRAPH_SERVICE_URL", "http://localhost:8081")
 SAP_BDC_URL = os.getenv("SAP_BDC_URL", "http://localhost:8083")
 CATALOG_URL = os.getenv("CATALOG_URL", "http://localhost:8084")
 DEEP_RESEARCH_URL = os.getenv("DEEP_RESEARCH_URL", "http://localhost:8085")
+
+logger = logging.getLogger(__name__)
+if LOCALAI_URL == GRAPH_SERVICE_URL:
+    logger.warning(
+        "LOCALAI_URL (%s) matches GRAPH_SERVICE_URL (%s). "
+        "Override one of them to avoid routing conflicts.",
+        LOCALAI_URL,
+        GRAPH_SERVICE_URL,
+    )
 
 client = httpx.AsyncClient(timeout=30.0)
 
@@ -154,8 +164,7 @@ async def agentflow_process(payload: Dict[str, Any]) -> Any:
     """
     try:
         # Proxy to graph service for LangGraph workflow orchestration
-        graph_url = os.getenv("GRAPH_SERVICE_URL", "http://localhost:8081")
-        r = await client.post(f"{graph_url}/agentflow/process", json=payload)
+        r = await client.post(f"{GRAPH_SERVICE_URL}/agentflow/process", json=payload)
         r.raise_for_status()
         return r.json()
     except httpx.HTTPStatusError as e:
@@ -173,8 +182,7 @@ async def orchestration_process(payload: Dict[str, Any]) -> Any:
     """
     try:
         # Proxy to graph service for LangGraph workflow orchestration
-        graph_url = os.getenv("GRAPH_SERVICE_URL", "http://localhost:8081")
-        r = await client.post(f"{graph_url}/orchestration/process", json=payload)
+        r = await client.post(f"{GRAPH_SERVICE_URL}/orchestration/process", json=payload)
         r.raise_for_status()
         return r.json()
     except httpx.HTTPStatusError as e:
@@ -201,8 +209,7 @@ async def unified_process(payload: Dict[str, Any]) -> Any:
     """
     try:
         # Proxy to graph service for unified workflow orchestration
-        graph_url = os.getenv("GRAPH_SERVICE_URL", "http://localhost:8081")
-        r = await client.post(f"{graph_url}/unified/process", json=payload)
+        r = await client.post(f"{GRAPH_SERVICE_URL}/unified/process", json=payload)
         r.raise_for_status()
         return r.json()
     except httpx.HTTPStatusError as e:
@@ -348,8 +355,7 @@ async def pipeline_to_agentflow(payload: Dict[str, Any]) -> Any:
     3. Imports the flow into AgentFlow/LangFlow service
     """
     try:
-        graph_url = os.getenv("GRAPH_SERVICE_URL", "http://localhost:8081")
-        r = await client.post(f"{graph_url}/pipeline/to-agentflow", json=payload)
+        r = await client.post(f"{GRAPH_SERVICE_URL}/pipeline/to-agentflow", json=payload)
         r.raise_for_status()
         return r.json()
     except httpx.HTTPStatusError as e:
@@ -696,5 +702,4 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=GATEWAY_PORT)
-
 

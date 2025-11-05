@@ -1,5 +1,6 @@
 """FastAPI service for DeepAgents integration."""
 
+import logging
 import os
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException
@@ -10,6 +11,7 @@ from agent_factory import create_amodels_deep_agent
 
 # Global agent instance (created on startup)
 _agent = None
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="aModels DeepAgents Service",
@@ -107,10 +109,12 @@ async def invoke_agent(request: AgentRequest) -> AgentResponse:
             result=result.get("result") if "result" in result else result,
         )
     
-    except Exception as e:
-        import traceback
-        error_detail = f"{str(e)}\n{traceback.format_exc()}"
-        raise HTTPException(status_code=500, detail=f"Agent invocation failed: {error_detail}")
+    except Exception:
+        logger.exception("Agent invocation failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Agent invocation failed; see service logs for details.",
+        )
 
 
 @app.post("/stream")
@@ -149,8 +153,12 @@ async def stream_agent(request: AgentRequest):
             media_type="text/event-stream",
         )
     
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Agent streaming failed: {str(e)}")
+    except Exception:
+        logger.exception("Agent streaming failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Agent streaming failed; see service logs for details.",
+        )
 
 
 @app.get("/agent/info")
@@ -186,4 +194,3 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("DEEPAGENTS_PORT", "9004"))
     uvicorn.run(app, host="0.0.0.0", port=port)
-
