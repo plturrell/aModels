@@ -49,6 +49,28 @@ The repository is organized into clear architectural layers:
 
 See [docs/architecture.md](docs/architecture.md) for detailed architecture documentation and [SERVICES.md](SERVICES.md) for the service registry.
 
+## Deep Research Local Test Setup
+
+The Open Deep Research agent vendored in `models/open_deep_research` now ships with catalog-aware tools and regression tests. Running those tests locally requires **Python 3.11 or newer**:
+
+1. Create (or recreate) a virtual environment with Python 3.11:
+   ```bash
+   python3.11 -m venv .venv
+   source .venv/bin/activate
+   python -m pip install --upgrade pip
+   ```
+2. Install the package in editable mode along with the async pytest helper:
+   ```bash
+   python -m pip install -e models/open_deep_research
+   python -m pip install pytest-asyncio
+   ```
+3. Run the regression suite that guards catalog tool registration:
+   ```bash
+   python -m pytest models/open_deep_research/tests/test_catalog_tools.py
+   ```
+
+Future PRs that touch Deep Research or catalog integration should include this test (or the full suite in `models/open_deep_research/tests`) in their validation steps so we keep the intelligence layer reliable even without the full GPU runtime.
+
 ## Training Data
 
 The `data/training/` directory contains training datasets and process artifacts for model training:

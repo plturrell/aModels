@@ -50,4 +50,4 @@
 2. **Introduce observability hooks** (metrics, structured logs, tracing headers) across gateway and Deep Research containers.  
 3. **Publish operations runbooks** covering model installation, migration commands, and recovery procedures to close the final documentation gap.  
 4. **GPU build validation**: run `docker compose -f infrastructure/docker/compose.yml build` on a host with Docker (GPU infra) to confirm the public base images compile end-to-end.
-5. **Test cadence**: run `pytest models/open_deep_research/tests/test_catalog_tools.py` after configuration changes to ensure catalog tools remain correctly gated.
+5. **Test cadence**: run `pytest models/open_deep_research/tests/test_catalog_tools.py` after configuration changes to ensure catalog tools remain correctly gated (requires Python ≥ 3.11 and `pytest-asyncio`).
