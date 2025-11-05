@@ -138,12 +138,13 @@ class TrainingPipeline:
             all_nodes = graph_nodes + glean_nodes
             all_edges = graph_edges + glean_edges
             
-            # Learn patterns
+            # Learn patterns (including semantic patterns if available)
             learned_patterns = pattern_engine.learn_patterns(
                 nodes=all_nodes,
                 edges=all_edges,
                 metrics=graph_metrics,
-                glean_data=glean_data
+                glean_data=glean_data,
+                semantic_embeddings=semantic_embeddings
             )
             
             results["steps"]["pattern_learning"] = {
@@ -268,11 +269,25 @@ class TrainingPipeline:
         else:
             results["steps"]["temporal_analysis"] = {"status": "skipped"}
         
+        # Step 3b: Get semantic embeddings for training features
+        semantic_embeddings = None
+        if os.getenv("USE_SAP_RPT_EMBEDDINGS", "false").lower() == "true":
+            logger.info("Step 3b: Retrieving semantic embeddings...")
+            try:
+                semantic_embeddings = self._get_semantic_embeddings_for_training(
+                    graph_data=graph_data,
+                    extract_service_url=self.extract_service_url
+                )
+                logger.info(f"✅ Retrieved semantic embeddings for {len(semantic_embeddings) if semantic_embeddings else 0} artifacts")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to retrieve semantic embeddings: {e}")
+                semantic_embeddings = None
+        
         # Step 4: Generate training features
         logger.info("Step 4: Generating training features...")
         try:
             features = self._generate_training_features(
-                graph_data, glean_data, learned_patterns, temporal_patterns
+                graph_data, glean_data, learned_patterns, temporal_patterns, semantic_embeddings
             )
             results["steps"]["features"] = {
                 "status": "success",

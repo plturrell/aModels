@@ -660,6 +660,64 @@ class WorkflowPatternLearner:
         return self.learned_patterns
 
 
+class SemanticPatternLearner:
+    """Learns patterns from semantic embeddings."""
+    
+    def __init__(self):
+        self.semantic_patterns = {}
+    
+    def learn_from_semantic_embeddings(
+        self,
+        semantic_embeddings: Dict[str, Any],
+        graph_nodes: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Learn patterns from semantic embeddings.
+        
+        Args:
+            semantic_embeddings: Dictionary of artifact IDs to embedding metadata
+            graph_nodes: List of graph nodes
+        
+        Returns:
+            Dictionary of learned semantic patterns
+        """
+        patterns = {
+            "embedding_clusters": {},
+            "classification_patterns": {},
+            "semantic_similarity_groups": {},
+        }
+        
+        # Group by classification
+        classification_groups = {}
+        for artifact_id, embedding_data in semantic_embeddings.items():
+            metadata = embedding_data.get("metadata", {})
+            classification = metadata.get("table_classification")
+            if classification:
+                if classification not in classification_groups:
+                    classification_groups[classification] = []
+                classification_groups[classification].append(artifact_id)
+        
+        patterns["classification_patterns"] = {
+            cls: len(ids) for cls, ids in classification_groups.items()
+        }
+        
+        # Analyze semantic similarity (if scores available)
+        score_ranges = {"high": [], "medium": [], "low": []}
+        for artifact_id, embedding_data in semantic_embeddings.items():
+            score = embedding_data.get("search_score", 0.0)
+            if score >= 0.8:
+                score_ranges["high"].append(artifact_id)
+            elif score >= 0.5:
+                score_ranges["medium"].append(artifact_id)
+            else:
+                score_ranges["low"].append(artifact_id)
+        
+        patterns["semantic_similarity_groups"] = {
+            range_name: len(ids) for range_name, ids in score_ranges.items()
+        }
+        
+        return patterns
+
+
 class PatternLearningEngine:
     """Main engine for learning patterns from knowledge graphs and Glean data."""
     
@@ -674,7 +732,8 @@ class PatternLearningEngine:
         nodes: List[Dict[str, Any]],
         edges: List[Dict[str, Any]],
         metrics: Optional[Dict[str, Any]] = None,
-        glean_data: Optional[Dict[str, Any]] = None
+        glean_data: Optional[Dict[str, Any]] = None,
+        semantic_embeddings: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Learn all patterns from knowledge graph and Glean data.
         

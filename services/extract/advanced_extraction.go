@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strings"
@@ -50,12 +52,14 @@ type HardcodedList struct {
 }
 
 // TableClassification classifies a table as transaction or reference.
+// Phase 5: Extended with Props for quality scores and review flags.
 type TableClassification struct {
 	TableName      string   `json:"table_name"`
 	Classification string   `json:"classification"` // transaction, reference, lookup, staging, etc.
 	Confidence     float64  `json:"confidence"`     // 0.0 to 1.0
 	Evidence       []string `json:"evidence"`       // Reasons for classification
 	Patterns       []string `json:"patterns"`       // Patterns that led to classification
+	Props          map[string]any `json:"props,omitempty"` // Phase 5: Additional properties (quality_score, needs_review)
 }
 
 // TestingEndpoint represents a testing/test endpoint.
@@ -350,7 +354,47 @@ func (ae *AdvancedExtractor) classifyTablesFromJSON(jsonTable map[string]any, so
 }
 
 // classifyTable classifies a single table as transaction, reference, etc.
+// Uses sap-rpt-1-oss if available, otherwise falls back to pattern matching.
+// Phase 5: Supports multi-task learning (classification + regression) and active learning
 func (ae *AdvancedExtractor) classifyTable(tableName, context, sourceID string) TableClassification {
+	// Try advanced multi-task SAP-RPT if enabled (Phase 5)
+	if useAdvanced := os.Getenv("USE_SAP_RPT_ADVANCED") == "true"; useAdvanced {
+		trainingDataPath := os.Getenv("SAP_RPT_TRAINING_DATA_PATH")
+		if trainingDataPath != "" {
+			metadata := map[string]any{} // Could extract from context
+			classification, qualityScore, needsReview := ae.classifyTableWithAdvancedSAPRPT(
+				tableName, context, sourceID, trainingDataPath, metadata)
+			
+			// Store quality score in classification
+			if classification.Props == nil {
+				classification.Props = make(map[string]any)
+			}
+			classification.Props["quality_score"] = qualityScore
+			classification.Props["needs_review"] = needsReview
+			
+			if classification.Classification != "unknown" {
+				return classification
+			}
+		}
+	}
+	
+	// Try full SAP-RPT classifier if enabled and training data available (Phase 4)
+	if useSAPRPTClassification := os.Getenv("USE_SAP_RPT_CLASSIFICATION"); useSAPRPTClassification == "true" {
+		trainingDataPath := os.Getenv("SAP_RPT_TRAINING_DATA_PATH")
+		if trainingDataPath != "" {
+			if classification := ae.classifyTableWithFullSAPRPT(tableName, context, sourceID, trainingDataPath); classification.Classification != "unknown" {
+				return classification
+			}
+		}
+		
+		// Fallback to feature-based classification
+		if classification := ae.classifyTableWithSAPRPT(tableName, context, sourceID); classification.Classification != "unknown" {
+			return classification
+		}
+		// Fallback to pattern matching if sap-rpt-1-oss fails
+	}
+	
+	// Pattern-based classification (original implementation)
 	classification := TableClassification{
 		TableName:      tableName,
 		Classification: "unknown",
@@ -621,6 +665,187 @@ func (ae *AdvancedExtractor) mergeTableClassifications(classifications []TableCl
 	})
 	
 	return result
+}
+
+// classifyTableWithAdvancedSAPRPT calls the advanced multi-task script (Phase 5: classification + regression)
+func (ae *AdvancedExtractor) classifyTableWithAdvancedSAPRPT(tableName, context, sourceID, trainingDataPath string, metadata map[string]any) (TableClassification, float64, bool) {
+	columns := []map[string]any{}
+	if strings.Contains(context, "CREATE TABLE") {
+		columnPattern := regexp.MustCompile(`(?i)(\w+)\s+(\w+)`)
+		matches := columnPattern.FindAllStringSubmatch(context, -1)
+		for _, match := range matches {
+			if len(match) >= 3 {
+				columns = append(columns, map[string]any{
+					"name": match[1],
+					"type": match[2],
+				})
+			}
+		}
+	}
+
+	columnsJSON, _ := json.Marshal(columns)
+	metadataJSON, _ := json.Marshal(metadata)
+
+	cmd := exec.Command("python3", "./scripts/sap_rpt_advanced.py",
+		"--table-name", tableName,
+		"--columns", string(columnsJSON),
+		"--context", context,
+		"--training-data", trainingDataPath,
+		"--metadata", string(metadataJSON),
+	)
+
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			ae.logger.Printf("advanced sap-rpt prediction failed: %v, stderr: %s", err, string(exitErr.Stderr))
+		}
+		return TableClassification{
+			TableName:      tableName,
+			Classification: "unknown",
+			Confidence:     0.0,
+			Source:         sourceID,
+		}, 0.0, false
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(output, &result); err != nil {
+		return TableClassification{
+			TableName:      tableName,
+			Classification: "unknown",
+			Confidence:     0.0,
+			Source:         sourceID,
+		}, 0.0, false
+	}
+
+	classification := "unknown"
+	if cls, ok := result["classification"].(string); ok {
+		classification = cls
+	}
+
+	confidence := 0.0
+	if conf, ok := result["classification_confidence"].(float64); ok {
+		confidence = conf
+	}
+
+	qualityScore := 0.0
+	if qs, ok := result["quality_score"].(float64); ok {
+		qualityScore = qs
+	}
+
+	needsReview := false
+	if nr, ok := result["needs_review"].(bool); ok {
+		needsReview = nr
+	}
+
+	evidence := []string{}
+	if ev, ok := result["uncertainty_reason"].(string); ok && ev != "" {
+		evidence = append(evidence, ev)
+	}
+	if method, ok := result["method"].(string); ok {
+		evidence = append(evidence, fmt.Sprintf("Method: %s", method))
+	}
+
+	result := TableClassification{
+		TableName:      tableName,
+		Classification: classification,
+		Confidence:     confidence,
+		Evidence:       evidence,
+		Source:         sourceID,
+		Props:          make(map[string]any),
+	}
+	result.Props["quality_score"] = qualityScore
+	result.Props["needs_review"] = needsReview
+	return result, qualityScore, needsReview
+}
+
+// classifyTableWithFullSAPRPT calls the Python script to classify using full SAP_RPT_OSS_Classifier with training data
+func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sourceID, trainingDataPath string) TableClassification {
+	// Extract columns from context if possible
+	columns := []map[string]any{}
+	// This is a simplified extraction - in practice, you'd parse DDL or JSON properly
+	if strings.Contains(context, "CREATE TABLE") {
+		// Try to extract column definitions from DDL
+		columnPattern := regexp.MustCompile(`(?i)(\w+)\s+(\w+)`)
+		matches := columnPattern.FindAllStringSubmatch(context, -1)
+		for _, match := range matches {
+			if len(match) >= 3 {
+				columns = append(columns, map[string]any{
+					"name": match[1],
+					"type": match[2],
+				})
+			}
+		}
+	}
+
+	columnsJSON, err := json.Marshal(columns)
+	if err != nil {
+		return TableClassification{
+			TableName:      tableName,
+			Classification: "unknown",
+			Confidence:     0.0,
+			Source:         sourceID,
+		}
+	}
+
+	cmd := exec.Command("python3", "./scripts/classify_table_sap_rpt_full.py",
+		"--table-name", tableName,
+		"--columns", string(columnsJSON),
+		"--context", context,
+		"--training-data", trainingDataPath,
+	)
+
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			ae.logger.Printf("full sap-rpt classification failed: %v, stderr: %s", err, string(exitErr.Stderr))
+		}
+		return TableClassification{
+			TableName:      tableName,
+			Classification: "unknown",
+			Confidence:     0.0,
+			Source:         sourceID,
+			Props:          make(map[string]any),
+		}
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(output, &result); err != nil {
+		return TableClassification{
+			TableName:      tableName,
+			Classification: "unknown",
+			Confidence:     0.0,
+			Source:         sourceID,
+			Props:          make(map[string]any),
+		}
+	}
+
+	classification := "unknown"
+	if cls, ok := result["classification"].(string); ok {
+		classification = cls
+	}
+
+	confidence := 0.0
+	if conf, ok := result["confidence"].(float64); ok {
+		confidence = conf
+	}
+
+	evidence := []string{}
+	if ev, ok := result["evidence"].([]interface{}); ok {
+		for _, e := range ev {
+			if str, ok := e.(string); ok {
+				evidence = append(evidence, str)
+			}
+		}
+	}
+
+	return TableClassification{
+		TableName:      tableName,
+		Classification: classification,
+		Confidence:     confidence,
+		Evidence:       evidence,
+		Source:         sourceID,
+		Props:          make(map[string]any),
+	}
 }
 
 // Helper functions

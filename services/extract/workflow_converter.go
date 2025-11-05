@@ -67,12 +67,22 @@ type AgentFlowWorkflow struct {
 
 // WorkflowConverter converts Petri nets to LangGraph and AgentFlow workflows.
 type WorkflowConverter struct {
-	logger *log.Logger
+	logger           *log.Logger
+	extractServiceURL string
+	useSemanticSearch bool
 }
 
 // NewWorkflowConverter creates a new workflow converter.
 func NewWorkflowConverter(logger *log.Logger) *WorkflowConverter {
-	return &WorkflowConverter{logger: logger}
+	return &WorkflowConverter{
+		logger:            logger,
+		useSemanticSearch: os.Getenv("USE_SAP_RPT_EMBEDDINGS") == "true",
+	}
+}
+
+// SetExtractServiceURL sets the Extract service URL for semantic search.
+func (wc *WorkflowConverter) SetExtractServiceURL(url string) {
+	wc.extractServiceURL = url
 }
 
 // ConvertPetriNetToLangGraph converts a Petri net to a LangGraph workflow.
@@ -136,17 +146,8 @@ func (wc *WorkflowConverter) ConvertPetriNetToLangGraph(net *PetriNet) *LangGrap
 		nodeID := fmt.Sprintf("node_%d", nodeCounter)
 		nodeCounter++
 
-		// Determine agent type based on transition properties
-		agentType := "generic"
-		if cmd, ok := transition.Properties["command"].(string); ok {
-			if strings.Contains(strings.ToUpper(cmd), "SQL") {
-				agentType = "sql"
-			} else if strings.Contains(strings.ToUpper(cmd), "PYTHON") {
-				agentType = "python"
-			} else if strings.Contains(strings.ToUpper(cmd), "SHELL") {
-				agentType = "shell"
-			}
-		}
+		// Determine agent type using semantic search and classifications
+		agentType := wc.determineAgentType(transition)
 
 		node := LangGraphNode{
 			ID:        nodeID,
@@ -281,14 +282,21 @@ func (wc *WorkflowConverter) ConvertPetriNetToAgentFlow(net *PetriNet) *AgentFlo
 		nodeID := fmt.Sprintf("agent_%d", nodeCounter)
 		nodeCounter++
 
-		// Determine agent type
-		agentType := "GenericAgent"
-		if cmd, ok := transition.Properties["command"].(string); ok {
-			if strings.Contains(strings.ToUpper(cmd), "SQL") {
-				agentType = "SQLAgent"
-			} else if strings.Contains(strings.ToUpper(cmd), "PYTHON") {
-				agentType = "PythonAgent"
-			}
+		// Determine agent type using semantic search and classifications
+		agentType := wc.determineAgentType(transition)
+		
+		// Map agent type to AgentFlow node type
+		switch agentType {
+		case "sql":
+			agentType = "SQLAgent"
+		case "python":
+			agentType = "PythonAgent"
+		case "lookup":
+			agentType = "LookupAgent"
+		case "etl":
+			agentType = "ETLAgent"
+		default:
+			agentType = "GenericAgent"
 		}
 
 		data := map[string]any{
@@ -390,6 +398,155 @@ func (wc *WorkflowConverter) ConvertPetriNetToAgentFlow(net *PetriNet) *AgentFlo
 	}
 
 	return workflow
+}
+
+// determineAgentType determines agent type using semantic search and classifications
+func (wc *WorkflowConverter) determineAgentType(transition *Transition) string {
+	// First, check transition properties for explicit type
+	if cmd, ok := transition.Properties["command"].(string); ok {
+		if strings.Contains(strings.ToUpper(cmd), "SQL") {
+			return "sql"
+		} else if strings.Contains(strings.ToUpper(cmd), "PYTHON") {
+			return "python"
+		} else if strings.Contains(strings.ToUpper(cmd), "SHELL") {
+			return "shell"
+		}
+	}
+
+	// Use semantic search to find related tables and determine type
+	if wc.useSemanticSearch && wc.extractServiceURL != "" {
+		agentType := wc.discoverAgentTypeViaSemantic(transition)
+		if agentType != "" {
+			return agentType
+		}
+	}
+
+	// Default fallback
+	return "generic"
+}
+
+// discoverAgentTypeViaSemantic uses semantic search to discover agent type
+func (wc *WorkflowConverter) discoverAgentTypeViaSemantic(transition *Transition) string {
+	// Search for tables related to this transition
+	query := fmt.Sprintf("tables for %s", transition.Label)
+	
+	searchPayload := map[string]any{
+		"query":           query,
+		"artifact_type":   "table",
+		"limit":           5,
+		"use_semantic":    true,
+		"use_hybrid_search": true,
+	}
+	
+	payloadJSON, err := json.Marshal(searchPayload)
+	if err != nil {
+		wc.logger.Printf("failed to marshal search payload: %v", err)
+		return ""
+	}
+	
+	searchURL := fmt.Sprintf("%s/knowledge-graph/search", wc.extractServiceURL)
+	resp, err := http.Post(searchURL, "application/json", bytes.NewReader(payloadJSON))
+	if err != nil {
+		wc.logger.Printf("semantic search failed: %v", err)
+		return ""
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	
+	var searchResult struct {
+		Results []struct {
+			ArtifactID string            `json:"artifact_id"`
+			Metadata   map[string]any    `json:"metadata"`
+			Score      float64           `json:"score"`
+		} `json:"results"`
+	}
+	
+	if err := json.NewDecoder(resp.Body).Decode(&searchResult); err != nil {
+		return ""
+	}
+	
+	// Analyze results to determine agent type
+	// If results contain transaction tables, likely SQL agent
+	// If results contain reference tables, might be lookup agent
+	for _, result := range searchResult.Results {
+		if metadata := result.Metadata; metadata != nil {
+			if classification, ok := metadata["table_classification"].(string); ok {
+				switch classification {
+				case "transaction":
+					return "sql"
+				case "reference":
+					return "lookup"
+				case "staging":
+					return "etl"
+				}
+			}
+		}
+	}
+	
+	return ""
+}
+
+// RouteByClassification routes workflow based on table classifications
+func (wc *WorkflowConverter) RouteByClassification(tableName string, extractServiceURL string) string {
+	if extractServiceURL == "" {
+		return "default"
+	}
+	
+	// Query classification for this table
+	queryPayload := map[string]any{
+		"query": fmt.Sprintf(`
+			MATCH (n)
+			WHERE n.type = 'table' AND n.label = $table_name
+			RETURN n.props.table_classification AS classification
+		`),
+		"params": map[string]any{
+			"table_name": tableName,
+		},
+	}
+	
+	payloadJSON, err := json.Marshal(queryPayload)
+	if err != nil {
+		return "default"
+	}
+	
+	queryURL := fmt.Sprintf("%s/knowledge-graph/query", extractServiceURL)
+	resp, err := http.Post(queryURL, "application/json", bytes.NewReader(payloadJSON))
+	if err != nil {
+		return "default"
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		return "default"
+	}
+	
+	var queryResult struct {
+		Data []map[string]any `json:"data"`
+	}
+	
+	if err := json.NewDecoder(resp.Body).Decode(&queryResult); err != nil {
+		return "default"
+	}
+	
+	if len(queryResult.Data) > 0 {
+		if classification, ok := queryResult.Data[0]["classification"].(string); ok {
+			switch classification {
+			case "transaction":
+				return "transaction_handler"
+			case "reference":
+				return "reference_handler"
+			case "staging":
+				return "staging_handler"
+			case "test":
+				return "test_handler"
+			}
+		}
+	}
+	
+	return "default"
 }
 
 // ToJSON converts a LangGraph workflow to JSON.

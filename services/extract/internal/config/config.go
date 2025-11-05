@@ -15,6 +15,7 @@ type Config struct {
 	Training    TrainingConfig
 	Persistence PersistenceConfig
 	Telemetry   TelemetryConfig
+	SAPRPT      SAPRPTConfig
 }
 
 // ServerConfig holds server configuration
@@ -49,6 +50,14 @@ type PersistenceConfig struct {
 	HanaHost      string
 	HanaUser      string
 	HanaPassword  string
+}
+
+// SAPRPTConfig holds sap-rpt-1-oss configuration
+type SAPRPTConfig struct {
+	UseEmbeddings    bool
+	UseClassification bool
+	ZMQPort          int
+	EmbeddingModel   string
 }
 
 // TelemetryConfig holds telemetry configuration
@@ -101,6 +110,12 @@ func LoadConfig() (*Config, error) {
 			UserIDHash:   os.Getenv("POSTGRES_LANG_SERVICE_USER_ID"),
 			DialTimeout:  defaultDialTimeout,
 			CallTimeout:  defaultCallTimeout,
+		},
+		SAPRPT: SAPRPTConfig{
+			UseEmbeddings:      parseBoolEnv("USE_SAP_RPT_EMBEDDINGS", false),
+			UseClassification: parseBoolEnv("USE_SAP_RPT_CLASSIFICATION", false),
+			ZMQPort:           parseIntEnv("SAP_RPT_ZMQ_PORT", 5655),
+			EmbeddingModel:    getEnv("SAP_RPT_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
 		},
 	}
 

@@ -129,6 +129,102 @@ class ExtractServiceClient:
             logger.error(f"Neo4j query request error: {e}")
             raise
     
+    def search_semantic(
+        self,
+        query: str,
+        artifact_type: Optional[str] = None,
+        limit: int = 10,
+        use_semantic: bool = True,
+        use_hybrid_search: bool = False
+    ) -> List[Dict[str, Any]]:
+        """Perform semantic search using sap-rpt-1-oss embeddings.
+        
+        Args:
+            query: Search query (natural language)
+            artifact_type: Optional artifact type filter (table, column, etc.)
+            limit: Maximum number of results
+            use_semantic: Use semantic embeddings (sap-rpt-1-oss)
+            use_hybrid_search: Search both relational and semantic embeddings
+        
+        Returns:
+            List of search results with metadata
+        """
+        endpoint = f"{self.extract_service_url}/knowledge-graph/search"
+        
+        payload = {
+            "query": query,
+            "limit": limit,
+            "use_semantic": use_semantic,
+            "use_hybrid_search": use_hybrid_search,
+        }
+        
+        if artifact_type:
+            payload["artifact_type"] = artifact_type
+        
+        logger.info(f"Performing semantic search: {query[:100]}...")
+        
+        try:
+            response = self.client.post(endpoint, json=payload)
+            response.raise_for_status()
+            
+            result = response.json()
+            
+            results = result.get("results", [])
+            logger.info(f"Semantic search returned {len(results)} results")
+            
+            return results
+        
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Semantic search HTTP error: {e.response.status_code} - {e.response.text}")
+            raise
+        except httpx.RequestError as e:
+            logger.error(f"Semantic search request error: {e}")
+            raise
+    
+    def get_table_classifications(
+        self,
+        project_id: str,
+        system_id: Optional[str] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """Get table classifications for a project/system.
+        
+        Args:
+            project_id: Project ID
+            system_id: Optional system ID
+        
+        Returns:
+            Dictionary mapping table names to classification data
+        """
+        query = """
+        MATCH (n)
+        WHERE n.type = 'table'
+          AND n.props.project_id = $project_id
+          AND ($system_id IS NULL OR n.props.system_id = $system_id)
+          AND n.props.table_classification IS NOT NULL
+        RETURN n.label AS table_name, 
+               n.props.table_classification AS classification,
+               n.props.classification_confidence AS confidence,
+               n.props.classification_evidence AS evidence
+        """
+        
+        params = {"project_id": project_id}
+        if system_id:
+            params["system_id"] = system_id
+        
+        result = self.query_knowledge_graph(query, params)
+        
+        classifications = {}
+        for row in result.get("data", []):
+            table_name = row.get("table_name")
+            if table_name:
+                classifications[table_name] = {
+                    "classification": row.get("classification"),
+                    "confidence": row.get("confidence"),
+                    "evidence": row.get("evidence"),
+                }
+        
+        return classifications
+    
     def health_check(self) -> bool:
         """Check if Extract service is available.
         

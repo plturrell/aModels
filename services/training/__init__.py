@@ -36,6 +36,8 @@ __all__ = [
     "TrainingPipeline",
     "PatternLearningEngine",
     "WorkflowPatternLearner",
+    "SemanticPatternLearner",
+    "SemanticFeatureExtractor",
     "ColumnTypePatternLearner",
     "RelationshipPatternLearner",
     "MetadataEntropyPatternLearner",
