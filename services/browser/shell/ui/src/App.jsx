@@ -22,6 +22,10 @@ const THEME_CLASS = {
   light: 'theme-light',
 };
 
+const STREAM_SPLIT_REGEX = /(\s+)/;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 function usePersistentState(key, defaultValue) {
   const [value, setValue] = useState(() => {
     try {
@@ -456,6 +460,9 @@ export default function App() {
     } catch (error) {
       setStatus({ tone: 'error', message: `Page summary failed: ${error.message}` });
       pushLog(`Page summary FAIL ${error.message}`);
+      setSummaryLines([]);
+      setSummaryCitations([]);
+      setFollowUps([]);
       window.shellBridge?.invoke?.('highlight-text', { phrases: [] });
     } finally {
       setSummaryBusy(false);
@@ -636,6 +643,26 @@ const handlePaletteSelect = useCallback(
 );
 
 const streamDelay = (chunk) => Math.min(80, 10 + chunk.length * 4);
+
+const streamText = useCallback(
+  async (text) => {
+    const content = (text || '').toString();
+    if (!content) {
+      setLastResult('');
+      return;
+    }
+    const pieces = content.split(STREAM_SPLIT_REGEX).filter((piece) => piece.length);
+    let accumulator = '';
+    setLastResult('');
+    for (const piece of pieces) {
+      accumulator += piece;
+      setLastResult(accumulator);
+      // eslint-disable-next-line no-await-in-loop
+      await sleep(streamDelay(piece));
+    }
+  },
+  [],
+);
 
 
   useEffect(() => {
