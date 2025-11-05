@@ -21,6 +21,14 @@ func (f *FileConfigLoader) LoadDomainConfigs(ctx context.Context, dm *DomainMana
 	return dm.LoadDomainConfigs(f.path)
 }
 
+// NewFileConfigLoader creates a file-based config loader with the specified path.
+func NewFileConfigLoader(path string) ConfigLoader {
+	if path == "" {
+		path = "config/domains.json"
+	}
+	return &FileConfigLoader{path: path}
+}
+
 // NewConfigLoader creates the appropriate config loader based on environment
 func NewConfigLoader() (ConfigLoader, error) {
 	// Check for Redis configuration first (preferred for production)

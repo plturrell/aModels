@@ -67,9 +67,9 @@ func main() {
 	if err != nil {
 		log.Printf("⚠️  Failed to create config loader: %v", err)
 		log.Printf("⚠️  Falling back to file-based config")
-		configLoader = &domain.FileConfigLoader{path: *configPath}
+		configLoader = domain.NewFileConfigLoader(*configPath)
 	}
-	
+
 	if err := configLoader.LoadDomainConfigs(context.Background(), domainManager); err != nil {
 		log.Printf("⚠️  Failed to load domain configs: %v", err)
 		log.Printf("⚠️  Continuing with single model mode")
@@ -205,12 +205,12 @@ func main() {
 	http.HandleFunc("/v1/chat/completions/function-calling", server.EnableCORS(vgServer.RateLimitMiddleware(vgServer.HandleFunctionCalling)))
 	http.HandleFunc("/v1/models", server.EnableCORS(vgServer.HandleModels))
 	http.HandleFunc("/v1/domains", server.EnableCORS(vgServer.HandleListDomains))
-	
+
 	// Phase 3: Domain lifecycle management API
 	// Initialize PostgreSQL and Redis stores if available
 	var postgresStore *domain.PostgresConfigStore
 	var redisLoader *domain.RedisConfigLoader
-	
+
 	postgresDSN := os.Getenv("POSTGRES_DSN")
 	if postgresDSN != "" {
 		if store, err := domain.NewPostgresConfigStore(postgresDSN); err == nil {
@@ -220,7 +220,7 @@ func main() {
 			log.Printf("⚠️  Failed to initialize PostgreSQL store: %v", err)
 		}
 	}
-	
+
 	redisURL := os.Getenv("REDIS_URL")
 	if redisURL != "" {
 		if loader, err := domain.NewRedisConfigLoader(redisURL, "localai:domains:config"); err == nil {
@@ -230,7 +230,7 @@ func main() {
 			log.Printf("⚠️  Failed to initialize Redis loader: %v", err)
 		}
 	}
-	
+
 	if postgresStore != nil || redisLoader != nil {
 		lifecycleManager := domain.NewLifecycleManager(domainManager, postgresStore, redisLoader)
 		lifecycleAPI := domain.NewDomainLifecycleAPI(lifecycleManager)
