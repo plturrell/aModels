@@ -18,6 +18,7 @@ require (
 )
 
 replace github.com/plturrell/aModels/services/postgres => ../postgres
+
 replace github.com/SAP/go-hdb => ../../infrastructure/third_party/go-hdb
 
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration => ../../infrastructure/third_party/orchestration
@@ -32,12 +33,16 @@ require (
 	github.com/google/flatbuffers v25.9.23+incompatible // indirect
 	github.com/klauspost/compress v1.18.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
+	github.com/pressly/goose/v3 v3.20.0 // indirect
+	github.com/sethvargo/go-retry v0.2.4 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/yuin/gopher-lua v1.1.0 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.opentelemetry.io/otel v1.38.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.38.0 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/mod v0.29.0 // indirect
 	golang.org/x/net v0.46.0 // indirect

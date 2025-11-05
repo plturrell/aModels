@@ -36,8 +36,15 @@ Use this checklist once you have access to a Docker-enabled GPU host. It exercis
    ```bash
    docker compose exec catalog \
      go run ./cmd/migrate up
+
+   docker compose exec extract-service \
+     go run ./services/extract/cmd/migrate up
+
+   go run ./cmd/migrate-graph status  # Uses SQLITE_MIGRATIONS_DSN / EXTRACT_SQLITE_PATH
+
+   go run ./services/training/cmd/migrate up
    ```
-   Confirms Neo4j + Postgres migrations succeed inside the container.
+   Confirms Neo4j + Postgres/SQLite migrations succeed across services.
 
 5. **Sanity-check Deep Research endpoint**
    ```bash
@@ -61,4 +68,3 @@ Use this checklist once you have access to a Docker-enabled GPU host. It exercis
    ```
 
 Record results in your run log (success, issues encountered, service logs). If any migration or service fails, capture logs before tearing down (`docker compose logs <service>`).
-

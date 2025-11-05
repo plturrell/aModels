@@ -26,8 +26,10 @@ Catalog now uses Goose for both PostgreSQL and Neo4j migrations. The remaining s
      - Support `RUN_MIGRATIONS=true` env var for auto-execution at service startup.
 
 3. **Service Wiring**
-   - Update each service’s main server boot to call the migration runner when `RUN_MIGRATIONS` is set (development/test only).
-   - Document new env vars (`SQL_MIGRATIONS_DSN`, `NEO4J_URI`, etc.).
+   - Extract CLI: `go run ./services/extract/cmd/migrate [up|down|status]` (reads `SQL_MIGRATIONS_DSN` → `POSTGRES_CATALOG_DSN`).
+   - Training CLI: `go run ./services/training/cmd/migrate [up|down|status]` (reads `SQL_MIGRATIONS_DSN` → `POSTGRES_DSN`).
+   - Graph CLI: `go run ./cmd/migrate-graph [up|down|status] [sqlite_path]` (defaults to `SQLITE_MIGRATIONS_DSN`, `EXTRACT_SQLITE_PATH`, or `CHECKPOINT_STORE_URL`).
+   - Update each service’s startup scripts to invoke the CLI when `RUN_MIGRATIONS=true` in dev/test.
 
 4. **CI Enforcement**
    - Extend the GitHub workflow to spin up service-specific datastores and execute:
@@ -46,4 +48,3 @@ Catalog now uses Goose for both PostgreSQL and Neo4j migrations. The remaining s
 - Consider common tooling (shared migration CLI) if more services adopt Goose to avoid duplicated logic.
 
 Once the work above lands, the only manual database initialisation will be legacy paths explicitly called out in service docs.
-
