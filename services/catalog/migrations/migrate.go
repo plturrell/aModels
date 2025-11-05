@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	_ "github.com/lib/pq"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	goose "github.com/pressly/goose/v3"
 )
 
 // MigrationRunner handles database migrations for the catalog service.
@@ -32,13 +33,9 @@ func NewMigrationRunner(neo4jURI, neo4jUsername, neo4jPassword string, logger *l
 
 // RunMigrations executes all pending migrations.
 func (mr *MigrationRunner) RunMigrations(ctx context.Context) error {
-	migrationsDir := "migrations"
-	if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
-		// Try relative to current working directory
-		migrationsDir = filepath.Join("services", "catalog", "migrations")
-		if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
-			return fmt.Errorf("migrations directory not found")
-		}
+	migrationsDir, err := DefaultMigrationsDir()
+	if err != nil {
+		return err
 	}
 
 	if mr.logger != nil {
@@ -47,7 +44,7 @@ func (mr *MigrationRunner) RunMigrations(ctx context.Context) error {
 
 	// Run Neo4j migrations using Cypher scripts
 	// Note: Goose doesn't natively support Neo4j, so we'll execute Cypher directly
-	err := mr.runNeo4jMigrations(ctx, migrationsDir)
+	err = mr.runNeo4jMigrations(ctx, migrationsDir)
 	if err != nil {
 		return fmt.Errorf("failed to run Neo4j migrations: %w", err)
 	}
@@ -193,11 +190,61 @@ func (mr *MigrationRunner) CheckMigrationStatus(ctx context.Context) (map[string
 	}, nil
 }
 
-// RunGooseMigrations runs migrations using goose binary (for SQL databases).
-func RunGooseMigrations(driver, db, migrationsDir string) error {
-	cmd := exec.Command("goose", "-dir", migrationsDir, driver, db, "up")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+// RunGooseMigrations runs SQL migrations using the goose library.
+func RunGooseMigrations(driver, dsn, migrationsDir string, logger *log.Logger) error {
+	if migrationsDir == "" {
+		var err error
+		migrationsDir, err = DefaultMigrationsDir()
+		if err != nil {
+			return err
+		}
+	}
+
+	db, err := goose.OpenDBWithDriver(driver, dsn)
+	if err != nil {
+		return fmt.Errorf("open %s database: %w", driver, err)
+	}
+	defer db.Close()
+
+	if err := goose.SetDialect(driver); err != nil {
+		return fmt.Errorf("set goose dialect: %w", err)
+	}
+
+	if logger != nil {
+		goose.SetLogger(&gooseStdLogger{logger: logger})
+	} else {
+		goose.SetLogger(goose.NopLogger())
+	}
+
+	if err := goose.Up(db, migrationsDir); err != nil {
+		return fmt.Errorf("run goose migrations: %w", err)
+	}
+
+	return nil
 }
 
+// DefaultMigrationsDir returns the default directory containing migration files.
+func DefaultMigrationsDir() (string, error) {
+	candidates := []string{
+		"migrations",
+		filepath.Join("services", "catalog", "migrations"),
+	}
+	for _, dir := range candidates {
+		if _, err := os.Stat(dir); err == nil {
+			return dir, nil
+		}
+	}
+	return "", fmt.Errorf("migrations directory not found")
+}
+
+type gooseStdLogger struct {
+	logger *log.Logger
+}
+
+func (l *gooseStdLogger) Fatalf(format string, v ...interface{}) {
+	l.logger.Fatalf(format, v...)
+}
+
+func (l *gooseStdLogger) Printf(format string, v ...interface{}) {
+	l.logger.Printf(format, v...)
+}

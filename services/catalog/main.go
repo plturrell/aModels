@@ -16,6 +16,7 @@ import (
 	"github.com/plturrell/aModels/services/catalog/multimodal"
 	"github.com/plturrell/aModels/services/catalog/observability"
 	"github.com/plturrell/aModels/services/catalog/quality"
+	"github.com/plturrell/aModels/services/catalog/research"
 	"github.com/plturrell/aModels/services/catalog/security"
 	"github.com/plturrell/aModels/services/catalog/streaming"
 	"github.com/plturrell/aModels/services/catalog/triplestore"
@@ -62,17 +63,17 @@ func main() {
 	if extractServiceURL == "" {
 		extractServiceURL = "http://localhost:9002"
 	}
-	
+
 	graphServiceURL := os.Getenv("GRAPH_SERVICE_URL")
 	if graphServiceURL == "" {
 		graphServiceURL = "http://localhost:8081"
 	}
-	
+
 	localaiURL := os.Getenv("LOCALAI_URL")
 	if localaiURL == "" {
 		localaiURL = "http://localhost:8081"
 	}
-	
+
 	deepResearchURL := os.Getenv("DEEP_RESEARCH_URL")
 	if deepResearchURL == "" {
 		deepResearchURL = "http://localhost:8085"
@@ -82,7 +83,10 @@ func main() {
 	if redisURL == "" {
 		redisURL = "redis://localhost:6379/0"
 	}
+	catalogDBURL := os.Getenv("CATALOG_DATABASE_URL")
 
+	legacyLogger := log.New(os.Stdout, "[catalog] ", log.LstdFlags|log.Lmsgprefix)
+	migrationLogger := log.New(os.Stdout, "[catalog:migrations] ", log.LstdFlags|log.Lmsgprefix)
 	// Initialize Redis cache
 	var cacheClient *cache.Cache
 	if redisURL != "" {
@@ -100,7 +104,7 @@ func main() {
 
 	// Initialize connection pool (if using performance package)
 	// For now, we'll use the existing triplestore client
-	
+
 	// Initialize ISO 11179 registry
 	registry := iso11179.NewMetadataRegistry("catalog", "aModels Catalog", baseURI)
 	structLogger.Info("ISO 11179 metadata registry initialized", nil)
@@ -108,20 +112,37 @@ func main() {
 	// Run migrations if enabled
 	runMigrations := os.Getenv("RUN_MIGRATIONS") == "true"
 	if runMigrations {
-		// Create legacy logger for migration runner (takes *log.Logger)
-		legacyLogger := log.New(os.Stdout, "[catalog:migrations] ", log.LstdFlags|log.Lmsgprefix)
-		migrationRunner := migrations.NewMigrationRunner(neo4jURI, neo4jUsername, neo4jPassword, legacyLogger)
+		migrationRunner := migrations.NewMigrationRunner(neo4jURI, neo4jUsername, neo4jPassword, migrationLogger)
 		if err := migrationRunner.RunMigrations(context.Background()); err != nil {
-			structLogger.Warn("Failed to run migrations, continuing", map[string]interface{}{
+			structLogger.Warn("Failed to run Neo4j migrations, continuing", map[string]interface{}{
 				"error": err.Error(),
 			})
 		} else {
-			structLogger.Info("Migrations completed successfully", nil)
+			structLogger.Info("Neo4j migrations completed successfully", nil)
+		}
+
+		sqlDriver := os.Getenv("SQL_MIGRATIONS_DRIVER")
+		sqlDSN := os.Getenv("SQL_MIGRATIONS_DSN")
+		if sqlDSN == "" && catalogDBURL != "" {
+			sqlDSN = catalogDBURL
+		}
+		if sqlDriver == "" && sqlDSN != "" {
+			sqlDriver = "postgres"
+		}
+		if sqlDriver != "" && sqlDSN != "" {
+			if err := migrations.RunGooseMigrations(sqlDriver, sqlDSN, "", migrationLogger); err != nil {
+				structLogger.Warn("Failed to run SQL migrations, continuing", map[string]interface{}{
+					"error": err.Error(),
+				})
+			} else {
+				structLogger.Info("SQL migrations completed successfully", map[string]interface{}{
+					"driver": sqlDriver,
+				})
+			}
 		}
 	}
 
 	// Initialize triplestore client
-	legacyLogger := log.New(os.Stdout, "[catalog] ", log.LstdFlags|log.Lmsgprefix)
 	triplestoreClient, err := triplestore.NewTriplestoreClient(neo4jURI, neo4jUsername, neo4jPassword, legacyLogger)
 	if err != nil {
 		structLogger.Error("Failed to create triplestore client", err, nil)
@@ -139,15 +160,26 @@ func main() {
 	qualityMonitor := quality.NewQualityMonitor(extractServiceURL, legacyLogger)
 	structLogger.Info("Quality monitor initialized (connected to Extract service)", nil)
 
+	reportStore, err := research.NewReportStore(catalogDBURL, legacyLogger)
+	if err != nil {
+		structLogger.Warn("Failed to initialize research report store", map[string]interface{}{
+			"error": err.Error(),
+		})
+	} else if reportStore != nil {
+		defer reportStore.Close(context.Background())
+		structLogger.Info("Research report store initialized", nil)
+	}
+
 	// Initialize unified workflow integration
 	unifiedWorkflow := workflows.NewUnifiedWorkflowIntegration(
 		graphServiceURL,
-		graphServiceURL, // Orchestration via graph service
+		graphServiceURL,         // Orchestration via graph service
 		"http://localhost:9001", // AgentFlow
 		localaiURL,
 		deepResearchURL,
 		registry,
 		qualityMonitor,
+		reportStore,
 		legacyLogger,
 	)
 	structLogger.Info("Unified workflow integration initialized", nil)
@@ -189,7 +221,7 @@ func main() {
 	sparqlHandler := api.NewSPARQLHandler(sparqlEndpoint, legacyLogger)
 	dataProductHandler := api.NewDataProductHandler(unifiedWorkflow, legacyLogger)
 	aiHandlers := api.NewAIHandlers(metadataDiscoverer, qualityPredictor, recommender, legacyLogger)
-	
+
 	// Initialize advanced handlers (Phase 3)
 	var advancedHandlers *api.AdvancedHandlers
 	var wsHandler *api.WebSocketHandler
@@ -198,7 +230,7 @@ func main() {
 		advancedHandlers = api.NewAdvancedHandlers(eventStream, multiModalExtractor, analyticsDashboard, legacyLogger)
 		structLogger.Info("Advanced handlers initialized", nil)
 	}
-	
+
 	// Initialize auth middleware
 	authMiddleware := security.NewAuthMiddleware(legacyLogger)
 	// Register default token for testing (in production, load from config)
@@ -229,7 +261,7 @@ func main() {
 			}
 		}),
 	}
-	
+
 	if cacheClient != nil {
 		healthCheckers = append(healthCheckers, api.NewBasicHealthChecker("redis", func(ctx context.Context) api.HealthStatus {
 			// Check Redis connection
@@ -248,7 +280,7 @@ func main() {
 			}
 		}))
 	}
-	
+
 	healthHandler := api.NewHealthHandler(healthCheckers, structLogger)
 
 	// Setup HTTP routes
@@ -258,7 +290,7 @@ func main() {
 	mux.HandleFunc("/healthz", healthHandler.HandleHealthz)
 	mux.HandleFunc("/ready", healthHandler.HandleReadiness)
 	mux.HandleFunc("/live", healthHandler.HandleLiveness)
-	
+
 	// Prometheus metrics endpoint
 	mux.Handle("/metrics", promhttp.Handler())
 
@@ -342,4 +374,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-

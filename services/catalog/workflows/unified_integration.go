@@ -17,16 +17,17 @@ import (
 
 // UnifiedWorkflowIntegration integrates catalog with unified workflow (graph + orchestration + agentflow).
 type UnifiedWorkflowIntegration struct {
-	graphServiceURL      string
-	orchestrationURL     string
-	agentflowURL         string
-	localaiURL           string
-	deepResearchURL      string
-	httpClient           *http.Client
-	registry             *iso11179.MetadataRegistry
-	qualityMonitor       *quality.QualityMonitor
-	deepResearchClient   *research.DeepResearchClient
-	logger               *log.Logger
+	graphServiceURL    string
+	orchestrationURL   string
+	agentflowURL       string
+	localaiURL         string
+	deepResearchURL    string
+	httpClient         *http.Client
+	registry           *iso11179.MetadataRegistry
+	qualityMonitor     *quality.QualityMonitor
+	deepResearchClient *research.DeepResearchClient
+	reportStore        *research.ReportStore
+	logger             *log.Logger
 }
 
 // NewUnifiedWorkflowIntegration creates a new unified workflow integration.
@@ -38,11 +39,12 @@ func NewUnifiedWorkflowIntegration(
 	deepResearchURL string,
 	registry *iso11179.MetadataRegistry,
 	qualityMonitor *quality.QualityMonitor,
+	reportStore *research.ReportStore,
 	logger *log.Logger,
 ) *UnifiedWorkflowIntegration {
 	// Create Deep Research client
 	deepResearchClient := research.NewDeepResearchClient(deepResearchURL, logger)
-	
+
 	return &UnifiedWorkflowIntegration{
 		graphServiceURL:    graphServiceURL,
 		orchestrationURL:   orchestrationURL,
@@ -53,6 +55,7 @@ func NewUnifiedWorkflowIntegration(
 		registry:           registry,
 		qualityMonitor:     qualityMonitor,
 		deepResearchClient: deepResearchClient,
+		reportStore:        reportStore,
 		logger:             logger,
 	}
 }
@@ -88,10 +91,10 @@ type CompleteDataProduct struct {
 
 // DataLineage represents data lineage from knowledge graph.
 type DataLineage struct {
-	Sources      []string
+	Sources         []string
 	Transformations []string
-	Destinations []string
-	GraphPath    string
+	Destinations    []string
+	GraphPath       string
 }
 
 // UsageExample represents a usage example.
@@ -189,13 +192,13 @@ func (uwi *UnifiedWorkflowIntegration) BuildCompleteDataProduct(
 	usageExamples := uwi.createUsageExamples(dataElement)
 
 	product := &CompleteDataProduct{
-		DataElement:     dataElement,
-		EnhancedElement: enhanced,
-		QualityMetrics:  qualityMetrics,
-		AccessControl:   accessControl,
-		Lineage:         lineage,
-		UsageExamples:   usageExamples,
-		ResearchReport:  researchReport,
+		DataElement:      dataElement,
+		EnhancedElement:  enhanced,
+		QualityMetrics:   qualityMetrics,
+		AccessControl:    accessControl,
+		Lineage:          lineage,
+		UsageExamples:    usageExamples,
+		ResearchReport:   researchReport,
 		DocumentationURL: fmt.Sprintf("/catalog/data-elements/%s/docs", dataElement.Identifier),
 		SampleDataURL:    fmt.Sprintf("/catalog/data-elements/%s/sample", dataElement.Identifier),
 	}
@@ -216,7 +219,7 @@ func (uwi *UnifiedWorkflowIntegration) queryKnowledgeGraph(ctx context.Context, 
 	payload := map[string]any{
 		"unified_request": map[string]any{
 			"knowledge_graph_request": map[string]any{
-				"query": fmt.Sprintf("MATCH (n) WHERE toLower(n.label) CONTAINS toLower($topic) RETURN n LIMIT 10"),
+				"query":  fmt.Sprintf("MATCH (n) WHERE toLower(n.label) CONTAINS toLower($topic) RETURN n LIMIT 10"),
 				"params": map[string]any{"topic": topic},
 			},
 		},
@@ -256,7 +259,7 @@ func (uwi *UnifiedWorkflowIntegration) mapToDataElement(graphData map[string]any
 	// Extract node information from graph data
 	// This is simplified - in production would parse actual graph response
 	elementID := fmt.Sprintf("http://amodels.org/catalog/data-element/%s", topic)
-	
+
 	conceptID := fmt.Sprintf("http://amodels.org/catalog/concept/%s", topic)
 	concept := iso11179.NewDataElementConcept(
 		conceptID,
@@ -315,7 +318,7 @@ func (uwi *UnifiedWorkflowIntegration) getDataLineage(ctx context.Context, eleme
 
 	// Parse lineage (simplified)
 	return &DataLineage{
-		Sources: []string{"extract-service"},
+		Sources:   []string{"extract-service"},
 		GraphPath: "extract-service -> knowledge-graph -> catalog",
 	}, nil
 }
@@ -329,9 +332,9 @@ func (uwi *UnifiedWorkflowIntegration) generateResearchReport(ctx context.Contex
 			uwi.logger.Printf("Warning: Deep Research client not initialized, using placeholder")
 		}
 		return &ResearchReport{
-			Topic:     topic,
-			Summary:   fmt.Sprintf("Research report for %s data product", topic),
-			Sections:  []ReportSection{
+			Topic:   topic,
+			Summary: fmt.Sprintf("Research report for %s data product", topic),
+			Sections: []ReportSection{
 				{Title: "Overview", Content: fmt.Sprintf("Data product for %s", topic)},
 				{Title: "Quality", Content: "Quality metrics from Extract service"},
 			},
@@ -340,16 +343,16 @@ func (uwi *UnifiedWorkflowIntegration) generateResearchReport(ctx context.Contex
 	}
 
 	// Call Deep Research service
-	report, err := uwi.deepResearchClient.ResearchMetadata(ctx, topic, true, true)
+	rawReport, err := uwi.deepResearchClient.ResearchMetadata(ctx, topic, true, true)
 	if err != nil {
 		if uwi.logger != nil {
 			uwi.logger.Printf("Warning: Deep Research failed: %v, using fallback", err)
 		}
 		// Return fallback report
 		return &ResearchReport{
-			Topic:     topic,
-			Summary:   fmt.Sprintf("Research report for %s data product", topic),
-			Sections:  []ReportSection{
+			Topic:   topic,
+			Summary: fmt.Sprintf("Research report for %s data product", topic),
+			Sections: []ReportSection{
 				{Title: "Overview", Content: fmt.Sprintf("Data product for %s", topic)},
 				{Title: "Quality", Content: "Quality metrics from Extract service"},
 			},
@@ -357,21 +360,31 @@ func (uwi *UnifiedWorkflowIntegration) generateResearchReport(ctx context.Contex
 		}, nil
 	}
 
+	if rawReport != nil && uwi.reportStore != nil {
+		elementID := ""
+		if element != nil {
+			elementID = element.Identifier
+		}
+		if err := uwi.reportStore.SaveReport(ctx, topic, elementID, rawReport); err != nil && uwi.logger != nil {
+			uwi.logger.Printf("Warning: Failed to persist research report: %v", err)
+		}
+	}
+
 	// Convert research report to our format
-	if report.Report != nil {
+	if rawReport != nil && rawReport.Report != nil {
 		return &ResearchReport{
-			Topic:     report.Report.Topic,
-			Summary:   report.Report.Summary,
-			Sections:  convertSections(report.Report.Sections),
-			Generated: report.Report.Generated,
+			Topic:     rawReport.Report.Topic,
+			Summary:   rawReport.Report.Summary,
+			Sections:  convertSections(rawReport.Report.Sections),
+			Generated: rawReport.Report.Generated,
 		}, nil
 	}
 
 	// Fallback if report structure is unexpected
 	return &ResearchReport{
-		Topic:     topic,
-		Summary:   fmt.Sprintf("Research report for %s data product", topic),
-		Sections:  []ReportSection{
+		Topic:   topic,
+		Summary: fmt.Sprintf("Research report for %s data product", topic),
+		Sections: []ReportSection{
 			{Title: "Overview", Content: fmt.Sprintf("Data product for %s", topic)},
 		},
 		Generated: time.Now(),
@@ -406,4 +419,3 @@ func (uwi *UnifiedWorkflowIntegration) createUsageExamples(element *iso11179.Dat
 		},
 	}
 }
-

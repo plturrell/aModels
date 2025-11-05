@@ -37,6 +37,11 @@ Created three migration files:
    - Creates properties for relationships
    - Rollback support
 
+4. **`004_create_research_reports.sql`**
+   - Creates `research_reports` table for storing deep research outputs
+   - Adds topic/data element indexes
+   - Rollback support
+
 ### ✅ 3. Migration Runner
 
 **File**: `services/catalog/migrations/migrate.go`
@@ -136,6 +141,11 @@ RUN_MIGRATIONS=true
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=password
+
+# Optional SQL migrations / deep research storage
+SQL_MIGRATIONS_DRIVER=postgres
+SQL_MIGRATIONS_DSN=postgres://postgres:postgres@postgres:5432/amodels?sslmode=disable
+CATALOG_DATABASE_URL=postgres://postgres:postgres@postgres:5432/amodels?sslmode=disable
 ```
 
 ### Docker Compose
@@ -147,6 +157,9 @@ catalog:
     - NEO4J_URI=bolt://neo4j:7687
     - NEO4J_USERNAME=neo4j
     - NEO4J_PASSWORD=password
+    - SQL_MIGRATIONS_DRIVER=postgres
+    - SQL_MIGRATIONS_DSN=postgres://postgres:postgres@postgres:5432/amodels?sslmode=disable
+    - CATALOG_DATABASE_URL=postgres://postgres:postgres@postgres:5432/amodels?sslmode=disable
 ```
 
 ## Migration Execution Flow
@@ -275,4 +288,3 @@ docker exec -it neo4j-container cypher-shell -u neo4j -p password \
 - CI/CD integration for migration validation
 
 **Next**: All three priorities complete! Open Deep Research and Goose are now fully integrated (90/100).
-

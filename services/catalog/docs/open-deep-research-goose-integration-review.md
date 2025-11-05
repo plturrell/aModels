@@ -29,16 +29,21 @@ Open Deep Research and Goose are **partially integrated** but not fully operatio
    - `search_catalog_semantic()` - Semantic search tool
    - `generate_metadata_report()` - Report generation
 
+4. **Runtime Service**:
+   - Dockerfile added for `models/open_deep_research`
+   - Docker Compose service (`deep-research`) exposes LangGraph on port 2024
+   - Configured to rely on LocalAI (no external LLM providers)
+
 4. **Integration Points**:
    - Referenced in `workflows/unified_integration.go`
    - Called via unified workflow orchestration
 
 #### ❌ What's Missing
 
-1. **No Actual Service**: Open Deep Research is not deployed as a service
-   - No Docker container
-   - No service endpoint (`http://localhost:8085` doesn't exist)
-   - No LangGraph server running
+1. **Service hardening**:
+   - Runtime added, but needs production-grade configuration (monitoring, auth)
+   - Compose target currently assumes LocalAI only; multi-model orchestration pending
+   - Requires CI coverage / automated health verification
 
 2. **No Direct Integration**: 
    - Python tool is standalone, not integrated into Go service
@@ -422,4 +427,3 @@ Open Deep Research and Goose are **structure-ready** but **not operational**. Th
 **Estimated Effort**: 2-3 weeks to reach 90/100
 
 **Priority**: High - These are critical for the "complete data product" feature.
-

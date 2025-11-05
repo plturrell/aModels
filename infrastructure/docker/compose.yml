@@ -17,6 +17,7 @@ services:
       - HANA_URL=http://hana:8083
       - GATEWAY_PORT=8000
       - DEEPAGENTS_URL=http://deepagents:9004
+      - DEEP_RESEARCH_URL=http://deep-research:2024
       # Model Configuration - LocalAI only (no external LLM dependencies)
       - LOCALAI_URL=http://localai:8080
     ports:
@@ -84,8 +85,8 @@ services:
 
   deep-research:
     build:
-      context: ../../models/open_deep_research
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: infrastructure/docker/deep-research/Dockerfile
     environment:
       # Catalog Integration (for tools)
       - CATALOG_URL=http://catalog:8084
@@ -115,4 +116,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-

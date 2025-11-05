@@ -8,7 +8,7 @@ NEO4J_PASSWORD := $(shell echo $${NEO4J_PASSWORD:-password})
 
 migrate-up:
 	@echo "Running migrations..."
-	@go run migrations/migrate.go up
+	@GOWORK=off go run ./cmd/migrate up
 
 migrate-down:
 	@echo "Rolling back migrations..."
@@ -16,7 +16,7 @@ migrate-down:
 
 migrate-status:
 	@echo "Checking migration status..."
-	@go run migrations/migrate.go status
+	@GOWORK=off go run ./cmd/migrate status
 
 migrate-create:
 	@echo "Usage: make migrate-create NAME=migration_name"
@@ -48,4 +48,3 @@ test:
 run:
 	@echo "Running catalog service..."
 	@GOWORK=off go run main.go
-
