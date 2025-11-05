@@ -8,20 +8,16 @@ WORKDIR /workspace
 
 RUN apk add --no-cache git build-base
 
-# Copy the entire repo to maintain the directory structure needed for go.mod replace directives
-COPY . /workspace/src
+# Copy LocalAI source and the local model modules required by go.mod replaces
+COPY services/localai/ /workspace/services/localai/
+COPY models/glove/ /workspace/models/glove/
+COPY models/sentencepiece/ /workspace/models/sentencepiece/
 
-# Setup the directory structure expected by go.mod replace directives
-RUN mkdir -p /workspace/src/models && \
-    mkdir -p /workspace/src/third_party && \
-    if [ ! -d /workspace/src/third_party/go-llama.cpp ]; then \
-        echo "Warning: third_party/go-llama.cpp not found, may need to be provided" ; \
-    fi
-
-WORKDIR /workspace/src/localai
+WORKDIR /workspace/services/localai
 
 ENV GOTOOLCHAIN=local
 ENV GOWORK=off
+
 RUN go mod download
 RUN CGO_ENABLED=0 go build -mod=mod -o /workspace/build/vaultgemma ./cmd/vaultgemma-server
 

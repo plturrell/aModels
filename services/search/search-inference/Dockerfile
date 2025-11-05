@@ -6,18 +6,18 @@ WORKDIR /workspace
 # SQLite requires CGO, so we need gcc and musl-dev
 RUN apk add --no-cache git build-base gcc musl-dev sqlite-dev
 
-# Copy the entire repo
+# Copy the entire repo (module relies on sibling modules via go.work / replace directives)
 COPY . /workspace/src
 
-WORKDIR /workspace/src/stage3/search/search-inference
+WORKDIR /workspace/src/services/search/search-inference
 
 ENV GOTOOLCHAIN=local
 ENV CGO_ENABLED=1
 ENV GOWORK=off
 
-# SQLite needs CGO enabled
-RUN go mod tidy
-RUN cd cmd/search-server && go build -o /workspace/build/search-inference .
+# Ensure dependencies are fetched with CGO enabled
+RUN go mod download
+RUN go build -o /workspace/build/search-inference ./cmd/search-server
 
 FROM alpine:3.22
 
