@@ -24,10 +24,10 @@ from test_helpers import (
 )
 
 # Test configuration
-LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localhost:8081")
-TRAINING_URL = os.getenv("TRAINING_SERVICE_URL", "http://localhost:8080")
-POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://user:pass@localhost:5432/amodels")
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localai-compat:8080")
+TRAINING_URL = os.getenv("TRAINING_SERVICE_URL", "http://training-service:8080")
+POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://postgres:postgres@postgres:5432/amodels")
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 
 DEFAULT_TIMEOUT = 30
 HEALTH_TIMEOUT = 5
@@ -95,20 +95,26 @@ class AutomationTestSuite:
 def test_auto_tuner_available() -> bool:
     """Test that auto-tuner is available."""
     try:
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "training"))
+        # Check via training service health endpoint
+        training_url = os.getenv("TRAINING_SERVICE_URL", "http://training-service:8080")
         
-        try:
-            from auto_tuner import AutoTuner
-            
-            tuner = AutoTuner(localai_url=LOCALAI_URL)
-            
-            print(f"✅ Auto-tuner available")
-            print(f"   Domain-aware: {tuner.localai_url is not None}")
-            print(f"   Domain studies: {len(tuner.domain_studies)}")
-            return True
-            
-        except ImportError:
-            print(f"⚠️  Auto-tuner not available (module not found)")
+        response = httpx.get(
+            f"{training_url}/health",
+            timeout=5.0
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            auto_tuner_available = result.get("components", {}).get("auto_tuner_available", False)
+            if auto_tuner_available:
+                print(f"✅ Auto-tuner available")
+                print(f"   (Auto-tuner tested via training service)")
+                return True
+            else:
+                print(f"⚠️  Auto-tuner not available")
+                return False
+        else:
+            print(f"⚠️  Training service returned status {response.status_code}")
             return False
         
     except Exception as e:
@@ -119,24 +125,27 @@ def test_auto_tuner_available() -> bool:
 def test_domain_specific_hyperparameter_optimization() -> bool:
     """Test domain-specific hyperparameter optimization."""
     try:
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "training"))
+        # Auto-tuner is available via training service
+        # Domain-specific optimization would be tested via training pipeline
+        training_url = os.getenv("TRAINING_SERVICE_URL", "http://training-service:8080")
         
-        try:
-            from auto_tuner import AutoTuner
-            
-            tuner = AutoTuner(localai_url=LOCALAI_URL)
-            
-            # Test domain-specific optimization
-            domain_id = "test-financial"
-            
-            print(f"Testing domain-specific hyperparameter optimization")
-            print(f"   Domain: {domain_id}")
-            print(f"   (Domain-specific optimization tested in integration)")
-            
-            return True
-            
-        except ImportError:
-            print(f"⚠️  Domain-specific hyperparameter optimization test not available (module not found)")
+        response = httpx.get(
+            f"{training_url}/health",
+            timeout=5.0
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            auto_tuner_available = result.get("components", {}).get("auto_tuner_available", False)
+            if auto_tuner_available:
+                print(f"✅ Domain-specific hyperparameter optimization available")
+                print(f"   (Domain-specific optimization tested via training service)")
+                return True
+            else:
+                print(f"⚠️  Auto-tuner not available for domain optimization")
+                return False
+        else:
+            print(f"⚠️  Training service returned status {response.status_code}")
             return False
         
     except Exception as e:
@@ -188,18 +197,25 @@ def test_auto_pipeline_available() -> bool:
     """Test that auto-pipeline orchestrator is available (Go service)."""
     try:
         # Auto-pipeline is part of orchestration service
-        ORCHESTRATION_URL = os.getenv("ORCHESTRATION_SERVICE_URL", "http://localhost:8080")
+        ORCHESTRATION_URL = os.getenv("ORCHESTRATION_SERVICE_URL", "http://graph-server:8080")
         
-        if not check_service_health(f"{ORCHESTRATION_URL}/health", "Orchestration Service"):
-            print(f"⚠️  Orchestration service not available")
-            return False
+        # Try orchestration endpoint on graph-server
+        try:
+            response = httpx.get(f"{ORCHESTRATION_URL}/health", timeout=5.0)
+            if response.status_code == 200:
+                print(f"✅ Orchestration service available (auto-pipeline is part of it)")
+                print(f"   Service: graph-server")
+                return True
+        except (httpx.ConnectError, httpx.TimeoutException):
+            pass
         
-        print(f"✅ Orchestration service available (auto-pipeline is part of it)")
-        print(f"   (Auto-pipeline tested via orchestration service)")
-        return True
+        # Service not available - this is acceptable for now
+        print(f"⚠️  Orchestration service not available (graph-server not running)")
+        print(f"   This is expected if graph-server service is not deployed")
+        return False
         
     except Exception as e:
-        print(f"❌ Auto-pipeline test error: {e}")
+        print(f"⚠️  Auto-pipeline test: {e}")
         return False
 
 
@@ -227,18 +243,25 @@ def test_predictive_analytics_available() -> bool:
     """Test that predictive analytics is available (Go service)."""
     try:
         # Predictive analytics is part of analytics service
-        ANALYTICS_URL = os.getenv("ANALYTICS_SERVICE_URL", "http://localhost:8080")
+        ANALYTICS_URL = os.getenv("ANALYTICS_SERVICE_URL", "http://catalog:8084")
         
-        if not check_service_health(f"{ANALYTICS_URL}/health", "Analytics Service"):
-            print(f"⚠️  Analytics service not available")
-            return False
+        # Try analytics endpoint on catalog service
+        try:
+            response = httpx.get(f"{ANALYTICS_URL}/health", timeout=5.0)
+            if response.status_code == 200:
+                print(f"✅ Analytics service available (predictive analytics is part of it)")
+                print(f"   Service: catalog")
+                return True
+        except (httpx.ConnectError, httpx.TimeoutException):
+            pass
         
-        print(f"✅ Analytics service available (predictive analytics is part of it)")
-        print(f"   (Predictive analytics tested via analytics service)")
-        return True
+        # Service not available - this is acceptable for now
+        print(f"⚠️  Analytics service not available (catalog not running)")
+        print(f"   This is expected if catalog service is not deployed")
+        return False
         
     except Exception as e:
-        print(f"❌ Predictive analytics test error: {e}")
+        print(f"⚠️  Predictive analytics test: {e}")
         return False
 
 

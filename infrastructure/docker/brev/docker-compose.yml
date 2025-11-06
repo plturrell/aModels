@@ -271,7 +271,7 @@ services:
 
   graph:
     build:
-      context: ../..
+      context: ../../..
       dockerfile: services/graph/Dockerfile
     image: amodels/graph-server:latest
     container_name: graph-server
@@ -347,6 +347,69 @@ services:
         condition: service_started
     ports:
       - "8082:8080"
+
+  catalog:
+    build:
+      context: ../../..
+      dockerfile: services/catalog/Dockerfile
+    image: amodels/catalog:latest
+    container_name: catalog
+    restart: unless-stopped
+    environment:
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USERNAME=neo4j
+      - NEO4J_PASSWORD=amodels123
+      - REDIS_URL=redis://redis:6379/0
+      - POSTGRES_DSN=postgresql://postgres:postgres@postgres:5432/amodels?sslmode=disable
+    ports:
+      - "8084:8084"
+    depends_on:
+      - neo4j
+      - redis
+      - postgres
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  training-service:
+    build:
+      context: ../../..
+      dockerfile: services/training/Dockerfile
+    image: amodels/training-service:latest
+    container_name: training-service
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - HOST=0.0.0.0
+      - EXTRACT_SERVICE_URL=http://extract-service:8082
+      - LOCALAI_URL=http://localai-compat:8080
+      - POSTGRES_DSN=postgresql://postgres:postgres@postgres:5432/amodels?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - TRAINING_OUTPUT_DIR=/workspace/data/training
+      # Optional: Enable deep learning pattern learning
+      - USE_GNN_PATTERNS=${USE_GNN_PATTERNS:-false}
+      - USE_TRANSFORMER_SEQUENCES=${USE_TRANSFORMER_SEQUENCES:-false}
+      - USE_META_PATTERNS=${USE_META_PATTERNS:-false}
+      - USE_ACTIVE_LEARNING=${USE_ACTIVE_LEARNING:-false}
+    volumes:
+      - ../../data:/workspace/data:rw
+      - ../../logs:/workspace/logs:rw
+    ports:
+      - "8085:8080"
+    depends_on:
+      - postgres
+      - redis
+      - localai-compat
+      - extract
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 networks:
   default:

@@ -24,8 +24,9 @@ from test_helpers import (
 )
 
 # Test configuration
-LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localhost:8081")
-EXTRACT_URL = os.getenv("EXTRACT_SERVICE_URL", "http://localhost:19080")
+LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localai-compat:8080")
+EXTRACT_URL = os.getenv("EXTRACT_SERVICE_URL", "http://extract-service:8082")
+TRAINING_SERVICE_URL = os.getenv("TRAINING_SERVICE_URL", "http://localhost:8080")
 
 DEFAULT_TIMEOUT = 30
 HEALTH_TIMEOUT = 5
@@ -222,20 +223,32 @@ def test_domain_normalized_extraction() -> bool:
 def test_pattern_transfer_available() -> bool:
     """Test that pattern transfer learner is available."""
     try:
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "training"))
+        # Check via training service API
+        response = httpx.get(
+            f"{TRAINING_SERVICE_URL}/patterns/transfer/available",
+            timeout=5.0
+        )
         
-        try:
-            from pattern_transfer import PatternTransferLearner
-            
-            learner = PatternTransferLearner(localai_url=LOCALAI_URL)
-            
-            print(f"✅ Pattern transfer learner available")
-            print(f"   Domain-aware: {learner.localai_url is not None}")
-            return True
-            
-        except ImportError:
-            print(f"⚠️  Pattern transfer learner not available (module not found)")
-            return False
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("available", False):
+                print(f"✅ Pattern transfer learner available")
+                print(f"   Status: {result.get('status')}")
+                return True
+            else:
+                print(f"⚠️  Pattern transfer learner not available")
+                return False
+        else:
+            # Fallback: try direct import
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "training"))
+            try:
+                from pattern_transfer import PatternTransferLearner
+                learner = PatternTransferLearner(localai_url=LOCALAI_URL)
+                print(f"✅ Pattern transfer learner available (direct import)")
+                return True
+            except ImportError:
+                print(f"⚠️  Pattern transfer learner not available (module not found)")
+                return False
         
     except Exception as e:
         print(f"❌ Pattern transfer test error: {e}")
@@ -245,26 +258,29 @@ def test_pattern_transfer_available() -> bool:
 def test_domain_similarity_calculation() -> bool:
     """Test domain similarity calculation for pattern transfer."""
     try:
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "training"))
+        # Test via training service API
+        training_url = os.getenv("TRAINING_SERVICE_URL", "http://training-service:8080")
         
-        try:
-            from pattern_transfer import PatternTransferLearner
-            
-            learner = PatternTransferLearner(localai_url=LOCALAI_URL)
-            
-            # Test domain similarity
-            source_domain = "test-financial"
-            target_domain = "test-customer"
-            
-            print(f"Testing domain similarity calculation")
-            print(f"   Source: {source_domain}")
-            print(f"   Target: {target_domain}")
-            print(f"   (Domain similarity tested in integration)")
-            
+        response = httpx.post(
+            f"{training_url}/patterns/transfer/calculate-similarity",
+            json={
+                "source_domain": "test-financial",
+                "target_domain": "test-customer"
+            },
+            timeout=30.0
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            similarity = result.get("similarity", 0.0)
+            print(f"✅ Domain similarity calculation successful")
+            print(f"   Source: test-financial")
+            print(f"   Target: test-customer")
+            print(f"   Similarity: {similarity}")
             return True
-            
-        except ImportError:
-            print(f"⚠️  Domain similarity calculation test not available (module not found)")
+        else:
+            print(f"⚠️  Domain similarity returned status {response.status_code}")
+            print(f"   Response: {response.text[:200]}")
             return False
         
     except Exception as e:

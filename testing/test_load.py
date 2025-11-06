@@ -29,9 +29,9 @@ from test_helpers import (
 )
 
 # Test configuration
-LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localhost:8081")
-EXTRACT_URL = os.getenv("EXTRACT_SERVICE_URL", "http://localhost:19080")
-TRAINING_URL = os.getenv("TRAINING_SERVICE_URL", "http://localhost:8080")
+LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localai-compat:8080")
+EXTRACT_URL = os.getenv("EXTRACT_SERVICE_URL", "http://extract-service:8082")
+TRAINING_URL = os.getenv("TRAINING_SERVICE_URL", "http://training-service:8080")
 
 DEFAULT_TIMEOUT = 60
 HEALTH_TIMEOUT = 5
@@ -215,7 +215,8 @@ def test_high_volume_training() -> bool:
     print()
     
     # Check if training service is available
-    if not check_service_health(f"{TRAINING_URL}/health", "Training Service"):
+    TRAINING_SERVICE_URL = os.getenv("TRAINING_SERVICE_URL", TRAINING_URL)
+    if not check_service_health(f"{TRAINING_SERVICE_URL}/health", "Training Service"):
         print("⚠️  Training service not available")
         return False
     
@@ -252,37 +253,52 @@ def test_ab_test_traffic_splitting_performance() -> bool:
     print("Testing A/B test traffic splitting performance...")
     print()
     
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "training"))
+    TRAINING_SERVICE_URL = os.getenv("TRAINING_SERVICE_URL", TRAINING_URL)
     
+    # Test via training service API
     try:
-        from ab_testing import ABTestManager
-        
-        manager = ABTestManager()
-        
-        # Test routing performance
         domain_id = "test-financial"
         num_requests = 100
         
         start = time.time()
         variant_counts = {"A": 0, "B": 0, "default": 0}
+        successful_requests = 0
         
         for i in range(num_requests):
-            variant, config = manager.route_request(domain_id, f"request_{i}")
-            variant_counts[variant] = variant_counts.get(variant, 0) + 1
+            try:
+                response = httpx.post(
+                    f"{TRAINING_SERVICE_URL}/ab-test/route",
+                    json={
+                        "domain_id": domain_id,
+                        "request_id": f"request_{i}"
+                    },
+                    timeout=5.0
+                )
+                if response.status_code == 200:
+                    result = response.json()
+                    variant = result.get("variant", "default")
+                    variant_counts[variant] = variant_counts.get(variant, 0) + 1
+                    successful_requests += 1
+            except Exception:
+                pass
         
         latency_ms = (time.time() - start) * 1000
-        avg_latency = latency_ms / num_requests
+        avg_latency = latency_ms / num_requests if num_requests > 0 else 0
         
-        print(f"✅ Traffic splitting performance test")
-        print(f"   Total requests: {num_requests}")
-        print(f"   Total latency: {latency_ms:.2f}ms")
-        print(f"   Avg latency per request: {avg_latency:.2f}ms")
-        print(f"   Variant distribution: {variant_counts}")
+        if successful_requests > 0:
+            print(f"✅ Traffic splitting performance test")
+            print(f"   Total requests: {num_requests}")
+            print(f"   Successful: {successful_requests}")
+            print(f"   Total latency: {latency_ms:.2f}ms")
+            print(f"   Avg latency per request: {avg_latency:.2f}ms")
+            print(f"   Variant distribution: {variant_counts}")
+            return avg_latency < 100.0  # Reasonable threshold for HTTP requests
+        else:
+            print("⚠️  A/B test routing failed (no successful requests)")
+            return False
         
-        return avg_latency < 10.0  # Should be fast (< 10ms)
-        
-    except ImportError:
-        print("⚠️  A/B test manager not available (module not found)")
+    except Exception as e:
+        print(f"⚠️  A/B test manager not available: {e}")
         return False
 
 

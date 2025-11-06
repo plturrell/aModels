@@ -12,9 +12,13 @@ Domain-aware enhancements:
 import logging
 import json
 import os
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, TYPE_CHECKING
 import numpy as np
 import httpx
+
+# Conditional imports for type hints
+if TYPE_CHECKING:
+    from torch_geometric.data import Data, Batch
 
 try:
     import torch
@@ -32,6 +36,11 @@ except ImportError:
         HAS_TORCH = True
     except ImportError:
         HAS_TORCH = False
+        torch = None
+        nn = None
+    # Define stub types for type hints when PyG is not available
+    Data = Any
+    Batch = Any
 
 logger = logging.getLogger(__name__)
 
@@ -207,7 +216,7 @@ class GNNRelationshipPatternLearner:
         self,
         nodes: List[Dict[str, Any]],
         edges: List[Dict[str, Any]]
-    ) -> Optional[Data]:
+    ) -> Optional[Any]:
         """Convert knowledge graph nodes/edges to PyG Data format.
         
         Args:
@@ -592,7 +601,7 @@ class GNNRelationshipPatternLearner:
         nodes: List[Dict[str, Any]],
         edges: List[Dict[str, Any]],
         domain_config: Optional[Dict[str, Any]] = None
-    ) -> Optional[Data]:
+    ) -> Optional[Any]:
         """Convert graph to PyG format with domain context.
         
         Args:
@@ -840,7 +849,7 @@ class GNNRelationshipPatternLearner:
     
     def _predict_edge_types(
         self,
-        data: Data,
+        data: Any,
         embeddings: np.ndarray
     ) -> List[Dict[str, Any]]:
         """Predict edge types from learned embeddings.

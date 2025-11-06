@@ -51,7 +51,6 @@ class TrainingPipeline:
         self.output_dir = output_dir or os.getenv("TRAINING_OUTPUT_DIR", "./training_data")
         os.makedirs(self.output_dir, exist_ok=True)
         
-<<<<<<< HEAD
         # Phase 9.1: Initialize auto-tuner if enabled
         self.auto_tuner = None
         if os.getenv("ENABLE_AUTO_TUNING", "false").lower() == "true" and HAS_AUTO_TUNER and AutoTuner is not None:
@@ -65,7 +64,7 @@ class TrainingPipeline:
             except Exception as e:
                 logger.warning(f"Failed to initialize auto-tuner: {e}")
                 self.auto_tuner = None
-=======
+        
         # Initialize domain filter with differential privacy
         self.enable_domain_filtering = enable_domain_filtering
         if self.enable_domain_filtering:
@@ -106,7 +105,6 @@ class TrainingPipeline:
             redis_url=os.getenv("REDIS_URL"),
             cache_ttl=int(os.getenv("DOMAIN_CACHE_TTL", "3600"))
         )
->>>>>>> 6a21c0762c0be29af891c24b40696f1bfb66ea8f
     
     def run_full_pipeline(
         self,
@@ -364,7 +362,6 @@ class TrainingPipeline:
                 graph_data, glean_data, learned_patterns, temporal_patterns, semantic_embeddings
             )
             
-<<<<<<< HEAD
             # Phase 9.1: Assess training data quality
             if self.auto_tuner is not None:
                 try:
@@ -383,7 +380,7 @@ class TrainingPipeline:
                     logger.info(f"✅ Data quality assessment: score={quality_assessment.get('quality_score', 0.0):.2f}")
                 except Exception as e:
                     logger.warning(f"⚠️  Data quality assessment failed: {e}")
-=======
+            
             # Apply domain-specific filtering with differential privacy
             if self.domain_filter and self.enable_domain_filtering:
                 logger.info("Applying domain-specific filtering with differential privacy...")
@@ -416,7 +413,6 @@ class TrainingPipeline:
             else:
                 features["domain_filtered"] = False
                 features["privacy_applied"] = False
->>>>>>> 6a21c0762c0be29af891c24b40696f1bfb66ea8f
             
             results["steps"]["features"] = {
                 "status": "success",

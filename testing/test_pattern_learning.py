@@ -24,8 +24,9 @@ from test_helpers import (
 )
 
 # Test configuration
-LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localhost:8081")
-POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://user:pass@localhost:5432/amodels")
+LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localai-compat:8080")
+TRAINING_SERVICE_URL = os.getenv("TRAINING_SERVICE_URL", "http://training-service:8080")
+POSTGRES_DSN = os.getenv("POSTGRES_DSN", "postgresql://postgres:postgres@postgres:5432/amodels")
 
 DEFAULT_TIMEOUT = 30
 HEALTH_TIMEOUT = 5
@@ -93,24 +94,28 @@ class PatternLearningTestSuite:
 def test_gnn_pattern_learner_available() -> bool:
     """Test that GNN pattern learner is available."""
     try:
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "training"))
+        # Check via training service API
+        response = httpx.get(
+            f"{TRAINING_SERVICE_URL}/patterns/gnn/available",
+            timeout=5.0
+        )
         
-        try:
-            from pattern_learning_gnn import GNNRelationshipPatternLearner
-            
-            learner = GNNRelationshipPatternLearner(
-                localai_url=LOCALAI_URL
-            )
-            
-            print(f"✅ GNN pattern learner available")
-            print(f"   Domain-aware: {learner.localai_url is not None}")
-            print(f"   Domain models cache: {len(learner.domain_models)} models")
-            return True
-            
-        except ImportError:
-            print(f"⚠️  GNN pattern learner not available (module not found)")
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("available", False):
+                print(f"✅ GNN pattern learner available")
+                print(f"   Status: {result.get('status')}")
+                return True
+            else:
+                print(f"⚠️  GNN pattern learner not available")
+                return False
+        else:
+            print(f"⚠️  Training service returned status {response.status_code}")
             return False
         
+    except (httpx.ConnectError, httpx.TimeoutException) as e:
+        print(f"⚠️  Training service API unavailable: {e}")
+        return False
     except Exception as e:
         print(f"❌ GNN pattern learner test error: {e}")
         return False
@@ -119,46 +124,35 @@ def test_gnn_pattern_learner_available() -> bool:
 def test_domain_specific_gnn_model() -> bool:
     """Test domain-specific GNN model creation."""
     try:
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "training"))
+        # Test via training service API
+        test_nodes = [
+            {"id": "node_1", "type": "table", "properties": {"domain": "test-financial"}},
+            {"id": "node_2", "type": "column", "properties": {"domain": "test-financial"}}
+        ]
+        test_edges = [
+            {"source_id": "node_1", "target_id": "node_2", "type": "HAS_COLUMN", "properties": {}}
+        ]
         
-        try:
-            from pattern_learning_gnn import GNNRelationshipPatternLearner
-            
-            learner = GNNRelationshipPatternLearner(localai_url=LOCALAI_URL)
-            
-            # Test domain model creation
-            domain_id = "test-financial"
-            
-            # Load test knowledge graph
-            try:
-                kg_data = load_test_data("knowledge_graph.json")
-                nodes = kg_data.get("nodes", [])
-                edges = kg_data.get("edges", [])
-            except FileNotFoundError:
-                # Create minimal test data
-                nodes = [
-                    {"id": "node_1", "label": "transactions", "type": "table", "properties": {"domain": "test-financial"}},
-                    {"id": "node_2", "label": "amount", "type": "column", "properties": {"domain": "test-financial"}}
-                ]
-                edges = [
-                    {"source": "node_1", "target": "node_2", "type": "HAS_COLUMN", "properties": {"domain": "test-financial"}}
-                ]
-            
-            print(f"Testing domain-specific GNN model for domain: {domain_id}")
-            print(f"   Nodes: {len(nodes)}")
-            print(f"   Edges: {len(edges)}")
-            
-            # Test domain pattern learning
-            if hasattr(learner, 'learn_domain_patterns'):
-                print(f"✅ Domain-specific learning method available")
-                print(f"   (Full learning tested in integration)")
-                return True
-            else:
-                print(f"⚠️  Domain-specific learning method not found")
-                return False
-                
-        except ImportError:
-            print(f"⚠️  Domain-specific GNN model test not available (module not found)")
+        response = httpx.post(
+            f"{TRAINING_SERVICE_URL}/patterns/learn",
+            json={
+                "nodes": test_nodes,
+                "edges": test_edges,
+                "use_gnn": True
+            },
+            timeout=30.0
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            patterns = result.get("patterns", {})
+            print(f"✅ Domain-specific GNN model test successful")
+            print(f"   Patterns returned: {bool(patterns)}")
+            if patterns.get("node_embeddings"):
+                print(f"   Node embeddings: {len(patterns['node_embeddings'])}")
+            return True
+        else:
+            print(f"⚠️  GNN pattern learning returned status {response.status_code}")
             return False
         
     except Exception as e:
@@ -169,21 +163,23 @@ def test_domain_specific_gnn_model() -> bool:
 def test_meta_pattern_learner_available() -> bool:
     """Test that meta-pattern learner is available."""
     try:
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "training"))
+        # Check via training service API
+        response = httpx.get(
+            f"{TRAINING_SERVICE_URL}/patterns/meta/available",
+            timeout=5.0
+        )
         
-        try:
-            from meta_pattern_learner import MetaPatternLearner
-            
-            learner = MetaPatternLearner(localai_url=LOCALAI_URL)
-            
-            print(f"✅ Meta-pattern learner available")
-            print(f"   Domain-aware: {learner.localai_url is not None}")
-            print(f"   Layer patterns: {len(learner.layer_patterns)}")
-            print(f"   Team patterns: {len(learner.team_patterns)}")
-            return True
-            
-        except ImportError:
-            print(f"⚠️  Meta-pattern learner not available (module not found)")
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("available", False):
+                print(f"✅ Meta-pattern learner available")
+                print(f"   Status: {result.get('status')}")
+                return True
+            else:
+                print(f"⚠️  Meta-pattern learner not available")
+                return False
+        else:
+            print(f"⚠️  Training service returned status {response.status_code}")
             return False
         
     except Exception as e:
@@ -194,29 +190,32 @@ def test_meta_pattern_learner_available() -> bool:
 def test_layer_specific_meta_patterns() -> bool:
     """Test layer-specific meta-pattern learning."""
     try:
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "training"))
+        # Test via training service API with meta-patterns enabled
+        test_nodes = [
+            {"id": "node_1", "type": "table", "properties": {}},
+            {"id": "node_2", "type": "table", "properties": {}}
+        ]
+        test_edges = [
+            {"source_id": "node_1", "target_id": "node_2", "type": "DATA_FLOW", "properties": {}}
+        ]
         
-        try:
-            from meta_pattern_learner import MetaPatternLearner
-            
-            learner = MetaPatternLearner(localai_url=LOCALAI_URL)
-            
-            # Test layer-specific learning
-            sample_patterns = {
-                "column_patterns": {"types": ["bigint", "decimal", "string"]},
-                "relationship_patterns": {"labels": ["HAS_COLUMN", "RELATES_TO"]}
-            }
-            
-            domains = ["test-financial", "test-customer"]
-            
-            print(f"Testing layer-specific meta-patterns")
-            print(f"   Domains: {domains}")
-            print(f"   (Layer-specific learning tested in integration)")
-            
+        response = httpx.post(
+            f"{TRAINING_SERVICE_URL}/patterns/learn",
+            json={
+                "nodes": test_nodes,
+                "edges": test_edges,
+                "use_meta_patterns": True
+            },
+            timeout=30.0
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"✅ Layer-specific meta-patterns test successful")
+            print(f"   (Meta-pattern learning tested via API)")
             return True
-            
-        except ImportError:
-            print(f"⚠️  Layer-specific meta-patterns test not available (module not found)")
+        else:
+            print(f"⚠️  Meta-pattern learning returned status {response.status_code}")
             return False
         
     except Exception as e:
@@ -227,20 +226,23 @@ def test_layer_specific_meta_patterns() -> bool:
 def test_sequence_pattern_learner_available() -> bool:
     """Test that sequence pattern learner is available."""
     try:
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "training"))
+        # Check via training service API
+        response = httpx.get(
+            f"{TRAINING_SERVICE_URL}/patterns/sequence/available",
+            timeout=5.0
+        )
         
-        try:
-            from sequence_pattern_transformer import SequencePatternTransformer
-            
-            learner = SequencePatternTransformer(localai_url=LOCALAI_URL)
-            
-            print(f"✅ Sequence pattern learner available")
-            print(f"   Domain-aware: {learner.localai_url is not None}")
-            print(f"   Domain embeddings cache: {len(learner.domain_embeddings)} embeddings")
-            return True
-            
-        except ImportError:
-            print(f"⚠️  Sequence pattern learner not available (module not found)")
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("available", False):
+                print(f"✅ Sequence pattern learner available")
+                print(f"   Status: {result.get('status')}")
+                return True
+            else:
+                print(f"⚠️  Sequence pattern learner not available")
+                return False
+        else:
+            print(f"⚠️  Training service returned status {response.status_code}")
             return False
         
     except Exception as e:
@@ -251,29 +253,32 @@ def test_sequence_pattern_learner_available() -> bool:
 def test_domain_conditioned_sequences() -> bool:
     """Test domain-conditioned sequence learning."""
     try:
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "training"))
+        # Test via training service API with transformer enabled
+        test_nodes = [
+            {"id": "node_1", "type": "table", "properties": {"domain": "test-financial"}},
+            {"id": "node_2", "type": "table", "properties": {"domain": "test-financial"}}
+        ]
+        test_edges = [
+            {"source_id": "node_1", "target_id": "node_2", "type": "DATA_FLOW", "properties": {}}
+        ]
         
-        try:
-            from sequence_pattern_transformer import SequencePatternTransformer
-            
-            learner = SequencePatternTransformer(localai_url=LOCALAI_URL)
-            
-            # Test domain-conditioned learning
-            domain_id = "test-financial"
-            sequences = [
-                [{"type": "controlm_job", "name": "load_data"}, {"type": "sql", "query": "SELECT * FROM transactions"}],
-                [{"type": "controlm_job", "name": "process_payments"}, {"type": "sql", "query": "UPDATE accounts SET balance = ..."}]
-            ]
-            
-            print(f"Testing domain-conditioned sequences")
-            print(f"   Domain: {domain_id}")
-            print(f"   Sequences: {len(sequences)}")
-            print(f"   (Domain-conditioned learning tested in integration)")
-            
+        response = httpx.post(
+            f"{TRAINING_SERVICE_URL}/patterns/learn",
+            json={
+                "nodes": test_nodes,
+                "edges": test_edges,
+                "use_transformer": True
+            },
+            timeout=30.0
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"✅ Domain-conditioned sequences test successful")
+            print(f"   (Sequence learning tested via API)")
             return True
-            
-        except ImportError:
-            print(f"⚠️  Domain-conditioned sequences test not available (module not found)")
+        else:
+            print(f"⚠️  Sequence learning returned status {response.status_code}")
             return False
         
     except Exception as e:
@@ -284,19 +289,23 @@ def test_domain_conditioned_sequences() -> bool:
 def test_active_pattern_learner_available() -> bool:
     """Test that active pattern learner is available."""
     try:
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "training"))
+        # Check via training service API
+        response = httpx.get(
+            f"{TRAINING_SERVICE_URL}/patterns/active/available",
+            timeout=5.0
+        )
         
-        try:
-            from active_pattern_learner import ActivePatternLearner
-            
-            learner = ActivePatternLearner(localai_url=LOCALAI_URL)
-            
-            print(f"✅ Active pattern learner available")
-            print(f"   Domain-aware: {learner.localai_url is not None}")
-            return True
-            
-        except ImportError:
-            print(f"⚠️  Active pattern learner not available (module not found)")
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("available", False):
+                print(f"✅ Active pattern learner available")
+                print(f"   Status: {result.get('status')}")
+                return True
+            else:
+                print(f"⚠️  Active pattern learner not available")
+                return False
+        else:
+            print(f"⚠️  Training service returned status {response.status_code}")
             return False
         
     except Exception as e:
@@ -307,35 +316,32 @@ def test_active_pattern_learner_available() -> bool:
 def test_domain_filtered_active_learning() -> bool:
     """Test domain-filtered active learning."""
     try:
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "services", "training"))
+        # Test via training service API with active learning enabled
+        test_nodes = [
+            {"id": "node_1", "type": "table", "properties": {"domain": "test-financial"}},
+            {"id": "node_2", "type": "table", "properties": {"domain": "test-financial"}}
+        ]
+        test_edges = [
+            {"source_id": "node_1", "target_id": "node_2", "type": "DATA_FLOW", "properties": {}}
+        ]
         
-        try:
-            from active_pattern_learner import ActivePatternLearner
-            
-            learner = ActivePatternLearner(localai_url=LOCALAI_URL)
-            
-            # Test domain filtering
-            domain_id = "test-financial"
-            
-            # Load test knowledge graph
-            try:
-                kg_data = load_test_data("knowledge_graph.json")
-                nodes = kg_data.get("nodes", [])
-                edges = kg_data.get("edges", [])
-            except FileNotFoundError:
-                nodes = [{"id": "node_1", "label": "transactions", "type": "table"}]
-                edges = []
-            
-            print(f"Testing domain-filtered active learning")
-            print(f"   Domain: {domain_id}")
-            print(f"   Nodes: {len(nodes)}")
-            print(f"   Edges: {len(edges)}")
-            print(f"   (Domain filtering tested in integration)")
-            
+        response = httpx.post(
+            f"{TRAINING_SERVICE_URL}/patterns/learn",
+            json={
+                "nodes": test_nodes,
+                "edges": test_edges,
+                "use_active_learning": True
+            },
+            timeout=30.0
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            print(f"✅ Domain-filtered active learning test successful")
+            print(f"   (Active learning tested via API)")
             return True
-            
-        except ImportError:
-            print(f"⚠️  Domain-filtered active learning test not available (module not found)")
+        else:
+            print(f"⚠️  Active learning returned status {response.status_code}")
             return False
         
     except Exception as e:
@@ -355,6 +361,10 @@ def main():
     print("Waiting for services...")
     if not wait_for_service(f"{LOCALAI_URL}/health", "LocalAI"):
         print("⚠️  LocalAI not available, some tests will be skipped")
+    if TRAINING_SERVICE_URL and wait_for_service(f"{TRAINING_SERVICE_URL}/health", "Training Service"):
+        print(f"✅ Training Service available at {TRAINING_SERVICE_URL}")
+    else:
+        print(f"⚠️  Training Service not available at {TRAINING_SERVICE_URL}, some tests will use direct imports")
     print()
     
     suite = PatternLearningTestSuite()

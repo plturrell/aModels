@@ -52,6 +52,42 @@ class PatternTransferLearner:
             self.routing_optimizer = None
             logger.warning("RoutingOptimizer not available, using basic similarity")
     
+    def _load_domain_config(self, domain_id: str) -> Optional[Dict[str, Any]]:
+        """Load domain configuration from cache or LocalAI.
+        
+        Args:
+            domain_id: Domain identifier
+            
+        Returns:
+            Domain configuration dict or None if not found
+        """
+        # Check cache first
+        if domain_id in self.domain_configs:
+            return self.domain_configs[domain_id]
+        
+        # Try to load from LocalAI
+        try:
+            response = httpx.get(
+                f"{self.localai_url}/v1/domains",
+                timeout=5.0
+            )
+            if response.status_code == 200:
+                domains = response.json()
+                if isinstance(domains, list):
+                    for domain in domains:
+                        if domain.get("id") == domain_id or domain.get("name") == domain_id:
+                            self.domain_configs[domain_id] = domain
+                            return domain
+                elif isinstance(domains, dict):
+                    # Single domain response
+                    if domains.get("id") == domain_id or domains.get("name") == domain_id:
+                        self.domain_configs[domain_id] = domains
+                        return domains
+        except Exception as e:
+            logger.debug(f"Failed to load domain config for {domain_id}: {e}")
+        
+        return None
+    
     def transfer_patterns(
         self,
         source_domain: str,

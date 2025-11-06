@@ -12,7 +12,7 @@ Domain-aware enhancements:
 import logging
 import json
 import os
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, TYPE_CHECKING
 import numpy as np
 import httpx
 import subprocess
@@ -22,16 +22,21 @@ try:
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
-    from transformers import AutoModel, AutoConfig
-    HAS_TRANSFORMER = True
-except ImportError:
-    HAS_TRANSFORMER = False
+    HAS_TORCH = True
     try:
-        import torch
-        import torch.nn as nn
-        HAS_TORCH = True
+        from transformers import AutoModel, AutoConfig
+        HAS_TRANSFORMER = True
     except ImportError:
-        HAS_TORCH = False
+        HAS_TRANSFORMER = False
+except ImportError:
+    HAS_TORCH = False
+    HAS_TRANSFORMER = False
+    torch = None
+    # Create a stub Module class for type hints when torch is not available
+    class StubModule:
+        pass
+    nn = type('nn', (), {'Module': StubModule})()
+    F = None
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +216,7 @@ class SequencePatternTransformer:
         self,
         sequence: List[Dict[str, Any]],
         sequence_type: str = "process"
-    ) -> Optional[torch.Tensor]:
+    ) -> Optional[Any]:
         """Convert a sequence to tensor format.
         
         Args:
@@ -681,29 +686,40 @@ class SequencePatternTransformer:
         return predictions
 
 
-class PositionalEncoding(nn.Module):
-    """Positional encoding for transformer."""
-    
-    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
-        super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
+if HAS_TORCH:
+    class PositionalEncoding(nn.Module):
+        """Positional encoding for transformer."""
         
-        position = torch.arange(max_len).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model))
-        pe = torch.zeros(1, max_len, d_model)
-        pe[0, :, 0::2] = torch.sin(position * div_term)
-        pe[0, :, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply positional encoding.
+        def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+            super().__init__()
+            self.dropout = nn.Dropout(p=dropout)
+            
+            position = torch.arange(max_len).unsqueeze(1)
+            div_term = torch.exp(torch.arange(0, d_model, 2) * (-np.log(10000.0) / d_model))
+            pe = torch.zeros(1, max_len, d_model)
+            pe[0, :, 0::2] = torch.sin(position * div_term)
+            pe[0, :, 1::2] = torch.cos(position * div_term)
+            self.register_buffer('pe', pe)
         
-        Args:
-            x: Input tensor of shape (batch, seq_len, d_model)
+        def forward(self, x: Any) -> Any:
+            """Apply positional encoding.
+            
+            Args:
+                x: Input tensor of shape (batch, seq_len, d_model)
+            
+            Returns:
+                Tensor with positional encoding added
+            """
+            x = x + self.pe[:, :x.size(1), :]
+            return self.dropout(x)
+else:
+    # Stub class when torch is not available
+    class PositionalEncoding:
+        """Stub for positional encoding when PyTorch is not available."""
         
-        Returns:
-            Tensor with positional encoding added
-        """
-        x = x + self.pe[:, :x.size(1), :]
-        return self.dropout(x)
+        def __init__(self, *args, **kwargs):
+            raise ImportError("PyTorch is required for PositionalEncoding")
+        
+        def forward(self, *args, **kwargs):
+            raise ImportError("PyTorch is required for PositionalEncoding")
 

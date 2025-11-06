@@ -28,8 +28,8 @@ from test_helpers import (
 )
 
 # Test configuration
-LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localhost:8081")
-EXTRACT_URL = os.getenv("EXTRACT_SERVICE_URL", "http://localhost:19080")
+LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localai-compat:8080")
+EXTRACT_URL = os.getenv("EXTRACT_SERVICE_URL", "http://extract-service:8082")
 
 DEFAULT_TIMEOUT = 60
 HEALTH_TIMEOUT = 5

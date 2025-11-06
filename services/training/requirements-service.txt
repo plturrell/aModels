@@ -1,0 +1,18 @@
+# Training Service HTTP Server Dependencies
+# This is for the FastAPI service wrapper
+# Training modules themselves may have additional dependencies
+
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+httpx>=0.25.0
+psycopg2-binary>=2.9.0
+redis>=5.0.0
+numpy>=1.24.0
+
+# Optional dependencies for deep learning pattern learning
+# GNN/Transformer pattern learning dependencies
+torch>=2.0.0
+torch-geometric>=2.3.0
+transformers>=4.30.0
+
