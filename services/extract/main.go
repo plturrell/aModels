@@ -25,7 +25,6 @@ import (
 	_ "github.com/SAP/go-hdb/driver"
 	_ "github.com/lib/pq"
 	"github.com/lib/pq"
-	"database/sql"
 	extractpb "github.com/plturrell/aModels/services/extract/gen/extractpb"
 
 	"github.com/plturrell/aModels/services/extract/api"
