@@ -254,6 +254,12 @@ func main() {
 	// Register default token for testing (in production, load from config)
 	authMiddleware.RegisterToken("test-token", "test-user")
 
+	// Initialize production readiness middleware
+	errorHandler := api.NewErrorHandler(legacyLogger)
+	rateLimiter := api.DefaultRateLimiter()
+	monitoringMiddleware := api.NewMonitoringMiddleware(legacyLogger)
+	structLogger.Info("Production readiness middleware initialized", nil)
+
 	// Initialize health checkers
 	healthCheckers := []api.HealthChecker{
 		api.NewBasicHealthChecker("neo4j", func(ctx context.Context) api.HealthStatus {
@@ -375,8 +381,14 @@ func main() {
 		structLogger.Info("Authentication enabled", nil)
 	}
 
-	// Apply metrics middleware to all routes
-	handler := api.MetricsMiddleware(mux)
+	// Apply production readiness middleware (order matters: recovery -> rate limit -> monitoring -> metrics)
+	handler := errorHandler.RecoveryMiddleware(
+		api.RateLimitMiddleware(rateLimiter, 100.0/60.0, 10)( // 100 req/min per IP, burst of 10
+			monitoringMiddleware.Middleware(
+				api.MetricsMiddleware(mux),
+			),
+		),
+	)
 
 	structLogger.Info("Catalog service starting", map[string]interface{}{
 		"port":    port,
