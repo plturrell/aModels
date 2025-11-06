@@ -10,6 +10,7 @@ import (
 	"github.com/plturrell/aModels/services/catalog/ai"
 	"github.com/plturrell/aModels/services/catalog/analytics"
 	"github.com/plturrell/aModels/services/catalog/api"
+	"github.com/plturrell/aModels/services/catalog/autonomous"
 	"github.com/plturrell/aModels/services/catalog/cache"
 	"github.com/plturrell/aModels/services/catalog/iso11179"
 	"github.com/plturrell/aModels/services/catalog/migrations"
@@ -173,6 +174,9 @@ func main() {
 		structLogger.Info("Research report store initialized", nil)
 		reportStore.StartRetentionJob(ctx, 24*time.Hour)
 	}
+
+	// Initialize Deep Research client for autonomous intelligence
+	deepResearchClient := research.NewDeepResearchClient(deepResearchURL, legacyLogger)
 
 	// Initialize unified workflow integration
 	unifiedWorkflow := workflows.NewUnifiedWorkflowIntegration(
@@ -347,13 +351,34 @@ func main() {
 	mux.HandleFunc("/catalog/ai/recommendations", aiHandlers.HandleGetRecommendations)
 	mux.HandleFunc("/catalog/ai/usage", aiHandlers.HandleRecordUsage)
 
-	// Discoverability endpoints
-	if discoverabilityHandler != nil {
-		mux.HandleFunc("/api/discover/search", discoverabilityHandler.HandleSearch)
-		mux.HandleFunc("/api/discover/marketplace", discoverabilityHandler.HandleMarketplace)
-		mux.HandleFunc("/api/discover/tags", discoverabilityHandler.HandleCreateTag)
-		mux.HandleFunc("/api/discover/access-request", discoverabilityHandler.HandleRequestAccess)
-	}
+		// Discoverability endpoints
+		if discoverabilityHandler != nil {
+			mux.HandleFunc("/api/discover/search", discoverabilityHandler.HandleSearch)
+			mux.HandleFunc("/api/discover/marketplace", discoverabilityHandler.HandleMarketplace)
+			mux.HandleFunc("/api/discover/tags", discoverabilityHandler.HandleCreateTag)
+			mux.HandleFunc("/api/discover/access-request", discoverabilityHandler.HandleRequestAccess)
+		}
+
+		// Autonomous Intelligence Layer endpoints
+		deepAgentsURL := os.Getenv("DEEPAGENTS_URL")
+		if deepAgentsURL == "" {
+			deepAgentsURL = "http://deepagents-service:9004"
+		}
+		unifiedWorkflowURL := os.Getenv("GRAPH_SERVICE_URL")
+		if unifiedWorkflowURL == "" {
+			unifiedWorkflowURL = "http://graph-service:8081"
+		}
+		autonomousHandler := autonomous.NewAutonomousHandler(
+			deepResearchClient,
+			deepAgentsURL,
+			unifiedWorkflowURL,
+			legacyLogger,
+		)
+		mux.HandleFunc("/api/autonomous/execute", autonomousHandler.HandleExecuteTask)
+		mux.HandleFunc("/api/autonomous/metrics", autonomousHandler.HandleGetMetrics)
+		mux.HandleFunc("/api/autonomous/agents", autonomousHandler.HandleGetAgents)
+		mux.HandleFunc("/api/autonomous/knowledge", autonomousHandler.HandleGetKnowledgeBase)
+		structLogger.Info("Autonomous Intelligence Layer endpoints registered", nil)
 
 	// Advanced features endpoints (Phase 3)
 	if advancedHandlers != nil {
