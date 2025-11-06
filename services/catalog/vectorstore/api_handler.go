@@ -30,66 +30,10 @@ func NewHANAVectorStoreHandler(
 	}
 }
 
-// HandleStoreInformation handles POST /vectorstore/store
+// HandleStoreInformation is disabled - HANA Cloud is read-only for security
+// This endpoint is intentionally disabled to prevent storing confidential information
 func (h *HANAVectorStoreHandler) HandleStoreInformation(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	ctx := r.Context()
-
-	var req struct {
-		Type        string                 `json:"type"`
-		System      string                 `json:"system"`
-		Category    string                 `json:"category"`
-		Title       string                 `json:"title"`
-		Content     string                 `json:"content"`
-		Metadata    map[string]interface{} `json:"metadata"`
-		Tags        []string               `json:"tags"`
-		IsPublic    bool                   `json:"is_public"`
-		GenerateEmbedding bool             `json:"generate_embedding"` // Auto-generate embedding
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to decode request: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	// Generate embedding if requested
-	var vector []float32
-	var err error
-	if req.GenerateEmbedding && h.embeddingService != nil {
-		vector, err = h.embeddingService.GenerateEmbedding(ctx, req.Content)
-		if err != nil {
-			h.logger.Printf("Warning: Failed to generate embedding: %v", err)
-		}
-	}
-
-	info := &PublicInformation{
-		Type:      req.Type,
-		System:    req.System,
-		Category:  req.Category,
-		Title:     req.Title,
-		Content:   req.Content,
-		Vector:    vector,
-		Metadata:  req.Metadata,
-		Tags:      req.Tags,
-		IsPublic:  req.IsPublic,
-	}
-
-	if err := h.store.StorePublicInformation(ctx, info); err != nil {
-		h.logger.Printf("Failed to store information: %v", err)
-		http.Error(w, fmt.Sprintf("Failed to store information: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"success": true,
-		"id":       info.ID,
-		"message":  "Information stored successfully",
-	})
+	http.Error(w, "Write operations to HANA Cloud are disabled for security. This service is read-only to protect confidential information.", http.StatusForbidden)
 }
 
 // HandleSearchInformation handles POST /vectorstore/search

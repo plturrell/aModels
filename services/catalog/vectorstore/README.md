@@ -6,13 +6,12 @@ This package provides integration with SAP HANA Cloud vector store for storing a
 
 ## Features
 
-- ✅ **Vector Storage**: Store embeddings in HANA Cloud REAL_VECTOR format
-- ✅ **Semantic Search**: Cosine similarity search across stored vectors
-- ✅ **Public Information Management**: Store and search public knowledge
-- ✅ **Multi-Type Support**: Break patterns, regulatory rules, best practices, knowledge base
+- ✅ **Semantic Search**: Cosine similarity search across stored vectors (READ-ONLY)
+- ✅ **Public Information Access**: Read-only access to public knowledge in HANA Cloud
+- ✅ **Multi-Type Support**: Search break patterns, regulatory rules, best practices, knowledge base
 - ✅ **System-Agnostic**: Works with any system (Murex, SAP, BCRS, RCO, AxiomSL, or "general")
 - ✅ **Filtering**: Filter by type, system, category, tags, public status
-- ✅ **Vector Indexing**: Optional vector indexing for performance
+- 🔒 **Security**: Write operations disabled to protect confidential information
 
 ## Usage
 
@@ -43,28 +42,9 @@ defer store.Close()
 
 ### 2. Store Public Information
 
-```go
-// Store break pattern
-info := &vectorstore.PublicInformation{
-    ID:       "pattern-123",
-    Type:     "break_pattern",
-    System:   "sap_fioneer", // or "murex", "bcrs", "general", etc.
-    Category: "finance",
-    Title:    "Reconciliation Break Pattern",
-    Content:  "This pattern occurs when...",
-    Vector:   embeddingVector, // []float32 of dimension 1536
-    Metadata: map[string]interface{}{
-        "frequency": 10,
-        "resolution": "Check journal entries",
-    },
-    Tags:      []string{"reconciliation", "finance", "critical"},
-    IsPublic:  true,
-    CreatedAt: time.Now(),
-    UpdatedAt: time.Now(),
-}
+**⚠️ DISABLED FOR SECURITY**: Write operations are disabled to protect confidential information. This service is read-only.
 
-err := store.StorePublicInformation(ctx, info)
-```
+If you need to store public information in HANA Cloud, you must do so through a separate, secure process that ensures data is properly anonymized and approved before storage.
 
 ### 3. Semantic Search
 
@@ -86,93 +66,66 @@ results, err := store.SearchPublicInformation(ctx, queryVector, options)
 
 ### 4. Store Break Patterns
 
-```go
-breakPatternStore := vectorstore.NewHANABreakPatternStore(store)
+**⚠️ DISABLED FOR SECURITY**: Automatic storage of break patterns is disabled to protect confidential information.
 
-pattern := &vectorstore.BreakPattern{
-    Description: "Missing journal entries in reconciliation",
-    Frequency:   10,
-    Resolution:  "Verify source system data",
-    Prevention:  "Add data validation checks",
-    Tags:        []string{"missing_entry", "reconciliation"},
-}
-
-err := breakPatternStore.StoreBreakPattern(
-    ctx,
-    breakdetection.SystemSAPFioneer,
-    breakdetection.DetectionTypeFinance,
-    breakdetection.BreakTypeMissingEntry,
-    pattern,
-    embeddingVector,
-)
-```
+Break patterns are not automatically stored in HANA Cloud. If you need to share patterns publicly, they must be manually reviewed, anonymized, and approved before storage through a separate secure process.
 
 ### 5. Store Regulatory Rules
 
-```go
-regulatoryStore := vectorstore.NewHANARegulatoryRuleStore(store)
+**⚠️ DISABLED FOR SECURITY**: Storage operations are disabled to protect confidential information.
 
-rule := &vectorstore.RegulatoryRule{
-    Regulation:    "Basel III",
-    Title:         "Capital Ratio Requirements",
-    Description:   "Banks must maintain minimum capital ratios...",
-    Requirement:   "Tier 1 capital ratio >= 6%",
-    Compliance:    "Regular monitoring and reporting",
-    EffectiveDate: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-    Tags:          []string{"basel", "capital", "regulatory"},
-}
-
-err := regulatoryStore.StoreRegulatoryRule(ctx, rule, embeddingVector)
-```
+Regulatory rules in HANA Cloud are managed separately and are read-only from this service.
 
 ### 6. Store Best Practices
 
-```go
-practiceStore := vectorstore.NewHANABestPracticeStore(store)
+**⚠️ DISABLED FOR SECURITY**: Storage operations are disabled to protect confidential information.
 
-practice := &vectorstore.BestPractice{
-    System:      "general", // or specific system
-    Category:    "break_detection",
-    Title:       "Automated Baseline Comparison",
-    Description: "Use automated baseline comparison to detect breaks...",
-    Application: "Implement baseline snapshots before migrations",
-    Benefits:    []string{"Reduces manual work", "Faster detection"},
-    Tags:        []string{"baseline", "automation", "best_practice"},
-}
-
-err := practiceStore.StoreBestPractice(ctx, practice, embeddingVector)
-```
+Best practices in HANA Cloud are managed separately and are read-only from this service.
 
 ## Integration with Break Detection
 
-The vector store can be integrated with the break detection system to:
+The vector store is integrated with the break detection system for **READ-ONLY** operations:
 
-1. **Store Break Patterns**: Automatically store anonymized break patterns for future reference
-2. **Search Similar Breaks**: Find similar historical breaks across systems
-3. **Regulatory Compliance**: Store and search regulatory rules for compliance checks
-4. **Best Practices**: Share best practices across systems
+1. **❌ Store Break Patterns**: DISABLED - Automatic storage disabled to protect confidential information
+2. **✅ Search Similar Breaks**: Find similar historical breaks across systems (read-only)
+3. **✅ Regulatory Compliance**: Search regulatory rules for compliance checks (read-only)
+4. **✅ Best Practices**: Search best practices across systems (read-only)
 
-### Example Integration
+**Security Note**: All write operations are disabled. This service can only read from HANA Cloud, not write to it.
+
+### Example Integration (Read-Only)
 
 ```go
-// In break detection service
+// In break detection service - SEARCH ONLY
 func (s *BreakDetectionService) DetectBreaks(ctx context.Context, req *DetectionRequest) (*DetectionResult, error) {
     // ... perform break detection ...
     
-    // Store break patterns in HANA Cloud (if enabled)
+    // Search for similar breaks in HANA Cloud (read-only)
     if s.hanaVectorStore != nil && s.embeddingService != nil {
         for _, breakRecord := range result.Breaks {
-            // Generate embedding
-            embedding, err := s.embeddingService.GenerateEmbedding(ctx, buildBreakContent(breakRecord))
+            // Generate embedding for search
+            content := vectorstore.BuildBreakContent(breakRecord)
+            embedding, err := s.embeddingService.GenerateEmbedding(ctx, content)
             if err == nil {
-                // Store as public pattern (anonymized)
-                vectorstore.StoreBreakForPublicKnowledge(ctx, s.hanaVectorStore, breakRecord, embedding, s.logger)
+                // Search for similar historical breaks
+                similar, err := s.hanaVectorStore.SearchPublicInformation(ctx, embedding, &vectorstore.SearchOptions{
+                    Type: "break_pattern",
+                    System: "general",
+                    Limit: 5,
+                    Threshold: 0.7,
+                })
+                if err == nil && len(similar) > 0 {
+                    // Use similar breaks for recommendations
+                    breakRecord.SimilarBreaks = convertToSimilarBreaks(similar)
+                }
             }
         }
     }
     
     return result, nil
 }
+
+// Note: StoreBreakForPublicKnowledge is DISABLED - no automatic storage
 ```
 
 ## Information Types

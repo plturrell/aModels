@@ -226,23 +226,13 @@ if hanaVectorStore != nil {
 
 ## API Endpoints
 
-### Store Information
+### ⚠️ Store Information (DISABLED FOR SECURITY)
 
-```bash
-POST /vectorstore/store
-Content-Type: application/json
+**POST /vectorstore/store** - **DISABLED**
 
-{
-  "type": "break_pattern",
-  "system": "sap_fioneer",
-  "category": "finance",
-  "title": "Reconciliation Break",
-  "content": "Break description...",
-  "generate_embedding": true,
-  "tags": ["reconciliation", "finance"],
-  "is_public": true
-}
-```
+Write operations are disabled to protect confidential information. This service is read-only.
+
+If you need to store public information in HANA Cloud, you must do so through a separate, secure process that ensures data is properly anonymized and approved before storage.
 
 ### Search Information
 
@@ -351,10 +341,12 @@ options := &SearchOptions{
 
 ## Security Considerations
 
-- **Public vs Private**: Use `IsPublic` flag to control visibility
-- **System Filtering**: Filter by system to restrict access
-- **Anonymization**: Break patterns should be anonymized before storage
-- **Access Control**: Implement additional access control as needed
+- **🔒 Read-Only Access**: This service is **READ-ONLY** to protect confidential information
+- **🔒 Write Operations Disabled**: POST /vectorstore/store is disabled
+- **🔒 No Automatic Storage**: Break patterns are NOT automatically stored
+- **✅ Search Only**: Only search and list operations are available
+- **✅ Public Information Only**: Can only access public information already in HANA Cloud
+- **System Filtering**: Filter by system to restrict access to specific systems
 
 ## Performance
 
