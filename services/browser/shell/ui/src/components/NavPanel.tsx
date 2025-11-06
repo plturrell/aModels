@@ -16,6 +16,11 @@ const NAV_ITEMS: Array<{ id: ShellModuleId; label: string; description: string }
     description: "Curated library with relationships"
   },
   {
+    id: "flows",
+    label: "Flows",
+    description: "AgentFlow / LangFlow orchestration"
+  },
+  {
     id: "telemetry",
     label: "Telemetry",
     description: "Latency and usage instrumentation"
@@ -45,7 +50,7 @@ export function NavPanel() {
         <span className={styles.glow} aria-hidden="true" />
         <div>
           <strong>aModels Shell</strong>
-          <p>Chromium host for SGMI, documents, and live telemetry</p>
+          <p>Chromium host for documents, flows, and telemetry</p>
         </div>
       </header>
 

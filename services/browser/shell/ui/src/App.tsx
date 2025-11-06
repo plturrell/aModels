@@ -6,6 +6,7 @@ import { useShellStore, type ShellModuleId } from "./state/useShellStore";
 import { HomeModule } from "./modules/Home/HomeModule";
 import { LocalAIModule } from "./modules/LocalAI/LocalAIModule";
 import { DocumentsModule } from "./modules/Documents/DocumentsModule";
+import { FlowsModule } from "./modules/Flows/FlowsModule";
 import { TelemetryModule } from "./modules/Telemetry/TelemetryModule";
 
 import styles from "./App.module.css";
@@ -16,6 +17,8 @@ const renderModule = (moduleId: ShellModuleId) => {
       return <LocalAIModule />;
     case "dms":
       return <DocumentsModule />;
+    case "flows":
+      return <FlowsModule />;
     case "telemetry":
       return <TelemetryModule />;
     case "home":

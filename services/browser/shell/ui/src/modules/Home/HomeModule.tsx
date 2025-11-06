@@ -14,6 +14,11 @@ const quickLinks = [
     targetModule: "dms"
   },
   {
+    label: "Flow orchestrator",
+    description: "Sync and run AgentFlow / LangFlow pipelines",
+    targetModule: "flows"
+  },
+  {
     label: "Telemetry dashboard",
     description: "Track response latency and token usage",
     targetModule: "telemetry"
