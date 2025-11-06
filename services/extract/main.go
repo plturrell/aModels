@@ -23,12 +23,15 @@ import (
 
 	_ "github.com/Chahine-tech/sql-parser-go/pkg/parser"
 	_ "github.com/SAP/go-hdb/driver"
-	"github.com/lib/pq"
+	_ "github.com/lib/pq"
+	"database/sql"
 	extractpb "github.com/plturrell/aModels/services/extract/gen/extractpb"
 
+	"github.com/plturrell/aModels/services/extract/api"
 	"github.com/plturrell/aModels/services/extract/internal/config"
 	handlers "github.com/plturrell/aModels/services/extract/internal/handlers"
 	"github.com/plturrell/aModels/services/extract/internal/processing"
+	"github.com/plturrell/aModels/services/extract/regulatory"
 )
 
 const (
@@ -415,6 +418,27 @@ func main() {
 	mux.HandleFunc("/catalog/information-systems", server.handleGetInformationSystems)
 	mux.HandleFunc("/catalog/information-systems/add", server.handleAddInformationSystem)
 	mux.HandleFunc("/ui", server.handleWebUI)
+
+	// Initialize regulatory spec system if database is available
+	var regulatoryHandler *api.RegulatoryHandler
+	if auditDBURL := os.Getenv("EXTRACT_AUDIT_DATABASE_URL"); auditDBURL != "" {
+		if db, err := sql.Open("postgres", auditDBURL); err == nil {
+			regSystem := regulatory.NewRegulatorySpecSystem(server.langextractURL, nil, db, logger)
+			regulatoryHandler = api.NewRegulatoryHandler(regSystem, logger)
+			logger.Printf("Regulatory spec system initialized")
+		} else {
+			logger.Printf("Failed to initialize regulatory spec system: %v", err)
+		}
+	}
+
+	// Regulatory spec endpoints
+	if regulatoryHandler != nil {
+		mux.HandleFunc("/api/regulatory/extract/mas610", regulatoryHandler.HandleExtractMAS610)
+		mux.HandleFunc("/api/regulatory/extract/bcbs239", regulatoryHandler.HandleExtractBCBS239)
+		mux.HandleFunc("/api/regulatory/validate", regulatoryHandler.HandleValidateSpec)
+		mux.HandleFunc("/api/regulatory/schemas", regulatoryHandler.HandleListSchemas)
+		logger.Printf("Regulatory spec endpoints registered")
+	}
 
 	// Initialize DeepAgents client
 	server.deepAgentsClient = NewDeepAgentsClient(logger)

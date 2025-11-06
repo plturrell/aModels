@@ -30,4 +30,35 @@ Recommended: store the gateway base URL in extension storage (options page) or a
 - Implement UI tabs (Extract, Graph, Flow, Data, Discover, Training, LocalAI, AgentFlow) that call the gateway.
 - Ensure CORS is enabled on the gateway for extension origins.
 
+### Shell UI (Chromium host)
+
+`services/browser/shell/ui` contains the Perplexity-style host that now ships with live LocalAI chat, SGMI data exploration, and telemetry dashboards.
+
+```bash
+# install dependencies once
+cd services/browser/shell/ui
+npm install
+
+# iterate locally
+npm run dev
+
+# or produce an embedded bundle for the Go server
+npm run build
+
+# regenerate dist assets and run the embedded server
+cd ../cmd/server
+go generate .
+go run .
+```
+
+The embedded server automatically discovers gateway endpoints and falls back to repository artefacts when an API is unavailable.
+
+Environment overrides:
+
+- `SHELL_GATEWAY_URL` – base URL for the gateway (`GATEWAY_URL` / `http://localhost:8000` by default).
+- `SHELL_LOCALAI_URL` – point to a LocalAI/OpenAI-compatible base (defaults to `LOCALAI_URL`).
+- `SHELL_SGMI_JSON` – alternate path to a `json_with_changes.json` payload.
+- `SHELL_MODELS_DIR` – override the repository `models/` folder root.
+- `SHELL_SGMI_ENDPOINT` – overrides the inferred `SHELL_GATEWAY_URL/shell/sgmi/raw` endpoint (falls back to file on disk if unset/unavailable).
+- `SHELL_TRAINING_DATA_ENDPOINT` – overrides the inferred `SHELL_GATEWAY_URL/shell/training/dataset` endpoint (falls back to derived summaries on failure).
 

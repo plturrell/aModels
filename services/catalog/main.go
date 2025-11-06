@@ -220,11 +220,25 @@ func main() {
 	analyticsDashboard := analytics.NewAnalyticsDashboard(registry, recommender, legacyLogger)
 	structLogger.Info("Analytics dashboard initialized", nil)
 
+	// Initialize discoverability system if database is available
+	var discoverSystem *discoverability.DiscoverabilitySystem
+	if catalogDB != nil {
+		discoverSystem = discoverability.NewDiscoverabilitySystem(catalogDB, legacyLogger)
+		structLogger.Info("Discoverability system initialized", nil)
+	}
+
 	// Initialize API handlers
 	catalogHandlers := api.NewCatalogHandlers(registry, legacyLogger)
 	sparqlHandler := api.NewSPARQLHandler(sparqlEndpoint, legacyLogger)
 	dataProductHandler := api.NewDataProductHandler(unifiedWorkflow, legacyLogger)
 	aiHandlers := api.NewAIHandlers(metadataDiscoverer, qualityPredictor, recommender, legacyLogger)
+	
+	// Initialize discoverability handler if system is available
+	var discoverabilityHandler *api.DiscoverabilityHandler
+	if discoverSystem != nil {
+		discoverabilityHandler = api.NewDiscoverabilityHandler(discoverSystem, legacyLogger)
+		structLogger.Info("Discoverability handler initialized", nil)
+	}
 
 	// Initialize advanced handlers (Phase 3)
 	var advancedHandlers *api.AdvancedHandlers
@@ -326,6 +340,14 @@ func main() {
 	mux.HandleFunc("/catalog/ai/predict-quality", aiHandlers.HandlePredictQuality)
 	mux.HandleFunc("/catalog/ai/recommendations", aiHandlers.HandleGetRecommendations)
 	mux.HandleFunc("/catalog/ai/usage", aiHandlers.HandleRecordUsage)
+
+	// Discoverability endpoints
+	if discoverabilityHandler != nil {
+		mux.HandleFunc("/api/discover/search", discoverabilityHandler.HandleSearch)
+		mux.HandleFunc("/api/discover/marketplace", discoverabilityHandler.HandleMarketplace)
+		mux.HandleFunc("/api/discover/tags", discoverabilityHandler.HandleCreateTag)
+		mux.HandleFunc("/api/discover/access-request", discoverabilityHandler.HandleRequestAccess)
+	}
 
 	// Advanced features endpoints (Phase 3)
 	if advancedHandlers != nil {

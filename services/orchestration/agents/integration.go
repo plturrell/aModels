@@ -10,18 +10,28 @@ import (
 
 // AgentSystem integrates all agents into a coordinated system.
 type AgentSystem struct {
-	coordinator      interface{} // *orchestration.AgentCoordinator - using interface to avoid circular dependency
+	coordinator      AgentCoordinatorInterface
 	factory          *AgentFactory
 	ingestionAgents  map[string]*DataIngestionAgent
 	mappingAgent     *MappingRuleAgent
-	anomalyAgent    *AnomalyDetectionAgent
+	anomalyAgent     *AnomalyDetectionAgent
 	testAgent        *TestGenerationAgent
 	logger           *log.Logger
 }
 
+// AgentCoordinatorInterface defines the interface for agent coordination.
+type AgentCoordinatorInterface interface {
+	RegisterAgent(agentID, agentType string) interface{}
+	StartAgent(ctx context.Context, agentID string, task map[string]any) error
+	SendMessage(fromAgentID, toAgentID, messageType string, payload map[string]any) error
+	GetAgentStatus(agentID string) (interface{}, error)
+	GetSharedState(key string) (any, bool)
+	SetSharedState(key string, value any)
+}
+
 // NewAgentSystem creates a new agent system with all agents.
 func NewAgentSystem(
-	coordinator interface{}, // *orchestration.AgentCoordinator
+	coordinator AgentCoordinatorInterface,
 	graphClient GraphClient,
 	db *sql.DB,
 	logger *log.Logger,
@@ -44,10 +54,13 @@ func NewAgentSystem(
 		logger:          logger,
 	}
 
-	// Register agents with coordinator (would call coordinator methods in production)
-	// coordinator.RegisterAgent("mapping-rule-agent", "mapping_rule")
-	// coordinator.RegisterAgent("anomaly-detection-agent", "anomaly_detection")
-	// coordinator.RegisterAgent("test-generation-agent", "test_generation")
+	// Register agents with coordinator
+	if coordinator != nil {
+		coordinator.RegisterAgent("mapping-rule-agent", "mapping_rule")
+		coordinator.RegisterAgent("anomaly-detection-agent", "anomaly_detection")
+		coordinator.RegisterAgent("test-generation-agent", "test_generation")
+		logger.Printf("Registered agents with coordinator")
+	}
 
 	return system
 }
@@ -60,7 +73,11 @@ func (as *AgentSystem) RegisterIngestionAgent(sourceType string, config map[stri
 	}
 
 	as.ingestionAgents[sourceType] = agent
-	// as.coordinator.RegisterAgent(agent.ID, "data_ingestion") // Would register in production
+	
+	// Register with coordinator if available
+	if as.coordinator != nil {
+		as.coordinator.RegisterAgent(agent.ID, "data_ingestion")
+	}
 
 	if as.logger != nil {
 		as.logger.Printf("Registered ingestion agent for %s", sourceType)

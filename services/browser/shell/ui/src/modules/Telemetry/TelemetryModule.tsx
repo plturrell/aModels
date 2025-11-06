@@ -2,7 +2,7 @@ import { useMemo } from "react";
 
 import { Panel } from "../../components/Panel";
 import { telemetryDefaults, telemetryRecordFields, telemetryConfigFields } from "../../data/telemetry";
-import { useTelemetryStore } from "../../state/useTelemetryStore";
+import { useTelemetryStore, type TelemetryState, type InteractionMetric } from "../../state/useTelemetryStore";
 
 import styles from "./TelemetryModule.module.css";
 
@@ -24,23 +24,29 @@ const formatRelativeTime = (timestamp: number) => {
 };
 
 export function TelemetryModule() {
-  const metrics = useTelemetryStore((state) => state.metrics);
-  const resetMetrics = useTelemetryStore((state) => state.reset);
+  const metrics = useTelemetryStore((state: TelemetryState) => state.metrics);
+  const resetMetrics = useTelemetryStore((state: TelemetryState) => state.reset);
 
   const summary = useMemo(() => {
     if (!metrics.length) return null;
 
-    const totalLatency = metrics.reduce((sum, metric) => sum + metric.durationMs, 0);
-    const maxLatency = metrics.reduce((max, metric) => Math.max(max, metric.durationMs), 0);
-    const totalPromptTokens = metrics.reduce(
+    const totalLatency = metrics.reduce<number>((sum, metric) => sum + metric.durationMs, 0);
+    const maxLatency = metrics.reduce<number>(
+      (max, metric) => Math.max(max, metric.durationMs),
+      0
+    );
+    const totalPromptTokens = metrics.reduce<number>(
       (sum, metric) => sum + (metric.promptTokens ?? 0),
       0
     );
-    const totalCompletionTokens = metrics.reduce(
+    const totalCompletionTokens = metrics.reduce<number>(
       (sum, metric) => sum + (metric.completionTokens ?? 0),
       0
     );
-    const totalCitations = metrics.reduce((sum, metric) => sum + metric.citations, 0);
+    const totalCitations = metrics.reduce<number>(
+      (sum, metric) => sum + metric.citations,
+      0
+    );
 
     return {
       interactions: metrics.length,
@@ -154,7 +160,7 @@ export function TelemetryModule() {
                     </tr>
                   </thead>
                   <tbody>
-                    {metrics.map((metric) => (
+                    {metrics.map((metric: InteractionMetric) => (
                       <tr key={metric.id}>
                         <td>{formatRelativeTime(metric.timestamp)}</td>
                         <td>

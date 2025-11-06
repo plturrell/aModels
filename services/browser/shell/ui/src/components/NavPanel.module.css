@@ -1,0 +1,122 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.branding {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  position: relative;
+}
+
+.branding strong {
+  display: block;
+  font-size: 18px;
+  letter-spacing: 0.08em;
+}
+
+.branding p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.75);
+}
+
+.glow {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(129, 140, 248, 0.9), rgba(56, 189, 248, 0.85));
+  box-shadow: 0 12px 32px rgba(14, 165, 233, 0.4);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.navItem {
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 14px;
+  padding: 14px 16px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: inherit;
+  cursor: pointer;
+  transition: transform 0.18s ease, border 0.18s ease, background 0.18s ease;
+}
+
+.navItem small {
+  font-size: 12px;
+  color: rgba(148, 163, 184, 0.65);
+}
+
+.navItem:hover {
+  transform: translateY(-2px);
+  border-color: rgba(129, 140, 248, 0.5);
+  background: rgba(79, 70, 229, 0.18);
+}
+
+.active {
+  border-color: rgba(129, 140, 248, 0.65);
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.35), rgba(14, 165, 233, 0.18));
+}
+
+.controls {
+  margin-top: auto;
+}
+
+.themeToggle {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.45);
+  border-radius: 999px;
+  padding: 10px 14px;
+  color: inherit;
+  cursor: pointer;
+  transition: border 0.18s ease, background 0.18s ease;
+}
+
+.themeToggle:hover {
+  border-color: rgba(129, 140, 248, 0.5);
+  background: rgba(99, 102, 241, 0.14);
+}
+
+@media (max-width: 960px) {
+  .nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .navItem {
+    flex: 1 1 160px;
+  }
+
+  .controls {
+    width: 180px;
+  }
+}
+
+:global(body.theme-light) .navItem {
+  background: rgba(248, 250, 252, 0.92);
+  border-color: rgba(148, 163, 184, 0.24);
+}
+
+:global(body.theme-light) .navItem small {
+  color: rgba(100, 116, 139, 0.7);
+}
+
+:global(body.theme-light) .active {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.22), rgba(14, 165, 233, 0.18));
+  border-color: rgba(79, 70, 229, 0.42);
+}
+
+:global(body.theme-light) .themeToggle {
+  background: rgba(248, 250, 252, 0.92);
+  border-color: rgba(148, 163, 184, 0.24);
+}
