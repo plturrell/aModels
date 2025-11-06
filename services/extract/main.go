@@ -24,6 +24,7 @@ import (
 	_ "github.com/Chahine-tech/sql-parser-go/pkg/parser"
 	_ "github.com/SAP/go-hdb/driver"
 	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 	"database/sql"
 	extractpb "github.com/plturrell/aModels/services/extract/gen/extractpb"
 
