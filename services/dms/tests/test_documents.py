@@ -47,6 +47,7 @@ async def test_client(tmp_path: Path):
     with patch("app.core.config.get_settings", return_value=settings), \
          patch("app.services.storage.get_settings", return_value=settings), \
          patch("app.services.ingestion.get_redis_client", return_value=fake_redis), \
+         patch("app.api.routers.documents.orchestrate_document", new=AsyncMock()), \
          patch("app.core.neo4j.get_neo4j_driver", return_value=fake_driver):
         app = create_app()
         app.dependency_overrides[get_db_session] = override_session
@@ -82,3 +83,5 @@ async def test_upload_and_list_documents(test_client):
     assert len(documents) == 1
     assert documents[0]["id"] == payload["id"]
     assert documents[0]["name"] == payload["name"]
+    assert "catalog_identifier" in documents[0]
+    assert "extraction_summary" in documents[0]

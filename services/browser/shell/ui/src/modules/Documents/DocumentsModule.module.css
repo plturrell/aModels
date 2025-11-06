@@ -76,6 +76,11 @@
   font-weight: 600;
 }
 
+.metricCard small {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .errorBanner {
   padding: 10px 14px;
   border-radius: var(--radius-medium);
@@ -147,6 +152,12 @@
   color: var(--muted);
 }
 
+.summaryCell p {
+  margin: 0;
+  line-height: 1.5;
+  max-width: 240px;
+}
+
 .cellTitle {
   font-weight: 600;
   margin-bottom: 4px;
@@ -161,6 +172,22 @@
   display: block;
   color: var(--muted);
   margin-top: 4px;
+}
+
+.catalogPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(150, 183, 255, 0.18);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.muted {
+  color: var(--muted);
+  font-style: italic;
 }
 
 .emptyCell {

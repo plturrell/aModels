@@ -21,11 +21,13 @@ docker build -t amodels-dms:dev services/dms
 docker run --rm \
   --network amodels_default \  # adjust to match existing compose network
   -e DMS_POSTGRES_DSN=postgresql+psycopg://postgres:postgres@postgres:5432/dms \
-  -e DMS_REDIS_URL=redis://redis:6379/0 \
-  -e DMS_NEO4J_URI=neo4j://neo4j:7687 \
-  -e DMS_NEO4J_USER=neo4j \
-  -e DMS_NEO4J_PASSWORD=neo4j \
-  -e DMS_STORAGE_ROOT=/data/documents \
+-e DMS_REDIS_URL=redis://redis:6379/0 \
+-e DMS_NEO4J_URI=neo4j://neo4j:7687 \
+-e DMS_NEO4J_USER=neo4j \
+-e DMS_NEO4J_PASSWORD=neo4j \
+-e DMS_STORAGE_ROOT=/data/documents \
+-e DMS_EXTRACT_URL=http://extract:8081 \
+-e DMS_CATALOG_URL=http://catalog:8084 \
   -p 8080:8080 \
   amodels-dms:dev
 ```
@@ -41,9 +43,18 @@ docker compose up --build
 
 Environment variables (see `app/core/config.py`) control database connections and storage paths. Ensure the service runs on the same Docker network as Postgres/Redis/Neo4j containers so hostnames resolve.
 
+Key environment variables:
+
+- `DMS_POSTGRES_DSN`
+- `DMS_REDIS_URL`
+- `DMS_NEO4J_URI`, `DMS_NEO4J_USER`, `DMS_NEO4J_PASSWORD`
+- `DMS_STORAGE_ROOT` (local filesystem path)
+- `DMS_EXTRACT_URL` (HTTP base for the Extract service, e.g., `http://extract:8081`)
+- `DMS_CATALOG_URL` (HTTP base for the Catalog service, e.g., `http://catalog:8084`)
+
 ### Tests
 
 ```bash
 cd services/dms
-pytest
+PYTHONPATH=$(pwd) pytest
 ```

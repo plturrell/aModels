@@ -4,7 +4,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -21,6 +22,8 @@ class Settings(BaseSettings):
     neo4j_uri: str = Field(default="neo4j://localhost:7687", env="DMS_NEO4J_URI")
     neo4j_user: str = Field(default="neo4j", env="DMS_NEO4J_USER")
     neo4j_password: str = Field(default="neo4j", env="DMS_NEO4J_PASSWORD")
+    extract_url: Optional[str] = Field(default=None, env="DMS_EXTRACT_URL")
+    catalog_url: Optional[str] = Field(default=None, env="DMS_CATALOG_URL")
 
     storage_root: Path = Field(
         default=Path("./data/documents").resolve(),

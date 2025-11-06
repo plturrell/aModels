@@ -19,6 +19,8 @@ export interface DocumentRecord {
   name: string;
   description?: string | null;
   storage_path: string;
+  catalog_identifier?: string | null;
+  extraction_summary?: string | null;
   created_at: string;
   updated_at: string;
 }

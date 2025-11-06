@@ -43,6 +43,11 @@ const createdThisWeek = (documents: DocumentRecord[]) => {
   }).length;
 };
 
+const truncate = (value?: string | null, length = 160) => {
+  if (!value) return null;
+  return value.length > length ? `${value.slice(0, length - 1)}…` : value;
+};
+
 export function DocumentsModule() {
   const { data, loading, error, refresh } = useDocuments();
 
@@ -90,6 +95,12 @@ export function DocumentsModule() {
               <span>Latest upload</span>
               <strong>{mostRecent ? formatter.format(new Date(mostRecent.created_at)) : "—"}</strong>
             </div>
+            <div className={styles.metricCard}>
+              <span>Catalog coverage</span>
+              <strong>
+                {documents.filter((doc) => Boolean(doc.catalog_identifier)).length} linked
+              </strong>
+            </div>
           </div>
 
           {error ? (
@@ -116,6 +127,8 @@ export function DocumentsModule() {
                 <tr>
                   <th>Name</th>
                   <th>Description</th>
+                  <th>Data Product</th>
+                  <th>Insights</th>
                   <th>Created</th>
                   <th>Updated</th>
                 </tr>
@@ -128,6 +141,20 @@ export function DocumentsModule() {
                       <div className={styles.cellMeta}>{doc.id}</div>
                     </td>
                     <td>{doc.description ?? "—"}</td>
+                    <td>
+                      {doc.catalog_identifier ? (
+                        <span className={styles.catalogPill}>{doc.catalog_identifier}</span>
+                      ) : (
+                        <span className={styles.muted}>Pending</span>
+                      )}
+                    </td>
+                    <td className={styles.summaryCell}>
+                      {doc.extraction_summary ? (
+                        <p>{truncate(doc.extraction_summary)}</p>
+                      ) : (
+                        <span className={styles.muted}>Processing…</span>
+                      )}
+                    </td>
                     <td>
                       <span>{formatter.format(new Date(doc.created_at))}</span>
                       <small>{getRelativeTime(doc.created_at)}</small>

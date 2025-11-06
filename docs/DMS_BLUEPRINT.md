@@ -201,9 +201,10 @@ def process_document(document_id: str):
 ### Implementation Phases (FastAPI)
 
 1. **MVP** — CRUD, storage, metadata persistence, REST endpoints.
-2. **Graph Layer** — Sync relationships/tag taxonomy to Neo4j, expose traversal APIs.
-3. **Search & AI** — Add full-text indices, pgvector embeddings, RAG/classification endpoints.
-4. **Telemetry & UX** — Integrate with existing observability stack, build admin monitoring.
+2. **Integration** — Invoke Extract service for enrichment and register documents with Catalog.
+3. **Graph Layer** — Sync relationships/tag taxonomy to Neo4j, expose traversal APIs.
+4. **Search & AI** — Add full-text indices, pgvector embeddings, RAG/classification endpoints.
+5. **Telemetry & UX** — Integrate with existing observability stack, build admin monitoring.
 
 ---
 

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
-
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -17,6 +15,8 @@ class Document(Base):
     description = Column(Text, nullable=True)
     storage_path = Column(String(512), nullable=False, unique=True)
     checksum = Column(String(128), nullable=True)
+    catalog_identifier = Column(String(255), nullable=True)
+    extraction_summary = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 

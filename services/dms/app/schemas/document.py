@@ -33,6 +33,8 @@ class DocumentRead(BaseModel):
     name: str
     description: Optional[str]
     storage_path: str
+    catalog_identifier: Optional[str] = None
+    extraction_summary: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
