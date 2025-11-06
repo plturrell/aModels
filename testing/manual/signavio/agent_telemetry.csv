@@ -1,0 +1,6 @@
+agent_run_id,agent_name,task_id,task_description,start_time,end_time,status,outcome_summary,latency_ms,notes
+RUN-20241005-001,deepagent,step-01,"Analyze Control-M job graph",2024-10-05T09:00:00Z,2024-10-05T09:00:07Z,COMPLETED,"Identified 3 critical paths",7420,
+RUN-20241005-001,deepagent,step-02,"Fetch Signavio process overview",2024-10-05T09:00:08Z,2024-10-05T09:00:14Z,COMPLETED,"Retrieved 12 process variants",6150,
+RUN-20241005-001,deepagent,step-03,"Recommend optimization actions",2024-10-05T09:00:15Z,2024-10-05T09:00:21Z,FAILED,"Insufficient historical data",6840,"Retry after data refresh"
+RUN-20241005-002,goose,step-01,"Summarize anomalies",2024-10-06T11:32:10Z,2024-10-06T11:32:16Z,COMPLETED,"Flagged 2 anomalies",5985,
+RUN-20241005-002,goose,step-02,"Trigger retraining workflow",2024-10-06T11:32:17Z,2024-10-06T11:32:25Z,COMPLETED,"Retraining queued",8002,

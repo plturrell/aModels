@@ -1,0 +1,29 @@
+{
+  "type": "record",
+  "name": "AgentTelemetryRecord",
+  "namespace": "com.amodels.testing.signavio",
+  "fields": [
+    { "name": "agent_run_id", "type": "string" },
+    { "name": "agent_name", "type": "string" },
+    { "name": "task_id", "type": "string" },
+    { "name": "task_description", "type": "string" },
+    {
+      "name": "start_time",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    {
+      "name": "end_time",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    { "name": "status", "type": "string" },
+    { "name": "outcome_summary", "type": ["null", "string"], "default": null },
+    { "name": "latency_ms", "type": ["null", "long"], "default": null },
+    { "name": "notes", "type": ["null", "string"], "default": null }
+  ]
+}

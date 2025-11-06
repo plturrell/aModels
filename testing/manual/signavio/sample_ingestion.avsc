@@ -1,0 +1,22 @@
+{
+  "type": "record",
+  "name": "SignavioManualIngestion",
+  "namespace": "com.amodels.testing.signavio",
+  "fields": [
+    { "name": "case_id", "type": "string" },
+    { "name": "event_name", "type": "string" },
+    { "name": "performed_by", "type": ["null", "string"], "default": null },
+    {
+      "name": "event_time",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    {
+      "name": "amount",
+      "type": ["null", "double"],
+      "default": null
+    }
+  ]
+}
