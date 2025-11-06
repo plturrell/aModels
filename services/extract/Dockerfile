@@ -74,6 +74,7 @@ COPY --from=builder /server ./server
 COPY --from=builder /app/services/extract/scripts ./scripts
 
 # Install Python dependencies required by the helper scripts
+# Note: transformers and torch are included for DeepSeek OCR support
 RUN pip3 install --no-cache-dir --break-system-packages -r ./scripts/requirements.txt
 
 # Command to run the service with dependency waits

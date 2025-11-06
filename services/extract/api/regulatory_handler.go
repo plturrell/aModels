@@ -1,7 +1,7 @@
 package api
 
 import (
-	"context"
+	// "context" // unused
 	"encoding/json"
 	"fmt"
 	"log"
@@ -175,7 +175,7 @@ func (h *RegulatoryHandler) HandleListSchemas(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	regulatoryType := r.URL.Query().Get("regulatory_type")
+	_ = r.URL.Query().Get("regulatory_type") // regulatoryType unused
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit == 0 {
 		limit = 100

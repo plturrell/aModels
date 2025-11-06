@@ -259,6 +259,12 @@ services:
       # See configs/langextract-config.md for details
       - LANGEXTRACT_API_URL=${LANGEXTRACT_API_URL:-}
       - LANGEXTRACT_API_KEY=${LANGEXTRACT_API_KEY:-}
+      # Multimodal Extraction and DeepSeek OCR (Phase 6)
+      - USE_MULTIMODAL_EXTRACTION=${USE_MULTIMODAL_EXTRACTION:-true}
+      - USE_DEEPSEEK_OCR=${USE_DEEPSEEK_OCR:-true}
+      # DMS Integration - Document Management System URLs
+      - DMS_EXTRACT_URL=${DMS_EXTRACT_URL:-http://extract-service:8082}
+      - DMS_CATALOG_URL=${DMS_CATALOG_URL:-http://catalog:8084}
     volumes:
       - ../../data:/workspace/data:rw
       - ../../logs:/workspace/logs:rw
