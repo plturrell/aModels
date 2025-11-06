@@ -1,11 +1,15 @@
 package breakdetection
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -216,28 +220,183 @@ func (rd *RegulatoryDetector) parseRegulatoryCalculation(data map[string]interfa
 
 // fetchCurrentRegulatoryReports fetches current regulatory reports from AxiomSL
 func (rd *RegulatoryDetector) fetchCurrentRegulatoryReports(ctx context.Context) (map[string]*AxiomSLRegulatoryReport, error) {
-	// TODO: Implement actual API call to AxiomSL
-	reports := make(map[string]*AxiomSLRegulatoryReport)
+	baseURL := strings.TrimSuffix(rd.axiomSLURL, "/")
+	endpoint := fmt.Sprintf("%s/api/regulatory-reports", baseURL)
 
-	// Placeholder: In production, this would call AxiomSL API
-	// url := fmt.Sprintf("%s/api/regulatory-reports", rd.axiomSLURL)
-	// resp, err := rd.httpClient.Get(url)
-	// ... parse response ...
+	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if apiKey := os.Getenv("AXIOMSL_API_KEY"); apiKey != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	}
+	req.Header.Set("Accept", "application/json")
+
+	if rd.logger != nil {
+		rd.logger.Printf("Fetching regulatory reports from AxiomSL: %s", endpoint)
+	}
+
+	resp, err := rd.makeHTTPRequestWithRetry(req, 3)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch regulatory reports: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("AxiomSL API returned error status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var response struct {
+		Reports []*AxiomSLRegulatoryReport `json:"reports,omitempty"`
+		Data    []*AxiomSLRegulatoryReport `json:"data,omitempty"`
+	}
+
+	var reportsArray []*AxiomSLRegulatoryReport
+	if err := json.Unmarshal(body, &reportsArray); err == nil {
+		reports := make(map[string]*AxiomSLRegulatoryReport, len(reportsArray))
+		for _, report := range reportsArray {
+			reports[report.ReportID] = report
+		}
+		return reports, nil
+	}
+
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	reports := make(map[string]*AxiomSLRegulatoryReport)
+	if len(response.Reports) > 0 {
+		for _, report := range response.Reports {
+			reports[report.ReportID] = report
+		}
+	} else if len(response.Data) > 0 {
+		for _, report := range response.Data {
+			reports[report.ReportID] = report
+		}
+	}
+
+	if rd.logger != nil {
+		rd.logger.Printf("Fetched %d regulatory reports from AxiomSL", len(reports))
+	}
 
 	return reports, nil
 }
 
 // fetchCurrentRegulatoryCalculations fetches current regulatory calculations from AxiomSL
 func (rd *RegulatoryDetector) fetchCurrentRegulatoryCalculations(ctx context.Context) (map[string]*AxiomSLRegulatoryCalculation, error) {
-	// TODO: Implement actual API call to AxiomSL
-	calculations := make(map[string]*AxiomSLRegulatoryCalculation)
+	baseURL := strings.TrimSuffix(rd.axiomSLURL, "/")
+	endpoint := fmt.Sprintf("%s/api/regulatory-calculations", baseURL)
 
-	// Placeholder: In production, this would call AxiomSL API
-	// url := fmt.Sprintf("%s/api/regulatory-calculations", rd.axiomSLURL)
-	// resp, err := rd.httpClient.Get(url)
-	// ... parse response ...
+	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if apiKey := os.Getenv("AXIOMSL_API_KEY"); apiKey != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	}
+	req.Header.Set("Accept", "application/json")
+
+	if rd.logger != nil {
+		rd.logger.Printf("Fetching regulatory calculations from AxiomSL: %s", endpoint)
+	}
+
+	resp, err := rd.makeHTTPRequestWithRetry(req, 3)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch regulatory calculations: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("AxiomSL API returned error status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var response struct {
+		Calculations []*AxiomSLRegulatoryCalculation `json:"calculations,omitempty"`
+		Data         []*AxiomSLRegulatoryCalculation `json:"data,omitempty"`
+	}
+
+	var calculationsArray []*AxiomSLRegulatoryCalculation
+	if err := json.Unmarshal(body, &calculationsArray); err == nil {
+		calculations := make(map[string]*AxiomSLRegulatoryCalculation, len(calculationsArray))
+		for _, calculation := range calculationsArray {
+			calculations[calculation.CalculationID] = calculation
+		}
+		return calculations, nil
+	}
+
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	calculations := make(map[string]*AxiomSLRegulatoryCalculation)
+	if len(response.Calculations) > 0 {
+		for _, calculation := range response.Calculations {
+			calculations[calculation.CalculationID] = calculation
+		}
+	} else if len(response.Data) > 0 {
+		for _, calculation := range response.Data {
+			calculations[calculation.CalculationID] = calculation
+		}
+	}
+
+	if rd.logger != nil {
+		rd.logger.Printf("Fetched %d regulatory calculations from AxiomSL", len(calculations))
+	}
 
 	return calculations, nil
+}
+
+// makeHTTPRequestWithRetry makes an HTTP request with retry logic and exponential backoff
+func (rd *RegulatoryDetector) makeHTTPRequestWithRetry(req *http.Request, maxRetries int) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			waitTime := time.Duration(1<<uint(attempt-1)) * time.Second
+			if rd.logger != nil {
+				rd.logger.Printf("Retrying HTTP request (attempt %d/%d) after %v", attempt+1, maxRetries, waitTime)
+			}
+			select {
+			case <-time.After(waitTime):
+			case <-req.Context().Done():
+				return nil, fmt.Errorf("request cancelled: %w", req.Context().Err())
+			}
+		}
+
+		resp, err = rd.httpClient.Do(req)
+		if err == nil {
+			return resp, nil
+		}
+
+		if req.Context().Err() != nil {
+			return nil, fmt.Errorf("request cancelled or timed out: %w", req.Context().Err())
+		}
+
+		if rd.logger != nil && attempt < maxRetries-1 {
+			rd.logger.Printf("HTTP request failed (attempt %d/%d): %v", attempt+1, maxRetries, err)
+		}
+	}
+
+	return nil, fmt.Errorf("failed after %d attempts: %w", maxRetries, err)
 }
 
 // detectComplianceViolations detects compliance violations

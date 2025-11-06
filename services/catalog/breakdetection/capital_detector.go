@@ -1,11 +1,15 @@
 package breakdetection
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -212,28 +216,183 @@ func (cd *CapitalDetector) parseCapitalRatio(data map[string]interface{}) *BCRSC
 
 // fetchCurrentCreditExposures fetches current credit exposures from BCRS
 func (cd *CapitalDetector) fetchCurrentCreditExposures(ctx context.Context) (map[string]*BCRSCreditExposure, error) {
-	// TODO: Implement actual API call to BCRS
-	exposures := make(map[string]*BCRSCreditExposure)
+	baseURL := strings.TrimSuffix(cd.bcrsURL, "/")
+	endpoint := fmt.Sprintf("%s/api/credit-exposures", baseURL)
 
-	// Placeholder: In production, this would call BCRS API
-	// url := fmt.Sprintf("%s/api/credit-exposures", cd.bcrsURL)
-	// resp, err := cd.httpClient.Get(url)
-	// ... parse response ...
+	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if apiKey := os.Getenv("BCRS_API_KEY"); apiKey != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	}
+	req.Header.Set("Accept", "application/json")
+
+	if cd.logger != nil {
+		cd.logger.Printf("Fetching credit exposures from BCRS: %s", endpoint)
+	}
+
+	resp, err := cd.makeHTTPRequestWithRetry(req, 3)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch credit exposures: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("BCRS API returned error status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var response struct {
+		Exposures []*BCRSCreditExposure `json:"exposures,omitempty"`
+		Data      []*BCRSCreditExposure `json:"data,omitempty"`
+	}
+
+	var exposuresArray []*BCRSCreditExposure
+	if err := json.Unmarshal(body, &exposuresArray); err == nil {
+		exposures := make(map[string]*BCRSCreditExposure, len(exposuresArray))
+		for _, exposure := range exposuresArray {
+			exposures[exposure.ExposureID] = exposure
+		}
+		return exposures, nil
+	}
+
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	exposures := make(map[string]*BCRSCreditExposure)
+	if len(response.Exposures) > 0 {
+		for _, exposure := range response.Exposures {
+			exposures[exposure.ExposureID] = exposure
+		}
+	} else if len(response.Data) > 0 {
+		for _, exposure := range response.Data {
+			exposures[exposure.ExposureID] = exposure
+		}
+	}
+
+	if cd.logger != nil {
+		cd.logger.Printf("Fetched %d credit exposures from BCRS", len(exposures))
+	}
 
 	return exposures, nil
 }
 
 // fetchCurrentCapitalRatios fetches current capital ratios from BCRS
 func (cd *CapitalDetector) fetchCurrentCapitalRatios(ctx context.Context) (map[string]*BCRSCapitalRatio, error) {
-	// TODO: Implement actual API call to BCRS
-	ratios := make(map[string]*BCRSCapitalRatio)
+	baseURL := strings.TrimSuffix(cd.bcrsURL, "/")
+	endpoint := fmt.Sprintf("%s/api/capital-ratios", baseURL)
 
-	// Placeholder: In production, this would call BCRS API
-	// url := fmt.Sprintf("%s/api/capital-ratios", cd.bcrsURL)
-	// resp, err := cd.httpClient.Get(url)
-	// ... parse response ...
+	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if apiKey := os.Getenv("BCRS_API_KEY"); apiKey != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	}
+	req.Header.Set("Accept", "application/json")
+
+	if cd.logger != nil {
+		cd.logger.Printf("Fetching capital ratios from BCRS: %s", endpoint)
+	}
+
+	resp, err := cd.makeHTTPRequestWithRetry(req, 3)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch capital ratios: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("BCRS API returned error status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var response struct {
+		Ratios []*BCRSCapitalRatio `json:"ratios,omitempty"`
+		Data   []*BCRSCapitalRatio `json:"data,omitempty"`
+	}
+
+	var ratiosArray []*BCRSCapitalRatio
+	if err := json.Unmarshal(body, &ratiosArray); err == nil {
+		ratios := make(map[string]*BCRSCapitalRatio, len(ratiosArray))
+		for _, ratio := range ratiosArray {
+			ratios[ratio.RatioType] = ratio
+		}
+		return ratios, nil
+	}
+
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	ratios := make(map[string]*BCRSCapitalRatio)
+	if len(response.Ratios) > 0 {
+		for _, ratio := range response.Ratios {
+			ratios[ratio.RatioType] = ratio
+		}
+	} else if len(response.Data) > 0 {
+		for _, ratio := range response.Data {
+			ratios[ratio.RatioType] = ratio
+		}
+	}
+
+	if cd.logger != nil {
+		cd.logger.Printf("Fetched %d capital ratios from BCRS", len(ratios))
+	}
 
 	return ratios, nil
+}
+
+// makeHTTPRequestWithRetry makes an HTTP request with retry logic and exponential backoff
+func (cd *CapitalDetector) makeHTTPRequestWithRetry(req *http.Request, maxRetries int) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			waitTime := time.Duration(1<<uint(attempt-1)) * time.Second
+			if cd.logger != nil {
+				cd.logger.Printf("Retrying HTTP request (attempt %d/%d) after %v", attempt+1, maxRetries, waitTime)
+			}
+			select {
+			case <-time.After(waitTime):
+			case <-req.Context().Done():
+				return nil, fmt.Errorf("request cancelled: %w", req.Context().Err())
+			}
+		}
+
+		resp, err = cd.httpClient.Do(req)
+		if err == nil {
+			return resp, nil
+		}
+
+		if req.Context().Err() != nil {
+			return nil, fmt.Errorf("request cancelled or timed out: %w", req.Context().Err())
+		}
+
+		if cd.logger != nil && attempt < maxRetries-1 {
+			cd.logger.Printf("HTTP request failed (attempt %d/%d): %v", attempt+1, maxRetries, err)
+		}
+	}
+
+	return nil, fmt.Errorf("failed after %d attempts: %w", maxRetries, err)
 }
 
 // detectCapitalRatioViolations detects capital ratio violations

@@ -21,13 +21,19 @@ type EnhancedBreakDetectionHandler struct {
 	enablePagination  bool
 	enableValidation  bool
 	enableMetrics     bool
+	rateLimiter       *RateLimiter
 }
 
 // NewEnhancedBreakDetectionHandler creates an enhanced handler
 func NewEnhancedBreakDetectionHandler(
 	baseHandler *BreakDetectionHandler,
 	apiVersion string,
+	rateLimiter *RateLimiter,
 ) *EnhancedBreakDetectionHandler {
+	if rateLimiter == nil {
+		// Use default rate limiter if none provided
+		rateLimiter = DefaultRateLimiter()
+	}
 	return &EnhancedBreakDetectionHandler{
 		BreakDetectionHandler: baseHandler,
 		apiVersion:            apiVersion,
@@ -35,6 +41,7 @@ func NewEnhancedBreakDetectionHandler(
 		enablePagination:      true,
 		enableValidation:      true,
 		enableMetrics:         true,
+		rateLimiter:           rateLimiter,
 	}
 }
 
@@ -215,9 +222,59 @@ func (h *EnhancedBreakDetectionHandler) validateAPIVersion(r *http.Request) bool
 }
 
 func (h *EnhancedBreakDetectionHandler) checkRateLimit(r *http.Request) bool {
-	// TODO: Integrate with actual rate limiter
-	// For now, always return true
+	if !h.enableRateLimit || h.rateLimiter == nil {
+		return true
+	}
+
+	// Get client IP address
+	clientIP := h.getClientIP(r)
+
+	// Default rate limits: 100 requests per minute per IP, burst of 10
+	// Different endpoints can have different limits
+	rps := 100.0 / 60.0  // 100 requests per minute = ~1.67 requests per second
+	burst := 10
+
+	// Get or create limiter for this IP
+	ipLimiter := h.rateLimiter.GetLimiter(clientIP, rps, burst)
+
+	// Check per-IP rate limit first
+	if !ipLimiter.Allow() {
+		// IP limit exceeded
+		return false
+	}
+
+	// Also check global rate limit
+	if !h.rateLimiter.Allow() {
+		return false
+	}
+
 	return true
+}
+
+// getClientIP extracts the client IP address from the request
+func (h *EnhancedBreakDetectionHandler) getClientIP(r *http.Request) string {
+	// Check X-Forwarded-For header (for proxies/load balancers)
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		// X-Forwarded-For can contain multiple IPs, take the first one
+		ips := strings.Split(forwarded, ",")
+		if len(ips) > 0 {
+			return strings.TrimSpace(ips[0])
+		}
+	}
+
+	// Check X-Real-IP header (for nginx)
+	if realIP := r.Header.Get("X-Real-IP"); realIP != "" {
+		return realIP
+	}
+
+	// Fallback to RemoteAddr
+	// Remove port if present (format: "IP:port")
+	ip := r.RemoteAddr
+	if colonIdx := strings.LastIndex(ip, ":"); colonIdx != -1 {
+		ip = ip[:colonIdx]
+	}
+
+	return ip
 }
 
 func (h *EnhancedBreakDetectionHandler) parsePagination(r *http.Request) PaginationParams {

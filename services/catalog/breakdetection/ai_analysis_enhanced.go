@@ -430,14 +430,139 @@ func (aae *AIAnalysisEnhanced) calculateTypeCriticality(breakRecord *Break) floa
 
 func (aae *AIAnalysisEnhanced) generateAlternativeDescriptions(ctx context.Context, 
 	breakRecord *Break) ([]string, error) {
-	// TODO: Generate alternative descriptions when confidence is low
-	return []string{}, nil
+	if aae.AIAnalysisService.localaiURL == "" {
+		return []string{}, fmt.Errorf("LocalAI URL not configured")
+	}
+
+	// Build prompt for alternative descriptions
+	var promptBuilder strings.Builder
+	promptBuilder.WriteString("Generate 2-3 alternative descriptions of this break from different perspectives:\n\n")
+	promptBuilder.WriteString(fmt.Sprintf("Break Type: %s\n", breakRecord.BreakType))
+	promptBuilder.WriteString(fmt.Sprintf("System: %s\n", breakRecord.SystemName))
+	promptBuilder.WriteString(fmt.Sprintf("Severity: %s\n", breakRecord.Severity))
+	promptBuilder.WriteString(fmt.Sprintf("Detection Type: %s\n", breakRecord.DetectionType))
+	
+	if len(breakRecord.AffectedEntities) > 0 {
+		promptBuilder.WriteString(fmt.Sprintf("Affected Entities: %s\n", strings.Join(breakRecord.AffectedEntities, ", ")))
+	}
+	
+	if breakRecord.Difference != nil {
+		promptBuilder.WriteString(fmt.Sprintf("Difference: %v\n", breakRecord.Difference))
+	}
+	
+	if breakRecord.RootCauseAnalysis != "" {
+		promptBuilder.WriteString(fmt.Sprintf("Root Cause: %s\n", breakRecord.RootCauseAnalysis))
+	}
+
+	prompt := promptBuilder.String()
+	systemPrompt := "Generate 2-3 alternative descriptions of this break. Each description should provide a different perspective (technical, business impact, or operational). Return descriptions as a numbered list, one per line."
+
+	// Call LocalAI
+	response, err := aae.AIAnalysisService.callLocalAI(ctx, prompt, systemPrompt)
+	if err != nil {
+		if aae.AIAnalysisService.logger != nil {
+			aae.AIAnalysisService.logger.Printf("Failed to generate alternative descriptions: %v", err)
+		}
+		return []string{}, err
+	}
+
+	// Parse response into list of descriptions
+	descriptions := aae.parseAlternativeDescriptions(response)
+
+	if aae.AIAnalysisService.logger != nil {
+		aae.AIAnalysisService.logger.Printf("Generated %d alternative descriptions for break %s", len(descriptions), breakRecord.BreakID)
+	}
+
+	return descriptions, nil
+}
+
+// parseAlternativeDescriptions parses alternative descriptions from LocalAI response
+func (aae *AIAnalysisEnhanced) parseAlternativeDescriptions(response string) []string {
+	var descriptions []string
+	lines := strings.Split(response, "\n")
+	
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		
+		// Remove numbering (1., 2., etc.)
+		line = strings.TrimPrefix(line, "1.")
+		line = strings.TrimPrefix(line, "2.")
+		line = strings.TrimPrefix(line, "3.")
+		line = strings.TrimPrefix(line, "-")
+		line = strings.TrimSpace(line)
+		
+		// Remove leading dash or bullet points
+		line = strings.TrimPrefix(line, "- ")
+		line = strings.TrimPrefix(line, "• ")
+		
+		if line != "" {
+			descriptions = append(descriptions, line)
+		}
+		
+		// Limit to 3 descriptions
+		if len(descriptions) >= 3 {
+			break
+		}
+	}
+	
+	return descriptions
 }
 
 func (aae *AIAnalysisEnhanced) generateCategoryReasoning(ctx context.Context, 
 	breakRecord *Break, category string) (string, error) {
-	// TODO: Generate reasoning for category assignment
-	return fmt.Sprintf("Categorized as %s based on break type %s and severity %s", 
-		category, breakRecord.BreakType, breakRecord.Severity), nil
+	if aae.AIAnalysisService.localaiURL == "" {
+		return fmt.Sprintf("Categorized as %s based on break type %s and severity %s", 
+			category, breakRecord.BreakType, breakRecord.Severity), nil
+	}
+
+	// Build prompt for category reasoning
+	var promptBuilder strings.Builder
+	promptBuilder.WriteString("Explain in detail why this break was categorized as '" + category + "':\n\n")
+	promptBuilder.WriteString(fmt.Sprintf("Break Type: %s\n", breakRecord.BreakType))
+	promptBuilder.WriteString(fmt.Sprintf("System: %s\n", breakRecord.SystemName))
+	promptBuilder.WriteString(fmt.Sprintf("Detection Type: %s\n", breakRecord.DetectionType))
+	promptBuilder.WriteString(fmt.Sprintf("Severity: %s\n", breakRecord.Severity))
+	
+	if len(breakRecord.AffectedEntities) > 0 {
+		promptBuilder.WriteString(fmt.Sprintf("Affected Entities: %s\n", strings.Join(breakRecord.AffectedEntities, ", ")))
+	}
+	
+	if breakRecord.Difference != nil {
+		promptBuilder.WriteString(fmt.Sprintf("Difference: %v\n", breakRecord.Difference))
+	}
+	
+	if breakRecord.RootCauseAnalysis != "" {
+		promptBuilder.WriteString(fmt.Sprintf("Root Cause: %s\n", breakRecord.RootCauseAnalysis))
+	}
+
+	prompt := promptBuilder.String()
+	systemPrompt := "Provide a detailed explanation of why this break was categorized as the specified category. Include specific factors, patterns, or characteristics that led to this categorization. Be concise but comprehensive."
+
+	// Call LocalAI
+	response, err := aae.AIAnalysisService.callLocalAI(ctx, prompt, systemPrompt)
+	if err != nil {
+		if aae.AIAnalysisService.logger != nil {
+			aae.AIAnalysisService.logger.Printf("Failed to generate category reasoning: %v", err)
+		}
+		// Fallback to simple reasoning
+		return fmt.Sprintf("Categorized as %s based on break type %s, severity %s, and detection type %s", 
+			category, breakRecord.BreakType, breakRecord.Severity, breakRecord.DetectionType), nil
+	}
+
+	// Clean up response
+	reasoning := strings.TrimSpace(response)
+	// Remove any leading prefixes like "Reasoning:" or "Explanation:"
+	reasoning = strings.TrimPrefix(reasoning, "Reasoning:")
+	reasoning = strings.TrimPrefix(reasoning, "Explanation:")
+	reasoning = strings.TrimSpace(reasoning)
+
+	if aae.AIAnalysisService.logger != nil {
+		aae.AIAnalysisService.logger.Printf("Generated category reasoning for break %s: %s", breakRecord.BreakID, category)
+	}
+
+	return reasoning, nil
 }
 

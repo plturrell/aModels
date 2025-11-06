@@ -1,11 +1,15 @@
 package breakdetection
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -227,29 +231,211 @@ func (fd *FinanceDetector) parseAccountBalance(data map[string]interface{}) *SAP
 
 // fetchCurrentJournalEntries fetches current journal entries from SAP Fioneer
 func (fd *FinanceDetector) fetchCurrentJournalEntries(ctx context.Context) (map[string]*SAPFioneerJournalEntry, error) {
-	// TODO: Implement actual API call to SAP Fioneer
-	// For now, return empty map - this would be replaced with actual API integration
+	// Construct API endpoint URL
+	baseURL := strings.TrimSuffix(fd.sapFioneerURL, "/")
+	endpoint := fmt.Sprintf("%s/api/journal-entries", baseURL)
+
+	// Create request with context timeout
+	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Add authentication header if API key is available (from environment)
+	if apiKey := getAPIKey("SAP_FIONEER_API_KEY"); apiKey != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	}
+	req.Header.Set("Accept", "application/json")
+
+	if fd.logger != nil {
+		fd.logger.Printf("Fetching journal entries from SAP Fioneer: %s", endpoint)
+	}
+
+	// Make HTTP request with retry logic
+	resp, err := fd.makeHTTPRequestWithRetry(req, 3)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch journal entries: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Check HTTP status
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("SAP Fioneer API returned error status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response - expect array or object with entries field
+	var response struct {
+		Entries []*SAPFioneerJournalEntry `json:"entries,omitempty"`
+		Data    []*SAPFioneerJournalEntry `json:"data,omitempty"`
+	}
+	
+	// Try parsing as array first
+	var entriesArray []*SAPFioneerJournalEntry
+	if err := json.Unmarshal(body, &entriesArray); err == nil {
+		// Successfully parsed as array
+		entries := make(map[string]*SAPFioneerJournalEntry, len(entriesArray))
+		for _, entry := range entriesArray {
+			entries[entry.EntryID] = entry
+		}
+		return entries, nil
+	}
+
+	// Try parsing as object with entries/data field
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
 	entries := make(map[string]*SAPFioneerJournalEntry)
-	
-	// Placeholder: In production, this would call SAP Fioneer API
-	// url := fmt.Sprintf("%s/api/journal-entries", fd.sapFioneerURL)
-	// resp, err := fd.httpClient.Get(url)
-	// ... parse response ...
-	
+	if len(response.Entries) > 0 {
+		for _, entry := range response.Entries {
+			entries[entry.EntryID] = entry
+		}
+	} else if len(response.Data) > 0 {
+		for _, entry := range response.Data {
+			entries[entry.EntryID] = entry
+		}
+	}
+
+	if fd.logger != nil {
+		fd.logger.Printf("Fetched %d journal entries from SAP Fioneer", len(entries))
+	}
+
 	return entries, nil
 }
 
 // fetchCurrentAccountBalances fetches current account balances from SAP Fioneer
 func (fd *FinanceDetector) fetchCurrentAccountBalances(ctx context.Context) (map[string]*SAPFioneerAccountBalance, error) {
-	// TODO: Implement actual API call to SAP Fioneer
+	// Construct API endpoint URL
+	baseURL := strings.TrimSuffix(fd.sapFioneerURL, "/")
+	endpoint := fmt.Sprintf("%s/api/account-balances", baseURL)
+
+	// Create request with context timeout
+	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Add authentication header if API key is available
+	if apiKey := getAPIKey("SAP_FIONEER_API_KEY"); apiKey != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	}
+	req.Header.Set("Accept", "application/json")
+
+	if fd.logger != nil {
+		fd.logger.Printf("Fetching account balances from SAP Fioneer: %s", endpoint)
+	}
+
+	// Make HTTP request with retry logic
+	resp, err := fd.makeHTTPRequestWithRetry(req, 3)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch account balances: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Check HTTP status
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("SAP Fioneer API returned error status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse response - expect array or object with balances field
+	var response struct {
+		Balances []*SAPFioneerAccountBalance `json:"balances,omitempty"`
+		Data     []*SAPFioneerAccountBalance `json:"data,omitempty"`
+	}
+
+	// Try parsing as array first
+	var balancesArray []*SAPFioneerAccountBalance
+	if err := json.Unmarshal(body, &balancesArray); err == nil {
+		// Successfully parsed as array
+		balances := make(map[string]*SAPFioneerAccountBalance, len(balancesArray))
+		for _, balance := range balancesArray {
+			balances[balance.Account] = balance
+		}
+		return balances, nil
+	}
+
+	// Try parsing as object with balances/data field
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
 	balances := make(map[string]*SAPFioneerAccountBalance)
-	
-	// Placeholder: In production, this would call SAP Fioneer API
-	// url := fmt.Sprintf("%s/api/account-balances", fd.sapFioneerURL)
-	// resp, err := fd.httpClient.Get(url)
-	// ... parse response ...
-	
+	if len(response.Balances) > 0 {
+		for _, balance := range response.Balances {
+			balances[balance.Account] = balance
+		}
+	} else if len(response.Data) > 0 {
+		for _, balance := range response.Data {
+			balances[balance.Account] = balance
+		}
+	}
+
+	if fd.logger != nil {
+		fd.logger.Printf("Fetched %d account balances from SAP Fioneer", len(balances))
+	}
+
 	return balances, nil
+}
+
+// makeHTTPRequestWithRetry makes an HTTP request with retry logic and exponential backoff
+func (fd *FinanceDetector) makeHTTPRequestWithRetry(req *http.Request, maxRetries int) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 1s, 2s, 4s
+			waitTime := time.Duration(1<<uint(attempt-1)) * time.Second
+			if fd.logger != nil {
+				fd.logger.Printf("Retrying HTTP request (attempt %d/%d) after %v", attempt+1, maxRetries, waitTime)
+			}
+			
+			select {
+			case <-time.After(waitTime):
+			case <-req.Context().Done():
+				return nil, fmt.Errorf("request cancelled: %w", req.Context().Err())
+			}
+		}
+
+		resp, err = fd.httpClient.Do(req)
+		if err == nil {
+			return resp, nil
+		}
+
+		// Check if context was cancelled
+		if req.Context().Err() != nil {
+			return nil, fmt.Errorf("request cancelled or timed out: %w", req.Context().Err())
+		}
+
+		if fd.logger != nil && attempt < maxRetries-1 {
+			fd.logger.Printf("HTTP request failed (attempt %d/%d): %v", attempt+1, maxRetries, err)
+		}
+	}
+
+	return nil, fmt.Errorf("failed after %d attempts: %w", maxRetries, err)
+}
+
+// getAPIKey retrieves API key from environment variable (helper function)
+func getAPIKey(envVar string) string {
+	return os.Getenv(envVar)
 }
 
 // detectMissingJournalEntries detects missing journal entries

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -218,9 +219,10 @@ func (bme *BaselineManagerEnhanced) hasChecksum(baseline *Baseline) bool {
 }
 
 func (bme *BaselineManagerEnhanced) calculateChecksum(data []byte) string {
-	// TODO: Implement actual SHA256 checksum
-	// For now, return placeholder
-	return fmt.Sprintf("sha256:%x", len(data))
+	// Calculate SHA256 hash
+	hash := sha256.Sum256(data)
+	// Return in format: sha256:hexstring
+	return fmt.Sprintf("sha256:%x", hash)
 }
 
 func (bme *BaselineManagerEnhanced) verifyChecksum(baseline *Baseline) error {

@@ -1,6 +1,12 @@
 .PHONY: all build build-all test clean proto help install-tools tidy verify
 .PHONY: build-aibench build-benchmark-server build-arcagi-service
 .PHONY: run-aibench run-benchmark-server run-arcagi-service
+.PHONY: shell-build shell-serve shell-run
+
+SHELL_GATEWAY_URL          ?=
+SHELL_DMS_ENDPOINT         ?= http://localhost:8084
+SHELL_AGENTFLOW_ENDPOINT   ?= http://localhost:8086
+SHELL_LOCALAI_URL          ?=
 
 # Default target
 all: build
@@ -36,6 +42,22 @@ run-benchmark-server:
 
 run-arcagi-service:
 	go run ./cmd/arcagi_service
+
+# Build embedded shell UI + Go assets
+shell-build:
+	@echo "Building browser shell assets..."
+	go generate ./services/browser/shell/cmd/server
+
+# Serve the Chromium shell with configured upstreams
+shell-serve: shell-build
+	@echo "Starting browser shell..."
+	SHELL_GATEWAY_URL=$(SHELL_GATEWAY_URL) \
+	SHELL_DMS_ENDPOINT=$(SHELL_DMS_ENDPOINT) \
+	SHELL_AGENTFLOW_ENDPOINT=$(SHELL_AGENTFLOW_ENDPOINT) \
+	SHELL_LOCALAI_URL=$(SHELL_LOCALAI_URL) \
+	go run ./services/browser/shell/cmd/server
+
+shell-run: shell-serve
 
 # Run tests
 test:

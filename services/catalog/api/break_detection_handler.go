@@ -237,8 +237,41 @@ func (h *BreakDetectionHandler) HandleGetBreak(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// TODO: Implement break retrieval
-	http.Error(w, "Not yet implemented", http.StatusNotImplemented)
+	ctx := r.Context()
+
+	// Extract break_id from URL path
+	// Path format: /catalog/break-detection/breaks/{break_id}
+	path := r.URL.Path
+	pathParts := strings.Split(strings.Trim(path, "/"), "/")
+	
+	var breakID string
+	for i, part := range pathParts {
+		if part == "breaks" && i+1 < len(pathParts) {
+			breakID = pathParts[i+1]
+			break
+		}
+	}
+
+	if breakID == "" {
+		http.Error(w, "break_id is required", http.StatusBadRequest)
+		return
+	}
+
+	// Get break from service
+	breakRecord, err := h.breakDetectionService.GetBreak(ctx, breakID)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		h.logger.Printf("Failed to get break %s: %v", breakID, err)
+		http.Error(w, fmt.Sprintf("Failed to get break: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"break": breakRecord,
+	})
 }
 
 // writeJSON writes a JSON response

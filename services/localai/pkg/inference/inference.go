@@ -6,8 +6,14 @@ import (
 	"log"
 	"time"
 
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/ai"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/domain"
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/ai"
+)
+
+const (
+	defaultStubVocabSize = 50000
+	defaultBOSTokenID    = 1
+	defaultEOSTokenID    = 2
 )
 
 // InferenceEngine handles actual model inference
@@ -111,6 +117,17 @@ func (e *InferenceEngine) GenerateResponse(ctx context.Context, req *InferenceRe
 
 // tokenizeInput tokenizes the input text
 func (e *InferenceEngine) tokenizeInput(prompt string, model *ai.VaultGemma) ([]int, error) {
+	vocabSize := defaultStubVocabSize
+	bosID := defaultBOSTokenID
+	if model != nil {
+		if model.Config.VocabSize > 0 {
+			vocabSize = model.Config.VocabSize
+		}
+		if model.Config.BOSTokenID != 0 {
+			bosID = model.Config.BOSTokenID
+		}
+	}
+
 	// Use the model's tokenizer to convert text to tokens
 	// This is a simplified implementation - in practice, you'd use the actual tokenizer
 	tokens := make([]int, 0, len(prompt)/4) // Rough estimate
@@ -120,12 +137,12 @@ func (e *InferenceEngine) tokenizeInput(prompt string, model *ai.VaultGemma) ([]
 	words := splitIntoWords(prompt)
 	for _, word := range words {
 		// Simple hash-based tokenization (replace with actual tokenizer)
-		token := hashString(word) % model.Config.VocabSize
+		token := hashString(word) % vocabSize
 		tokens = append(tokens, token)
 	}
 
 	// Add special tokens (using default BOS token ID)
-	tokens = append([]int{1}, tokens...) // BOS token ID
+	tokens = append([]int{bosID}, tokens...) // BOS token ID
 
 	return tokens, nil
 }
@@ -133,8 +150,19 @@ func (e *InferenceEngine) tokenizeInput(prompt string, model *ai.VaultGemma) ([]
 // generateTokens generates tokens using the model
 
 func (e *InferenceEngine) generateTokens(ctx context.Context, model *ai.VaultGemma, inputTokens []int, maxTokens int, temperature, topP float64, topK int) ([]int, error) {
+	vocabSize := defaultStubVocabSize
+	eosID := defaultEOSTokenID
+	if model != nil {
+		if model.Config.VocabSize > 0 {
+			vocabSize = model.Config.VocabSize
+		}
+		if model.Config.EOSTokenID != 0 {
+			eosID = model.Config.EOSTokenID
+		}
+	}
+
 	if model == nil || model.Embed == nil || model.Output == nil || model.Embed.Weights == nil || model.Output.Weights == nil {
-		return generateStubTokens(inputTokens, maxTokens, model.Config.VocabSize, model.Config.EOSTokenID), nil
+		return generateStubTokens(inputTokens, maxTokens, vocabSize, eosID), nil
 	}
 	samplingCfg := ai.SamplingConfig{
 		Temperature: temperature,
@@ -187,10 +215,10 @@ func generateStubTokens(inputTokens []int, maxTokens int, vocabSize int, eosID i
 		return []int{}
 	}
 	if vocabSize <= 0 {
-		vocabSize = 50000
+		vocabSize = defaultStubVocabSize
 	}
 	if eosID == 0 {
-		eosID = 2
+		eosID = defaultEOSTokenID
 	}
 	generated := make([]int, 0, maxTokens)
 	base := 1

@@ -343,6 +343,72 @@ func (s *BreakDetectionService) storeBreak(ctx context.Context, b *Break) error 
 	return err
 }
 
+// GetBreak retrieves a break by break_id
+func (s *BreakDetectionService) GetBreak(ctx context.Context, breakID string) (*Break, error) {
+	query := `
+		SELECT id, break_id, run_id, system_name, detection_type, break_type,
+		       severity, status, current_value, baseline_value, difference,
+		       affected_entities, root_cause_analysis, semantic_enrichment,
+		       recommendations, ai_description, ai_category, ai_priority_score,
+		       similar_breaks, detected_at, resolved_at, resolved_by,
+		       resolution_notes, created_at, updated_at
+		FROM break_detection_breaks
+		WHERE break_id = $1
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+
+	var b Break
+	var currentJSON, baselineJSON, differenceJSON, affectedJSON []byte
+	var semanticJSON, similarJSON []byte
+	var recommendationsJSON []byte
+	var resolvedAt sql.NullTime
+
+	err := s.db.QueryRowContext(ctx, query, breakID).Scan(
+		&b.ID, &b.BreakID, &b.RunID, &b.SystemName, &b.DetectionType, &b.BreakType,
+		&b.Severity, &b.Status, &currentJSON, &baselineJSON, &differenceJSON,
+		&affectedJSON, &b.RootCauseAnalysis, &semanticJSON,
+		&recommendationsJSON, &b.AIDescription, &b.AICategory, &b.AIPriorityScore,
+		&similarJSON, &b.DetectedAt, &resolvedAt, &b.ResolvedBy,
+		&b.ResolutionNotes, &b.CreatedAt, &b.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("break not found: %s", breakID)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get break: %w", err)
+	}
+
+	// Parse JSON fields (JSONB is returned as []byte in PostgreSQL)
+	if len(currentJSON) > 0 {
+		json.Unmarshal(currentJSON, &b.CurrentValue)
+	}
+	if len(baselineJSON) > 0 {
+		json.Unmarshal(baselineJSON, &b.BaselineValue)
+	}
+	if len(differenceJSON) > 0 {
+		json.Unmarshal(differenceJSON, &b.Difference)
+	}
+	if len(affectedJSON) > 0 {
+		json.Unmarshal(affectedJSON, &b.AffectedEntities)
+	}
+	if len(semanticJSON) > 0 {
+		json.Unmarshal(semanticJSON, &b.SemanticEnrichment)
+	}
+	if len(similarJSON) > 0 {
+		json.Unmarshal(similarJSON, &b.SimilarBreaks)
+	}
+	if len(recommendationsJSON) > 0 {
+		json.Unmarshal(recommendationsJSON, &b.Recommendations)
+	}
+	if resolvedAt.Valid {
+		b.ResolvedAt = &resolvedAt.Time
+	}
+
+	return &b, nil
+}
+
 // GetDetectionRun retrieves a detection run by ID
 func (s *BreakDetectionService) GetDetectionRun(ctx context.Context, runID string) (*DetectionRun, error) {
 	// Implementation to retrieve run and associated breaks

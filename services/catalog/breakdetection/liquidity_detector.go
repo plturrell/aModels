@@ -1,11 +1,15 @@
 package breakdetection
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -193,26 +197,172 @@ func (ld *LiquidityDetector) parseLCR(data map[string]interface{}) *RCOLCR {
 
 // fetchCurrentLiquidityPositions fetches current liquidity positions from RCO
 func (ld *LiquidityDetector) fetchCurrentLiquidityPositions(ctx context.Context) (map[string]*RCOLiquidityPosition, error) {
-	// TODO: Implement actual API call to RCO
-	positions := make(map[string]*RCOLiquidityPosition)
+	baseURL := strings.TrimSuffix(ld.rcoURL, "/")
+	endpoint := fmt.Sprintf("%s/api/liquidity-positions", baseURL)
 
-	// Placeholder: In production, this would call RCO API
-	// url := fmt.Sprintf("%s/api/liquidity-positions", ld.rcoURL)
-	// resp, err := ld.httpClient.Get(url)
-	// ... parse response ...
+	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if apiKey := os.Getenv("RCO_API_KEY"); apiKey != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	}
+	req.Header.Set("Accept", "application/json")
+
+	if ld.logger != nil {
+		ld.logger.Printf("Fetching liquidity positions from RCO: %s", endpoint)
+	}
+
+	resp, err := ld.makeHTTPRequestWithRetry(req, 3)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch liquidity positions: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("RCO API returned error status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var response struct {
+		Positions []*RCOLiquidityPosition `json:"positions,omitempty"`
+		Data      []*RCOLiquidityPosition `json:"data,omitempty"`
+	}
+
+	var positionsArray []*RCOLiquidityPosition
+	if err := json.Unmarshal(body, &positionsArray); err == nil {
+		positions := make(map[string]*RCOLiquidityPosition, len(positionsArray))
+		for _, position := range positionsArray {
+			positions[position.PositionID] = position
+		}
+		return positions, nil
+	}
+
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	positions := make(map[string]*RCOLiquidityPosition)
+	if len(response.Positions) > 0 {
+		for _, position := range response.Positions {
+			positions[position.PositionID] = position
+		}
+	} else if len(response.Data) > 0 {
+		for _, position := range response.Data {
+			positions[position.PositionID] = position
+		}
+	}
+
+	if ld.logger != nil {
+		ld.logger.Printf("Fetched %d liquidity positions from RCO", len(positions))
+	}
 
 	return positions, nil
 }
 
 // fetchCurrentLCR fetches current LCR from RCO
 func (ld *LiquidityDetector) fetchCurrentLCR(ctx context.Context) (*RCOLCR, error) {
-	// TODO: Implement actual API call to RCO
-	// Placeholder: In production, this would call RCO API
-	// url := fmt.Sprintf("%s/api/lcr", ld.rcoURL)
-	// resp, err := ld.httpClient.Get(url)
-	// ... parse response ...
+	baseURL := strings.TrimSuffix(ld.rcoURL, "/")
+	endpoint := fmt.Sprintf("%s/api/lcr", baseURL)
 
-	return nil, nil
+	requestCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if apiKey := os.Getenv("RCO_API_KEY"); apiKey != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
+	}
+	req.Header.Set("Accept", "application/json")
+
+	if ld.logger != nil {
+		ld.logger.Printf("Fetching LCR from RCO: %s", endpoint)
+	}
+
+	resp, err := ld.makeHTTPRequestWithRetry(req, 3)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch LCR: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("RCO API returned error status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var response struct {
+		LCR  *RCOLCR `json:"lcr,omitempty"`
+		Data *RCOLCR `json:"data,omitempty"`
+	}
+
+	// Try parsing as direct object first
+	var lcr *RCOLCR
+	if err := json.Unmarshal(body, &lcr); err == nil && lcr != nil {
+		return lcr, nil
+	}
+
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if response.LCR != nil {
+		return response.LCR, nil
+	}
+	if response.Data != nil {
+		return response.Data, nil
+	}
+
+	return nil, fmt.Errorf("no LCR data found in response")
+}
+
+// makeHTTPRequestWithRetry makes an HTTP request with retry logic and exponential backoff
+func (ld *LiquidityDetector) makeHTTPRequestWithRetry(req *http.Request, maxRetries int) (*http.Response, error) {
+	var resp *http.Response
+	var err error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		if attempt > 0 {
+			waitTime := time.Duration(1<<uint(attempt-1)) * time.Second
+			if ld.logger != nil {
+				ld.logger.Printf("Retrying HTTP request (attempt %d/%d) after %v", attempt+1, maxRetries, waitTime)
+			}
+			select {
+			case <-time.After(waitTime):
+			case <-req.Context().Done():
+				return nil, fmt.Errorf("request cancelled: %w", req.Context().Err())
+			}
+		}
+
+		resp, err = ld.httpClient.Do(req)
+		if err == nil {
+			return resp, nil
+		}
+
+		if req.Context().Err() != nil {
+			return nil, fmt.Errorf("request cancelled or timed out: %w", req.Context().Err())
+		}
+
+		if ld.logger != nil && attempt < maxRetries-1 {
+			ld.logger.Printf("HTTP request failed (attempt %d/%d): %v", attempt+1, maxRetries, err)
+		}
+	}
+
+	return nil, fmt.Errorf("failed after %d attempts: %w", maxRetries, err)
 }
 
 // detectLCRViolations detects LCR violations

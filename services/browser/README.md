@@ -46,9 +46,8 @@ npm run dev
 npm run build
 
 # regenerate dist assets and run the embedded server
-cd ../cmd/server
-go generate .
-go run .
+cd ../../../..
+make shell-serve SHELL_DMS_ENDPOINT=http://localhost:8084 SHELL_AGENTFLOW_ENDPOINT=http://localhost:8086
 ```
 
 The embedded server automatically discovers gateway endpoints and falls back to repository artefacts when an API is unavailable.
@@ -61,4 +60,16 @@ Environment overrides:
 - `SHELL_MODELS_DIR` – override the repository `models/` folder root.
 - `SHELL_SGMI_ENDPOINT` – overrides the inferred `SHELL_GATEWAY_URL/shell/sgmi/raw` endpoint (falls back to file on disk if unset/unavailable).
 - `SHELL_TRAINING_DATA_ENDPOINT` – overrides the inferred `SHELL_GATEWAY_URL/shell/training/dataset` endpoint (falls back to derived summaries on failure).
+- `SHELL_DMS_ENDPOINT` – target for Document Management Service requests (defaults to `${SHELL_GATEWAY_URL}/dms`).
+- `SHELL_AGENTFLOW_ENDPOINT` – target for AgentFlow/LangFlow requests (defaults to `${SHELL_GATEWAY_URL}/agentflow`).
 
+The Go shell reverse-proxies `/dms/*` and `/agentflow/*` to the configured upstreams so the UI can call those services without CORS changes.
+
+Quick verification once the shell is running:
+
+```bash
+curl -s http://localhost:4173/dms/documents | jq .
+curl -s http://localhost:4173/agentflow/flows | jq .
+```
+
+These requests should return the same JSON payloads your FastAPI services expose on their native ports.
