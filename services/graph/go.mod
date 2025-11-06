@@ -8,11 +8,8 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
-	github.com/plturrell/agenticAiETH/agenticAiETH_layer1_Blockchain v0.0.0
-	github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK v0.0.0
-	github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract v0.0.0
-	github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA v0.0.0
-	github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths v0.0.0
+	// Removed agenticAiETH dependencies - these packages don't exist
+	// Using replace directive to point to local services/postgres instead
 	github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres v0.0.0
 	github.com/redis/go-redis/v9 v9.16.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -68,19 +65,16 @@ require (
 	google.golang.org/protobuf v1.36.10
 )
 
-replace github.com/redis/go-redis/v9 => ../third_party/go-redis
-
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer1_Blockchain => ../agenticAiETH_layer1_Blockchain
-
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA => ../agenticAiETH_layer4_HANA
-
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK => ../agenticAiETH_layer4_AgentSDK
-
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract => ../agenticAiETH_layer4_Extract
-
+// Replace directives for local packages
+replace github.com/plturrell/aModels/services/graph => .
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres => ../postgres
-
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths => ../agenticAiETH_layer4_Models/maths
-
-replace github.com/apache/arrow/go/v16 => ../third_party/go-arrow
 replace github.com/SAP/go-hdb => ../../infrastructure/third_party/go-hdb
+
+// Removed agenticAiETH replace directives - these packages don't exist
+// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer1_Blockchain => ../agenticAiETH_layer1_Blockchain
+// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA => ../agenticAiETH_layer4_HANA
+// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK => ../agenticAiETH_layer4_AgentSDK
+// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract => ../agenticAiETH_layer4_Extract
+// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths => ../agenticAiETH_layer4_Models/maths
+// replace github.com/redis/go-redis/v9 => ../third_party/go-redis
+// replace github.com/apache/arrow/go/v16 => ../third_party/go-arrow

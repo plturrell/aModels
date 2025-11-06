@@ -20,7 +20,7 @@ import (
 	extractpersist "github.com/langchain-ai/langgraph-go/pkg/persistence/extract"
 	"github.com/langchain-ai/langgraph-go/pkg/graph"
 	"github.com/langchain-ai/langgraph-go/pkg/stategraph"
-	extractpb "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract/gen/extractpb"
+	extractpb "github.com/plturrell/aModels/services/extract/gen/extractpb"
 )
 
 // EdgeSpec describes a directed connection between two nodes for helper builders.

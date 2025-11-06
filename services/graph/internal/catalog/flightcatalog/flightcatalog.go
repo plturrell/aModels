@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightclient"
+	"github.com/langchain-ai/langgraph-go/pkg/stubs"
 )
 
 // Catalog summarizes the Arrow Flight listings the graph service cares about.

@@ -31,10 +31,25 @@ WORKDIR /workspace/src/services/graph
 ENV GOTOOLCHAIN=local
 
 # Remove replace directives that point to missing local paths
+# Keep Postgres replace but fix path
 RUN sed -i '/replace.*third_party\/go-arrow/d' go.mod || true && \
     sed -i '/replace.*third_party\/go-redis/d' go.mod || true && \
     sed -i '/replace.*infrastructure\/third_party\/go-hdb/d' go.mod || true && \
-    sed -i '/replace.*agenticAiETH/d' go.mod || true
+    sed -i '/replace.*agenticAiETH_layer1_Blockchain/d' go.mod || true && \
+    sed -i '/replace.*agenticAiETH_layer4_HANA/d' go.mod || true && \
+    sed -i '/replace.*agenticAiETH_layer4_AgentSDK/d' go.mod || true && \
+    sed -i '/replace.*agenticAiETH_layer4_Extract/d' go.mod || true && \
+    sed -i '/replace.*agenticAiETH_layer4_Models/d' go.mod || true && \
+    sed -i '/replace.*agenticAiETH_layer4_Postgres/d' go.mod || true
+
+# Add replace directives using go mod edit (must be done before go mod tidy)
+RUN go mod edit -replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres=../postgres && \
+    go mod edit -replace github.com/plturrell/aModels/services/graph=. && \
+    go mod edit -replace github.com/SAP/go-hdb=../../infrastructure/third_party/go-hdb && \
+    go mod edit -replace github.com/plturrell/aModels/services/postgres=../postgres && \
+    go mod edit -replace github.com/plturrell/aModels/services/catalog=../catalog && \
+    go mod edit -replace github.com/plturrell/aModels/services/extract=../extract && \
+    go mod edit -replace github.com/plturrell/aModels/services/orchestration=../orchestration
 
 RUN go mod tidy
 RUN CGO_ENABLED=0 go build -o /workspace/build/graph-server ./cmd/graph-server

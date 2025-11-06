@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	postgresv1 "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/gen/v1"
+	postgresv1 "github.com/plturrell/aModels/services/postgres/pkg/gen/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
