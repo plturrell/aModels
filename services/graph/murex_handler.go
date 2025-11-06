@@ -15,15 +15,27 @@ import (
 
 // MurexHandler provides HTTP handlers for Murex integration.
 type MurexHandler struct {
-	integration *MurexIntegration
-	logger      *log.Logger
+	integration           *MurexIntegration
+	terminologyExtractor  *MurexTerminologyExtractor
+	catalogPopulator      *MurexCatalogPopulator
+	terminologyLearner    *MurexTerminologyLearnerIntegration
+	logger                *log.Logger
 }
 
 // NewMurexHandler creates a new Murex handler.
-func NewMurexHandler(integration *MurexIntegration, logger *log.Logger) *MurexHandler {
+func NewMurexHandler(
+	integration *MurexIntegration,
+	terminologyExtractor *MurexTerminologyExtractor,
+	catalogPopulator *MurexCatalogPopulator,
+	terminologyLearner *MurexTerminologyLearnerIntegration,
+	logger *log.Logger,
+) *MurexHandler {
 	return &MurexHandler{
-		integration: integration,
-		logger:      logger,
+		integration:          integration,
+		terminologyExtractor: terminologyExtractor,
+		catalogPopulator:    catalogPopulator,
+		terminologyLearner:   terminologyLearner,
+		logger:               logger,
 	}
 }
 
@@ -133,6 +145,148 @@ func (h *MurexHandler) HandleDiscoverSchema(w http.ResponseWriter, r *http.Reque
 	}
 
 	h.respondJSON(w, http.StatusOK, schema)
+}
+
+// HandleExtractTerminology handles POST /integrations/murex/terminology/extract - Extract terminology.
+func (h *MurexHandler) HandleExtractTerminology(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		FromOpenAPI bool `json:"from_openapi"`
+		FromAPIData bool `json:"from_api_data"`
+		SampleSize  int  `json:"sample_size"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err.Error() != "EOF" {
+		// Defaults
+		req.FromOpenAPI = true
+		req.FromAPIData = true
+		req.SampleSize = 100
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+
+	if h.terminologyExtractor == nil {
+		h.respondError(w, http.StatusServiceUnavailable, "Terminology extractor not configured")
+		return
+	}
+
+	if req.FromOpenAPI {
+		if err := h.terminologyExtractor.ExtractFromOpenAPISpec(ctx); err != nil {
+			h.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to extract from OpenAPI: %v", err))
+			return
+		}
+	}
+
+	if req.FromAPIData {
+		if req.SampleSize == 0 {
+			req.SampleSize = 100
+		}
+		if err := h.terminologyExtractor.ExtractFromAPIData(ctx, req.SampleSize); err != nil {
+			h.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to extract from API data: %v", err))
+			return
+		}
+	}
+
+	terminology := h.terminologyExtractor.GetTerminology()
+	trainingData := h.terminologyExtractor.GetTrainingData()
+
+	h.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"status":      "success",
+		"message":     "Terminology extracted successfully",
+		"terminology": map[string]interface{}{
+			"domains":        len(terminology.Domains),
+			"roles":          len(terminology.Roles),
+			"patterns":       len(terminology.NamingPatterns),
+			"entity_types":   len(terminology.EntityTypes),
+			"relationships":  len(terminology.Relationships),
+		},
+		"training_data": map[string]interface{}{
+			"schema_examples":      len(trainingData.SchemaExamples),
+			"field_examples":       len(trainingData.FieldExamples),
+			"relationship_examples": len(trainingData.RelationshipExamples),
+			"value_patterns":       len(trainingData.ValuePatterns),
+		},
+	})
+}
+
+// HandlePopulateCatalog handles POST /integrations/murex/catalog/populate - Populate catalog.
+func (h *MurexHandler) HandlePopulateCatalog(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+
+	if h.catalogPopulator == nil {
+		h.respondError(w, http.StatusServiceUnavailable, "Catalog populator not configured")
+		return
+	}
+
+	if err := h.catalogPopulator.PopulateAll(ctx); err != nil {
+		h.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to populate catalog: %v", err))
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "success",
+		"message": "Catalog populated successfully from Murex terminology and training data",
+	})
+}
+
+// HandleTrainTerminology handles POST /integrations/murex/terminology/train - Train terminology learner.
+func (h *MurexHandler) HandleTrainTerminology(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+
+	if h.terminologyLearner == nil {
+		h.respondError(w, http.StatusServiceUnavailable, "Terminology learner integration not configured")
+		return
+	}
+
+	// Train from extracted terminology
+	if err := h.terminologyLearner.TrainFromExtractedTerminology(ctx); err != nil {
+		h.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to train terminology learner: %v", err))
+		return
+	}
+
+	// Also train from schema examples
+	if err := h.terminologyLearner.TrainFromSchemaExamples(ctx); err != nil {
+		h.respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to train from schema examples: %v", err))
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "success",
+		"message": "Terminology learner trained successfully from Murex data",
+	})
+}
+
+// HandleExportTrainingData handles GET /integrations/murex/terminology/export - Export training data.
+func (h *MurexHandler) HandleExportTrainingData(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.terminologyLearner == nil {
+		h.respondError(w, http.StatusServiceUnavailable, "Terminology learner integration not configured")
+		return
+	}
+
+	trainingData := h.terminologyLearner.ExportTrainingData()
+	h.respondJSON(w, http.StatusOK, trainingData)
 }
 
 // respondJSON writes a JSON response.

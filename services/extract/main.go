@@ -396,7 +396,12 @@ func main() {
 	mux.HandleFunc("/terminology/domains", server.handleTerminologyDomains)     // List learned domains
 	mux.HandleFunc("/terminology/roles", server.handleTerminologyRoles)         // List learned roles
 	mux.HandleFunc("/terminology/patterns", server.handleTerminologyPatterns)   // List learned naming patterns
-	mux.HandleFunc("/terminology/learn", server.handleTerminologyLearn)         // Trigger manual learning
+	mux.HandleFunc("/terminology/learn", server.handleTerminologyLearn)         // Trigger manual learning (from nodes/edges)
+	mux.HandleFunc("/terminology/learn/domain", server.handleTerminologyLearnDomain) // Learn domain term
+	mux.HandleFunc("/terminology/learn/role", server.handleTerminologyLearnRole)   // Learn role term
+	mux.HandleFunc("/terminology/infer/domain", server.handleTerminologyInferDomain) // Infer domain
+	mux.HandleFunc("/terminology/infer/role", server.handleTerminologyInferRole)   // Infer role
+	mux.HandleFunc("/terminology/enhance/embedding", server.handleTerminologyEnhanceEmbedding) // Enhance embedding
 	mux.HandleFunc("/terminology/evolution", server.handleTerminologyEvolution) // Terminology evolution over time
 	// SAP Business Data Cloud integration endpoints
 	mux.HandleFunc("/sap-bdc/extract", server.handleSAPBDCExtract)                  // Extract from SAP BDC
@@ -4013,8 +4018,227 @@ func (s *extractServer) handleTerminologyPatterns(w http.ResponseWriter, r *http
 	handlers.WriteJSON(w, http.StatusOK, map[string]any{"patterns": []any{}})
 }
 func (s *extractServer) handleTerminologyLearn(w http.ResponseWriter, r *http.Request) {
-	handlers.WriteJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	terminologyLearner := GetGlobalTerminologyLearner()
+	if terminologyLearner == nil {
+		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "terminology learner not available"})
+		return
+	}
+
+	var req struct {
+		Nodes []Node `json:"nodes"`
+		Edges []Edge `json:"edges"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("failed to decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	if err := terminologyLearner.LearnFromExtraction(r.Context(), req.Nodes, req.Edges); err != nil {
+		s.logger.Printf("Failed to learn terminology: %v", err)
+		http.Error(w, fmt.Sprintf("failed to learn terminology: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{
+		"status":  "success",
+		"message": "Terminology learned successfully",
+		"nodes":   len(req.Nodes),
+		"edges":   len(req.Edges),
+	})
 }
+
+func (s *extractServer) handleTerminologyLearnDomain(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	terminologyLearner := GetGlobalTerminologyLearner()
+	if terminologyLearner == nil {
+		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "terminology learner not available"})
+		return
+	}
+
+	var req struct {
+		Text      string `json:"text"`
+		Domain    string `json:"domain"`
+		Timestamp string `json:"timestamp"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("failed to decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	timestamp := time.Now()
+	if req.Timestamp != "" {
+		if t, err := time.Parse(time.RFC3339, req.Timestamp); err == nil {
+			timestamp = t
+		}
+	}
+
+	if err := terminologyLearner.LearnDomain(r.Context(), req.Text, req.Domain, timestamp); err != nil {
+		s.logger.Printf("Failed to learn domain: %v", err)
+		http.Error(w, fmt.Sprintf("failed to learn domain: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{
+		"status":  "success",
+		"message": "Domain learned successfully",
+		"text":    req.Text,
+		"domain":  req.Domain,
+	})
+}
+
+func (s *extractServer) handleTerminologyLearnRole(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	terminologyLearner := GetGlobalTerminologyLearner()
+	if terminologyLearner == nil {
+		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "terminology learner not available"})
+		return
+	}
+
+	var req struct {
+		Text      string `json:"text"`
+		Role      string `json:"role"`
+		Timestamp string `json:"timestamp"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("failed to decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	timestamp := time.Now()
+	if req.Timestamp != "" {
+		if t, err := time.Parse(time.RFC3339, req.Timestamp); err == nil {
+			timestamp = t
+		}
+	}
+
+	if err := terminologyLearner.LearnRole(r.Context(), req.Text, req.Role, timestamp); err != nil {
+		s.logger.Printf("Failed to learn role: %v", err)
+		http.Error(w, fmt.Sprintf("failed to learn role: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{
+		"status":  "success",
+		"message": "Role learned successfully",
+		"text":    req.Text,
+		"role":    req.Role,
+	})
+}
+
+func (s *extractServer) handleTerminologyInferDomain(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	terminologyLearner := GetGlobalTerminologyLearner()
+	if terminologyLearner == nil {
+		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "terminology learner not available"})
+		return
+	}
+
+	var req struct {
+		ColumnName string                 `json:"column_name"`
+		TableName  string                 `json:"table_name"`
+		Context    map[string]interface{} `json:"context"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("failed to decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	domain, confidence := terminologyLearner.InferDomain(r.Context(), req.ColumnName, req.TableName, req.Context)
+
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{
+		"domain":     domain,
+		"confidence": confidence,
+	})
+}
+
+func (s *extractServer) handleTerminologyInferRole(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	terminologyLearner := GetGlobalTerminologyLearner()
+	if terminologyLearner == nil {
+		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "terminology learner not available"})
+		return
+	}
+
+	var req struct {
+		ColumnName string                 `json:"column_name"`
+		ColumnType string                 `json:"column_type"`
+		TableName  string                 `json:"table_name"`
+		Context    map[string]interface{} `json:"context"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("failed to decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	role, confidence := terminologyLearner.InferRole(r.Context(), req.ColumnName, req.ColumnType, req.TableName, req.Context)
+
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{
+		"role":       role,
+		"confidence": confidence,
+	})
+}
+
+func (s *extractServer) handleTerminologyEnhanceEmbedding(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	terminologyLearner := GetGlobalTerminologyLearner()
+	if terminologyLearner == nil {
+		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "terminology learner not available"})
+		return
+	}
+
+	var req struct {
+		Text          string    `json:"text"`
+		BaseEmbedding []float32 `json:"base_embedding"`
+		EmbeddingType string    `json:"embedding_type"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("failed to decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	enhanced, err := terminologyLearner.EnhanceEmbedding(r.Context(), req.Text, req.BaseEmbedding, req.EmbeddingType)
+	if err != nil {
+		s.logger.Printf("Failed to enhance embedding: %v", err)
+		http.Error(w, fmt.Sprintf("failed to enhance embedding: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, map[string]any{
+		"enhanced_embedding": enhanced,
+	})
+}
+
 func (s *extractServer) handleTerminologyEvolution(w http.ResponseWriter, r *http.Request) {
 	handlers.WriteJSON(w, http.StatusOK, map[string]any{"evolution": []any{}})
 }

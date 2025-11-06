@@ -21,6 +21,7 @@ import (
 	postgresv1 "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/gen/v1"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/plturrell/aModels/services/graph"
+	"github.com/plturrell/aModels/services/orchestration/agents/connectors"
 	"google.golang.org/protobuf/encoding/protojson"
 	proto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -109,8 +110,33 @@ func main() {
 			// Create Murex integration
 			murexIntegration := graph.NewMurexIntegration(murexConfig, mapper, graphClient, log.Default())
 
+			// Create terminology extractor
+			terminologyExtractor := graph.NewMurexTerminologyExtractor(connectors.NewMurexConnector(murexConfig, log.Default()), log.Default())
+
+			// Create catalog populator (if registry available)
+			var catalogPopulator *graph.MurexCatalogPopulator
+			// Note: Would need to pass catalog registry here if available
+			// For now, catalogPopulator can be nil
+
+			// Create terminology learner integration
+			// Use HTTP client to connect to extract service TerminologyLearner
+			var terminologyLearner *graph.MurexTerminologyLearnerIntegration
+			extractServiceURL := strings.TrimSpace(os.Getenv("EXTRACT_SERVICE_URL"))
+			if extractServiceURL == "" {
+				extractServiceURL = extractHTTPURL // Use the same URL as extract service
+			}
+			if extractServiceURL != "" {
+				httpLearnerClient := graph.NewHTTPTerminologyLearnerClient(extractServiceURL, log.Default())
+				terminologyLearner = graph.NewMurexTerminologyLearnerIntegration(
+					terminologyExtractor,
+					httpLearnerClient,
+					log.Default(),
+				)
+				log.Printf("Murex terminology learner integration initialized (extract_service=%s)", extractServiceURL)
+			}
+
 			// Create handler
-			murexHandler = graph.NewMurexHandler(murexIntegration, log.Default())
+			murexHandler = graph.NewMurexHandler(murexIntegration, terminologyExtractor, catalogPopulator, terminologyLearner, log.Default())
 
 			log.Printf("Murex integration initialized (base_url=%s)", murexBaseURL)
 		}
@@ -549,6 +575,10 @@ func main() {
 		http.HandleFunc("/integrations/murex/trades", murexHandler.HandleIngestTrades)
 		http.HandleFunc("/integrations/murex/cashflows", murexHandler.HandleIngestCashflows)
 		http.HandleFunc("/integrations/murex/schema", murexHandler.HandleDiscoverSchema)
+		http.HandleFunc("/integrations/murex/terminology/extract", murexHandler.HandleExtractTerminology)
+		http.HandleFunc("/integrations/murex/terminology/train", murexHandler.HandleTrainTerminology)
+		http.HandleFunc("/integrations/murex/terminology/export", murexHandler.HandleExportTrainingData)
+		http.HandleFunc("/integrations/murex/catalog/populate", murexHandler.HandlePopulateCatalog)
 		log.Println("Murex integration endpoints registered")
 	}
 

@@ -165,6 +165,32 @@ func (tl *TerminologyLearner) EnhanceEmbedding(
 	return enhanced, nil
 }
 
+// LearnDomain learns a domain term directly.
+func (tl *TerminologyLearner) LearnDomain(
+	ctx context.Context,
+	text string,
+	domain string,
+	timestamp time.Time,
+) error {
+	tl.mu.Lock()
+	defer tl.mu.Unlock()
+
+	return tl.terminologyLNN.LearnDomain(ctx, text, domain, timestamp)
+}
+
+// LearnRole learns a role term directly.
+func (tl *TerminologyLearner) LearnRole(
+	ctx context.Context,
+	text string,
+	role string,
+	timestamp time.Time,
+) error {
+	tl.mu.Lock()
+	defer tl.mu.Unlock()
+
+	return tl.terminologyLNN.LearnRole(ctx, text, role, timestamp)
+}
+
 // LoadTerminology loads learned terminology from store.
 func (tl *TerminologyLearner) LoadTerminology(ctx context.Context) error {
 	tl.mu.Lock()
