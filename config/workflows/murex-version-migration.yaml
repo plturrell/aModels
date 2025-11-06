@@ -1,0 +1,449 @@
+# Murex Version Migration Workflow
+# Automated workflow for Murex version migrations
+
+workflow:
+  id: "murex-version-migration"
+  name: "Murex Version Migration Workflow"
+  version: "1.0.0"
+  description: "Automated workflow for Murex version migrations addressing 11-week manual reconciliation problem"
+  
+  # Workflow stages
+  stages:
+    # Stage 1: Pre-Migration Preparation
+    - id: "pre-migration"
+      name: "Pre-Migration Preparation"
+      steps:
+        - id: "backup-current-version"
+          name: "Backup Current Version"
+          type: "backup"
+          system: "murex"
+          config:
+            version: "current"
+            backup_location: "version-backups/murex"
+            backup_format: "full_snapshot"
+            include_data: true
+            include_config: true
+          on_error: "stop"
+          retries: 3
+        
+        - id: "validate-current-state"
+          name: "Validate Current State"
+          type: "validate"
+          system: "murex"
+          config:
+            checks:
+              - type: "data_quality"
+                threshold: 0.95
+              - type: "completeness"
+                threshold: 0.98
+              - type: "reconciliation_status"
+                must_be: "reconciled"
+          on_error: "stop"
+        
+        - id: "snapshot-downstream-systems"
+          name: "Snapshot Downstream Systems"
+          type: "snapshot"
+          systems:
+            - "etl_data_factory"
+            - "sap_fioneer"
+            - "etl_warehouse"
+            - "bcrs"
+            - "rco"
+            - "axiomsl"
+          config:
+            snapshot_location: "version-backups/downstream"
+            snapshot_format: "point_in_time"
+          on_error: "warn"
+    
+    # Stage 2: New Version Ingestion
+    - id: "new-version-ingestion"
+      name: "New Version Ingestion"
+      steps:
+        - id: "ingest-new-version"
+          name: "Ingest New Version Data"
+          type: "ingest"
+          system: "murex"
+          config:
+            version: "new"
+            source: "murex_new_version"
+            batch_size: 1000
+            validate_on_ingest: true
+          on_error: "stop"
+          retries: 3
+        
+        - id: "validate-new-version"
+          name: "Validate New Version Data"
+          type: "validate"
+          system: "murex"
+          config:
+            checks:
+              - type: "schema_validation"
+                must_pass: true
+              - type: "data_quality"
+                threshold: 0.95
+              - type: "completeness"
+                threshold: 0.98
+          on_error: "stop"
+    
+    # Stage 3: Version Comparison
+    - id: "version-comparison"
+      name: "Version Comparison"
+      steps:
+        - id: "compare-schemas"
+          name: "Compare Schemas"
+          type: "compare"
+          config:
+            version1: "current"
+            version2: "new"
+            comparison_type: "schema"
+            tolerance: "exact"
+            report_changes: true
+          on_error: "warn"
+        
+        - id: "compare-data"
+          name: "Compare Data"
+          type: "compare"
+          config:
+            version1: "current"
+            version2: "new"
+            comparison_type: "data"
+            tolerance: 0.01
+            comparison_fields:
+              - "trade_id"
+              - "notional_amount"
+              - "currency"
+              - "counterparty_id"
+            report_differences: true
+          on_error: "warn"
+        
+        - id: "generate-comparison-report"
+          name: "Generate Comparison Report"
+          type: "report"
+          config:
+            report_type: "version_comparison"
+            include_differences: true
+            include_statistics: true
+            output_format: "json"
+            output_location: "reports/version-comparison"
+          on_error: "warn"
+    
+    # Stage 4: Break Detection
+    - id: "break-detection"
+      name: "Detect Breaks in Downstream Systems"
+      steps:
+        - id: "detect-finance-breaks"
+          name: "Detect Finance Breaks"
+          type: "quality-check"
+          system: "sap_fioneer"
+          config:
+            checks:
+              - type: "finance_break"
+                threshold: 0.0
+                description: "Zero tolerance for finance breaks"
+            compare_with: "current_version_baseline"
+          on_error: "alert"
+        
+        - id: "detect-capital-breaks"
+          name: "Detect Capital Breaks"
+          type: "quality-check"
+          system: "bcrs"
+          config:
+            checks:
+              - type: "capital_break"
+                threshold: 0.0
+                description: "Zero tolerance for capital breaks"
+            compare_with: "current_version_baseline"
+          on_error: "alert"
+        
+        - id: "detect-liquidity-breaks"
+          name: "Detect Liquidity Breaks"
+          type: "quality-check"
+          system: "rco"
+          config:
+            checks:
+              - type: "liquidity_break"
+                threshold: 0.0
+                description: "Zero tolerance for liquidity breaks"
+            compare_with: "current_version_baseline"
+          on_error: "alert"
+        
+        - id: "detect-regulatory-breaks"
+          name: "Detect Regulatory Breaks"
+          type: "quality-check"
+          system: "axiomsl"
+          config:
+            checks:
+              - type: "regulatory_break"
+                threshold: 0.0
+                description: "Zero tolerance for regulatory breaks"
+            compare_with: "current_version_baseline"
+          on_error: "alert"
+        
+        - id: "generate-break-report"
+          name: "Generate Break Report"
+          type: "report"
+          config:
+            report_type: "break_detection"
+            include_all_breaks: true
+            output_format: "json"
+            output_location: "reports/break-detection"
+          on_error: "warn"
+    
+    # Stage 5: Automated Reconciliation
+    - id: "automated-reconciliation"
+      name: "Automated Reconciliation"
+      steps:
+        - id: "reconcile-murex-to-etl"
+          name: "Reconcile Murex to ETL Data Factory"
+          type: "reconcile"
+          config:
+            source: "murex"
+            target: "etl_data_factory"
+            reconciliation_rules:
+              - field: "trade_id"
+                match: "exact"
+              - field: "notional_amount"
+                tolerance: 0.01
+            auto_fix: true
+            max_differences: 100
+          on_error: "warn"
+        
+        - id: "reconcile-etl-to-sap"
+          name: "Reconcile ETL Data Factory to SAP Fioneer"
+          type: "reconcile"
+          config:
+            source: "etl_data_factory"
+            target: "sap_fioneer"
+            reconciliation_rules:
+              - field: "entry_id"
+                match: "exact"
+              - field: "debit_amount"
+                tolerance: 0.01
+            auto_fix: true
+            max_differences: 100
+          on_error: "warn"
+        
+        - id: "reconcile-sap-to-warehouse"
+          name: "Reconcile SAP Fioneer to ETL Warehouse"
+          type: "reconcile"
+          config:
+            source: "sap_fioneer"
+            target: "etl_warehouse"
+            reconciliation_rules:
+              - field: "trade_id"
+                match: "exact"
+              - field: "notional_amount"
+                tolerance: 0.01
+            auto_fix: true
+            max_differences: 100
+          on_error: "warn"
+        
+        - id: "reconcile-warehouse-to-downstream"
+          name: "Reconcile Warehouse to Downstream Systems"
+          type: "reconcile"
+          config:
+            source: "etl_warehouse"
+            targets:
+              - "bcrs"
+              - "rco"
+              - "axiomsl"
+            reconciliation_rules:
+              - field: "trade_id"
+                match: "exact"
+              - field: "amount"
+                tolerance: 0.01
+            auto_fix: true
+            parallel: true
+          on_error: "warn"
+        
+        - id: "generate-reconciliation-report"
+          name: "Generate Reconciliation Report"
+          type: "report"
+          config:
+            report_type: "reconciliation"
+            include_reconciled: true
+            include_unreconciled: true
+            output_format: "json"
+            output_location: "reports/reconciliation"
+          on_error: "warn"
+    
+    # Stage 6: Downstream Validation
+    - id: "downstream-validation"
+      name: "Validate Downstream Systems"
+      steps:
+        - id: "validate-sap-fioneer"
+          name: "Validate SAP Fioneer"
+          type: "validate"
+          system: "sap_fioneer"
+          config:
+            checks:
+              - type: "data_quality"
+                threshold: 0.98
+              - type: "reconciliation_status"
+                must_be: "reconciled"
+              - type: "finance_break"
+                must_be: false
+          on_error: "alert"
+        
+        - id: "validate-bcrs"
+          name: "Validate BCRS (Capital)"
+          type: "validate"
+          system: "bcrs"
+          config:
+            checks:
+              - type: "data_quality"
+                threshold: 0.95
+              - type: "capital_break"
+                must_be: false
+          on_error: "alert"
+        
+        - id: "validate-rco"
+          name: "Validate RCO (Liquidity)"
+          type: "validate"
+          system: "rco"
+          config:
+            checks:
+              - type: "data_quality"
+                threshold: 0.95
+              - type: "liquidity_break"
+                must_be: false
+          on_error: "alert"
+        
+        - id: "validate-axiomsl"
+          name: "Validate AxiomSL (Regulatory)"
+          type: "validate"
+          system: "axiomsl"
+          config:
+            checks:
+              - type: "data_quality"
+                threshold: 0.98
+              - type: "regulatory_break"
+                must_be: false
+              - type: "regulatory_compliance"
+                must_be: true
+          on_error: "stop"
+        
+        - id: "generate-validation-report"
+          name: "Generate Validation Report"
+          type: "report"
+          config:
+            report_type: "downstream_validation"
+            include_all_systems: true
+            output_format: "json"
+            output_location: "reports/downstream-validation"
+          on_error: "warn"
+    
+    # Stage 7: Conditional Rollback
+    - id: "conditional-rollback"
+      name: "Rollback if Validation Fails"
+      conditional: true
+      condition: "validation_failed"
+      steps:
+        - id: "rollback-murex"
+          name: "Rollback Murex to Current Version"
+          type: "rollback"
+          system: "murex"
+          config:
+            target_version: "current"
+            backup_location: "version-backups/murex"
+            restore_data: true
+            restore_config: true
+          on_error: "alert"
+        
+        - id: "rollback-downstream"
+          name: "Rollback Downstream Systems"
+          type: "rollback"
+          systems:
+            - "etl_data_factory"
+            - "sap_fioneer"
+            - "etl_warehouse"
+            - "bcrs"
+            - "rco"
+            - "axiomsl"
+          config:
+            snapshot_location: "version-backups/downstream"
+            restore_point_in_time: true
+          on_error: "alert"
+        
+        - id: "generate-rollback-report"
+          name: "Generate Rollback Report"
+          type: "report"
+          config:
+            report_type: "rollback"
+            include_reason: true
+            output_format: "json"
+            output_location: "reports/rollback"
+          on_error: "warn"
+    
+    # Stage 8: Success Confirmation
+    - id: "success-confirmation"
+      name: "Success Confirmation"
+      conditional: true
+      condition: "validation_passed"
+      steps:
+        - id: "mark-version-active"
+          name: "Mark New Version as Active"
+          type: "update"
+          system: "murex"
+          config:
+            version: "new"
+            status: "active"
+          on_error: "alert"
+        
+        - id: "archive-old-version"
+          name: "Archive Old Version"
+          type: "archive"
+          system: "murex"
+          config:
+            version: "current"
+            archive_location: "archives/murex"
+          on_error: "warn"
+        
+        - id: "generate-success-report"
+          name: "Generate Success Report"
+          type: "report"
+          config:
+            report_type: "migration_success"
+            include_statistics: true
+            include_time_saved: true
+            output_format: "json"
+            output_location: "reports/migration-success"
+          on_error: "warn"
+  
+  # Error handling
+  error_handling:
+    strategy: "fail_fast"
+    max_retries: 3
+    retry_backoff: "exponential"
+    alert_on_failure: true
+    alert_channels:
+      - "email"
+      - "slack"
+      - "pagerduty"
+  
+  # Success metrics
+  success_metrics:
+    - name: "time_saved"
+      description: "Time saved vs manual 11-week reconciliation"
+      target: "> 10 weeks"
+    
+    - name: "break_detection_rate"
+      description: "Percentage of breaks detected automatically"
+      target: "> 95%"
+    
+    - name: "automated_reconciliation_rate"
+      description: "Percentage of records reconciled automatically"
+      target: "> 90%"
+    
+    - name: "downstream_validation_pass_rate"
+      description: "Percentage of downstream validations passing"
+      target: "100%"
+  
+  # Metadata
+  metadata:
+    owner: "Data Operations"
+    steward: "data-ops@example.com"
+    created_at: "2025-01-XX"
+    updated_at: "2025-01-XX"
+    notes: "This workflow addresses the 11-week manual reconciliation problem by automating version migration and reconciliation."
+

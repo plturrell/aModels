@@ -1,0 +1,210 @@
+# Murex to BCRS Schema Mapping
+# Maps Murex trade data to BCRS credit exposure format
+
+schema_mapping:
+  id: "murex-to-bcrs-mapping"
+  name: "Murex to BCRS Credit Exposure Mapping"
+  version: "1.0.0"
+  description: "Schema mapping from Murex trades to BCRS credit exposures"
+  
+  source:
+    system: "murex"
+    entity: "trades"
+    schema_version: "1.0.0"
+  
+  target:
+    system: "bcrs"
+    entity: "credit_exposures"
+    schema_version: "1.0.0"
+  
+  # Field-level mappings
+  field_mappings:
+    # Generated ID
+    - source: ""
+      target: "exposure_id"
+      transformation: "format"
+      transformation_config:
+        format: "EXP-{trade_id}-{counterparty_id}"
+        source_fields: ["trade_id", "counterparty_id"]
+      required: true
+      description: "Generate unique exposure ID from trade and counterparty"
+    
+    # Direct mappings
+    - source: "counterparty_id"
+      target: "counterparty_id"
+      transformation: "identity"
+      required: true
+      description: "Counterparty ID unchanged"
+    
+    - source: "notional_amount"
+      target: "exposure_amount"
+      transformation: "identity"
+      required: true
+      description: "Notional amount becomes exposure amount"
+    
+    - source: "trade_date"
+      target: "exposure_date"
+      transformation: "identity"
+      required: true
+      description: "Trade date becomes exposure date"
+    
+    # Lookup mappings
+    - source: "counterparty_id"
+      target: "risk_weight"
+      transformation: "lookup"
+      transformation_config:
+        lookup_table: "counterparty_risk_weights"
+        lookup_key: "counterparty_id"
+        lookup_fields:
+          - "risk_weight"
+          - "effective_risk_weight"
+        default_value: 1.0
+      required: true
+      description: "Risk weight from counterparty lookup table"
+    
+    - source: "counterparty_id"
+      target: "rating"
+      transformation: "lookup"
+      transformation_config:
+        lookup_table: "counterparty_ratings"
+        lookup_key: "counterparty_id"
+        lookup_fields:
+          - "rating"
+          - "rating_agency"
+        default_value: "UNRATED"
+      required: false
+      description: "Counterparty rating from rating lookup"
+    
+    - source: "counterparty_id"
+      target: "rating_agency"
+      transformation: "lookup"
+      transformation_config:
+        lookup_table: "counterparty_ratings"
+        lookup_key: "counterparty_id"
+        lookup_fields:
+          - "rating_agency"
+        default_value: "INTERNAL"
+      required: false
+      description: "Rating agency from rating lookup"
+    
+    # Calculated fields
+    - source: "exposure_amount"
+      target: "risk_weighted_amount"
+      transformation: "calculate"
+      transformation_config:
+        formula: "exposure_amount * risk_weight"
+        source_fields: ["exposure_amount", "risk_weight"]
+      required: true
+      description: "Risk-weighted amount = exposure * risk_weight"
+    
+    - source: "risk_weighted_amount"
+      target: "regulatory_capital"
+      transformation: "calculate"
+      transformation_config:
+        formula: "risk_weighted_amount * 0.08"
+        capital_requirement_rate: 0.08
+        source_fields: ["risk_weighted_amount"]
+      required: false
+      description: "Regulatory capital = RWA * 8%"
+    
+    # Constant fields
+    - source: ""
+      target: "calculation_type"
+      transformation: "constant"
+      transformation_config:
+        value: "CreditRisk"
+      required: true
+      description: "Always CreditRisk for this mapping"
+    
+    # Optional mappings
+    - source: "maturity_date"
+      target: "maturity_date"
+      transformation: "identity"
+      required: false
+      description: "Maturity date if available"
+    
+    - source: "trade_type"
+      target: "product_type"
+      transformation: "map"
+      transformation_config:
+        mapping:
+          "Bond": "Bond"
+          "Loan": "Loan"
+          "Derivative": "Derivative"
+          "Credit": "Credit"
+          default: "Other"
+      required: false
+      description: "Map trade type to product type"
+  
+  # Validation rules
+  validation_rules:
+    - field: "exposure_id"
+      rule: "required"
+      message: "Exposure ID is required"
+    
+    - field: "counterparty_id"
+      rule: "required"
+      message: "Counterparty ID is required"
+    
+    - field: "exposure_amount"
+      rule: ">= 0"
+      message: "Exposure amount must be non-negative"
+    
+    - field: "risk_weight"
+      rule: "range"
+      min: 0
+      max: 1
+      message: "Risk weight must be between 0 and 1"
+    
+    - field: "risk_weighted_amount"
+      rule: ">= 0"
+      message: "Risk-weighted amount must be non-negative"
+    
+    - field: "exposure_date"
+      rule: "required"
+      message: "Exposure date is required"
+  
+  # Data quality checks
+  quality_checks:
+    - name: "completeness"
+      check: "required_fields"
+      fields:
+        - "exposure_id"
+        - "counterparty_id"
+        - "exposure_amount"
+        - "risk_weight"
+        - "exposure_date"
+      threshold: 0.95
+      description: "95% of required fields must be present"
+    
+    - name: "accuracy"
+      check: "transformation_accuracy"
+      threshold: 0.90
+      description: "90% transformation accuracy"
+    
+    - name: "consistency"
+      check: "calculation_consistency"
+      rules:
+        - fields: ["exposure_amount", "risk_weight", "risk_weighted_amount"]
+          check: "formula"
+          formula: "exposure_amount * risk_weight = risk_weighted_amount"
+          tolerance: 0.01
+      threshold: 0.98
+      description: "98% of calculations must be consistent"
+  
+  # Error handling
+  error_handling:
+    missing_source_field: "warn"
+    transformation_failure: "error"
+    validation_failure: "error"
+    lookup_failure: "warn"
+    default_value_on_error: true
+  
+  # Metadata
+  metadata:
+    owner: "Risk Management"
+    steward: "risk-steward@example.com"
+    created_at: "2025-01-XX"
+    updated_at: "2025-01-XX"
+    notes: "This mapping handles Murex trades to BCRS credit exposures. Risk weight lookup required for accurate mapping."
+

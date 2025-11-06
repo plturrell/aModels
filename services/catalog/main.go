@@ -13,6 +13,7 @@ import (
 	"github.com/plturrell/aModels/services/catalog/analytics"
 	"github.com/plturrell/aModels/services/catalog/api"
 	"github.com/plturrell/aModels/services/catalog/autonomous"
+	"github.com/plturrell/aModels/services/catalog/breakdetection"
 	"github.com/plturrell/aModels/services/catalog/cache"
 	"github.com/plturrell/aModels/services/catalog/iso11179"
 	"github.com/plturrell/aModels/services/catalog/migrations"
@@ -247,6 +248,105 @@ func main() {
 	analyticsDashboard := analytics.NewAnalyticsDashboard(registry, recommender, legacyLogger)
 	structLogger.Info("Analytics dashboard initialized", nil)
 
+	// Initialize break detection service if database is available
+	var breakDetectionService *breakdetection.BreakDetectionService
+	var baselineManager *breakdetection.BaselineManager
+	var breakDetectionHandler *api.BreakDetectionHandler
+	if catalogDBURL != "" {
+		if db, err := sql.Open("postgres", catalogDBURL); err == nil {
+			if err := db.Ping(); err == nil {
+				// Initialize baseline manager
+				baselineManager = breakdetection.NewBaselineManager(db, legacyLogger)
+				
+				// Initialize SAP Fioneer URL
+				sapFioneerURL := os.Getenv("SAP_FIONEER_URL")
+				if sapFioneerURL == "" {
+					sapFioneerURL = "http://localhost:8080"
+				}
+				
+				// Initialize finance detector
+				financeDetector := breakdetection.NewFinanceDetector(sapFioneerURL, legacyLogger)
+				
+				// Initialize capital detector
+				bcrsURL := os.Getenv("BCRS_URL")
+				if bcrsURL == "" {
+					bcrsURL = "http://localhost:8080"
+				}
+				capitalDetector := breakdetection.NewCapitalDetector(bcrsURL, legacyLogger)
+				
+				// Initialize liquidity detector
+				rcoURL := os.Getenv("RCO_URL")
+				if rcoURL == "" {
+					rcoURL = "http://localhost:8080"
+				}
+				liquidityDetector := breakdetection.NewLiquidityDetector(rcoURL, legacyLogger)
+				
+				// Initialize regulatory detector
+				axiomSLURL := os.Getenv("AXIOMSL_URL")
+				if axiomSLURL == "" {
+					axiomSLURL = "http://localhost:8080"
+				}
+				regulatoryDetector := breakdetection.NewRegulatoryDetector(axiomSLURL, legacyLogger)
+				
+				// Initialize Deep Research integration services
+				var analysisService *breakdetection.BreakAnalysisService
+				var enrichmentService *breakdetection.EnrichmentService
+				var ruleGenerator *breakdetection.RuleGeneratorService
+				
+				if deepResearchClient != nil {
+					analysisService = breakdetection.NewBreakAnalysisService(deepResearchClient, legacyLogger)
+					enrichmentService = breakdetection.NewEnrichmentService(deepResearchClient, legacyLogger)
+					ruleGenerator = breakdetection.NewRuleGeneratorService(deepResearchClient, db, legacyLogger)
+					structLogger.Info("Deep Research integration for break detection initialized", nil)
+				}
+				
+				// Initialize Search service
+				searchService := breakdetection.NewBreakSearchService(extractServiceURL, legacyLogger)
+				
+				// Initialize LocalAI service
+				var aiAnalysisService *breakdetection.AIAnalysisService
+				if localaiURL != "" {
+					aiAnalysisService = breakdetection.NewAIAnalysisService(localaiURL, legacyLogger)
+					structLogger.Info("LocalAI integration for break detection initialized", nil)
+				}
+				
+				// Initialize break detection service
+				breakDetectionService = breakdetection.NewBreakDetectionService(
+					db,
+					baselineManager,
+					financeDetector,
+					capitalDetector,
+					liquidityDetector,
+					regulatoryDetector,
+					analysisService,
+					enrichmentService,
+					ruleGenerator,
+					searchService,
+					aiAnalysisService,
+					legacyLogger,
+				)
+				
+				// Initialize break detection handler
+				breakDetectionHandler = api.NewBreakDetectionHandler(
+					breakDetectionService,
+					baselineManager,
+					legacyLogger,
+				)
+				
+				structLogger.Info("Break detection service initialized", nil)
+			} else {
+				db.Close()
+				structLogger.Warn("Failed to ping database for break detection service, continuing without break detection", map[string]interface{}{
+					"error": err.Error(),
+				})
+			}
+		} else {
+			structLogger.Warn("Failed to open database for break detection service, continuing without break detection", map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+	}
+
 	// Initialize discoverability system if database is available
 	var discoverSystem *discoverability.DiscoverabilitySystem
 	if catalogDB != nil {
@@ -257,7 +357,7 @@ func main() {
 	// Initialize API handlers
 	catalogHandlers := api.NewCatalogHandlers(registry, legacyLogger)
 	sparqlHandler := api.NewSPARQLHandler(sparqlEndpoint, legacyLogger)
-	dataProductHandler := api.NewDataProductHandler(unifiedWorkflow, legacyLogger)
+	dataProductHandler := api.NewDataProductHandler(unifiedWorkflow, registry, versionManager, legacyLogger)
 	aiHandlers := api.NewAIHandlers(metadataDiscoverer, qualityPredictor, recommender, legacyLogger)
 	
 	// Initialize discoverability handler if system is available
@@ -357,7 +457,6 @@ func main() {
 		}
 	})
 
-	mux.HandleFunc("/catalog/data-elements/", catalogHandlers.HandleGetDataElement)
 	mux.HandleFunc("/catalog/ontology", catalogHandlers.HandleGetOntology)
 	mux.HandleFunc("/catalog/semantic-search", catalogHandlers.HandleSemanticSearch)
 
@@ -366,7 +465,24 @@ func main() {
 
 	// Complete data product endpoints (thin slice approach)
 	mux.HandleFunc("/catalog/data-products/build", dataProductHandler.HandleBuildDataProduct)
-	mux.HandleFunc("/catalog/data-products/", dataProductHandler.HandleGetDataProduct)
+	
+	// Data products endpoint (handles both get and sample)
+	mux.HandleFunc("/catalog/data-products/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/sample") {
+			dataProductHandler.HandleGetSampleData(w, r)
+		} else {
+			dataProductHandler.HandleGetDataProduct(w, r)
+		}
+	})
+	
+	// Data elements endpoint (handles both get and sample)
+	mux.HandleFunc("/catalog/data-elements/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/sample") {
+			dataProductHandler.HandleGetSampleData(w, r)
+		} else {
+			catalogHandlers.HandleGetDataElement(w, r)
+		}
+	})
 
 	// AI capabilities endpoints
 	mux.HandleFunc("/catalog/ai/discover", aiHandlers.HandleDiscoverMetadata)
@@ -402,6 +518,24 @@ func main() {
 		mux.HandleFunc("/api/autonomous/agents", autonomousHandler.HandleGetAgents)
 		mux.HandleFunc("/api/autonomous/knowledge", autonomousHandler.HandleGetKnowledgeBase)
 		structLogger.Info("Autonomous Intelligence Layer endpoints registered", nil)
+
+	// Break detection endpoints
+	if breakDetectionHandler != nil {
+		mux.HandleFunc("/catalog/break-detection/detect", breakDetectionHandler.HandleDetectBreaks)
+		mux.HandleFunc("/catalog/break-detection/baselines", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost {
+				breakDetectionHandler.HandleCreateBaseline(w, r)
+			} else if r.Method == http.MethodGet {
+				breakDetectionHandler.HandleListBaselines(w, r)
+			} else {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+		})
+		mux.HandleFunc("/catalog/break-detection/baselines/", breakDetectionHandler.HandleGetBaseline)
+		mux.HandleFunc("/catalog/break-detection/breaks", breakDetectionHandler.HandleListBreaks)
+		mux.HandleFunc("/catalog/break-detection/breaks/", breakDetectionHandler.HandleGetBreak)
+		structLogger.Info("Break detection endpoints registered", nil)
+	}
 
 	// Advanced features endpoints (Phase 3)
 	if advancedHandlers != nil {

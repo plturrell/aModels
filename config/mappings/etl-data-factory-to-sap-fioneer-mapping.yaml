@@ -1,0 +1,59 @@
+# ETL Data Factory to SAP Fioneer Subledger Schema Mapping
+# Maps staged trades to SAP Fioneer Subledger entries
+
+schema_mapping:
+  id: "etl-data-factory-to-sap-fioneer-mapping"
+  name: "ETL Data Factory to SAP Fioneer Subledger Mapping"
+  version: "1.0.0"
+  description: "Schema mapping from ETL Data Factory staging to SAP Fioneer Subledger"
+  
+  source:
+    system: "etl_data_factory"
+    entity: "staging_trades"
+    schema_version: "1.0.0"
+  
+  target:
+    system: "sap_fioneer"
+    entity: "subledger_entries"
+    schema_version: "1.0.0"
+  
+  field_mappings:
+    - source: "trade_id"
+      target: "entry_id"
+      transformation: "format"
+      transformation_config:
+        format: "SL-{value}"
+      required: true
+    
+    - source: "trade_date"
+      target: "entry_date"
+      transformation: "identity"
+      required: true
+    
+    - source: "notional_amount"
+      target: "debit_amount"
+      transformation: "identity"
+      required: true
+    
+    - source: "currency"
+      target: "currency"
+      transformation: "identity"
+      required: true
+    
+    - source: "counterparty_id"
+      target: "account"
+      transformation: "lookup"
+      transformation_config:
+        lookup_table: "counterparty_to_account"
+        lookup_key: "counterparty_id"
+        default_value: "UNKNOWN"
+      required: false
+  
+  validation_rules:
+    - field: "entry_id"
+      rule: "required"
+    - field: "entry_date"
+      rule: "required"
+    - field: "debit_amount"
+      rule: "> 0"
+

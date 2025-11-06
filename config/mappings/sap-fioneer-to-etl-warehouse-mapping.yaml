@@ -1,0 +1,88 @@
+# SAP Fioneer Subledger to ETL Warehouse Schema Mapping
+# Maps SAP Fioneer subledger entries to ETL Warehouse format
+
+schema_mapping:
+  id: "sap-fioneer-to-etl-warehouse-mapping"
+  name: "SAP Fioneer to ETL Warehouse Mapping"
+  version: "1.0.0"
+  description: "Schema mapping from SAP Fioneer Subledger to ETL Warehouse"
+  
+  source:
+    system: "sap_fioneer"
+    entity: "subledger_entries"
+    schema_version: "1.0.0"
+  
+  target:
+    system: "etl_warehouse"
+    entity: "warehouse_trades"
+    schema_version: "1.0.0"
+  
+  field_mappings:
+    - source: "entry_id"
+      target: "trade_id"
+      transformation: "extract"
+      transformation_config:
+        pattern: "SL-{value}"
+        extract: "{value}"
+      required: true
+    
+    - source: "entry_date"
+      target: "trade_date"
+      transformation: "identity"
+      required: true
+    
+    - source: "debit_amount"
+      target: "notional_amount"
+      transformation: "identity"
+      required: true
+    
+    - source: "currency"
+      target: "currency"
+      transformation: "identity"
+      required: true
+    
+    - source: "account"
+      target: "counterparty_id"
+      transformation: "lookup"
+      transformation_config:
+        lookup_table: "account_to_counterparty"
+        lookup_key: "account"
+        reverse: true
+      required: false
+    
+    - source: ""
+      target: "ready_for_capital"
+      transformation: "constant"
+      transformation_config:
+        value: true
+      required: true
+    
+    - source: ""
+      target: "ready_for_liquidity"
+      transformation: "constant"
+      transformation_config:
+        value: true
+      required: true
+    
+    - source: ""
+      target: "ready_for_regulatory"
+      transformation: "constant"
+      transformation_config:
+        value: true
+      required: true
+    
+    - source: ""
+      target: "validated"
+      transformation: "constant"
+      transformation_config:
+        value: true
+      required: true
+  
+  validation_rules:
+    - field: "trade_id"
+      rule: "required"
+    - field: "trade_date"
+      rule: "required"
+    - field: "notional_amount"
+      rule: "> 0"
+

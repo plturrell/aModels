@@ -1,0 +1,213 @@
+# Murex to BCRS ETL Pipeline Definition
+# ETL process from Murex trades to BCRS credit exposures
+
+pipeline:
+  id: "murex-to-bcrs-etl"
+  name: "Murex Trades to BCRS Credit Exposures"
+  version: "1.0.0"
+  description: "ETL process from Murex trades to BCRS credit exposure calculations"
+  
+  source:
+    type: "murex"
+    connection: "murex-connection"
+    schema:
+      fields:
+        - name: "trade_id"
+          type: "string"
+        - name: "trade_date"
+          type: "date"
+        - name: "notional_amount"
+          type: "decimal"
+        - name: "currency"
+          type: "string"
+        - name: "counterparty_id"
+          type: "string"
+        - name: "maturity_date"
+          type: "date"
+        - name: "trade_type"
+          type: "string"
+    filters:
+      status: "executed"
+      trade_type: ["Bond", "Loan", "Derivative", "Credit"]
+  
+  steps:
+    - id: "extract-trades"
+      name: "Extract Credit-Related Trades"
+      type: "extract"
+      description: "Extract trades with credit exposure from Murex"
+      config:
+        table: "trades"
+        batch_size: 1000
+        filters:
+          status: "executed"
+          trade_type: ["Bond", "Loan", "Derivative", "Credit"]
+      on_error: "stop"
+      retries: 3
+    
+    - id: "calculate-exposure"
+      name: "Calculate Credit Exposure"
+      type: "transform"
+      description: "Calculate credit exposure amount from trade notional"
+      config:
+        transformations:
+          - field: "exposure_amount"
+            type: "calculate"
+            formula: "notional_amount"
+            source_field: "notional_amount"
+          - field: "risk_weight"
+            type: "lookup"
+            lookup_table: "counterparty_risk_weights"
+            lookup_key: "counterparty_id"
+            default_value: 1.0
+      on_error: "stop"
+    
+    - id: "enrich-with-counterparty"
+      name: "Enrich with Counterparty Data"
+      type: "enrich"
+      description: "Enrich with counterparty rating and risk data"
+      config:
+        lookup_table: "counterparty_ratings"
+        lookup_key: "counterparty_id"
+        lookup_fields:
+          - "rating"
+          - "rating_agency"
+          - "probability_of_default"
+          - "loss_given_default"
+      on_error: "warn"
+    
+    - id: "calculate-risk-weighted"
+      name: "Calculate Risk-Weighted Amount"
+      type: "transform"
+      description: "Calculate risk-weighted exposure amount"
+      config:
+        transformations:
+          - field: "risk_weighted_amount"
+            type: "calculate"
+            formula: "exposure_amount * risk_weight"
+            source_fields: ["exposure_amount", "risk_weight"]
+      on_error: "stop"
+    
+    - id: "calculate-regulatory-capital"
+      name: "Calculate Regulatory Capital"
+      type: "transform"
+      description: "Calculate regulatory capital requirement"
+      config:
+        transformations:
+          - field: "regulatory_capital"
+            type: "calculate"
+            formula: "risk_weighted_amount * 0.08"  # 8% capital requirement
+            source_fields: ["risk_weighted_amount"]
+      on_error: "warn"
+    
+    - id: "validate-data"
+      name: "Validate Credit Exposure Data"
+      type: "validate"
+      description: "Validate credit exposure data meets BCRS requirements"
+      config:
+        rules:
+          - field: "exposure_id"
+            check: "required"
+          - field: "exposure_amount"
+            check: ">= 0"
+          - field: "risk_weight"
+            check: ">= 0"
+            check: "<= 1"
+          - field: "counterparty_id"
+            check: "not_null"
+      on_error: "stop"
+    
+    - id: "transform-to-bcrs-format"
+      name: "Transform to BCRS Format"
+      type: "transform"
+      description: "Transform to BCRS credit exposure format"
+      config:
+        mapping:
+          trade_id: "trade_reference"
+          trade_date: "exposure_date"
+          notional_amount: "exposure_amount"
+          counterparty_id: "counterparty_id"
+          calculation_type: "CreditRisk"
+        transformations:
+          - field: "exposure_id"
+            type: "format"
+            format: "EXP-{trade_id}-{counterparty_id}"
+      on_error: "stop"
+  
+  target:
+    type: "bcrs"
+    connection: "bcrs-connection"
+    schema:
+      fields:
+        - name: "exposure_id"
+          type: "string"
+        - name: "counterparty_id"
+          type: "string"
+        - name: "exposure_amount"
+          type: "decimal"
+        - name: "exposure_date"
+          type: "date"
+        - name: "risk_weight"
+          type: "decimal"
+        - name: "risk_weighted_amount"
+          type: "decimal"
+        - name: "calculation_type"
+          type: "string"
+      primary_key:
+        - "exposure_id"
+  
+  validation:
+    schema_validation: true
+    data_quality_gates:
+      - name: "completeness"
+        metric: "completeness"
+        threshold: 0.95
+        operator: ">="
+        on_failure: "stop"
+        description: "95% of trades must be successfully transformed"
+      
+      - name: "accuracy"
+        metric: "accuracy"
+        threshold: 0.90
+        operator: ">="
+        on_failure: "warn"
+        description: "90% accuracy threshold for exposure calculations"
+      
+      - name: "calculation_consistency"
+        metric: "consistency"
+        threshold: 0.98
+        operator: ">="
+        on_failure: "warn"
+        description: "98% of risk-weighted calculations consistent"
+    
+    consistency_checks:
+      - name: "risk_weight_range"
+        type: "range_check"
+        field: "risk_weight"
+        min: 0
+        max: 1
+        description: "Risk weight must be between 0 and 1"
+      
+      - name: "exposure_amount_positive"
+        type: "positive_check"
+        field: "exposure_amount"
+        description: "Exposure amount must be positive"
+  
+  schedule:
+    frequency: "*/30 * * * *"  # Every 30 minutes
+    timezone: "UTC"
+  
+  error_handling:
+    retries: 3
+    backoff: "exponential"
+    max_backoff: 60
+    alert_on_failure: true
+    alert_channels:
+      - "email"
+      - "slack"
+  
+  metadata:
+    owner: "Risk Management"
+    steward: "risk-steward@example.com"
+    created_at: "2025-01-XX"
+    updated_at: "2025-01-XX"
+

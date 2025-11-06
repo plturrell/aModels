@@ -5,6 +5,7 @@ import { useShellStore, type ShellModuleId } from "./state/useShellStore";
 
 import { HomeModule } from "./modules/Home/HomeModule";
 import { LocalAIModule } from "./modules/LocalAI/LocalAIModule";
+import { DocumentsModule } from "./modules/Documents/DocumentsModule";
 import { TelemetryModule } from "./modules/Telemetry/TelemetryModule";
 
 import styles from "./App.module.css";
@@ -13,6 +14,8 @@ const renderModule = (moduleId: ShellModuleId) => {
   switch (moduleId) {
     case "localai":
       return <LocalAIModule />;
+    case "dms":
+      return <DocumentsModule />;
     case "telemetry":
       return <TelemetryModule />;
     case "home":

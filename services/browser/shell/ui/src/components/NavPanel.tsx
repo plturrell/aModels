@@ -11,6 +11,11 @@ const NAV_ITEMS: Array<{ id: ShellModuleId; label: string; description: string }
     description: "Chat on top of vendored models"
   },
   {
+    id: "dms",
+    label: "Documents",
+    description: "Curated library with relationships"
+  },
+  {
     id: "telemetry",
     label: "Telemetry",
     description: "Latency and usage instrumentation"
@@ -40,7 +45,7 @@ export function NavPanel() {
         <span className={styles.glow} aria-hidden="true" />
         <div>
           <strong>aModels Shell</strong>
-          <p>Chromium host for SGMI &amp; LocalAI workflows</p>
+          <p>Chromium host for SGMI, documents, and live telemetry</p>
         </div>
       </header>
 

@@ -42,7 +42,7 @@ const getBaseUrl = () => {
 const seedPrompts = [
   "Summarise SGMI Control-M triggers versus waits-for dependencies.",
   "Which LocalAI models are missing documentation?",
-  "What signals are absent from the latest SGMI training dataset?"
+  "What telemetry improvements should we ship next?"
 ];
 
 function useStreamedText(text: string, streaming?: boolean) {
@@ -288,21 +288,36 @@ export function LocalAIModule() {
   };
 
   const modelActions = (
-    <div className={styles.chatActions}>
-      <label className={styles.selectLabel}>
-        <span>Model</span>
-        <select
-          className={styles.modelSelect}
-          value={model}
-          onChange={(event) => setModel(event.target.value)}
-        >
-          {modelOptions.map((entry) => (
-            <option key={entry.id} value={entry.id}>
-              {entry.id}
-            </option>
-          ))}
-        </select>
-      </label>
+    <div className={styles.metaControls}>
+      <div className={styles.pillGroup}>
+        <label className={styles.selectLabel}>
+          <span>Model</span>
+          <select
+            className={styles.modelSelect}
+            value={model}
+            onChange={(event) => setModel(event.target.value)}
+          >
+            {modelOptions.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.id}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.selectLabel}>
+          <span>Creativity</span>
+          <input
+            className={styles.temperatureSlider}
+            type="range"
+            min="0"
+            max="1"
+            step="0.1"
+            value={temperature}
+            onChange={(event) => setTemperature(Number(event.target.value))}
+          />
+          <small>{temperature.toFixed(1)}</small>
+        </label>
+      </div>
       <button
         type="button"
         className={styles.resetButton}
@@ -312,116 +327,51 @@ export function LocalAIModule() {
         }}
         disabled={!messages.length && !chatError && !draft.trim().length}
       >
-        Reset
+        Clear Thread
       </button>
     </div>
   );
 
   return (
     <div className={styles.localai}>
-      <div className={styles.columnStack}>
-        <Panel
-          title="LocalAI Runtime"
-          subtitle="Parsed from services/localai/LocalAI/docker-compose.yaml"
-        >
-          <div className={styles.runtimeGrid}>
-            <div>
-              <span className={styles.label}>Image</span>
-              <strong>{apiService?.image ?? "quay.io/go-skynet/local-ai:master"}</strong>
-            </div>
-            <div>
-              <span className={styles.label}>Ports</span>
-              <strong>{exposedPorts.join(", ") || "8080:8080"}</strong>
-            </div>
-            <div>
-              <span className={styles.label}>Command</span>
-              <code>
-                {Array.isArray(apiService?.command)
-                  ? apiService.command.join(" ")
-                  : apiService?.command ?? "phi-2"}
-              </code>
-            </div>
-            <div>
-              <span className={styles.label}>Base URL</span>
-              <a href={getBaseUrl()} target="_blank" rel="noreferrer">
-                {getBaseUrl()}
-              </a>
-            </div>
-          </div>
-        </Panel>
-
-        <Panel title="Vendored Models" subtitle="Directories under /models">
-          <div className={styles.listHeader}>
-            <span>Total: {modelOptions.length}</span>
-            <span>Documented: {documentedModels.length}</span>
-          </div>
-          <ul className={styles.modelTable}>
-            {modelOptions.map((entry) => (
-              <li key={entry.id}>
-                <span>{entry.id}</span>
-                <span>{entry.readme ? "Documented" : "Missing README"}</span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      </div>
-
-      <div className={styles.chatColumn}>
-        <Panel
-          title="LocalAI Assistant"
-          subtitle="Gateway proxy via /localai/chat"
-          actions={modelActions}
-        >
-          <div className={styles.chat}>
-            <div className={styles.temperatureControl}>
-              <label htmlFor="localai-temperature">Creativity</label>
-              <input
-                id="localai-temperature"
-                className={styles.temperatureSlider}
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={temperature}
-                onChange={(event) => setTemperature(Number(event.target.value))}
-              />
-              <span className={styles.temperatureValue}>{temperature.toFixed(1)}</span>
-            </div>
-
-            <div className={styles.chatScroll} aria-live="polite">
-              {messages.length ? (
-                messages.map((message) => <ChatBubble key={message.id} message={message} />)
-              ) : (
-                <div className={styles.chatPlaceholder}>
-                  <p>Kick off a conversation with LocalAI using real SGMI artefacts.</p>
-                  <div className={styles.seedGrid}>
-                    {seedPrompts.map((prompt) => (
-                      <button
-                        key={prompt}
-                        type="button"
-                        className={styles.seedButton}
-                        onClick={() => handleSeedPrompt(prompt)}
-                        disabled={pending}
-                      >
-                        {prompt}
-                      </button>
-                    ))}
-                  </div>
+      <Panel title="Live Answer" subtitle="LocalAI interprets SGMI context" actions={modelActions}>
+        <div className={styles.hero}>
+          <div className={styles.chatScroll} aria-live="polite">
+            {messages.length ? (
+              messages.map((message) => <ChatBubble key={message.id} message={message} />)
+            ) : (
+              <div className={styles.chatPlaceholder}>
+                <p>Ask something grounded in SGMI—jobs, telemetry, or training drift.</p>
+                <div className={styles.seedRow}>
+                  {seedPrompts.map((prompt) => (
+                    <button
+                      key={prompt}
+                      type="button"
+                      className={styles.seedButton}
+                      onClick={() => handleSeedPrompt(prompt)}
+                      disabled={pending}
+                    >
+                      {prompt}
+                    </button>
+                  ))}
                 </div>
-              )}
-              {pending ? (
-                <div className={styles.typingIndicator} role="status" aria-live="assertive">
-                  <span />
-                  <span />
-                  <span />
-                </div>
-              ) : null}
-            </div>
+              </div>
+            )}
+            {pending ? (
+              <div className={styles.typingIndicator} role="status" aria-live="assertive">
+                <span />
+                <span />
+                <span />
+              </div>
+            ) : null}
+          </div>
 
-            {chatError ? <div className={styles.errorBanner}>Error: {chatError}</div> : null}
+          {chatError ? <div className={styles.errorBanner}>Error: {chatError}</div> : null}
 
-            {followUps.length ? (
-              <div className={styles.followUps}>
+          {followUps.length ? (
+            <div className={styles.followUps}>
+              <span className={styles.followUpsLabel}>Suggested follow-ups</span>
+              <div className={styles.followUpRow}>
                 {followUps.map((item) => (
                   <button
                     key={item.id}
@@ -434,27 +384,70 @@ export function LocalAIModule() {
                   </button>
                 ))}
               </div>
-            ) : null}
+            </div>
+          ) : null}
 
-            <form className={styles.inputBar} onSubmit={handleSubmit}>
-              <textarea
-                className={styles.promptInput}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask about waits, training drift, telemetry, or LocalAI coverage…"
-                rows={3}
-                disabled={pending}
-              />
-              <button
-                type="submit"
-                className={styles.sendButton}
-                disabled={pending || !draft.trim()}
-              >
-                {pending ? "Sending…" : "Send"}
-              </button>
-            </form>
-          </div>
+          <form className={styles.inputBar} onSubmit={handleSubmit}>
+            <textarea
+              className={styles.promptInput}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask about waits, telemetry, or training coverage…"
+              rows={3}
+              disabled={pending}
+            />
+            <button type="submit" className={styles.sendButton} disabled={pending || !draft.trim()}>
+              {pending ? "Sending…" : "Send"}
+            </button>
+          </form>
+        </div>
+      </Panel>
+
+      <div className={styles.supportingRow}>
+        <Panel title="Runtime Snapshot" subtitle="services/localai/LocalAI/docker-compose.yaml" dense>
+          <dl className={styles.runtimeGrid}>
+            <div>
+              <dt>Image</dt>
+              <dd>{apiService?.image ?? "quay.io/go-skynet/local-ai:master"}</dd>
+            </div>
+            <div>
+              <dt>Ports</dt>
+              <dd>{exposedPorts.join(", ") || "8080:8080"}</dd>
+            </div>
+            <div>
+              <dt>Command</dt>
+              <dd>
+                <code>
+                  {Array.isArray(apiService?.command)
+                    ? apiService.command.join(" ")
+                    : apiService?.command ?? "phi-2"}
+                </code>
+              </dd>
+            </div>
+            <div>
+              <dt>Base URL</dt>
+              <dd>
+                <a href={getBaseUrl()} target="_blank" rel="noreferrer">
+                  {getBaseUrl()}
+                </a>
+              </dd>
+            </div>
+          </dl>
+        </Panel>
+
+        <Panel title="Model Inventory" subtitle={`Documented ${documentedModels.length} of ${modelOptions.length}`} dense>
+          <ul className={styles.modelList}>
+            {modelOptions.slice(0, 6).map((entry) => (
+              <li key={entry.id} className={entry.readme ? styles.modelReady : styles.modelTodo}>
+                <span>{entry.id}</span>
+                <small>{entry.readme ? "Doc complete" : "Needs README"}</small>
+              </li>
+            ))}
+            {modelOptions.length > 6 ? (
+              <li className={styles.modelMore}>+{modelOptions.length - 6} more models</li>
+            ) : null}
+          </ul>
         </Panel>
       </div>
     </div>

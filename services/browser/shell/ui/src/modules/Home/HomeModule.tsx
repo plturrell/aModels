@@ -9,6 +9,11 @@ const quickLinks = [
     targetModule: "localai"
   },
   {
+    label: "Document library",
+    description: "Review the latest uploads and relationships",
+    targetModule: "dms"
+  },
+  {
     label: "Telemetry dashboard",
     description: "Track response latency and token usage",
     targetModule: "telemetry"

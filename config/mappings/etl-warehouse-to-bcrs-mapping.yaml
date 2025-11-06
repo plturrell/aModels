@@ -1,0 +1,77 @@
+# ETL Warehouse to BCRS (Capital) Schema Mapping
+# Maps warehouse trades to BCRS credit exposures for capital calculations
+
+schema_mapping:
+  id: "etl-warehouse-to-bcrs-mapping"
+  name: "ETL Warehouse to BCRS Capital Mapping"
+  version: "1.0.0"
+  description: "Schema mapping from ETL Warehouse trades to BCRS credit exposures (Capital)"
+  
+  source:
+    system: "etl_warehouse"
+    entity: "warehouse_trades"
+    schema_version: "1.0.0"
+  
+  target:
+    system: "bcrs"
+    entity: "credit_exposures"
+    schema_version: "1.0.0"
+  
+  field_mappings:
+    - source: ""
+      target: "exposure_id"
+      transformation: "format"
+      transformation_config:
+        format: "EXP-{trade_id}-{counterparty_id}"
+        source_fields: ["trade_id", "counterparty_id"]
+      required: true
+    
+    - source: "counterparty_id"
+      target: "counterparty_id"
+      transformation: "identity"
+      required: true
+    
+    - source: "notional_amount"
+      target: "exposure_amount"
+      transformation: "identity"
+      required: true
+    
+    - source: "trade_date"
+      target: "exposure_date"
+      transformation: "identity"
+      required: true
+    
+    - source: "counterparty_id"
+      target: "risk_weight"
+      transformation: "lookup"
+      transformation_config:
+        lookup_table: "counterparty_risk_weights"
+        lookup_key: "counterparty_id"
+        default_value: 1.0
+      required: true
+    
+    - source: "exposure_amount"
+      target: "risk_weighted_amount"
+      transformation: "calculate"
+      transformation_config:
+        formula: "exposure_amount * risk_weight"
+        source_fields: ["exposure_amount", "risk_weight"]
+      required: true
+    
+    - source: ""
+      target: "calculation_type"
+      transformation: "constant"
+      transformation_config:
+        value: "Capital"
+      required: true
+  
+  validation_rules:
+    - field: "exposure_id"
+      rule: "required"
+    - field: "exposure_amount"
+      rule: ">= 0"
+    - field: "risk_weight"
+      rule: "range"
+      min: 0
+      max: 1
+

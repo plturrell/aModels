@@ -1,0 +1,232 @@
+# Murex to RCO ETL Pipeline Definition
+# ETL process from Murex trades to RCO risk positions
+
+pipeline:
+  id: "murex-to-rco-etl"
+  name: "Murex Trades to RCO Risk Positions"
+  version: "1.0.0"
+  description: "ETL process from Murex trades to RCO risk position calculations"
+  
+  source:
+    type: "murex"
+    connection: "murex-connection"
+    schema:
+      fields:
+        - name: "trade_id"
+          type: "string"
+        - name: "trade_date"
+          type: "date"
+        - name: "notional_amount"
+          type: "decimal"
+        - name: "currency"
+          type: "string"
+        - name: "trade_type"
+          type: "string"
+        - name: "book"
+          type: "string"
+        - name: "desk"
+          type: "string"
+        - name: "maturity_date"
+          type: "date"
+    filters:
+      status: "executed"
+  
+  steps:
+    - id: "extract-trades"
+      name: "Extract All Executed Trades"
+      type: "extract"
+      description: "Extract all executed trades from Murex"
+      config:
+        table: "trades"
+        batch_size: 1000
+        filters:
+          status: "executed"
+      on_error: "stop"
+      retries: 3
+    
+    - id: "determine-position-type"
+      name: "Determine Position Type"
+      type: "transform"
+      description: "Determine if position is long, short, or net"
+      config:
+        transformations:
+          - field: "position_type"
+            type: "conditional"
+            conditions:
+              - if: "trade_type == 'FX' AND direction == 'buy'"
+                then: "Long"
+              - if: "trade_type == 'FX' AND direction == 'sell'"
+                then: "Short"
+              - else: "Net"
+      on_error: "stop"
+    
+    - id: "calculate-market-value"
+      name: "Calculate Market Value"
+      type: "enrich"
+      description: "Enrich with current market value from pricing service"
+      config:
+        pricing_service: "market-data-service"
+        pricing_fields:
+          - "market_value"
+          - "pnl"
+      on_error: "warn"
+    
+    - id: "determine-risk-type"
+      name: "Determine Risk Type"
+      type: "transform"
+      description: "Determine primary risk type based on trade type"
+      config:
+        transformations:
+          - field: "risk_type"
+            type: "map"
+            mapping:
+              "FX": "Market"
+              "Bond": "Market"
+              "Swap": "Market"
+              "Option": "Market"
+              "Credit": "Credit"
+              default: "Market"
+          - field: "risk_factor"
+            type: "map"
+            mapping:
+              "FX": "FX"
+              "Bond": "InterestRate"
+              "Swap": "InterestRate"
+              "Option": "Equity"
+              default: "Market"
+      on_error: "stop"
+    
+    - id: "calculate-risk-amount"
+      name: "Calculate Risk Amount"
+      type: "transform"
+      description: "Calculate risk amount (VaR) for position"
+      config:
+        transformations:
+          - field: "value_at_risk"
+            type: "calculate"
+            formula: "market_value * var_multiplier"
+            source_fields: ["market_value"]
+            var_multiplier: 0.02  # 2% VaR assumption
+          - field: "var_confidence_level"
+            type: "constant"
+            value: 0.95
+          - field: "risk_amount"
+            type: "copy"
+            source: "value_at_risk"
+      on_error: "warn"
+    
+    - id: "validate-data"
+      name: "Validate Risk Position Data"
+      type: "validate"
+      description: "Validate risk position data meets RCO requirements"
+      config:
+        rules:
+          - field: "position_id"
+            check: "required"
+          - field: "position_amount"
+            check: "!= 0"
+          - field: "risk_amount"
+            check: ">= 0"
+          - field: "risk_type"
+            check: "in_list"
+            values: ["Market", "Credit", "Liquidity", "Operational"]
+      on_error: "stop"
+    
+    - id: "transform-to-rco-format"
+      name: "Transform to RCO Format"
+      type: "transform"
+      description: "Transform to RCO risk position format"
+      config:
+        mapping:
+          trade_id: "trade_id"
+          trade_date: "position_date"
+          notional_amount: "position_amount"
+          currency: "currency"
+          book: "book_id"
+          desk: "desk_id"
+        transformations:
+          - field: "position_id"
+            type: "format"
+            format: "POS-{trade_id}-{position_date}"
+      on_error: "stop"
+  
+  target:
+    type: "rco"
+    connection: "rco-connection"
+    schema:
+      fields:
+        - name: "position_id"
+          type: "string"
+        - name: "trade_id"
+          type: "string"
+        - name: "position_date"
+          type: "date"
+        - name: "position_type"
+          type: "string"
+        - name: "position_amount"
+          type: "decimal"
+        - name: "currency"
+          type: "string"
+        - name: "market_value"
+          type: "decimal"
+        - name: "risk_type"
+          type: "string"
+        - name: "risk_amount"
+          type: "decimal"
+      primary_key:
+        - "position_id"
+  
+  validation:
+    schema_validation: true
+    data_quality_gates:
+      - name: "completeness"
+        metric: "completeness"
+        threshold: 0.95
+        operator: ">="
+        on_failure: "stop"
+        description: "95% of trades must be successfully transformed"
+      
+      - name: "accuracy"
+        metric: "accuracy"
+        threshold: 0.90
+        operator: ">="
+        on_failure: "warn"
+        description: "90% accuracy threshold for risk calculations"
+      
+      - name: "risk_calculation_consistency"
+        metric: "consistency"
+        threshold: 0.95
+        operator: ">="
+        on_failure: "warn"
+        description: "95% of risk calculations consistent"
+    
+    consistency_checks:
+      - name: "risk_amount_positive"
+        type: "positive_check"
+        field: "risk_amount"
+        description: "Risk amount must be non-negative"
+      
+      - name: "position_amount_non_zero"
+        type: "non_zero_check"
+        field: "position_amount"
+        description: "Position amount must be non-zero"
+  
+  schedule:
+    frequency: "*/30 * * * *"  # Every 30 minutes
+    timezone: "UTC"
+  
+  error_handling:
+    retries: 3
+    backoff: "exponential"
+    max_backoff: 60
+    alert_on_failure: true
+    alert_channels:
+      - "email"
+      - "slack"
+  
+  metadata:
+    owner: "Risk Management"
+    steward: "risk-steward@example.com"
+    created_at: "2025-01-XX"
+    updated_at: "2025-01-XX"
+

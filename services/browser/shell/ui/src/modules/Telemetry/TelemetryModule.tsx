@@ -2,7 +2,11 @@ import { useMemo } from "react";
 
 import { Panel } from "../../components/Panel";
 import { telemetryDefaults, telemetryRecordFields, telemetryConfigFields } from "../../data/telemetry";
-import { useTelemetryStore, type TelemetryState, type InteractionMetric } from "../../state/useTelemetryStore";
+import {
+  useTelemetryStore,
+  type TelemetryState,
+  type InteractionMetric
+} from "../../state/useTelemetryStore";
 
 import styles from "./TelemetryModule.module.css";
 
@@ -28,7 +32,9 @@ export function TelemetryModule() {
   const resetMetrics = useTelemetryStore((state: TelemetryState) => state.reset);
 
   const summary = useMemo(() => {
-    if (!metrics.length) return null;
+    if (!metrics.length) {
+      return null;
+    }
 
     const totalLatency = metrics.reduce<number>((sum, metric) => sum + metric.durationMs, 0);
     const maxLatency = metrics.reduce<number>(
@@ -63,7 +69,7 @@ export function TelemetryModule() {
 
   return (
     <div className={styles.telemetry}>
-      <Panel title="Extract Service Defaults" subtitle="services/extract/main.go">
+      <Panel title="Service Defaults" subtitle="Telemetry baseline in extract service">
         <dl className={styles.defaults}>
           <div>
             <dt>Library</dt>
@@ -88,102 +94,101 @@ export function TelemetryModule() {
         </dl>
       </Panel>
 
-      <Panel title="Telemetry Config Schema" subtitle="telemetryConfig struct">
-        <ul className={styles.fieldList}>
-          {telemetryConfigFields.map((field) => (
-            <li key={field}>{field}</li>
-          ))}
-        </ul>
-      </Panel>
-
-      <Panel title="Telemetry Record Fields" subtitle="telemetryRecord struct">
-        <ul className={styles.fieldList}>
-          {telemetryRecordFields.map((field) => (
-            <li key={field}>{field}</li>
-          ))}
-        </ul>
-      </Panel>
-
       <Panel
-        title="LocalAI Interaction Metrics"
-        subtitle="Client-side telemetry (rolling 25)"
+        title="Session Pulse"
+        subtitle={hasMetrics && summary ? "Live feel of the LocalAI assistant" : "No interactions recorded yet"}
         actions={
           hasMetrics ? (
             <button type="button" className={styles.resetButton} onClick={resetMetrics}>
-              Clear
+              Clear history
             </button>
           ) : null
         }
       >
-        <div className={styles.metricsPanel}>
-          {hasMetrics && summary ? (
-            <>
-              <div className={styles.metricsSummary}>
-                <div className={styles.summaryItem}>
-                  <span className={styles.summaryLabel}>Interactions</span>
-                  <strong>{summary.interactions}</strong>
-                </div>
-                <div className={styles.summaryItem}>
-                  <span className={styles.summaryLabel}>Avg Latency</span>
-                  <strong>{formatLatency(summary.avgLatency)}</strong>
-                </div>
-                <div className={styles.summaryItem}>
-                  <span className={styles.summaryLabel}>Peak Latency</span>
-                  <strong>{formatLatency(summary.maxLatency)}</strong>
-                </div>
-                <div className={styles.summaryItem}>
-                  <span className={styles.summaryLabel}>Avg Tokens</span>
-                  <strong>
-                    {summary.avgPromptTokens.toLocaleString()} /{" "}
-                    {summary.avgCompletionTokens.toLocaleString()}
-                  </strong>
-                  <span className={styles.summaryHint}>prompt / completion</span>
-                </div>
-                <div className={styles.summaryItem}>
-                  <span className={styles.summaryLabel}>Avg Citations</span>
-                  <strong>{summary.avgCitations.toFixed(1)}</strong>
-                </div>
-              </div>
+        {hasMetrics && summary ? (
+          <div className={styles.pulseGrid}>
+            <div className={styles.pulseCard}>
+              <span className={styles.pulseLabel}>Average latency</span>
+              <strong>{formatLatency(summary.avgLatency)}</strong>
+              <small>Peak {formatLatency(summary.maxLatency)}</small>
+            </div>
+            <div className={styles.pulseCard}>
+              <span className={styles.pulseLabel}>Sessions today</span>
+              <strong>{summary.interactions}</strong>
+              <small>{summary.avgCitations.toFixed(1)} citations per reply</small>
+            </div>
+            <div className={styles.pulseCard}>
+              <span className={styles.pulseLabel}>Token blend</span>
+              <strong>
+                {summary.avgPromptTokens.toLocaleString()} /{" "}
+                {summary.avgCompletionTokens.toLocaleString()}
+              </strong>
+              <small>prompt / completion</small>
+            </div>
+          </div>
+        ) : (
+          <p className={styles.metricsEmpty}>
+            Chat with LocalAI to light up latency, token, and citation telemetry in real time.
+          </p>
+        )}
+      </Panel>
 
-              <div className={styles.tableScroll}>
-                <table className={styles.metricsTable}>
-                  <thead>
-                    <tr>
-                      <th>When</th>
-                      <th>Model</th>
-                      <th>Latency</th>
-                      <th>Prompt&nbsp;tokens</th>
-                      <th>Completion&nbsp;tokens</th>
-                      <th>Citations</th>
-                      <th>Prompt&nbsp;chars</th>
-                      <th>Completion&nbsp;chars</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {metrics.map((metric: InteractionMetric) => (
-                      <tr key={metric.id}>
-                        <td>{formatRelativeTime(metric.timestamp)}</td>
-                        <td>
-                          <span className={styles.pill}>{metric.model}</span>
-                        </td>
-                        <td>{formatLatency(metric.durationMs)}</td>
-                        <td>{formatNumber(metric.promptTokens)}</td>
-                        <td>{formatNumber(metric.completionTokens)}</td>
-                        <td>{metric.citations}</td>
-                        <td>{formatNumber(metric.promptChars)}</td>
-                        <td>{formatNumber(metric.completionChars)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          ) : (
-            <p className={styles.metricsEmpty}>
-              Run a conversation in the LocalAI module to populate latency, token, and citation
-              metrics.
-            </p>
-          )}
+      <Panel title="Latest Sessions" subtitle="Rolling 25 interactions">
+        {hasMetrics ? (
+          <div className={styles.tableScroll}>
+            <table className={styles.metricsTable}>
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Model</th>
+                  <th>Latency</th>
+                  <th>Prompt tokens</th>
+                  <th>Completion tokens</th>
+                  <th>Citations</th>
+                </tr>
+              </thead>
+              <tbody>
+                {metrics.map((metric: InteractionMetric) => (
+                  <tr key={metric.id}>
+                    <td>{formatRelativeTime(metric.timestamp)}</td>
+                    <td>
+                      <span className={styles.pill}>{metric.model}</span>
+                    </td>
+                    <td>{formatLatency(metric.durationMs)}</td>
+                    <td>{formatNumber(metric.promptTokens)}</td>
+                    <td>{formatNumber(metric.completionTokens)}</td>
+                    <td>{metric.citations}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className={styles.metricsEmpty}>
+            Once you start chatting we will surface latency, token usage, and citation coverage for
+            each exchange here.
+          </p>
+        )}
+      </Panel>
+
+      <Panel title="Schema Reference" subtitle="Telemetry structs at a glance" dense>
+        <div className={styles.schemaGrid}>
+          <div>
+            <h3>telemetryConfig</h3>
+            <ul className={styles.fieldList}>
+              {telemetryConfigFields.map((field) => (
+                <li key={field}>{field}</li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h3>telemetryRecord</h3>
+            <ul className={styles.fieldList}>
+              {telemetryRecordFields.map((field) => (
+                <li key={field}>{field}</li>
+              ))}
+            </ul>
+          </div>
         </div>
       </Panel>
     </div>

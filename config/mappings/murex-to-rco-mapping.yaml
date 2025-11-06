@@ -1,0 +1,258 @@
+# Murex to RCO Schema Mapping
+# Maps Murex trade data to RCO risk position format
+
+schema_mapping:
+  id: "murex-to-rco-mapping"
+  name: "Murex to RCO Risk Position Mapping"
+  version: "1.0.0"
+  description: "Schema mapping from Murex trades to RCO risk positions"
+  
+  source:
+    system: "murex"
+    entity: "trades"
+    schema_version: "1.0.0"
+  
+  target:
+    system: "rco"
+    entity: "positions"
+    schema_version: "1.0.0"
+  
+  # Field-level mappings
+  field_mappings:
+    # Generated ID
+    - source: ""
+      target: "position_id"
+      transformation: "format"
+      transformation_config:
+        format: "POS-{trade_id}-{trade_date}"
+        source_fields: ["trade_id", "trade_date"]
+        date_format: "YYYYMMDD"
+      required: true
+      description: "Generate unique position ID from trade ID and date"
+    
+    # Direct mappings
+    - source: "trade_id"
+      target: "trade_id"
+      transformation: "identity"
+      required: false
+      description: "Trade ID reference"
+    
+    - source: "trade_date"
+      target: "position_date"
+      transformation: "identity"
+      required: true
+      description: "Trade date becomes position date"
+    
+    - source: "notional_amount"
+      target: "position_amount"
+      transformation: "identity"
+      required: true
+      description: "Notional amount becomes position amount"
+    
+    - source: "currency"
+      target: "currency"
+      transformation: "identity"
+      required: true
+      description: "Currency code unchanged"
+    
+    - source: "book"
+      target: "book_id"
+      transformation: "identity"
+      required: false
+      description: "Trading book ID"
+    
+    - source: "desk"
+      target: "desk_id"
+      transformation: "identity"
+      required: false
+      description: "Trading desk ID"
+    
+    # Conditional mappings
+    - source: "trade_type"
+      target: "position_type"
+      transformation: "conditional"
+      transformation_config:
+        conditions:
+          - if: "trade_type == 'FX' AND direction == 'buy'"
+            then: "Long"
+          - if: "trade_type == 'FX' AND direction == 'sell'"
+            then: "Short"
+          - if: "trade_type == 'Bond' AND side == 'buy'"
+            then: "Long"
+          - if: "trade_type == 'Bond' AND side == 'sell'"
+            then: "Short"
+          else: "Net"
+      required: true
+      description: "Determine position type based on trade type and direction"
+    
+    # Risk type determination
+    - source: "trade_type"
+      target: "risk_type"
+      transformation: "map"
+      transformation_config:
+        mapping:
+          "FX": "Market"
+          "Bond": "Market"
+          "Swap": "Market"
+          "Option": "Market"
+          "Credit": "Credit"
+          "Loan": "Credit"
+          default: "Market"
+      required: true
+      description: "Map trade type to risk type"
+    
+    - source: "trade_type"
+      target: "risk_factor"
+      transformation: "map"
+      transformation_config:
+        mapping:
+          "FX": "FX"
+          "Bond": "InterestRate"
+          "Swap": "InterestRate"
+          "Option": "Equity"
+          "Credit": "CreditSpread"
+          default: "Market"
+      required: false
+      description: "Map trade type to primary risk factor"
+    
+    # Enrichment mappings (from external services)
+    - source: "trade_id"
+      target: "market_value"
+      transformation: "enrich"
+      transformation_config:
+        service: "market-data-service"
+        lookup_key: "trade_id"
+        lookup_fields:
+          - "market_value"
+          - "pnl"
+        default_value: 0
+      required: false
+      description: "Market value from pricing service"
+    
+    - source: "market_value"
+      target: "pnl"
+      transformation: "calculate"
+      transformation_config:
+        formula: "market_value - book_value"
+        source_fields: ["market_value", "book_value"]
+        default_book_value: 0
+      required: false
+      description: "P&L = market value - book value"
+    
+    # Calculated risk fields
+    - source: "market_value"
+      target: "value_at_risk"
+      transformation: "calculate"
+      transformation_config:
+        formula: "market_value * var_multiplier"
+        var_multiplier: 0.02
+        source_fields: ["market_value"]
+      required: false
+      description: "VaR = market value * 2% (assumption)"
+    
+    - source: ""
+      target: "var_confidence_level"
+      transformation: "constant"
+      transformation_config:
+        value: 0.95
+      required: false
+      description: "VaR confidence level (95%)"
+    
+    - source: "value_at_risk"
+      target: "risk_amount"
+      transformation: "copy"
+      required: true
+      description: "Risk amount = VaR"
+    
+    # Optional mappings
+    - source: "maturity_date"
+      target: "maturity_date"
+      transformation: "identity"
+      required: false
+      description: "Maturity date if available"
+    
+    - source: "trade_type"
+      target: "regulatory_category"
+      transformation: "map"
+      transformation_config:
+        mapping:
+          "Loan": "Standardized"
+          "Bond": "Standardized"
+          "Derivative": "Advanced"
+          default: "Standardized"
+      required: false
+      description: "Regulatory category for capital calculation"
+  
+  # Validation rules
+  validation_rules:
+    - field: "position_id"
+      rule: "required"
+      message: "Position ID is required"
+    
+    - field: "position_date"
+      rule: "required"
+      message: "Position date is required"
+    
+    - field: "position_amount"
+      rule: "!= 0"
+      message: "Position amount must be non-zero"
+    
+    - field: "risk_amount"
+      rule: ">= 0"
+      message: "Risk amount must be non-negative"
+    
+    - field: "risk_type"
+      rule: "in_list"
+      values: ["Market", "Credit", "Liquidity", "Operational"]
+      message: "Risk type must be valid"
+    
+    - field: "position_type"
+      rule: "in_list"
+      values: ["Long", "Short", "Net"]
+      message: "Position type must be valid"
+  
+  # Data quality checks
+  quality_checks:
+    - name: "completeness"
+      check: "required_fields"
+      fields:
+        - "position_id"
+        - "position_date"
+        - "position_amount"
+        - "risk_type"
+        - "risk_amount"
+      threshold: 0.95
+      description: "95% of required fields must be present"
+    
+    - name: "accuracy"
+      check: "transformation_accuracy"
+      threshold: 0.90
+      description: "90% transformation accuracy"
+    
+    - name: "risk_calculation_consistency"
+      check: "calculation_consistency"
+      rules:
+        - fields: ["market_value", "value_at_risk"]
+          check: "formula"
+          formula: "value_at_risk = market_value * 0.02"
+          tolerance: 0.01
+      threshold: 0.95
+      description: "95% of risk calculations must be consistent"
+  
+  # Error handling
+  error_handling:
+    missing_source_field: "warn"
+    transformation_failure: "error"
+    validation_failure: "error"
+    lookup_failure: "warn"
+    enrichment_failure: "warn"
+    default_value_on_error: true
+  
+  # Metadata
+  metadata:
+    owner: "Risk Management"
+    steward: "risk-steward@example.com"
+    created_at: "2025-01-XX"
+    updated_at: "2025-01-XX"
+    notes: "This mapping handles Murex trades to RCO risk positions. Market value enrichment requires pricing service integration."
+

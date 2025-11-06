@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 )
 
@@ -138,11 +139,22 @@ func (mti *MurexTerminologyLearnerIntegration) convertToTerminologyNodesAndEdges
 	// Create nodes for role terms
 	for role, examples := range terminology.Roles {
 		for _, example := range examples {
+			// Extract domain from context if available, otherwise use default
+			domain := "finance" // Default domain
+			if tableName, ok := example.Context["table"].(string); ok {
+				// Try to infer domain from table context
+				if strings.Contains(strings.ToLower(tableName), "trade") ||
+					strings.Contains(strings.ToLower(tableName), "cashflow") ||
+					strings.Contains(strings.ToLower(tableName), "position") {
+					domain = "finance"
+				}
+			}
+			
 			node := TerminologyNode{
 				ID:     fmt.Sprintf("murex:role:%s:%s", role, example.Text),
 				Type:   "column", // Roles apply to columns
 				Label:  example.Text,
-				Domain: "finance", // Murex is finance domain
+				Domain: domain,
 				Props: map[string]interface{}{
 					"source":      "murex",
 					"role":         role,
@@ -162,11 +174,19 @@ func (mti *MurexTerminologyLearnerIntegration) convertToTerminologyNodesAndEdges
 
 	// Create nodes for schema examples (tables)
 	for _, schemaExample := range trainingData.SchemaExamples {
+		// Infer domain from table name or use default
+		domain := "finance" // Default domain
+		if strings.Contains(strings.ToLower(schemaExample.TableName), "trade") ||
+			strings.Contains(strings.ToLower(schemaExample.TableName), "cashflow") ||
+			strings.Contains(strings.ToLower(schemaExample.TableName), "position") {
+			domain = "finance"
+		}
+		
 		tableNode := TerminologyNode{
 			ID:     fmt.Sprintf("murex:table:%s", schemaExample.TableName),
 			Type:   "table",
 			Label:  schemaExample.TableName,
-			Domain: "finance",
+			Domain: domain,
 			Props: map[string]interface{}{
 				"source":      "murex",
 				"table_name":  schemaExample.TableName,
@@ -182,7 +202,7 @@ func (mti *MurexTerminologyLearnerIntegration) convertToTerminologyNodesAndEdges
 				ID:     fmt.Sprintf("murex:column:%s:%s", schemaExample.TableName, column.Name),
 				Type:   "column",
 				Label:  column.Name,
-				Domain: "finance",
+				Domain: domain, // Use same domain as table
 				Props: map[string]interface{}{
 					"source":      "murex",
 					"table":       schemaExample.TableName,
@@ -216,8 +236,8 @@ func (mti *MurexTerminologyLearnerIntegration) convertToTerminologyNodesAndEdges
 				Label:    "REFERENCES",
 				Props: map[string]interface{}{
 					"source":           "murex",
-					"foreign_key":      fk.Name,
 					"columns":          fk.Columns,
+					"referenced_table": fk.ReferencedTable,
 					"referenced_cols": fk.ReferencedColumns,
 				},
 			}

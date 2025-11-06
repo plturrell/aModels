@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -28,9 +29,8 @@ func NewHTTPTerminologyLearnerClient(extractServiceURL string, logger *log.Logge
 	}
 }
 
-// LearnFromExtraction learns terminology from extraction nodes and edges via HTTP.
-func (c *HTTPTerminologyLearnerClient) LearnFromExtraction(ctx context.Context, nodes []TerminologyNode, edges []TerminologyEdge) error {
-	// Convert to format expected by extract service
+// convertTerminologyNodesToExtractFormat converts TerminologyNode to extract service format.
+func (c *HTTPTerminologyLearnerClient) convertTerminologyNodesToExtractFormat(nodes []TerminologyNode) []map[string]interface{} {
 	extractNodes := make([]map[string]interface{}, len(nodes))
 	for i, node := range nodes {
 		extractNodes[i] = map[string]interface{}{
@@ -40,7 +40,11 @@ func (c *HTTPTerminologyLearnerClient) LearnFromExtraction(ctx context.Context, 
 			"props": node.Props,
 		}
 	}
+	return extractNodes
+}
 
+// convertTerminologyEdgesToExtractFormat converts TerminologyEdge to extract service format.
+func (c *HTTPTerminologyLearnerClient) convertTerminologyEdgesToExtractFormat(edges []TerminologyEdge) []map[string]interface{} {
 	extractEdges := make([]map[string]interface{}, len(edges))
 	for i, edge := range edges {
 		extractEdges[i] = map[string]interface{}{
@@ -50,6 +54,14 @@ func (c *HTTPTerminologyLearnerClient) LearnFromExtraction(ctx context.Context, 
 			"props":  edge.Props,
 		}
 	}
+	return extractEdges
+}
+
+// LearnFromExtraction learns terminology from extraction nodes and edges via HTTP.
+func (c *HTTPTerminologyLearnerClient) LearnFromExtraction(ctx context.Context, nodes []TerminologyNode, edges []TerminologyEdge) error {
+	// Convert to format expected by extract service
+	extractNodes := c.convertTerminologyNodesToExtractFormat(nodes)
+	extractEdges := c.convertTerminologyEdgesToExtractFormat(edges)
 
 	payload := map[string]interface{}{
 		"nodes": extractNodes,
@@ -184,6 +196,10 @@ func (c *HTTPTerminologyLearnerClient) InferDomain(ctx context.Context, columnNa
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		if c.logger != nil {
+			c.logger.Printf("Extract service returned status %d for domain inference: %s", resp.StatusCode, string(body))
+		}
 		return "unknown", 0.0
 	}
 
@@ -192,6 +208,9 @@ func (c *HTTPTerminologyLearnerClient) InferDomain(ctx context.Context, columnNa
 		Confidence float64 `json:"confidence"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		if c.logger != nil {
+			c.logger.Printf("Failed to decode domain inference response: %v", err)
+		}
 		return "unknown", 0.0
 	}
 
@@ -235,6 +254,10 @@ func (c *HTTPTerminologyLearnerClient) InferRole(ctx context.Context, columnName
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		if c.logger != nil {
+			c.logger.Printf("Extract service returned status %d for role inference: %s", resp.StatusCode, string(body))
+		}
 		return "unknown", 0.0
 	}
 
@@ -243,6 +266,9 @@ func (c *HTTPTerminologyLearnerClient) InferRole(ctx context.Context, columnName
 		Confidence float64 `json:"confidence"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		if c.logger != nil {
+			c.logger.Printf("Failed to decode role inference response: %v", err)
+		}
 		return "unknown", 0.0
 	}
 

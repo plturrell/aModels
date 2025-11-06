@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ type MurexTerminologyExtractor struct {
 	logger        *log.Logger
 	terminology   *ExtractedTerminology
 	trainingData  *TrainingData
+	domain        string // Configurable domain (default: "finance")
 }
 
 // ExtractedTerminology contains terminology extracted from Murex.
@@ -101,9 +103,18 @@ type ValuePattern struct {
 
 // NewMurexTerminologyExtractor creates a new Murex terminology extractor.
 func NewMurexTerminologyExtractor(connector *connectors.MurexConnector, logger *log.Logger) *MurexTerminologyExtractor {
+	return NewMurexTerminologyExtractorWithDomain(connector, "finance", logger)
+}
+
+// NewMurexTerminologyExtractorWithDomain creates a new Murex terminology extractor with a specified domain.
+func NewMurexTerminologyExtractorWithDomain(connector *connectors.MurexConnector, domain string, logger *log.Logger) *MurexTerminologyExtractor {
+	if domain == "" {
+		domain = "finance" // Default to finance domain
+	}
 	return &MurexTerminologyExtractor{
 		connector: connector,
 		logger:    logger,
+		domain:    domain,
 		terminology: &ExtractedTerminology{
 			Domains:        make(map[string][]TerminologyExample),
 			Roles:          make(map[string][]TerminologyExample),
@@ -165,11 +176,19 @@ func (mte *MurexTerminologyExtractor) ExtractFromAPIData(ctx context.Context, sa
 		mte.logger.Printf("Extracting terminology from Murex API data (sample_size=%d)", sampleSize)
 	}
 
-	// Connect to Murex
+	// Connect to Murex (only if not already connected)
+	// Note: Connector should handle multiple Connect calls gracefully
 	if err := mte.connector.Connect(ctx, nil); err != nil {
 		return fmt.Errorf("failed to connect: %w", err)
 	}
-	defer mte.connector.Close()
+	
+	// Only close if we opened the connection
+	// In production, connector should manage its own lifecycle
+	defer func() {
+		if closeErr := mte.connector.Close(); closeErr != nil && mte.logger != nil {
+			mte.logger.Printf("Warning: Error closing connector: %v", closeErr)
+		}
+	}()
 
 	// Discover schema to know what tables to sample
 	schema, err := mte.connector.DiscoverSchema(ctx)
@@ -229,7 +248,7 @@ func (mte *MurexTerminologyExtractor) extractDomainTerminology(schema *agents.So
 		{Text: "market_data", Context: map[string]interface{}{"source": "murex"}, Confidence: 0.85, Source: "openapi_spec", Timestamp: time.Now()},
 	}
 
-	mte.terminology.Domains["finance"] = financeDomain
+	mte.terminology.Domains[mte.domain] = financeDomain
 	mte.terminology.EntityTypes = append(mte.terminology.EntityTypes, "Trade", "Cashflow", "Position", "Counterparty", "Instrument")
 
 	// Add table-specific domain terms
@@ -241,7 +260,7 @@ func (mte *MurexTerminologyExtractor) extractDomainTerminology(schema *agents.So
 			Source:      "openapi_spec",
 			Timestamp:   time.Now(),
 		}
-		mte.terminology.Domains["finance"] = append(mte.terminology.Domains["finance"], term)
+		mte.terminology.Domains[mte.domain] = append(mte.terminology.Domains[mte.domain], term)
 	}
 }
 
@@ -479,22 +498,76 @@ func (mte *MurexTerminologyExtractor) inferValuePattern(fieldType string, exampl
 		return "unknown"
 	}
 
-	// Simple pattern inference
+	// More robust pattern inference
 	switch fieldType {
 	case "string":
-		firstVal := fmt.Sprintf("%v", examples[0])
-		if len(firstVal) == 3 && strings.ToUpper(firstVal) == firstVal {
-			return "currency_code"
+		// Analyze multiple examples if available
+		sampleSize := len(examples)
+		if sampleSize > 10 {
+			sampleSize = 10 // Limit sample size
 		}
-		if strings.Contains(firstVal, "-") && len(firstVal) == 10 {
-			return "date_string"
+		
+		patterns := make(map[string]int)
+		for i := 0; i < sampleSize; i++ {
+			val := fmt.Sprintf("%v", examples[i])
+			valLen := len(val)
+			valUpper := strings.ToUpper(val)
+			
+			// Currency code pattern (3 uppercase letters)
+			if valLen == 3 && val == valUpper {
+				patterns["currency_code"]++
+			}
+			// Date string pattern (YYYY-MM-DD or similar)
+			if strings.Contains(val, "-") && (valLen == 10 || valLen == 19) {
+				patterns["date_string"]++
+			}
+			// ISO 8601 datetime pattern
+			if strings.Contains(val, "T") && strings.Contains(val, "Z") {
+				patterns["iso_datetime"]++
+			}
+			// UUID pattern
+			if valLen == 36 && strings.Contains(val, "-") {
+				patterns["uuid"]++
+			}
+			// Numeric string
+			if _, err := strconv.ParseFloat(val, 64); err == nil {
+				patterns["numeric_string"]++
+			}
+		}
+		
+		// Return most common pattern
+		if len(patterns) > 0 {
+			maxCount := 0
+			commonPattern := "text"
+			for pattern, count := range patterns {
+				if count > maxCount {
+					maxCount = count
+					commonPattern = pattern
+				}
+			}
+			// Only return specialized pattern if it appears in majority
+			if maxCount >= sampleSize/2 {
+				return commonPattern
+			}
 		}
 		return "text"
-	case "decimal", "integer":
+	case "decimal", "float", "double", "numeric":
+		// Check if values are monetary (typically 2 decimal places)
+		if len(examples) > 0 {
+			valStr := fmt.Sprintf("%v", examples[0])
+			if strings.Contains(valStr, ".") {
+				parts := strings.Split(valStr, ".")
+				if len(parts) == 2 && len(parts[1]) == 2 {
+					return "monetary"
+				}
+			}
+		}
 		return "numeric"
-	case "date":
+	case "integer", "int", "bigint":
+		return "integer"
+	case "date", "datetime", "timestamp":
 		return "date"
-	case "boolean":
+	case "boolean", "bool":
 		return "boolean"
 	default:
 		return "unknown"
@@ -504,7 +577,7 @@ func (mte *MurexTerminologyExtractor) inferValuePattern(fieldType string, exampl
 // extractFieldExamplesFromData extracts field examples from actual data.
 func (mte *MurexTerminologyExtractor) extractFieldExamplesFromData(table agents.TableDefinition, data []map[string]interface{}) {
 	for _, column := range table.Columns {
-		domain := "finance" // Murex is finance domain
+		domain := mte.domain // Use configured domain
 		role := mte.inferRole(column.Name, column.Type)
 
 		examples := []interface{}{}

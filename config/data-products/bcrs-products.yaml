@@ -1,0 +1,257 @@
+# BCRS Data Products Definition
+# Define all data products from Banking Credit Risk System
+
+data_products:
+  - id: "bcrs-credit-exposures"
+    name: "BCRS Credit Exposures"
+    description: "Credit exposures from Banking Credit Risk System"
+    source_system: "BCRS"
+    version: "1.0.0"
+    
+    schema:
+      fields:
+        - name: "exposure_id"
+          type: "string"
+          required: true
+          description: "Unique credit exposure identifier"
+        
+        - name: "counterparty_id"
+          type: "string"
+          required: true
+          description: "Counterparty identifier"
+        
+        - name: "counterparty_name"
+          type: "string"
+          required: false
+          description: "Counterparty name"
+        
+        - name: "exposure_amount"
+          type: "decimal"
+          required: true
+          description: "Credit exposure amount"
+          constraints:
+            min: 0
+        
+        - name: "exposure_date"
+          type: "date"
+          required: true
+          description: "Date of exposure calculation"
+        
+        - name: "risk_weight"
+          type: "decimal"
+          required: true
+          description: "Risk weight for capital calculation (0-1)"
+          constraints:
+            min: 0
+            max: 1
+        
+        - name: "effective_risk_weight"
+          type: "decimal"
+          required: false
+          description: "Effective risk weight after adjustments"
+          constraints:
+            min: 0
+            max: 1
+        
+        - name: "risk_weighted_amount"
+          type: "decimal"
+          required: true
+          description: "Risk-weighted exposure amount (exposure_amount * risk_weight)"
+          constraints:
+            min: 0
+        
+        - name: "rating"
+          type: "string"
+          required: false
+          description: "Credit rating (e.g., AAA, AA, A, BBB, etc.)"
+        
+        - name: "rating_agency"
+          type: "string"
+          required: false
+          description: "Rating agency (e.g., S&P, Moody's, Fitch)"
+        
+        - name: "probability_of_default"
+          type: "decimal"
+          required: false
+          description: "Probability of default (PD)"
+          constraints:
+            min: 0
+            max: 1
+        
+        - name: "loss_given_default"
+          type: "decimal"
+          required: false
+          description: "Loss given default (LGD)"
+          constraints:
+            min: 0
+            max: 1
+        
+        - name: "exposure_at_default"
+          type: "decimal"
+          required: false
+          description: "Exposure at default (EAD)"
+          constraints:
+            min: 0
+        
+        - name: "expected_loss"
+          type: "decimal"
+          required: false
+          description: "Expected loss (PD * LGD * EAD)"
+          constraints:
+            min: 0
+        
+        - name: "unexpected_loss"
+          type: "decimal"
+          required: false
+          description: "Unexpected loss"
+          constraints:
+            min: 0
+        
+        - name: "regulatory_capital"
+          type: "decimal"
+          required: false
+          description: "Regulatory capital requirement"
+          constraints:
+            min: 0
+        
+        - name: "economic_capital"
+          type: "decimal"
+          required: false
+          description: "Economic capital requirement"
+          constraints:
+            min: 0
+        
+        - name: "product_type"
+          type: "string"
+          required: false
+          description: "Product type (e.g., Loan, Bond, Derivative)"
+        
+        - name: "asset_class"
+          type: "string"
+          required: false
+          description: "Asset class classification"
+        
+        - name: "maturity_date"
+          type: "date"
+          required: false
+          description: "Maturity date of exposure"
+        
+        - name: "residual_maturity"
+          type: "integer"
+          required: false
+          description: "Residual maturity in days"
+          constraints:
+            min: 0
+        
+        - name: "calculation_type"
+          type: "string"
+          required: true
+          description: "Type of calculation (CreditRisk, MarketRisk, OperationalRisk)"
+          constraints:
+            enum: ["CreditRisk", "MarketRisk", "OperationalRisk"]
+      
+      primary_key:
+        - "exposure_id"
+      
+      indexes:
+        - name: "idx_counterparty"
+          fields: ["counterparty_id"]
+        - name: "idx_exposure_date"
+          fields: ["exposure_date"]
+        - name: "idx_rating"
+          fields: ["rating"]
+    
+    quality_slos:
+      - name: "freshness"
+        target: 0.90
+        window: "24h"
+        description: "90% of credit exposures available within 24 hours"
+      
+      - name: "completeness"
+        target: 0.95
+        window: "24h"
+        description: "95% of credit exposure data complete"
+      
+      - name: "accuracy"
+        target: 0.95
+        window: "24h"
+        description: "95% of credit exposures accurate"
+      
+      - name: "calculation_consistency"
+        target: 0.98
+        window: "24h"
+        description: "98% of risk-weighted amounts calculated consistently"
+    
+    metadata:
+      owner: "Risk Management"
+      steward: "risk-steward@example.com"
+      update_frequency: "daily"
+      retention_period: "7 years"
+  
+  - id: "bcrs-counterparty-ratings"
+    name: "BCRS Counterparty Ratings"
+    description: "Counterparty credit ratings from BCRS"
+    source_system: "BCRS"
+    version: "1.0.0"
+    
+    schema:
+      fields:
+        - name: "counterparty_id"
+          type: "string"
+          required: true
+          description: "Counterparty identifier"
+        
+        - name: "counterparty_name"
+          type: "string"
+          required: true
+          description: "Counterparty name"
+        
+        - name: "rating"
+          type: "string"
+          required: true
+          description: "Credit rating"
+        
+        - name: "rating_agency"
+          type: "string"
+          required: true
+          description: "Rating agency"
+        
+        - name: "rating_date"
+          type: "date"
+          required: true
+          description: "Date rating was assigned"
+        
+        - name: "outlook"
+          type: "string"
+          required: false
+          description: "Rating outlook (Positive, Stable, Negative)"
+          constraints:
+            enum: ["Positive", "Stable", "Negative"]
+        
+        - name: "default_probability"
+          type: "decimal"
+          required: false
+          description: "Default probability based on rating"
+          constraints:
+            min: 0
+            max: 1
+      
+      primary_key:
+        - "counterparty_id"
+        - "rating_agency"
+        - "rating_date"
+    
+    quality_slos:
+      - name: "freshness"
+        target: 0.90
+        window: "24h"
+      - name: "completeness"
+        target: 0.95
+        window: "24h"
+    
+    metadata:
+      owner: "Risk Management"
+      steward: "risk-steward@example.com"
+      update_frequency: "weekly"
+      retention_period: "7 years"
+

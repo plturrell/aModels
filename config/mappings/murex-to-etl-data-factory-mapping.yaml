@@ -1,0 +1,58 @@
+# Murex to ETL Data Factory Schema Mapping
+# Maps Murex trade data to ETL Data Factory staging format
+
+schema_mapping:
+  id: "murex-to-etl-data-factory-mapping"
+  name: "Murex to ETL Data Factory Mapping"
+  version: "1.0.0"
+  description: "Schema mapping from Murex trades to ETL Data Factory staging"
+  
+  source:
+    system: "murex"
+    entity: "trades"
+    schema_version: "1.0.0"
+  
+  target:
+    system: "etl_data_factory"
+    entity: "staging_trades"
+    schema_version: "1.0.0"
+  
+  field_mappings:
+    - source: "trade_id"
+      target: "trade_id"
+      transformation: "identity"
+      required: true
+    
+    - source: "trade_date"
+      target: "trade_date"
+      transformation: "identity"
+      required: true
+    
+    - source: "notional_amount"
+      target: "notional_amount"
+      transformation: "identity"
+      required: true
+    
+    - source: "currency"
+      target: "currency"
+      transformation: "identity"
+      required: true
+    
+    - source: "counterparty_id"
+      target: "counterparty_id"
+      transformation: "identity"
+      required: false
+    
+    - source: "trade_type"
+      target: "trade_type"
+      transformation: "identity"
+      required: true
+  
+  validation_rules:
+    - field: "trade_id"
+      rule: "required"
+    - field: "trade_date"
+      rule: "required"
+    - field: "notional_amount"
+      rule: "> 0"
+

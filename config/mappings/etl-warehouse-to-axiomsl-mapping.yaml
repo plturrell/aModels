@@ -1,0 +1,80 @@
+# ETL Warehouse to AxiomSL (Local Regulatory Reporting) Schema Mapping
+# Maps warehouse trades to AxiomSL regulatory reports
+
+schema_mapping:
+  id: "etl-warehouse-to-axiomsl-mapping"
+  name: "ETL Warehouse to AxiomSL Regulatory Mapping"
+  version: "1.0.0"
+  description: "Schema mapping from ETL Warehouse trades to AxiomSL local regulatory reporting"
+  
+  source:
+    system: "etl_warehouse"
+    entity: "warehouse_trades"
+    schema_version: "1.0.0"
+  
+  target:
+    system: "axiomsl"
+    entity: "regulatory_reports"
+    schema_version: "1.0.0"
+  
+  field_mappings:
+    - source: ""
+      target: "report_id"
+      transformation: "format"
+      transformation_config:
+        format: "REG-{trade_id}-{report_date}"
+        source_fields: ["trade_id", "report_date"]
+      required: true
+    
+    - source: "trade_id"
+      target: "trade_reference"
+      transformation: "identity"
+      required: true
+    
+    - source: "trade_date"
+      target: "report_date"
+      transformation: "identity"
+      required: true
+    
+    - source: "notional_amount"
+      target: "report_amount"
+      transformation: "identity"
+      required: true
+    
+    - source: "currency"
+      target: "report_currency"
+      transformation: "identity"
+      required: true
+    
+    - source: "counterparty_id"
+      target: "counterparty_id"
+      transformation: "identity"
+      required: false
+    
+    - source: ""
+      target: "regulatory_framework"
+      transformation: "constant"
+      transformation_config:
+        value: "Local"
+      required: true
+    
+    - source: ""
+      target: "reporting_jurisdiction"
+      transformation: "lookup"
+      transformation_config:
+        lookup_table: "counterparty_jurisdiction"
+        lookup_key: "counterparty_id"
+        default_value: "DEFAULT"
+      required: true
+  
+  validation_rules:
+    - field: "report_id"
+      rule: "required"
+    - field: "report_date"
+      rule: "required"
+    - field: "report_amount"
+      rule: ">= 0"
+    - field: "regulatory_framework"
+      rule: "equals"
+      value: "Local"
+

@@ -13,3 +13,16 @@ export interface LocalAIInventory {
 export function useLocalAIInventory() {
   return useApiData<LocalAIInventory>('/api/localai/models');
 }
+
+export interface DocumentRecord {
+  id: string;
+  name: string;
+  description?: string | null;
+  storage_path: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export function useDocuments() {
+  return useApiData<DocumentRecord[]>("/dms/documents");
+}
