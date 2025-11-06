@@ -61,11 +61,14 @@ RUN go mod tidy 2>&1 | grep -v "does not contain package" || true
 # Build (protobuf files are now generated and in the same module)
 RUN go build -o /server .
 
-# Final stage
-FROM alpine:latest
+# Final stage - use Python base image for PyTorch/transformers support
+FROM python:3.10-slim
 
-# Install Python runtime and bash for helper scripts
-RUN apk add --no-cache python3 py3-pip bash
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    bash \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -75,7 +78,7 @@ COPY --from=builder /app/services/extract/scripts ./scripts
 
 # Install Python dependencies required by the helper scripts
 # Note: transformers and torch are included for DeepSeek OCR support
-RUN pip3 install --no-cache-dir --break-system-packages -r ./scripts/requirements.txt
+RUN pip3 install --no-cache-dir -r ./scripts/requirements.txt
 
 # Command to run the service with dependency waits
 ENTRYPOINT ["./scripts/start_extract.sh"]
