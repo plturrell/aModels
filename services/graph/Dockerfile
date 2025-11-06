@@ -27,8 +27,11 @@ COPY . /workspace/src
 
 WORKDIR /workspace/src/services/graph
 
-# Use the image toolchain (Go 1.24)
+# Use the image toolchain (Go 1.25)
 ENV GOTOOLCHAIN=local
+
+# Remove go.work file if present to avoid version conflicts
+RUN rm -f ../../go.work || true
 
 # Remove replace directives that point to missing local paths
 # Keep Postgres replace but fix path
@@ -43,13 +46,16 @@ RUN sed -i '/replace.*third_party\/go-arrow/d' go.mod || true && \
     sed -i '/replace.*agenticAiETH_layer4_Postgres/d' go.mod || true
 
 # Add replace directives using go mod edit (must be done before go mod tidy)
-RUN go mod edit -replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres=../postgres && \
+# Remove postgres from require if present, then add replace directives
+RUN sed -i '/^require/,/^)/ { /agenticAiETH_layer4_Postgres/d; }' go.mod && \
     go mod edit -replace github.com/plturrell/aModels/services/graph=. && \
     go mod edit -replace github.com/SAP/go-hdb=../../infrastructure/third_party/go-hdb && \
     go mod edit -replace github.com/plturrell/aModels/services/postgres=../postgres && \
     go mod edit -replace github.com/plturrell/aModels/services/catalog=../catalog && \
     go mod edit -replace github.com/plturrell/aModels/services/extract=../extract && \
-    go mod edit -replace github.com/plturrell/aModels/services/orchestration=../orchestration
+    go mod edit -replace github.com/plturrell/aModels/services/orchestration=../orchestration && \
+    go mod edit -replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres=../postgres && \
+    go mod edit -replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract/gen/extractpb=../extract/gen/extractpb
 
 RUN go mod tidy
 RUN CGO_ENABLED=0 go build -o /workspace/build/graph-server ./cmd/graph-server

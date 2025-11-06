@@ -13,9 +13,7 @@ import (
 	"time"
 
 	"github.com/langchain-ai/langgraph-go/pkg/stategraph"
-	orch "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/chains"
-	orchlocalai "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/llms/localai"
-	orchprompts "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/prompts"
+	stubs "github.com/langchain-ai/langgraph-go/pkg/stubs"
 )
 
 // OrchestrationProcessorOptions configures the orchestration chain processing workflow.
@@ -70,7 +68,7 @@ func RunOrchestrationChainNode(localAIURL string) stategraph.NodeFunc {
 		// Create or load orchestration chain based on chain name
 		chain, err := createOrchestrationChain(chainName, localAIURL)
 		if err != nil {
-			return nil, fmt.Errorf("create orchestration chain %s: %w", chainName, err)
+			return nil, fmt.Errorf("create chain %s: %w", chainName, err)
 		}
 
 		// If knowledge graph context is available, enrich inputs
@@ -126,7 +124,7 @@ func RunOrchestrationChainNode(localAIURL string) stategraph.NodeFunc {
 		}
 
 		// Execute chain
-		result, err := orch.Call(ctx, chain, chainInputs)
+		result, err := chain.Call(ctx, chainInputs)
 		if err != nil {
 			return nil, fmt.Errorf("execute orchestration chain %s: %w", chainName, err)
 		}
@@ -243,9 +241,9 @@ func ChainResultRoutingFunc(ctx context.Context, value any) ([]string, error) {
 // createOrchestrationChain creates an orchestration chain based on the chain name.
 // Supports: "llm_chain", "question_answering", "summarization", "knowledge_graph_analyzer",
 // "data_quality_analyzer", "pipeline_analyzer", "sql_analyzer"
-func createOrchestrationChain(chainName, localAIURL string) (orch.Chain, error) {
+func createOrchestrationChain(chainName, localAIURL string) (stubs.Chain, error) {
 	// Create LocalAI LLM instance
-	llm, err := orchlocalai.New(localAIURL)
+	llm, err := stubs.NewLocalAI(localAIURL)
 	if err != nil {
 		return nil, fmt.Errorf("create LocalAI LLM: %w", err)
 	}
@@ -254,31 +252,31 @@ func createOrchestrationChain(chainName, localAIURL string) (orch.Chain, error) 
 	switch chainName {
 	case "llm_chain", "default":
 		// Simple LLM chain with customizable prompt
-		promptTemplate := orchprompts.NewPromptTemplate(
+		promptTemplate := stubs.NewPromptTemplate(
 			"Answer the following question or task:\n\n{{.input}}",
 			[]string{"input"},
 		)
-		return orch.NewLLMChain(llm, promptTemplate), nil
+		return stubs.NewLLMChain(llm, promptTemplate), nil
 
 	case "question_answering", "qa":
 		// Question answering chain with context support
-		promptTemplate := orchprompts.NewPromptTemplate(
+		promptTemplate := stubs.NewPromptTemplate(
 			"Context: {{.context}}\n\nQuestion: {{.question}}\n\nAnswer:",
 			[]string{"context", "question"},
 		)
-		return orch.NewLLMChain(llm, promptTemplate), nil
+		return stubs.NewLLMChain(llm, promptTemplate), nil
 
 	case "summarization", "summarize":
 		// Summarization chain
-		promptTemplate := orchprompts.NewPromptTemplate(
+		promptTemplate := stubs.NewPromptTemplate(
 			"Summarize the following text:\n\n{{.text}}\n\nSummary:",
 			[]string{"text"},
 		)
-		return orch.NewLLMChain(llm, promptTemplate), nil
+		return stubs.NewLLMChain(llm, promptTemplate), nil
 
 	case "knowledge_graph_analyzer", "kg_analyzer":
 		// Chain for analyzing knowledge graphs
-		promptTemplate := orchprompts.NewPromptTemplate(
+		promptTemplate := stubs.NewPromptTemplate(
 			"Analyze the following knowledge graph information:\n\n"+
 				"Nodes: {{.node_count}}\n"+
 				"Edges: {{.edge_count}}\n"+
@@ -288,11 +286,11 @@ func createOrchestrationChain(chainName, localAIURL string) (orch.Chain, error) 
 				"Provide insights and recommendations:\n\n{{.query}}",
 			[]string{"node_count", "edge_count", "quality_score", "quality_level", "knowledge_graph_context", "query"},
 		)
-		return orch.NewLLMChain(llm, promptTemplate), nil
+		return stubs.NewLLMChain(llm, promptTemplate), nil
 
 	case "data_quality_analyzer", "quality_analyzer":
 		// Chain for analyzing data quality metrics
-		promptTemplate := orchprompts.NewPromptTemplate(
+		promptTemplate := stubs.NewPromptTemplate(
 			"Analyze the following data quality metrics:\n\n"+
 				"Metadata Entropy: {{.metadata_entropy}}\n"+
 				"KL Divergence: {{.kl_divergence}}\n"+
@@ -302,11 +300,11 @@ func createOrchestrationChain(chainName, localAIURL string) (orch.Chain, error) 
 				"Provide data quality assessment and recommendations:\n\n{{.query}}",
 			[]string{"metadata_entropy", "kl_divergence", "quality_score", "quality_level", "issues", "query"},
 		)
-		return orch.NewLLMChain(llm, promptTemplate), nil
+		return stubs.NewLLMChain(llm, promptTemplate), nil
 
 	case "pipeline_analyzer", "pipeline":
 		// Chain for analyzing data pipelines
-		promptTemplate := orchprompts.NewPromptTemplate(
+		promptTemplate := stubs.NewPromptTemplate(
 			"Analyze the following data pipeline:\n\n"+
 				"Control-M Jobs: {{.controlm_jobs}}\n"+
 				"SQL Queries: {{.sql_queries}}\n"+
@@ -316,21 +314,21 @@ func createOrchestrationChain(chainName, localAIURL string) (orch.Chain, error) 
 				"Provide pipeline insights and optimization recommendations:\n\n{{.query}}",
 			[]string{"controlm_jobs", "sql_queries", "source_tables", "target_tables", "data_flow_path", "query"},
 		)
-		return orch.NewLLMChain(llm, promptTemplate), nil
+		return stubs.NewLLMChain(llm, promptTemplate), nil
 
 	case "sql_analyzer", "sql":
 		// Chain for analyzing SQL queries
-		promptTemplate := orchprompts.NewPromptTemplate(
+		promptTemplate := stubs.NewPromptTemplate(
 			"Analyze the following SQL query:\n\n{{.sql_query}}\n\n"+
 				"Context: {{.context}}\n\n"+
 				"Provide SQL analysis, optimization suggestions, and explain execution plan:\n\n{{.query}}",
 			[]string{"sql_query", "context", "query"},
 		)
-		return orch.NewLLMChain(llm, promptTemplate), nil
+		return stubs.NewLLMChain(llm, promptTemplate), nil
 
 	case "agentflow_analyzer", "agentflow":
 		// Chain for analyzing AgentFlow flows
-		promptTemplate := orchprompts.NewPromptTemplate(
+		promptTemplate := stubs.NewPromptTemplate(
 			"Analyze the following AgentFlow flow execution:\n\n"+
 				"Flow ID: {{.flow_id}}\n"+
 				"Flow Result: {{.flow_result}}\n"+
@@ -338,15 +336,15 @@ func createOrchestrationChain(chainName, localAIURL string) (orch.Chain, error) 
 				"Provide flow analysis and recommendations:\n\n{{.query}}",
 			[]string{"flow_id", "flow_result", "knowledge_graph_context", "query"},
 		)
-		return orch.NewLLMChain(llm, promptTemplate), nil
+		return stubs.NewLLMChain(llm, promptTemplate), nil
 
 	default:
 		// Default to simple LLM chain with custom input
-		promptTemplate := orchprompts.NewPromptTemplate(
+		promptTemplate := stubs.NewPromptTemplate(
 			"{{.input}}",
 			[]string{"input"},
 		)
-		return orch.NewLLMChain(llm, promptTemplate), nil
+		return stubs.NewLLMChain(llm, promptTemplate), nil
 	}
 }
 

@@ -15,7 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA/pkg/hanapool"
+	"github.com/langchain-ai/langgraph-go/pkg/stubs"
 	"github.com/redis/go-redis/v9"
 )
 

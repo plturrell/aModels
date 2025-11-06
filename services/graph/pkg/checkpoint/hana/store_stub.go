@@ -6,7 +6,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA/pkg/hanapool"
+	"github.com/langchain-ai/langgraph-go/pkg/stubs"
 )
 
 var errHANANotEnabled = errors.New("hana checkpoint: build without 'hana' tag")

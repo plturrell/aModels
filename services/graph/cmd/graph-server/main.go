@@ -18,10 +18,10 @@ import (
 	postgresgrpc "github.com/langchain-ai/langgraph-go/pkg/clients/postgresgrpc"
 	"github.com/langchain-ai/langgraph-go/pkg/workflows"
 	catalogprompt "github.com/langchain-ai/langgraph-go/pkg/stubs"
+	adaptersconnectors "github.com/plturrell/aModels/services/graph/adapters/connectors"
 	postgresv1 "github.com/plturrell/aModels/services/postgres/pkg/gen/v1"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/plturrell/aModels/services/graph"
-	"github.com/plturrell/aModels/services/orchestration/agents/connectors"
 	"google.golang.org/protobuf/encoding/protojson"
 	proto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -66,7 +66,7 @@ func main() {
 		}
 	}
 
-	graph, err := workflows.NewProactiveIngestionGraph(workflows.GraphOptions{
+	runtimeGraph, err := workflows.NewProactiveIngestionGraph(workflows.GraphOptions{
 		SearchServiceURL: searchServiceURL,
 		ExtractHTTPURL:   extractHTTPURL,
 		ExtractGRPC:      extractGRPCClient,
@@ -107,24 +107,20 @@ func main() {
 				murexConfig["openapi_spec_url"] = murexOpenAPISpecURL
 			}
 
-			// Create Murex integration
-			murexIntegration := graph.NewMurexIntegration(murexConfig, mapper, graphClient, log.Default())
+			// Create Murex integration via adapter
+			murexConnector := adaptersconnectors.NewMurexAdapter(murexConfig, log.Default())
+			murexIntegration := graph.NewMurexIntegration(murexConnector, mapper, graphClient, log.Default())
 
 			// Create terminology extractor
-			terminologyExtractor := graph.NewMurexTerminologyExtractor(connectors.NewMurexConnector(murexConfig, log.Default()), log.Default())
+			terminologyExtractor := graph.NewMurexTerminologyExtractor(murexConnector, log.Default())
 
-			// Create catalog populator (if registry available)
+			// Optional catalog populator (nil for now)
 			var catalogPopulator *graph.MurexCatalogPopulator
-			// Note: Would need to pass catalog registry here if available
-			// For now, catalogPopulator can be nil
 
-			// Create terminology learner integration
-			// Use HTTP client to connect to extract service TerminologyLearner
+			// Terminology learner integration
 			var terminologyLearner *graph.MurexTerminologyLearnerIntegration
 			extractServiceURL := strings.TrimSpace(os.Getenv("EXTRACT_SERVICE_URL"))
-			if extractServiceURL == "" {
-				extractServiceURL = extractHTTPURL // Use the same URL as extract service
-			}
+			if extractServiceURL == "" { extractServiceURL = extractHTTPURL }
 			if extractServiceURL != "" {
 				httpLearnerClient := graph.NewHTTPTerminologyLearnerClient(extractServiceURL, log.Default())
 				terminologyLearner = graph.NewMurexTerminologyLearnerIntegration(
@@ -137,7 +133,6 @@ func main() {
 
 			// Create handler
 			murexHandler = graph.NewMurexHandler(murexIntegration, terminologyExtractor, catalogPopulator, terminologyLearner, log.Default())
-
 			log.Printf("Murex integration initialized (base_url=%s)", murexBaseURL)
 		}
 	}
@@ -160,9 +155,7 @@ func main() {
 			return
 		}
 
-		initialState := map[string]any{
-			"file_path": filePath,
-		}
+		initialState := map[string]any{ "file_path": filePath }
 		if agentSDKFlightAddr != "" {
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 			defer cancel()
@@ -173,7 +166,7 @@ func main() {
 			}
 		}
 
-		result, err := graph.Invoke(context.Background(), initialState)
+		result, err := runtimeGraph.Invoke(context.Background(), initialState)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to run graph: %v", err), http.StatusInternalServerError)
 			return

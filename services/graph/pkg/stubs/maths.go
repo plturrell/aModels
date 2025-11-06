@@ -1,12 +1,14 @@
-// Package maths provides stubs for math functionality
+// Package stubs provides stubs for missing agenticAiETH dependencies
 // This replaces the missing agenticAiETH_layer4_Models/maths package
-package maths
+package stubs
 
-// Engine is a stub for math engine
-type Engine struct{}
+// Provider is a stub interface for math provider
+type Provider interface{}
 
-// NewEngine creates a new stub engine
-func NewEngine() *Engine {
-	return &Engine{}
+// New creates a new math provider (stub)
+func New() Provider {
+	return &stubProvider{}
 }
+
+type stubProvider struct{}
 

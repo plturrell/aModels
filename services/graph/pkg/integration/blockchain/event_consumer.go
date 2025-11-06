@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA/pkg/hanapool"
 )
 
 // BlockchainEvent represents a blockchain event from L1
@@ -29,15 +28,14 @@ type BlockchainEvent struct {
 type EventHandler func(ctx context.Context, event *BlockchainEvent) error
 
 // BlockchainEventConsumer consumes blockchain events and triggers Graph operations
+// NOTE: This is a stub implementation - blockchain functionality is not fully available
 type BlockchainEventConsumer struct {
-	pool     *hanapool.Pool
 	handlers map[string]EventHandler
 }
 
-// NewBlockchainEventConsumer creates a new blockchain event consumer
-func NewBlockchainEventConsumer(pool *hanapool.Pool) *BlockchainEventConsumer {
+// NewBlockchainEventConsumer creates a new blockchain event consumer (stub)
+func NewBlockchainEventConsumer(pool interface{}) *BlockchainEventConsumer {
 	return &BlockchainEventConsumer{
-		pool:     pool,
 		handlers: make(map[string]EventHandler),
 	}
 }
@@ -88,58 +86,10 @@ func (c *BlockchainEventConsumer) Start(ctx context.Context) error {
 	}
 }
 
-// getNewEvents retrieves new blockchain events
+// getNewEvents retrieves new blockchain events (stub - returns empty)
 func (c *BlockchainEventConsumer) getNewEvents(ctx context.Context, lastID int64) ([]*BlockchainEvent, error) {
-	query := `
-		SELECT id, event_type, tx_hash, block_number, block_hash, 
-		       agent_address, contract_address, event_data, timestamp, created_at
-		FROM BLOCKCHAIN_EVENTS 
-		WHERE id > ? 
-		ORDER BY id ASC 
-		LIMIT 100
-	`
-
-	rows, err := c.pool.Query(ctx, query, lastID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var events []*BlockchainEvent
-	for rows.Next() {
-		event := &BlockchainEvent{}
-		var eventDataJSON string
-
-		err := rows.Scan(
-			&event.ID,
-			&event.EventType,
-			&event.TxHash,
-			&event.BlockNumber,
-			&event.BlockHash,
-			&event.AgentAddress,
-			&event.ContractAddress,
-			&eventDataJSON,
-			&event.Timestamp,
-			&event.CreatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		// Parse event data JSON
-		if eventDataJSON != "" {
-			if err := json.Unmarshal([]byte(eventDataJSON), &event.EventData); err != nil {
-				log.Warn("Failed to parse event data JSON", "event_id", event.ID, "error", err)
-				event.EventData = make(map[string]interface{})
-			}
-		} else {
-			event.EventData = make(map[string]interface{})
-		}
-
-		events = append(events, event)
-	}
-
-	return events, nil
+	// Stub implementation - blockchain functionality not fully available
+	return []*BlockchainEvent{}, nil
 }
 
 // processEvent processes a single blockchain event

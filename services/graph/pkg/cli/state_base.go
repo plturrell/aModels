@@ -15,7 +15,7 @@ import (
 	redisstore "github.com/langchain-ai/langgraph-go/pkg/checkpoint/redis"
 	sqlitestore "github.com/langchain-ai/langgraph-go/pkg/checkpoint/sqlite"
 	"github.com/langchain-ai/langgraph-go/pkg/graph"
-	hanapool "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA/pkg/hanapool"
+	hanapool "github.com/langchain-ai/langgraph-go/pkg/stubs"
 )
 
 // BuildStateManager constructs a state manager for the requested checkpoint
@@ -41,7 +41,7 @@ func BuildStateManager(spec string) (*graph.StateManager, func() error, error) {
 		}
 		return graph.NewStateManager(store), db.Close, nil
 	case spec == "hana":
-		pool, err := hanapool.NewPoolFromEnv()
+		pool, err := stubs.NewPoolFromEnv()
 		if err != nil {
 			return nil, nil, fmt.Errorf("create hana pool: %w", err)
 		}

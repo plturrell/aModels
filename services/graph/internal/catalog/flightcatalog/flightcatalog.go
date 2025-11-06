@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/langchain-ai/langgraph-go/pkg/stubs"
+	stubs "github.com/langchain-ai/langgraph-go/pkg/stubs"
 )
 
 // Catalog summarizes the Arrow Flight listings the graph service cares about.
 type Catalog struct {
-	Suites []flightclient.ServiceSuiteInfo
-	Tools  []flightclient.ToolInfo
+	Suites []stubs.ServiceSuiteInfo
+	Tools  []stubs.ToolInfo
 }
 
 // Fetch retrieves the catalog from the Agent SDK Arrow Flight server.
 func Fetch(ctx context.Context, addr string) (Catalog, error) {
-	client, err := flightclient.Dial(ctx, addr)
+	client, err := stubs.Dial(ctx, addr)
 	if err != nil {
 		return Catalog{}, fmt.Errorf("dial flight server: %w", err)
 	}
@@ -31,8 +31,5 @@ func Fetch(ctx context.Context, addr string) (Catalog, error) {
 		return Catalog{}, fmt.Errorf("list tools: %w", err)
 	}
 
-	return Catalog{
-		Suites: suites,
-		Tools:  tools,
-	}, nil
+	return Catalog{ Suites: suites, Tools: tools }, nil
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	extractpb "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract/gen/extractpb"
+	extractpb "github.com/plturrell/aModels/services/extract/gen/extractpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

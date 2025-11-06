@@ -13,7 +13,7 @@ import (
 	"github.com/apache/arrow/go/v16/arrow/ipc"
 	"github.com/apache/arrow/go/v16/arrow/memory"
 	"github.com/langchain-ai/langgraph-go/internal/catalog/flightcatalog"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightdefs"
+	"github.com/langchain-ai/langgraph-go/pkg/stubs"
 )
 
 func TestFetch(t *testing.T) {

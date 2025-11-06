@@ -4,121 +4,50 @@ import (
 	"context"
 	"fmt"
 	"log"
-
-	"github.com/plturrell/aModels/services/orchestration/agents/connectors"
 )
 
 // SAPGLIntegration integrates SAP General Ledger with the knowledge graph.
 type SAPGLIntegration struct {
-	connector     *connectors.SAPGLConnector
-	mapper        ModelMapper
-	logger        *log.Logger
-	graphClient   GraphClient
+	connector   Connector
+	mapper      ModelMapper
+	logger      *log.Logger
+	graphClient GraphClient
 }
 
-// NewSAPGLIntegration creates a new SAP GL integration.
-func NewSAPGLIntegration(config map[string]interface{}, mapper ModelMapper, graphClient GraphClient, logger *log.Logger) *SAPGLIntegration {
-	connector := connectors.NewSAPGLConnector(config, logger)
+// NewSAPGLIntegration creates a new SAP GL integration using an injected connector.
+func NewSAPGLIntegration(conn Connector, mapper ModelMapper, graphClient GraphClient, logger *log.Logger) *SAPGLIntegration {
 	return &SAPGLIntegration{
-		connector:   connector,
+		connector:   conn,
 		mapper:      mapper,
 		logger:      logger,
 		graphClient: graphClient,
 	}
 }
 
-// IngestJournalEntries ingests journal entries from SAP GL and creates journal entry nodes.
-func (si *SAPGLIntegration) IngestJournalEntries(ctx context.Context, filters map[string]interface{}) error {
-	if si.logger != nil {
-		si.logger.Printf("Ingesting journal entries from SAP GL")
-	}
-
-	// Connect to SAP GL
-	if err := si.connector.Connect(ctx, nil); err != nil {
-		return fmt.Errorf("failed to connect to SAP GL: %w", err)
-	}
+// IngestGL ingests general ledger entries.
+func (si *SAPGLIntegration) IngestGL(ctx context.Context, filters map[string]any) error {
+	if si.logger != nil { si.logger.Printf("Ingesting SAP GL entries") }
+	if err := si.connector.Connect(ctx, nil); err != nil { return fmt.Errorf("connect SAP GL: %w", err) }
 	defer si.connector.Close()
 
-	// Extract journal entry data
-	query := map[string]interface{}{
-		"table": "journal_entries",
-		"limit": 1000,
-	}
-	for k, v := range filters {
-		query[k] = v
-	}
+	query := map[string]any{"table": "gl_entries", "limit": 1000}
+	for k, v := range filters { query[k] = v }
 
 	data, err := si.connector.ExtractData(ctx, query)
-	if err != nil {
-		return fmt.Errorf("failed to extract journal entries: %w", err)
-	}
+	if err != nil { return fmt.Errorf("extract SAP GL entries: %w", err) }
 
 	var nodes []DomainNode
-	var edges []DomainEdge
-
 	for _, record := range data {
-		// Add source system identifier
 		record["source_system"] = "SAP_GL"
-
-		// Map to JournalEntry domain model
-		entry, err := si.mapper.MapJournalEntry(ctx, record)
-		if err != nil {
-			if si.logger != nil {
-				si.logger.Printf("Warning: Failed to map journal entry: %v", err)
-			}
-			continue
-		}
-
-		// Convert to graph node
-		graphNode := entry.ToGraphNode()
-		nodes = append(nodes, *graphNode)
-
-		// Link to trade if trade_id exists
-		if tradeID, ok := record["trade_id"].(string); ok {
-			tradeNodeID := fmt.Sprintf("trade-%s", tradeID)
-			edge := CreateTradeToJournalEntryEdge(tradeNodeID, entry.ID, map[string]interface{}{
-				"source_system": "SAP_GL",
-			})
-			edges = append(edges, *edge)
-		}
+		entry, err := si.mapper.MapLedgerEntry(ctx, record)
+		if err != nil { if si.logger != nil { si.logger.Printf("map ledger entry: %v", err) }; continue }
+		node := entry.ToGraphNode()
+		nodes = append(nodes, *node)
 	}
-
-	// Upsert to knowledge graph
 	if len(nodes) > 0 {
-		if err := si.graphClient.UpsertNodes(ctx, nodes); err != nil {
-			return fmt.Errorf("failed to upsert journal entry nodes: %w", err)
-		}
-		if si.logger != nil {
-			si.logger.Printf("Upserted %d journal entry nodes", len(nodes))
-		}
+		if err := si.graphClient.UpsertNodes(ctx, nodes); err != nil { return fmt.Errorf("upsert gl nodes: %w", err) }
+		if si.logger != nil { si.logger.Printf("Upserted %d GL nodes", len(nodes)) }
 	}
-
-	if len(edges) > 0 {
-		if err := si.graphClient.UpsertEdges(ctx, edges); err != nil {
-			return fmt.Errorf("failed to upsert journal entry edges: %w", err)
-		}
-		if si.logger != nil {
-			si.logger.Printf("Upserted %d journal entry edges", len(edges))
-		}
-	}
-
-	return nil
-}
-
-// SyncFullSync performs a full synchronization of SAP GL data to the knowledge graph.
-func (si *SAPGLIntegration) SyncFullSync(ctx context.Context) error {
-	if si.logger != nil {
-		si.logger.Printf("Starting full SAP GL synchronization")
-	}
-
-	if err := si.IngestJournalEntries(ctx, nil); err != nil {
-		return fmt.Errorf("failed to sync journal entries: %w", err)
-	}
-
-	if si.logger != nil {
-		si.logger.Printf("Full SAP GL synchronization completed")
-	}
-
 	return nil
 }
 

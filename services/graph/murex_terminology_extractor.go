@@ -7,18 +7,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/plturrell/aModels/services/orchestration/agents"
-	"github.com/plturrell/aModels/services/orchestration/agents/connectors"
 )
 
 // MurexTerminologyExtractor extracts terminology and training data from Murex API.
 type MurexTerminologyExtractor struct {
-	connector     *connectors.MurexConnector
-	logger        *log.Logger
-	terminology   *ExtractedTerminology
+	connector   Connector
+	logger      *log.Logger
+	terminology *ExtractedTerminology
 	trainingData  *TrainingData
-	domain        string // Configurable domain (default: "finance")
 }
 
 // ExtractedTerminology contains terminology extracted from Murex.
@@ -101,35 +97,8 @@ type ValuePattern struct {
 	Frequency    int
 }
 
-// NewMurexTerminologyExtractor creates a new Murex terminology extractor.
-func NewMurexTerminologyExtractor(connector *connectors.MurexConnector, logger *log.Logger) *MurexTerminologyExtractor {
-	return NewMurexTerminologyExtractorWithDomain(connector, "finance", logger)
-}
-
-// NewMurexTerminologyExtractorWithDomain creates a new Murex terminology extractor with a specified domain.
-func NewMurexTerminologyExtractorWithDomain(connector *connectors.MurexConnector, domain string, logger *log.Logger) *MurexTerminologyExtractor {
-	if domain == "" {
-		domain = "finance" // Default to finance domain
-	}
-	return &MurexTerminologyExtractor{
-		connector: connector,
-		logger:    logger,
-		domain:    domain,
-		terminology: &ExtractedTerminology{
-			Domains:        make(map[string][]TerminologyExample),
-			Roles:          make(map[string][]TerminologyExample),
-			NamingPatterns: make(map[string][]TerminologyExample),
-			FieldDescriptions: make(map[string]string),
-			EntityTypes:    []string{},
-			Relationships:  []string{},
-		},
-		trainingData: &TrainingData{
-			SchemaExamples:   []SchemaExample{},
-			FieldExamples:    []FieldExample{},
-			RelationshipExamples: []RelationshipExample{},
-			ValuePatterns:    []ValuePattern{},
-		},
-	}
+func NewMurexTerminologyExtractor(conn Connector, logger *log.Logger) *MurexTerminologyExtractor {
+	return &MurexTerminologyExtractor{ connector: conn, logger: logger }
 }
 
 // ExtractFromOpenAPISpec extracts terminology from the OpenAPI specification.

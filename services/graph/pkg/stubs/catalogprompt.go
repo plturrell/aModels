@@ -1,6 +1,6 @@
-// Package catalogprompt provides stubs for catalog prompt functionality
+// Package stubs provides stubs for missing agenticAiETH dependencies
 // This replaces the missing agenticAiETH_layer4_AgentSDK/pkg/flightcatalog/prompt package
-package catalogprompt
+package stubs
 
 // Catalog represents a catalog with suites and tools
 type Catalog struct {

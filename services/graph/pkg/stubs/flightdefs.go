@@ -1,7 +1,7 @@
-// Package flightdefs provides stubs for flight definitions
+// Package stubs provides stubs for missing agenticAiETH dependencies
 // This replaces the missing agenticAiETH_layer4_AgentSDK/pkg/flightdefs package
-package flightdefs
+package stubs
 
-// Catalog represents a flight catalog (stub)
-type Catalog struct{}
+// FlightCatalogDef represents a flight catalog definition (stub)
+type FlightCatalogDef struct{}
 

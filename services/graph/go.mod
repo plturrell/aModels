@@ -9,8 +9,8 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	// Removed agenticAiETH dependencies - these packages don't exist
-	// Using replace directive to point to local services/postgres instead
-	github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres v0.0.0
+	// Postgres dependency removed from require - using replace directive only
+	// github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres v0.0.0
 	github.com/redis/go-redis/v9 v9.16.0
 	gopkg.in/yaml.v3 v3.0.1
 )
