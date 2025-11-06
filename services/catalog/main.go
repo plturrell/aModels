@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -16,6 +17,7 @@ import (
 	"github.com/plturrell/aModels/services/catalog/breakdetection"
 	"github.com/plturrell/aModels/services/catalog/cache"
 	"github.com/plturrell/aModels/services/catalog/iso11179"
+	"github.com/plturrell/aModels/services/catalog/vectorstore"
 	"github.com/plturrell/aModels/services/catalog/migrations"
 	"github.com/plturrell/aModels/services/catalog/multimodal"
 	"github.com/plturrell/aModels/services/catalog/observability"
@@ -537,6 +539,66 @@ func main() {
 		structLogger.Info("Break detection endpoints registered", nil)
 	}
 
+	// HANA Cloud Vector Store endpoints (public information)
+	hanaConnectionString := os.Getenv("HANA_CLOUD_CONNECTION_STRING")
+	if hanaConnectionString != "" {
+		hanaConfig := &vectorstore.HANAConfig{
+			ConnectionString: hanaConnectionString,
+			Schema:           getEnvOrDefault("HANA_CLOUD_SCHEMA", "PUBLIC"),
+			TableName:        getEnvOrDefault("HANA_CLOUD_TABLE_NAME", "PUBLIC_VECTORS"),
+			VectorDimension: getEnvIntOrDefault("HANA_CLOUD_VECTOR_DIMENSION", 1536),
+			EnableIndexing:   os.Getenv("HANA_CLOUD_ENABLE_INDEXING") != "false",
+		}
+
+		hanaStore, err := vectorstore.NewHANACloudVectorStore(hanaConnectionString, hanaConfig, legacyLogger)
+		if err != nil {
+			structLogger.Warn("HANA Cloud vector store not available", map[string]interface{}{
+				"error": err.Error(),
+			})
+		} else {
+			embeddingService := vectorstore.NewEmbeddingService(
+				os.Getenv("LOCALAI_URL"),
+				legacyLogger,
+			)
+
+			vectorStoreHandler := vectorstore.NewHANAVectorStoreHandler(
+				hanaStore,
+				embeddingService,
+				legacyLogger,
+			)
+
+			// Register vector store endpoints
+			mux.HandleFunc("/vectorstore/store", vectorStoreHandler.HandleStoreInformation)
+			mux.HandleFunc("/vectorstore/search", vectorStoreHandler.HandleSearchInformation)
+			mux.HandleFunc("/vectorstore", func(w http.ResponseWriter, r *http.Request) {
+				// Handle both list (GET with query params) and get by ID (GET /vectorstore/{id})
+				if r.Method == http.MethodGet {
+					// Check if path has ID (not just /vectorstore)
+					path := r.URL.Path
+					if path == "/vectorstore" || path == "/vectorstore/" {
+						// List public information
+						vectorStoreHandler.HandleListPublicInformation(w, r)
+					} else {
+						// Get by ID
+						vectorStoreHandler.HandleGetInformation(w, r)
+					}
+				} else {
+					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				}
+			})
+			mux.HandleFunc("/vectorstore/", vectorStoreHandler.HandleGetInformation)
+
+			structLogger.Info("HANA Cloud vector store endpoints registered", map[string]interface{}{
+				"endpoints": []string{
+					"POST /vectorstore/store",
+					"POST /vectorstore/search",
+					"GET /vectorstore (list)",
+					"GET /vectorstore/{id}",
+				},
+			})
+		}
+	}
+
 	// Advanced features endpoints (Phase 3)
 	if advancedHandlers != nil {
 		mux.HandleFunc("/catalog/multimodal/extract", advancedHandlers.HandleExtractMultimodal)
@@ -593,4 +655,21 @@ func main() {
 		structLogger.Error("Server failed to start", err, nil)
 		os.Exit(1)
 	}
+}
+
+// Helper functions for environment variables
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+func getEnvIntOrDefault(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
 }
