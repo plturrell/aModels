@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+
+	"github.com/plturrell/aModels/services/orchestration/agents/connectors"
 )
 
 // AgentFactory creates and configures agents.
@@ -34,17 +36,18 @@ func (af *AgentFactory) CreateDataIngestionAgent(sourceType string, config map[s
 	var connector SourceConnector
 
 	// Create source-specific connector
+	// Use connectors package which has OpenAPI-enabled implementations
 	switch sourceType {
 	case "murex":
-		connector = NewMurexConnector(config, af.logger)
+		connector = connectors.NewMurexConnector(config, af.logger)
 	case "sap_gl":
-		connector = NewSAPGLConnector(config, af.logger)
+		connector = connectors.NewSAPGLConnector(config, af.logger)
 	case "bcrs":
-		connector = NewBCRSConnector(config, af.logger)
+		connector = connectors.NewBCRSConnector(config, af.logger)
 	case "rco":
-		connector = NewRCOConnector(config, af.logger)
+		connector = connectors.NewRCOConnector(config, af.logger)
 	case "axiom":
-		connector = NewAxiomConnector(config, af.logger)
+		connector = connectors.NewAxiomConnector(config, af.logger)
 	default:
 		return nil, fmt.Errorf("unknown source type: %s", sourceType)
 	}
@@ -78,28 +81,27 @@ func (af *AgentFactory) CreateMappingRuleAgent() *MappingRuleAgent {
 // CreateAnomalyDetectionAgent creates an anomaly detection agent.
 func (af *AgentFactory) CreateAnomalyDetectionAgent() *AnomalyDetectionAgent {
 	detectors := []AnomalyDetector{
-		NewStatisticalAnomalyDetector(3.0, af.logger), // 3-sigma threshold
+		NewStatisticalAnomalyDetector(3.0, af.logger), // Z-score threshold of 3.0
 		NewPatternAnomalyDetector(af.logger),
 	}
+
+	alertManager := NewDefaultAlertManager(af.logger)
 
 	return NewAnomalyDetectionAgent(
 		"anomaly-detection-agent",
 		detectors,
-		af.alertManager,
+		alertManager,
 		af.graphClient,
 		af.logger,
 	)
 }
 
-// CreateTestGenerationAgent creates a test generation agent.
-func (af *AgentFactory) CreateTestGenerationAgent() *TestGenerationAgent {
-	generator := NewDefaultTestScenarioGenerator(af.logger)
-	orchestrator := NewDefaultTestOrchestrator(af.logger)
-
-	return NewTestGenerationAgent(
-		"test-generation-agent",
-		generator,
-		orchestrator,
+// CreateTestScenarioGenerator creates a test scenario generator agent.
+func (af *AgentFactory) CreateTestScenarioGenerator() *TestScenarioGenerator {
+	return NewTestScenarioGenerator(
+		"test-scenario-generator",
+		af.graphClient,
+		af.ruleStore,
 		af.logger,
 	)
 }

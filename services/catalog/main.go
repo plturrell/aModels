@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
 	"time"
 
+	_ "github.com/lib/pq"
 	"github.com/plturrell/aModels/services/catalog/ai"
 	"github.com/plturrell/aModels/services/catalog/analytics"
 	"github.com/plturrell/aModels/services/catalog/api"
@@ -178,6 +180,26 @@ func main() {
 	// Initialize Deep Research client for autonomous intelligence
 	deepResearchClient := research.NewDeepResearchClient(deepResearchURL, legacyLogger)
 
+	// Initialize version manager if database is available
+	var versionManager *workflows.VersionManager
+	if catalogDBURL != "" {
+		if db, err := sql.Open("postgres", catalogDBURL); err == nil {
+			if err := db.Ping(); err == nil {
+				versionManager = workflows.NewVersionManager(db, legacyLogger)
+				structLogger.Info("Version manager initialized", nil)
+			} else {
+				db.Close()
+				structLogger.Warn("Failed to ping database for version manager, continuing without versioning", map[string]interface{}{
+					"error": err.Error(),
+				})
+			}
+		} else {
+			structLogger.Warn("Failed to open database for version manager, continuing without versioning", map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+	}
+
 	// Initialize unified workflow integration
 	unifiedWorkflow := workflows.NewUnifiedWorkflowIntegration(
 		graphServiceURL,
@@ -188,6 +210,7 @@ func main() {
 		registry,
 		qualityMonitor,
 		reportStore,
+		versionManager,
 		legacyLogger,
 	)
 	structLogger.Info("Unified workflow integration initialized", nil)

@@ -26,6 +26,9 @@ type UnifiedWorkflowRequest struct {
 	// Knowledge graph processing
 	KnowledgeGraphRequest *KnowledgeGraphRequest `json:"knowledge_graph_request,omitempty"`
 
+	// GraphRAG query
+	GraphRAGRequest *GraphRAGRequest `json:"graphrag_request,omitempty"`
+
 	// Orchestration chain execution
 	OrchestrationRequest *OrchestrationRequest `json:"orchestration_request,omitempty"`
 
@@ -77,6 +80,18 @@ func ProcessUnifiedWorkflowNode(opts UnifiedProcessorOptions) stategraph.NodeFun
 					InputValue: getString(afReq["input_value"]),
 					Inputs:     parseMap(afReq["inputs"]),
 					Ensure:     getBool(afReq["ensure"]),
+				}
+			}
+
+			// Parse GraphRAG request
+			if grReq, ok := req["graphrag_request"].(map[string]any); ok {
+				unifiedReq.GraphRAGRequest = &GraphRAGRequest{
+					Query:      getString(grReq["query"]),
+					Strategy:   getString(grReq["strategy"]),
+					MaxDepth:   getInt(grReq["max_depth"]),
+					MaxResults: getInt(grReq["max_results"]),
+					Params:     parseMap(grReq["params"]),
+					Enrich:     getBool(grReq["enrich"]),
 				}
 			}
 
@@ -146,6 +161,25 @@ func ProcessUnifiedWorkflowNode(opts UnifiedProcessorOptions) stategraph.NodeFun
 			}
 			// Merge knowledge graph results into state
 			for k, v := range kgResult.(map[string]any) {
+				newState[k] = v
+			}
+		}
+
+		// Step 1.5: Process GraphRAG query if requested
+		if unifiedReq.GraphRAGRequest != nil {
+			graphragState := map[string]any{
+				"graphrag_request": unifiedReq.GraphRAGRequest,
+			}
+			graphragOpts := GraphRAGProcessorOptions{
+				ExtractServiceURL: opts.ExtractServiceURL,
+			}
+			graphragNode := ProcessGraphRAGNode(graphragOpts)
+			graphragResult, err := graphragNode(ctx, graphragState)
+			if err != nil {
+				return nil, fmt.Errorf("process graphrag: %w", err)
+			}
+			// Merge GraphRAG results into state
+			for k, v := range graphragResult.(map[string]any) {
 				newState[k] = v
 			}
 		}
@@ -457,12 +491,16 @@ func WorkflowModeRoutingFunc(ctx context.Context, value any) ([]string, error) {
 
 	// Check if multiple requests are present (parallel mode)
 	hasKG := state["knowledge_graph_request"] != nil
+	hasGraphRAG := state["graphrag_request"] != nil
 	hasOrch := state["orchestration_request"] != nil
 	hasAF := state["agentflow_request"] != nil
 	hasDeepAgents := state["deepagents_request"] != nil
 
 	count := 0
 	if hasKG {
+		count++
+	}
+	if hasGraphRAG {
 		count++
 	}
 	if hasOrch {
@@ -516,11 +554,17 @@ func NewUnifiedProcessorWorkflow(opts UnifiedProcessorOptions) (*stategraph.Comp
 		deepagentsServiceURL = "http://deepagents-service:9004"
 	}
 
+	// GraphRAG processor options
+	graphragOpts := GraphRAGProcessorOptions{
+		ExtractServiceURL: extractServiceURL,
+	}
+
 	// Nodes for both sequential and parallel modes
 	nodes := map[string]stategraph.NodeFunc{
 		"determine_mode":  DetermineWorkflowModeNode(),
 		"split_parallel":  ParallelSplitNode(),
 		"process_kg":      ProcessKnowledgeGraphWorkflowNode(extractServiceURL),
+		"process_graphrag": ProcessGraphRAGNode(graphragOpts),
 		"process_orch":    ProcessOrchestrationWorkflowNode(localAIURL),
 		"process_agentflow": ProcessAgentFlowWorkflowNode(agentflowServiceURL),
 		"process_deepagents": RunDeepAgentNode(deepagentsServiceURL),
@@ -553,10 +597,12 @@ func NewUnifiedProcessorWorkflow(opts UnifiedProcessorOptions) (*stategraph.Comp
 		EdgeSpec{From: "process_unified", To: "join_results", Label: "unified_complete"},
 		// Parallel mode paths (all branches can execute independently)
 		EdgeSpec{From: "split_parallel", To: "process_kg", Label: "kg_branch"},
+		EdgeSpec{From: "split_parallel", To: "process_graphrag", Label: "graphrag_branch"},
 		EdgeSpec{From: "split_parallel", To: "process_orch", Label: "orch_branch"},
 		EdgeSpec{From: "split_parallel", To: "process_agentflow", Label: "af_branch"},
 		EdgeSpec{From: "split_parallel", To: "process_deepagents", Label: "deepagents_branch"},
 		EdgeSpec{From: "process_kg", To: "join_results", Label: "kg_complete"},
+		EdgeSpec{From: "process_graphrag", To: "join_results", Label: "graphrag_complete"},
 		EdgeSpec{From: "process_orch", To: "join_results", Label: "orch_complete"},
 		EdgeSpec{From: "process_agentflow", To: "join_results", Label: "af_complete"},
 		EdgeSpec{From: "process_deepagents", To: "join_results", Label: "deepagents_complete"},
