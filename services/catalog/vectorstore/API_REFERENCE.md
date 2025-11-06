@@ -4,36 +4,20 @@
 
 ### 1. Store Public Information
 
-**POST** `/vectorstore/store`
+**POST** `/vectorstore/store` - **🔒 DISABLED FOR SECURITY**
 
-Store public information in HANA Cloud vector store.
-
-**Request Body:**
-```json
-{
-  "type": "break_pattern",
-  "system": "murex",
-  "category": "finance",
-  "title": "Reconciliation Break Pattern",
-  "content": "Break description...",
-  "metadata": {
-    "frequency": 10,
-    "resolution": "Check ETL pipeline"
-  },
-  "tags": ["reconciliation", "finance"],
-  "is_public": true,
-  "generate_embedding": true
-}
-```
+**Status**: Write operations are disabled to protect confidential information.
 
 **Response:**
 ```json
 {
-  "success": true,
-  "id": "pattern-123",
-  "message": "Information stored successfully"
+  "error": "Write operations to HANA Cloud are disabled for security. This service is read-only to protect confidential information."
 }
 ```
+
+**HTTP Status**: `403 Forbidden`
+
+**Note**: This endpoint is intentionally disabled. If you need to store public information in HANA Cloud, you must do so through a separate, secure process that ensures data is properly anonymized and approved before storage.
 
 ---
 

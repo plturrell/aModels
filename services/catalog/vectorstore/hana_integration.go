@@ -231,49 +231,18 @@ func SearchPublicKnowledge(ctx context.Context,
 }
 
 // Integration with break detection service
+// StoreBreakForPublicKnowledge is DISABLED for security
+// This function is intentionally disabled to prevent storing confidential information
+// in HANA Cloud. All write operations are blocked to protect customer data.
 func StoreBreakForPublicKnowledge(ctx context.Context,
 	store *HANACloudVectorStore,
 	breakRecord *breakdetection.Break,
 	vector []float32,
 	logger *log.Logger) error {
-
-	// Store as public break pattern (anonymized)
-	info := &PublicInformation{
-		ID:       fmt.Sprintf("break-pattern-%s-%d", breakRecord.BreakType, time.Now().Unix()),
-		Type:     "break_pattern",
-		System:   string(breakRecord.SystemName),
-		Category: string(breakRecord.DetectionType),
-		Title:    fmt.Sprintf("Break Pattern: %s in %s", breakRecord.BreakType, breakRecord.SystemName),
-		Content:  buildBreakContent(breakRecord),
-		Vector:   vector,
-		Metadata: map[string]interface{}{
-			"break_type":     string(breakRecord.BreakType),
-			"detection_type": string(breakRecord.DetectionType),
-			"severity":       string(breakRecord.Severity),
-			"resolution":     breakRecord.ResolutionNotes,
-		},
-		Tags: []string{
-			string(breakRecord.BreakType),
-			string(breakRecord.DetectionType),
-			string(breakRecord.SystemName),
-		},
-		IsPublic:  true,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}
-
-	if err := store.StorePublicInformation(ctx, info); err != nil {
-		if logger != nil {
-			logger.Printf("Failed to store break pattern: %v", err)
-		}
-		return err
-	}
-
 	if logger != nil {
-		logger.Printf("Stored break pattern in public knowledge base: %s", info.ID)
+		logger.Printf("StoreBreakForPublicKnowledge: DISABLED - Write operations blocked for security")
 	}
-
-	return nil
+	return fmt.Errorf("write operations to HANA Cloud are disabled for security. This service is read-only to protect confidential information")
 }
 
 // BuildBreakContent builds content string from break record for embedding

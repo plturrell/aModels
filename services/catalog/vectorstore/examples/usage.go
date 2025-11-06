@@ -215,13 +215,14 @@ func ExampleBreakDetectionIntegration() {
 	content := vectorstore.BuildBreakContent(breakRecord)
 	embedding, _ := embeddingService.GenerateEmbedding(ctx, content)
 
-	// Store in public knowledge base (anonymized)
-	err := vectorstore.StoreBreakForPublicKnowledge(ctx, store, breakRecord, embedding, log.Default())
-	if err != nil {
-		log.Printf("Failed to store break pattern: %v", err)
-	}
-
-	fmt.Println("Break pattern stored in public knowledge base")
+	// DISABLED FOR SECURITY: Write operations are disabled
+	// Store in public knowledge base (anonymized) - NOT AVAILABLE
+	// err := vectorstore.StoreBreakForPublicKnowledge(ctx, store, breakRecord, embedding, log.Default())
+	// if err != nil {
+	//     log.Printf("Note: StoreBreakForPublicKnowledge is disabled for security")
+	// }
+	
+	fmt.Println("Note: Break pattern storage is disabled for security. Service is read-only.")
 }
 
 // Example 6: Search knowledge base for Murex
