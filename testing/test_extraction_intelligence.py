@@ -26,7 +26,7 @@ from test_helpers import (
 # Test configuration
 LOCALAI_URL = os.getenv("LOCALAI_URL", "http://localai-compat:8080")
 EXTRACT_URL = os.getenv("EXTRACT_SERVICE_URL", "http://extract-service:8082")
-TRAINING_SERVICE_URL = os.getenv("TRAINING_SERVICE_URL", "http://localhost:8080")
+TRAINING_SERVICE_URL = os.getenv("TRAINING_SERVICE_URL", "http://training-service:8080")
 
 DEFAULT_TIMEOUT = 30
 HEALTH_TIMEOUT = 5

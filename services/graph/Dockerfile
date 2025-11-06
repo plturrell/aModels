@@ -30,6 +30,12 @@ WORKDIR /workspace/src/services/graph
 # Use the image toolchain (Go 1.24)
 ENV GOTOOLCHAIN=local
 
+# Remove replace directives that point to missing local paths
+RUN sed -i '/replace.*third_party\/go-arrow/d' go.mod || true && \
+    sed -i '/replace.*third_party\/go-redis/d' go.mod || true && \
+    sed -i '/replace.*infrastructure\/third_party\/go-hdb/d' go.mod || true && \
+    sed -i '/replace.*agenticAiETH/d' go.mod || true
+
 RUN go mod tidy
 RUN CGO_ENABLED=0 go build -o /workspace/build/graph-server ./cmd/graph-server
 
