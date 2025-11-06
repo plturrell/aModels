@@ -1,10 +1,12 @@
 simple-ddl-parser==1.7.1
 # DeepSeek OCR dependencies (optional, for USE_DEEPSEEK_OCR=true)
-transformers>=4.30.0
-torch>=2.0.0
-accelerate>=0.20.0
-safetensors>=0.3.0
-huggingface-hub>=0.16.0
+# Note: torch cannot be installed on Alpine Linux via pip
+# For production/GPU server, use Python base image (not Alpine) or install from PyTorch official source
+# transformers>=4.30.0  # Uncomment when using Python base image
+# torch>=2.0.0  # Uncomment when using Python base image
+# accelerate>=0.20.0
+# safetensors>=0.3.0
+# huggingface-hub>=0.16.0
 Pillow>=9.0.0
 pandas>=1.5.0
 numpy>=1.24.0
