@@ -19,6 +19,9 @@ import (
 	"github.com/langchain-ai/langgraph-go/pkg/workflows"
 	catalogprompt "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightcatalog/prompt"
 	postgresv1 "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres/pkg/gen/v1"
+	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/plturrell/aModels/services/graph"
+	"github.com/plturrell/aModels/services/orchestration/agents/connectors"
 	"google.golang.org/protobuf/encoding/protojson"
 	proto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -70,6 +73,73 @@ func main() {
 	})
 	if err != nil {
 		log.Fatalf("Failed to create graph: %v", err)
+	}
+
+	// Initialize Murex integration if configured
+	var murexHandler *graph.MurexHandler
+	neo4jURI := strings.TrimSpace(os.Getenv("NEO4J_URI"))
+	neo4jUsername := strings.TrimSpace(os.Getenv("NEO4J_USERNAME"))
+	neo4jPassword := strings.TrimSpace(os.Getenv("NEO4J_PASSWORD"))
+	murexBaseURL := strings.TrimSpace(os.Getenv("MUREX_BASE_URL"))
+	murexAPIKey := strings.TrimSpace(os.Getenv("MUREX_API_KEY"))
+	murexOpenAPISpecURL := strings.TrimSpace(os.Getenv("MUREX_OPENAPI_SPEC_URL"))
+
+	if neo4jURI != "" && murexBaseURL != "" {
+		// Create Neo4j driver
+		driver, err := neo4j.NewDriverWithContext(neo4jURI, neo4j.BasicAuth(neo4jUsername, neo4jPassword, ""))
+		if err != nil {
+			log.Printf("warn: failed to create Neo4j driver for Murex integration: %v", err)
+		} else {
+			defer driver.Close(context.Background())
+
+			// Create Neo4j graph client
+			graphClient := graph.NewNeo4jGraphClient(driver, log.Default())
+
+			// Create domain model mapper
+			mapper := graph.NewDefaultModelMapper()
+
+			// Configure Murex integration
+			murexConfig := map[string]interface{}{
+				"base_url": murexBaseURL,
+				"api_key":  murexAPIKey,
+			}
+			if murexOpenAPISpecURL != "" {
+				murexConfig["openapi_spec_url"] = murexOpenAPISpecURL
+			}
+
+			// Create Murex integration
+			murexIntegration := graph.NewMurexIntegration(murexConfig, mapper, graphClient, log.Default())
+
+			// Create terminology extractor
+			terminologyExtractor := graph.NewMurexTerminologyExtractor(connectors.NewMurexConnector(murexConfig, log.Default()), log.Default())
+
+			// Create catalog populator (if registry available)
+			var catalogPopulator *graph.MurexCatalogPopulator
+			// Note: Would need to pass catalog registry here if available
+			// For now, catalogPopulator can be nil
+
+			// Create terminology learner integration
+			// Use HTTP client to connect to extract service TerminologyLearner
+			var terminologyLearner *graph.MurexTerminologyLearnerIntegration
+			extractServiceURL := strings.TrimSpace(os.Getenv("EXTRACT_SERVICE_URL"))
+			if extractServiceURL == "" {
+				extractServiceURL = extractHTTPURL // Use the same URL as extract service
+			}
+			if extractServiceURL != "" {
+				httpLearnerClient := graph.NewHTTPTerminologyLearnerClient(extractServiceURL, log.Default())
+				terminologyLearner = graph.NewMurexTerminologyLearnerIntegration(
+					terminologyExtractor,
+					httpLearnerClient,
+					log.Default(),
+				)
+				log.Printf("Murex terminology learner integration initialized (extract_service=%s)", extractServiceURL)
+			}
+
+			// Create handler
+			murexHandler = graph.NewMurexHandler(murexIntegration, terminologyExtractor, catalogPopulator, terminologyLearner, log.Default())
+
+			log.Printf("Murex integration initialized (base_url=%s)", murexBaseURL)
+		}
 	}
 
 	http.HandleFunc("/run", func(w http.ResponseWriter, r *http.Request) {
@@ -497,6 +567,19 @@ func main() {
 			}
 			writeProtoJSON(w, resp)
 		})
+	}
+
+	// Murex integration endpoints
+	if murexHandler != nil {
+		http.HandleFunc("/integrations/murex/sync", murexHandler.HandleSync)
+		http.HandleFunc("/integrations/murex/trades", murexHandler.HandleIngestTrades)
+		http.HandleFunc("/integrations/murex/cashflows", murexHandler.HandleIngestCashflows)
+		http.HandleFunc("/integrations/murex/schema", murexHandler.HandleDiscoverSchema)
+		http.HandleFunc("/integrations/murex/terminology/extract", murexHandler.HandleExtractTerminology)
+		http.HandleFunc("/integrations/murex/terminology/train", murexHandler.HandleTrainTerminology)
+		http.HandleFunc("/integrations/murex/terminology/export", murexHandler.HandleExportTrainingData)
+		http.HandleFunc("/integrations/murex/catalog/populate", murexHandler.HandlePopulateCatalog)
+		log.Println("Murex integration endpoints registered")
 	}
 
 	log.Println("Starting graph server on :8081")

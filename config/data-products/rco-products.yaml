@@ -1,0 +1,252 @@
+# RCO Data Products Definition
+# Define all data products from RCO (Risk Control Office) system
+
+data_products:
+  - id: "rco-positions"
+    name: "RCO Risk Positions"
+    description: "Risk positions from RCO system"
+    source_system: "RCO"
+    version: "1.0.0"
+    
+    schema:
+      fields:
+        - name: "position_id"
+          type: "string"
+          required: true
+          description: "Unique risk position identifier"
+        
+        - name: "trade_id"
+          type: "string"
+          required: false
+          description: "Related trade identifier (if applicable)"
+        
+        - name: "instrument_id"
+          type: "string"
+          required: false
+          description: "Financial instrument identifier"
+        
+        - name: "position_date"
+          type: "date"
+          required: true
+          description: "Date of position calculation"
+        
+        - name: "position_type"
+          type: "string"
+          required: true
+          description: "Type of position (Long, Short, Net)"
+          constraints:
+            enum: ["Long", "Short", "Net"]
+        
+        - name: "position_amount"
+          type: "decimal"
+          required: true
+          description: "Position amount (notional)"
+        
+        - name: "currency"
+          type: "string"
+          required: true
+          description: "Currency code (ISO 4217)"
+          constraints:
+            pattern: "^[A-Z]{3}$"
+        
+        - name: "market_value"
+          type: "decimal"
+          required: false
+          description: "Current market value of position"
+        
+        - name: "book_value"
+          type: "decimal"
+          required: false
+          description: "Book value of position"
+        
+        - name: "pnl"
+          type: "decimal"
+          required: false
+          description: "Profit and loss (market value - book value)"
+        
+        - name: "risk_type"
+          type: "string"
+          required: true
+          description: "Type of risk (Market, Credit, Liquidity, Operational)"
+          constraints:
+            enum: ["Market", "Credit", "Liquidity", "Operational"]
+        
+        - name: "risk_factor"
+          type: "string"
+          required: false
+          description: "Primary risk factor (e.g., InterestRate, FX, Equity, Commodity)"
+        
+        - name: "risk_amount"
+          type: "decimal"
+          required: true
+          description: "Risk amount (e.g., VaR, stress loss)"
+          constraints:
+            min: 0
+        
+        - name: "value_at_risk"
+          type: "decimal"
+          required: false
+          description: "Value at Risk (VaR) at specified confidence level"
+          constraints:
+            min: 0
+        
+        - name: "var_confidence_level"
+          type: "decimal"
+          required: false
+          description: "VaR confidence level (e.g., 0.95 for 95%)"
+          constraints:
+            min: 0
+            max: 1
+        
+        - name: "expected_shortfall"
+          type: "decimal"
+          required: false
+          description: "Expected Shortfall (Conditional VaR)"
+          constraints:
+            min: 0
+        
+        - name: "stress_loss"
+          type: "decimal"
+          required: false
+          description: "Stress test loss amount"
+          constraints:
+            min: 0
+        
+        - name: "portfolio_id"
+          type: "string"
+          required: false
+          description: "Portfolio identifier"
+        
+        - name: "book_id"
+          type: "string"
+          required: false
+          description: "Trading book identifier"
+        
+        - name: "desk_id"
+          type: "string"
+          required: false
+          description: "Trading desk identifier"
+        
+        - name: "counterparty_id"
+          type: "string"
+          required: false
+          description: "Counterparty identifier (for credit risk)"
+        
+        - name: "maturity_date"
+          type: "date"
+          required: false
+          description: "Maturity date of position"
+        
+        - name: "calculation_method"
+          type: "string"
+          required: false
+          description: "Risk calculation method (e.g., Historical, MonteCarlo, Parametric)"
+        
+        - name: "regulatory_category"
+          type: "string"
+          required: false
+          description: "Regulatory category for capital calculation"
+      
+      primary_key:
+        - "position_id"
+      
+      indexes:
+        - name: "idx_position_date"
+          fields: ["position_date"]
+        - name: "idx_risk_type"
+          fields: ["risk_type"]
+        - name: "idx_portfolio"
+          fields: ["portfolio_id"]
+        - name: "idx_trade"
+          fields: ["trade_id"]
+    
+    quality_slos:
+      - name: "freshness"
+        target: 0.90
+        window: "24h"
+        description: "90% of positions available within 24 hours"
+      
+      - name: "completeness"
+        target: 0.95
+        window: "24h"
+        description: "95% of position data complete"
+      
+      - name: "accuracy"
+        target: 0.95
+        window: "24h"
+        description: "95% of positions accurate"
+      
+      - name: "risk_calculation_accuracy"
+        target: 0.95
+        window: "24h"
+        description: "95% of risk calculations accurate"
+    
+    metadata:
+      owner: "Risk Management"
+      steward: "risk-steward@example.com"
+      update_frequency: "daily"
+      retention_period: "7 years"
+  
+  - id: "rco-portfolio-summaries"
+    name: "RCO Portfolio Summaries"
+    description: "Portfolio-level risk summaries from RCO"
+    source_system: "RCO"
+    version: "1.0.0"
+    
+    schema:
+      fields:
+        - name: "portfolio_id"
+          type: "string"
+          required: true
+          description: "Portfolio identifier"
+        
+        - name: "portfolio_name"
+          type: "string"
+          required: false
+          description: "Portfolio name"
+        
+        - name: "summary_date"
+          type: "date"
+          required: true
+          description: "Date of summary"
+        
+        - name: "total_market_value"
+          type: "decimal"
+          required: true
+          description: "Total market value of portfolio"
+        
+        - name: "total_var"
+          type: "decimal"
+          required: false
+          description: "Total portfolio VaR"
+        
+        - name: "total_expected_shortfall"
+          type: "decimal"
+          required: false
+          description: "Total portfolio Expected Shortfall"
+        
+        - name: "position_count"
+          type: "integer"
+          required: true
+          description: "Number of positions in portfolio"
+          constraints:
+            min: 0
+      
+      primary_key:
+        - "portfolio_id"
+        - "summary_date"
+    
+    quality_slos:
+      - name: "freshness"
+        target: 0.90
+        window: "24h"
+      - name: "completeness"
+        target: 0.95
+        window: "24h"
+    
+    metadata:
+      owner: "Risk Management"
+      steward: "risk-steward@example.com"
+      update_frequency: "daily"
+      retention_period: "7 years"
+

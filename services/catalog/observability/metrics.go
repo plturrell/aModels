@@ -130,6 +130,15 @@ var (
 			Buckets: prometheus.ExponentialBuckets(0.1, 2, 10), // 100ms to 51.2s
 		},
 	)
+
+	// Alert metrics
+	AlertsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "catalog_alerts_total",
+			Help: "Total number of alerts",
+		},
+		[]string{"alert_type"},
+	)
 )
 
 // RecordRequest records metrics for an HTTP request.
@@ -181,5 +190,10 @@ func UpdateQualityScore(elementID, qualityLevel string, score float64) {
 // UpdateConnectionPool updates the connection pool size gauge.
 func UpdateConnectionPool(state string, size int) {
 	Neo4jConnectionPool.WithLabelValues(state).Set(float64(size))
+}
+
+// RecordAlert records an alert event.
+func RecordAlert(alertType string, details map[string]interface{}) {
+	AlertsTotal.WithLabelValues(alertType).Inc()
 }
 

@@ -1,5 +1,9 @@
+from __future__ import annotations
+
+import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, Dict
 
 import httpx
@@ -45,6 +49,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SGMI_JSON_PATH = REPO_ROOT / "data" / "training" / "sgmi" / "json_with_changes.json"
+TRAINING_DATASET_DIR = REPO_ROOT / "training_data" / "dataset"
+TRAINING_FEATURES_PATH = TRAINING_DATASET_DIR / "features.json"
+TRAINING_METADATA_PATH = TRAINING_DATASET_DIR / "metadata.json"
+
+
+def _load_json_file(path: Path) -> Any:
+    try:
+        payload = path.read_text(encoding="utf-8")
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"{path} not found") from exc
+    if not payload.strip():
+        return {}
+    try:
+        return json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Invalid JSON in {path.name}: {exc}"
+        ) from exc
 
 
 @app.get("/healthz")
@@ -413,6 +438,26 @@ async def browser_health() -> Any:
         raise HTTPException(status_code=502, detail=f"Layer4 Browser error: {e}")
 
 
+@app.get("/shell/sgmi/raw")
+async def shell_sgmi_raw() -> Any:
+    """Expose the Control-M hierarchy used by the browser shell."""
+
+    return _load_json_file(SGMI_JSON_PATH)
+
+
+@app.get("/shell/training/dataset")
+async def shell_training_dataset() -> Dict[str, Any]:
+    """Expose the derived training dataset summary for the browser shell."""
+
+    metadata = _load_json_file(TRAINING_METADATA_PATH)
+    dataset = _load_json_file(TRAINING_FEATURES_PATH)
+    if not isinstance(metadata, dict):
+        raise HTTPException(status_code=500, detail="training metadata is not a JSON object")
+    if not isinstance(dataset, dict):
+        raise HTTPException(status_code=500, detail="training dataset is not a JSON object")
+    return {"metadata": metadata, "dataset": dataset}
+
+
 @app.get("/redis/get")
 async def redis_get(key: str = Query(...)) -> Any:
     try:
@@ -702,4 +747,3 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=GATEWAY_PORT)
-

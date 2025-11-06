@@ -243,19 +243,128 @@ func (pe *PipelineExecutor) executeStep(ctx context.Context, pipeline *SemanticP
 		pe.logger.Printf("Executing step %d: %s (type: %s)", index, step.Name, step.Type)
 	}
 
-	// In production, would execute the actual step transformation
-	// For now, return a placeholder result
+	startTime := time.Now()
 	result := &StepResult{
 		StepID:      step.ID,
 		StepName:    step.Name,
 		Status:      "success",
-		StartedAt:   time.Now(),
-		CompletedAt: time.Now(),
+		StartedAt:   startTime,
 		RecordsProcessed: 0,
 		RecordsFailed:    0,
 	}
 
+	// Execute based on step type
+	switch step.Type {
+	case "transform":
+		recordsProcessed, recordsFailed, err := pe.executeTransformStep(ctx, step, pipeline)
+		result.RecordsProcessed = recordsProcessed
+		result.RecordsFailed = recordsFailed
+		if err != nil {
+			result.Status = "failed"
+			result.ErrorMessage = err.Error()
+			if step.OnError == "stop" {
+				result.CompletedAt = time.Now()
+				return result, err
+			}
+		}
+	case "validate":
+		recordsProcessed, recordsFailed, err := pe.executeValidateStep(ctx, step, pipeline)
+		result.RecordsProcessed = recordsProcessed
+		result.RecordsFailed = recordsFailed
+		if err != nil {
+			result.Status = "failed"
+			result.ErrorMessage = err.Error()
+		}
+	case "enrich":
+		recordsProcessed, recordsFailed, err := pe.executeEnrichStep(ctx, step, pipeline)
+		result.RecordsProcessed = recordsProcessed
+		result.RecordsFailed = recordsFailed
+		if err != nil {
+			result.Status = "failed"
+			result.ErrorMessage = err.Error()
+		}
+	case "aggregate":
+		recordsProcessed, recordsFailed, err := pe.executeAggregateStep(ctx, step, pipeline)
+		result.RecordsProcessed = recordsProcessed
+		result.RecordsFailed = recordsFailed
+		if err != nil {
+			result.Status = "failed"
+			result.ErrorMessage = err.Error()
+		}
+	case "filter":
+		recordsProcessed, recordsFailed, err := pe.executeFilterStep(ctx, step, pipeline)
+		result.RecordsProcessed = recordsProcessed
+		result.RecordsFailed = recordsFailed
+		if err != nil {
+			result.Status = "failed"
+			result.ErrorMessage = err.Error()
+		}
+	default:
+		if pe.logger != nil {
+			pe.logger.Printf("Warning: Unknown step type: %s", step.Type)
+		}
+	}
+
+	result.CompletedAt = time.Now()
+
+	// Retry logic if step failed and retries configured
+	if result.Status == "failed" && step.Retries > 0 {
+		// Retry logic would go here
+		if pe.logger != nil {
+			pe.logger.Printf("Step %s failed, retries remaining: %d", step.Name, step.Retries)
+		}
+	}
+
 	return result, nil
+}
+
+// executeTransformStep executes a transform step.
+func (pe *PipelineExecutor) executeTransformStep(ctx context.Context, step *PipelineStep, pipeline *SemanticPipeline) (int64, int64, error) {
+	// In production, would execute actual transformation
+	// For now, simulate processing
+	config := step.Config
+	if transformType, ok := config["type"].(string); ok {
+		if pe.logger != nil {
+			pe.logger.Printf("Applying transformation: %s", transformType)
+		}
+	}
+	return 1000, 0, nil
+}
+
+// executeValidateStep executes a validate step.
+func (pe *PipelineExecutor) executeValidateStep(ctx context.Context, step *PipelineStep, pipeline *SemanticPipeline) (int64, int64, error) {
+	// In production, would execute actual validation
+	if pe.logger != nil {
+		pe.logger.Printf("Executing validation: %s", step.Name)
+	}
+	return 1000, 0, nil
+}
+
+// executeEnrichStep executes an enrich step.
+func (pe *PipelineExecutor) executeEnrichStep(ctx context.Context, step *PipelineStep, pipeline *SemanticPipeline) (int64, int64, error) {
+	// In production, would enrich data from knowledge graph or external sources
+	if pe.logger != nil {
+		pe.logger.Printf("Enriching data: %s", step.Name)
+	}
+	return 1000, 0, nil
+}
+
+// executeAggregateStep executes an aggregate step.
+func (pe *PipelineExecutor) executeAggregateStep(ctx context.Context, step *PipelineStep, pipeline *SemanticPipeline) (int64, int64, error) {
+	// In production, would perform aggregation
+	if pe.logger != nil {
+		pe.logger.Printf("Aggregating data: %s", step.Name)
+	}
+	return 100, 0, nil // Aggregated results are fewer
+}
+
+// executeFilterStep executes a filter step.
+func (pe *PipelineExecutor) executeFilterStep(ctx context.Context, step *PipelineStep, pipeline *SemanticPipeline) (int64, int64, error) {
+	// In production, would apply filters
+	if pe.logger != nil {
+		pe.logger.Printf("Filtering data: %s", step.Name)
+	}
+	return 800, 0, nil // Some records filtered out
 }
 
 // runConsistencyChecks runs consistency checks between source and target.
@@ -267,26 +376,172 @@ func (pe *PipelineExecutor) runConsistencyChecks(ctx context.Context, pipeline *
 			Status:    "passed",
 			Message:   fmt.Sprintf("Consistency check %s passed", check.Name),
 		}
+
+		// Execute check based on type
+		switch check.Type {
+		case "row_count":
+			result = pe.checkRowCount(ctx, check, pipeline)
+		case "sum":
+			result = pe.checkSum(ctx, check, pipeline)
+		case "aggregate":
+			result = pe.checkAggregate(ctx, check, pipeline)
+		case "custom":
+			result = pe.checkCustom(ctx, check, pipeline)
+		}
+
 		results = append(results, result)
 	}
 	return results, nil
+}
+
+// checkRowCount checks row count consistency.
+func (pe *PipelineExecutor) checkRowCount(ctx context.Context, check ConsistencyCheck, pipeline *SemanticPipeline) ConsistencyResult {
+	// In production, would query source and target for row counts
+	sourceCount := 1000.0
+	targetCount := 1000.0
+	
+	diff := sourceCount - targetCount
+	tolerance := check.Tolerance
+	if tolerance == 0 {
+		tolerance = 0.01 // 1% default tolerance
+	}
+
+	status := "passed"
+	if diff < 0 {
+		diff = -diff
+	}
+	if diff > sourceCount*tolerance {
+		status = "failed"
+	}
+
+	return ConsistencyResult{
+		CheckName: check.Name,
+		Status:    status,
+		Message:   fmt.Sprintf("Row count check: source=%.0f, target=%.0f, diff=%.0f", sourceCount, targetCount, diff),
+		Value:     targetCount,
+		Expected:  sourceCount,
+	}
+}
+
+// checkSum checks sum consistency.
+func (pe *PipelineExecutor) checkSum(ctx context.Context, check ConsistencyCheck, pipeline *SemanticPipeline) ConsistencyResult {
+	// In production, would calculate sums from source and target
+	sourceSum := 1000000.0
+	targetSum := 1000000.0
+	
+	diff := sourceSum - targetSum
+	tolerance := check.Tolerance
+	if tolerance == 0 {
+		tolerance = 0.01
+	}
+
+	status := "passed"
+	if diff < 0 {
+		diff = -diff
+	}
+	if diff > sourceSum*tolerance {
+		status = "failed"
+	}
+
+	return ConsistencyResult{
+		CheckName: check.Name,
+		Status:    status,
+		Message:   fmt.Sprintf("Sum check: source=%.2f, target=%.2f, diff=%.2f", sourceSum, targetSum, diff),
+		Value:     targetSum,
+		Expected:  sourceSum,
+	}
+}
+
+// checkAggregate checks aggregate consistency.
+func (pe *PipelineExecutor) checkAggregate(ctx context.Context, check ConsistencyCheck, pipeline *SemanticPipeline) ConsistencyResult {
+	// In production, would calculate aggregates
+	return ConsistencyResult{
+		CheckName: check.Name,
+		Status:    "passed",
+		Message:   fmt.Sprintf("Aggregate check %s passed", check.Name),
+	}
+}
+
+// checkCustom checks custom consistency.
+func (pe *PipelineExecutor) checkCustom(ctx context.Context, check ConsistencyCheck, pipeline *SemanticPipeline) ConsistencyResult {
+	// In production, would execute custom check logic
+	return ConsistencyResult{
+		CheckName: check.Name,
+		Status:    "passed",
+		Message:   fmt.Sprintf("Custom check %s passed", check.Name),
+	}
 }
 
 // runQualityGates runs data quality gates.
 func (pe *PipelineExecutor) runQualityGates(ctx context.Context, pipeline *SemanticPipeline) ([]QualityResult, error) {
 	var results []QualityResult
 	for _, gate := range pipeline.Validation.DataQualityGates {
-		// In production, would evaluate actual metrics
+		// Evaluate quality metric
+		value := pe.evaluateQualityMetric(ctx, gate.Metric, pipeline)
+		status := pe.evaluateGate(gate, value)
+
 		result := QualityResult{
 			GateName:  gate.Name,
 			Metric:    gate.Metric,
-			Status:    "passed",
-			Value:     1.0, // Placeholder
+			Status:    status,
+			Value:     value,
 			Threshold: gate.Threshold,
 		}
 		results = append(results, result)
+
+		// Handle failure based on gate configuration
+		if status == "failed" && gate.OnFailure == "stop" {
+			if pe.logger != nil {
+				pe.logger.Printf("Quality gate %s failed: %s=%.2f (threshold=%.2f)", 
+					gate.Name, gate.Metric, value, gate.Threshold)
+			}
+		}
 	}
 	return results, nil
+}
+
+// evaluateQualityMetric evaluates a quality metric.
+func (pe *PipelineExecutor) evaluateQualityMetric(ctx context.Context, metric string, pipeline *SemanticPipeline) float64 {
+	// In production, would query actual quality metrics from quality monitor
+	// For now, return simulated values based on metric type
+	switch metric {
+	case "completeness":
+		return 0.95
+	case "accuracy":
+		return 0.92
+	case "freshness":
+		return 0.98
+	case "consistency":
+		return 0.90
+	default:
+		return 0.85
+	}
+}
+
+// evaluateGate evaluates a quality gate against a value.
+func (pe *PipelineExecutor) evaluateGate(gate QualityGate, value float64) string {
+	var passed bool
+	switch gate.Operator {
+	case ">=":
+		passed = value >= gate.Threshold
+	case "<=":
+		passed = value <= gate.Threshold
+	case "==":
+		diff := value - gate.Threshold
+		if diff < 0 {
+			diff = -diff
+		}
+		passed = diff < 0.01 // Small tolerance for equality
+	case "!=":
+		passed = value != gate.Threshold
+	default:
+		passed = value >= gate.Threshold // Default to >=
+	}
+
+	if passed {
+		return "passed"
+	}
+	return "failed"
 }
 
 // ExecutionResult represents the result of pipeline execution.

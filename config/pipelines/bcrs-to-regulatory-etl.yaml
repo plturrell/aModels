@@ -1,0 +1,313 @@
+# BCRS to Regulatory Reporting ETL Pipeline Definition
+# ETL process from BCRS credit exposures to regulatory reporting
+
+pipeline:
+  id: "bcrs-to-regulatory-etl"
+  name: "BCRS Credit Exposures to Regulatory Reporting"
+  version: "1.0.0"
+  description: "ETL process from BCRS credit exposures to regulatory reporting (Basel III, etc.)"
+  
+  source:
+    type: "bcrs"
+    connection: "bcrs-connection"
+    schema:
+      fields:
+        - name: "exposure_id"
+          type: "string"
+        - name: "counterparty_id"
+          type: "string"
+        - name: "exposure_amount"
+          type: "decimal"
+        - name: "exposure_date"
+          type: "date"
+        - name: "risk_weight"
+          type: "decimal"
+        - name: "risk_weighted_amount"
+          type: "decimal"
+        - name: "regulatory_capital"
+          type: "decimal"
+        - name: "rating"
+          type: "string"
+        - name: "product_type"
+          type: "string"
+        - name: "asset_class"
+          type: "string"
+    filters:
+      exposure_date: ">= START_OF_QUARTER"
+  
+  steps:
+    - id: "extract-credit-exposures"
+      name: "Extract Credit Exposures"
+      type: "extract"
+      description: "Extract credit exposures for regulatory reporting period"
+      config:
+        table: "credit_exposures"
+        batch_size: 1000
+        filters:
+          exposure_date: ">= START_OF_QUARTER"
+      on_error: "stop"
+      retries: 3
+    
+    - id: "classify-by-regulatory-category"
+      name: "Classify by Regulatory Category"
+      type: "transform"
+      description: "Classify exposures by regulatory category (Basel III)"
+      config:
+        transformations:
+          - field: "regulatory_category"
+            type: "map"
+            mapping:
+              "Loan": "Standardized"
+              "Bond": "Standardized"
+              "Derivative": "Advanced"
+              default: "Standardized"
+          - field: "risk_category"
+            type: "map"
+            mapping:
+              "Sovereign": "Sovereign"
+              "Bank": "Bank"
+              "Corporate": "Corporate"
+              "Retail": "Retail"
+              default: "Corporate"
+      on_error: "stop"
+    
+    - id: "aggregate-by-regulatory-category"
+      name: "Aggregate by Regulatory Category"
+      type: "aggregate"
+      description: "Aggregate exposures by regulatory category"
+      config:
+        group_by:
+          - "regulatory_category"
+          - "risk_category"
+          - "asset_class"
+          - "exposure_date"
+        aggregations:
+          - field: "exposure_amount"
+            function: "sum"
+            alias: "total_exposure"
+          - field: "risk_weighted_amount"
+            function: "sum"
+            alias: "total_rwa"
+          - field: "regulatory_capital"
+            function: "sum"
+            alias: "total_regulatory_capital"
+          - field: "exposure_id"
+            function: "count"
+            alias: "exposure_count"
+      on_error: "stop"
+    
+    - id: "calculate-regulatory-ratios"
+      name: "Calculate Regulatory Ratios"
+      type: "transform"
+      description: "Calculate Basel III regulatory ratios"
+      config:
+        transformations:
+          - field: "common_equity_tier1_ratio"
+            type: "calculate"
+            formula: "cet1_capital / total_rwa"
+            source_fields: ["cet1_capital", "total_rwa"]
+          - field: "tier1_ratio"
+            type: "calculate"
+            formula: "tier1_capital / total_rwa"
+            source_fields: ["tier1_capital", "total_rwa"]
+          - field: "total_capital_ratio"
+            type: "calculate"
+            formula: "total_capital / total_rwa"
+            source_fields: ["total_capital", "total_rwa"]
+          - field: "leverage_ratio"
+            type: "calculate"
+            formula: "tier1_capital / total_exposure"
+            source_fields: ["tier1_capital", "total_exposure"]
+      on_error: "stop"
+    
+    - id: "calculate-capital-buffers"
+      name: "Calculate Capital Buffers"
+      type: "transform"
+      description: "Calculate capital conservation and countercyclical buffers"
+      config:
+        transformations:
+          - field: "capital_conservation_buffer"
+            type: "calculate"
+            formula: "cet1_capital * 0.025"  # 2.5% buffer
+            source_fields: ["cet1_capital"]
+          - field: "countercyclical_buffer"
+            type: "calculate"
+            formula: "total_rwa * countercyclical_buffer_rate"
+            source_fields: ["total_rwa"]
+          - field: "total_buffer_requirement"
+            type: "calculate"
+            formula: "capital_conservation_buffer + countercyclical_buffer"
+            source_fields: ["capital_conservation_buffer", "countercyclical_buffer"]
+      on_error: "warn"
+    
+    - id: "validate-regulatory-compliance"
+      name: "Validate Regulatory Compliance"
+      type: "validate"
+      description: "Validate compliance with regulatory requirements"
+      config:
+        rules:
+          - field: "common_equity_tier1_ratio"
+            check: ">= 0.07"  # Minimum 7% CET1
+          - field: "tier1_ratio"
+            check: ">= 0.085"  # Minimum 8.5% Tier 1
+          - field: "total_capital_ratio"
+            check: ">= 0.105"  # Minimum 10.5% Total Capital
+          - field: "leverage_ratio"
+            check: ">= 0.03"  # Minimum 3% Leverage Ratio
+          - field: "total_exposure"
+            check: ">= 0"
+          - field: "total_rwa"
+            check: ">= 0"
+      on_error: "stop"
+    
+    - id: "format-for-regulatory-reporting"
+      name: "Format for Regulatory Reporting"
+      type: "transform"
+      description: "Format data for regulatory reporting format (e.g., COREP, FINREP)"
+      config:
+        transformations:
+          - field: "report_date"
+            type: "date_format"
+            source: "exposure_date"
+            format: "YYYY-MM-DD"
+          - field: "reporting_period"
+            type: "date_format"
+            source: "exposure_date"
+            format: "YYYY-Q"
+          - field: "amounts_rounded"
+            type: "round_multiple"
+            fields: ["total_exposure", "total_rwa", "total_regulatory_capital"]
+            decimals: 2
+      on_error: "warn"
+    
+    - id: "add-regulatory-metadata"
+      name: "Add Regulatory Metadata"
+      type: "transform"
+      description: "Add regulatory reporting metadata"
+      config:
+        transformations:
+          - field: "regulatory_framework"
+            type: "constant"
+            value: "Basel III"
+          - field: "reporting_standard"
+            type: "constant"
+            value: "COREP"
+          - field: "reporting_frequency"
+            type: "constant"
+            value: "Quarterly"
+      on_error: "warn"
+  
+  target:
+    type: "regulatory_reporting"
+    connection: "regulatory-connection"
+    schema:
+      fields:
+        - name: "regulatory_category"
+          type: "string"
+        - name: "risk_category"
+          type: "string"
+        - name: "asset_class"
+          type: "string"
+        - name: "report_date"
+          type: "date"
+        - name: "reporting_period"
+          type: "string"
+        - name: "total_exposure"
+          type: "decimal"
+        - name: "total_rwa"
+          type: "decimal"
+        - name: "total_regulatory_capital"
+          type: "decimal"
+        - name: "common_equity_tier1_ratio"
+          type: "decimal"
+        - name: "tier1_ratio"
+          type: "decimal"
+        - name: "total_capital_ratio"
+          type: "decimal"
+        - name: "leverage_ratio"
+          type: "decimal"
+        - name: "regulatory_framework"
+          type: "string"
+        - name: "reporting_standard"
+          type: "string"
+      primary_key:
+        - "regulatory_category"
+        - "risk_category"
+        - "asset_class"
+        - "report_date"
+  
+  validation:
+    schema_validation: true
+    data_quality_gates:
+      - name: "completeness"
+        metric: "completeness"
+        threshold: 0.98
+        operator: ">="
+        on_failure: "stop"
+        description: "98% of credit exposures must be successfully processed"
+      
+      - name: "accuracy"
+        metric: "accuracy"
+        threshold: 0.99
+        operator: ">="
+        on_failure: "stop"
+        description: "99% accuracy threshold for regulatory reporting"
+      
+      - name: "regulatory_compliance"
+        metric: "compliance"
+        threshold: 1.0
+        operator: ">="
+        on_failure: "stop"
+        description: "100% regulatory compliance (all ratios meet minimums)"
+    
+    consistency_checks:
+      - name: "cet1_ratio_minimum"
+        type: "threshold_check"
+        field: "common_equity_tier1_ratio"
+        threshold: 0.07
+        operator: ">="
+        description: "CET1 ratio must meet minimum 7% requirement"
+      
+      - name: "tier1_ratio_minimum"
+        type: "threshold_check"
+        field: "tier1_ratio"
+        threshold: 0.085
+        operator: ">="
+        description: "Tier 1 ratio must meet minimum 8.5% requirement"
+      
+      - name: "total_capital_ratio_minimum"
+        type: "threshold_check"
+        field: "total_capital_ratio"
+        threshold: 0.105
+        operator: ">="
+        description: "Total capital ratio must meet minimum 10.5% requirement"
+      
+      - name: "leverage_ratio_minimum"
+        type: "threshold_check"
+        field: "leverage_ratio"
+        threshold: 0.03
+        operator: ">="
+        description: "Leverage ratio must meet minimum 3% requirement"
+  
+  schedule:
+    frequency: "0 4 1 * *"  # First day of month at 4 AM (quarterly reporting)
+    timezone: "UTC"
+  
+  error_handling:
+    retries: 5
+    backoff: "exponential"
+    max_backoff: 300
+    alert_on_failure: true
+    alert_channels:
+      - "email"
+      - "slack"
+      - "pagerduty"
+      - "regulatory_alert"
+  
+  metadata:
+    owner: "Regulatory Compliance"
+    steward: "regulatory-steward@example.com"
+    created_at: "2025-01-XX"
+    updated_at: "2025-01-XX"
+    compliance_notes: "This pipeline must maintain 100% regulatory compliance. Any failures require immediate escalation."
+

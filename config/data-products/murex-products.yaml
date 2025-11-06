@@ -1,0 +1,180 @@
+# Murex Data Products Definition
+# Define all data products from Murex system
+
+data_products:
+  - id: "murex-trades"
+    name: "Murex Trade Data"
+    description: "Trades from Murex trading system"
+    source_system: "Murex"
+    version: "1.0.0"
+    
+    schema:
+      fields:
+        - name: "trade_id"
+          type: "string"
+          required: true
+          description: "Unique trade identifier"
+        
+        - name: "trade_date"
+          type: "date"
+          required: true
+          description: "Date trade was executed"
+        
+        - name: "value_date"
+          type: "date"
+          required: true
+          description: "Value date for settlement"
+        
+        - name: "maturity_date"
+          type: "date"
+          required: false
+          description: "Maturity date for term products"
+        
+        - name: "trade_type"
+          type: "string"
+          required: true
+          description: "Type of trade (FX, Bond, Swap, Option, etc.)"
+          constraints:
+            enum: ["FX", "Bond", "Swap", "Option", "Forward", "Future"]
+        
+        - name: "notional_amount"
+          type: "decimal"
+          required: true
+          description: "Notional amount of the trade"
+          constraints:
+            min: 0
+        
+        - name: "currency"
+          type: "string"
+          required: true
+          description: "Currency code (ISO 4217)"
+          constraints:
+            pattern: "^[A-Z]{3}$"
+        
+        - name: "status"
+          type: "string"
+          required: true
+          description: "Trade status"
+          constraints:
+            enum: ["Pending", "Executed", "Settled", "Cancelled"]
+        
+        - name: "book"
+          type: "string"
+          required: false
+          description: "Trading book"
+        
+        - name: "desk"
+          type: "string"
+          required: false
+          description: "Trading desk"
+        
+        - name: "counterparty_id"
+          type: "string"
+          required: false
+          description: "Counterparty identifier"
+      
+      primary_key:
+        - "trade_id"
+    
+    quality_slos:
+      - name: "freshness"
+        target: 0.95
+        window: "24h"
+        description: "95% of trades available within 24 hours"
+      
+      - name: "completeness"
+        target: 0.98
+        window: "24h"
+        description: "98% of trade data complete"
+      
+      - name: "accuracy"
+        target: 0.99
+        window: "24h"
+        description: "99% of trades accurate"
+    
+    metadata:
+      owner: "Trading Operations"
+      steward: "murex-steward@example.com"
+      update_frequency: "real-time"
+      retention_period: "7 years"
+  
+  - id: "murex-cashflows"
+    name: "Murex Cashflows"
+    description: "Cashflows from Murex trades"
+    source_system: "Murex"
+    version: "1.0.0"
+    
+    schema:
+      fields:
+        - name: "cashflow_id"
+          type: "string"
+          required: true
+        
+        - name: "trade_id"
+          type: "string"
+          required: true
+        
+        - name: "cashflow_date"
+          type: "date"
+          required: true
+        
+        - name: "amount"
+          type: "decimal"
+          required: true
+        
+        - name: "currency"
+          type: "string"
+          required: true
+      
+      primary_key:
+        - "cashflow_id"
+    
+    quality_slos:
+      - name: "freshness"
+        target: 0.95
+        window: "24h"
+      - name: "completeness"
+        target: 0.98
+        window: "24h"
+  
+  - id: "murex-regulatory-calculations"
+    name: "Murex Regulatory Calculations"
+    description: "Regulatory calculations from Murex"
+    source_system: "Murex"
+    version: "1.0.0"
+    
+    schema:
+      fields:
+        - name: "calculation_id"
+          type: "string"
+          required: true
+        
+        - name: "trade_id"
+          type: "string"
+          required: true
+        
+        - name: "calculation_type"
+          type: "string"
+          required: true
+          constraints:
+            enum: ["CreditRisk", "MarketRisk", "OperationalRisk"]
+        
+        - name: "risk_amount"
+          type: "decimal"
+          required: true
+        
+        - name: "calculation_date"
+          type: "date"
+          required: true
+      
+      primary_key:
+        - "calculation_id"
+    
+    quality_slos:
+      - name: "freshness"
+        target: 0.90
+        window: "24h"
+      - name: "completeness"
+        target: 0.95
+        window: "24h"
+

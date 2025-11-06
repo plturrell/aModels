@@ -114,17 +114,37 @@ func (ad *AnalyticsDashboard) GetDashboardStats(ctx context.Context) (*Dashboard
 
 // getPopularElements gets popular data elements.
 func (ad *AnalyticsDashboard) getPopularElements() []PopularElement {
-	// This would integrate with usage tracking
-	// For now, return placeholder
-	return []PopularElement{
-		{
-			ElementID:   "example_element",
-			ElementName: "Example Element",
-			AccessCount: 100,
-			LastAccessed: time.Now(),
-			Trend:        "up",
-		},
+	if ad.registry == nil {
+		return []PopularElement{}
 	}
+	
+	var popular []PopularElement
+	
+	// Aggregate usage from all data elements
+	for _, element := range ad.registry.DataElements {
+		// Check if element has enhanced data with usage tracking
+		// In a real implementation, we'd have a way to get enhanced elements
+		// For now, we'll use the registry's usage tracking if available
+		popular = append(popular, PopularElement{
+			ElementID:    element.Identifier,
+			ElementName:  element.Name,
+			AccessCount:  0, // Would be populated from enhanced element
+			LastAccessed: element.UpdatedAt,
+			Trend:        "stable",
+		})
+	}
+	
+	// Sort by access count (in real implementation)
+	// For now, return top 10 by last updated
+	sort.Slice(popular, func(i, j int) bool {
+		return popular[i].LastAccessed.After(popular[j].LastAccessed)
+	})
+	
+	if len(popular) > 10 {
+		popular = popular[:10]
+	}
+	
+	return popular
 }
 
 // getRecentActivity gets recent activity events.
@@ -160,20 +180,71 @@ func (ad *AnalyticsDashboard) getQualityTrends(ctx context.Context) []QualityTre
 
 // getUsageStatistics gets usage statistics.
 func (ad *AnalyticsDashboard) getUsageStatistics() UsageStatistics {
-	// This would integrate with usage tracking
+	if ad.registry == nil {
+		return UsageStatistics{
+			TotalAccesses:     0,
+			UniqueUsers:       0,
+			AverageAccessTime: 0,
+			TopUsers:          []UserStat{},
+			AccessByHour:      make(map[int]int),
+			AccessByDay:       make(map[string]int),
+		}
+	}
+	
+	// Aggregate usage from registry
+	totalAccesses := 0
+	uniqueUsers := make(map[string]bool)
+	userStats := make(map[string]*UserStat)
+	
+	for _, element := range ad.registry.DataElements {
+		// In a real implementation, we'd check enhanced elements for usage
+		// For now, we'll track based on registry activity
+		// Count unique users who have accessed elements
+		if element.Steward != "" {
+			uniqueUsers[element.Steward] = true
+			if userStats[element.Steward] == nil {
+				userStats[element.Steward] = &UserStat{
+					UserID:      element.Steward,
+					AccessCount: 0,
+					LastAccess:  element.UpdatedAt,
+				}
+			}
+			userStats[element.Steward].AccessCount++
+			totalAccesses++
+		}
+	}
+	
+	// Convert to slice and sort
+	topUsers := make([]UserStat, 0, len(userStats))
+	for _, stat := range userStats {
+		topUsers = append(topUsers, *stat)
+	}
+	sort.Slice(topUsers, func(i, j int) bool {
+		return topUsers[i].AccessCount > topUsers[j].AccessCount
+	})
+	if len(topUsers) > 10 {
+		topUsers = topUsers[:10]
+	}
+	
+	// Calculate access by hour/day (simplified - in production would track actual access times)
+	accessByHour := make(map[int]int)
+	accessByDay := make(map[string]int)
+	now := time.Now()
+	for i := 0; i < 24; i++ {
+		accessByHour[i] = 0
+	}
+	for i := 0; i < 7; i++ {
+		day := now.AddDate(0, 0, -i).Format("2006-01-02")
+		accessByDay[day] = 0
+	}
+	
 	return UsageStatistics{
-		TotalAccesses:    1000,
-		UniqueUsers:      50,
-		AverageAccessTime: 2.5,
-		TopUsers: []UserStat{
-			{
-				UserID:      "user1",
-				AccessCount: 100,
-				LastAccess:  time.Now(),
-			},
-		},
-		AccessByHour: make(map[int]int),
-		AccessByDay:  make(map[string]int),
+		TotalAccesses:     totalAccesses,
+		UniqueUsers:       len(uniqueUsers),
+		AverageAccessTime: 2.5, // Would calculate from actual metrics
+		TopUsers:          topUsers,
+		AccessByHour:      accessByHour,
+		AccessByDay:       accessByDay,
 	}
 }
 

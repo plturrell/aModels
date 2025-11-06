@@ -1,0 +1,73 @@
+# ETL Warehouse to RCO (Liquidity) Schema Mapping
+# Maps warehouse trades to RCO liquidity positions
+
+schema_mapping:
+  id: "etl-warehouse-to-rco-mapping"
+  name: "ETL Warehouse to RCO Liquidity Mapping"
+  version: "1.0.0"
+  description: "Schema mapping from ETL Warehouse trades to RCO liquidity positions"
+  
+  source:
+    system: "etl_warehouse"
+    entity: "warehouse_trades"
+    schema_version: "1.0.0"
+  
+  target:
+    system: "rco"
+    entity: "liquidity_positions"
+    schema_version: "1.0.0"
+  
+  field_mappings:
+    - source: ""
+      target: "position_id"
+      transformation: "format"
+      transformation_config:
+        format: "LIQ-{trade_id}-{trade_date}"
+        source_fields: ["trade_id", "trade_date"]
+      required: true
+    
+    - source: "trade_id"
+      target: "trade_id"
+      transformation: "identity"
+      required: false
+    
+    - source: "trade_date"
+      target: "position_date"
+      transformation: "identity"
+      required: true
+    
+    - source: "notional_amount"
+      target: "position_amount"
+      transformation: "identity"
+      required: true
+    
+    - source: "currency"
+      target: "currency"
+      transformation: "identity"
+      required: true
+    
+    - source: ""
+      target: "risk_type"
+      transformation: "constant"
+      transformation_config:
+        value: "Liquidity"
+      required: true
+    
+    - source: "position_amount"
+      target: "liquidity_requirement"
+      transformation: "calculate"
+      transformation_config:
+        formula: "position_amount * liquidity_multiplier"
+        liquidity_multiplier: 0.1
+        source_fields: ["position_amount"]
+      required: true
+  
+  validation_rules:
+    - field: "position_id"
+      rule: "required"
+    - field: "position_amount"
+      rule: "> 0"
+    - field: "risk_type"
+      rule: "equals"
+      value: "Liquidity"
+

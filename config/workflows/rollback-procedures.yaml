@@ -1,0 +1,220 @@
+# Rollback Procedures
+# Procedures for rolling back version migrations
+
+rollback_procedures:
+  # Murex Rollback
+  murex_rollback:
+    id: "murex-rollback"
+    name: "Murex Version Rollback"
+    description: "Rollback Murex to previous version"
+    
+    prerequisites:
+      - "Backup exists for target version"
+      - "All downstream systems are in consistent state"
+      - "Rollback approved by data operations"
+    
+    steps:
+      - id: "stop-ingestion"
+        name: "Stop New Ingestion"
+        type: "control"
+        action: "stop"
+        system: "murex"
+        config:
+          stop_ingestion: true
+          drain_pending: true
+          timeout: 300
+      
+      - id: "backup-current-state"
+        name: "Backup Current State"
+        type: "backup"
+        system: "murex"
+        config:
+          backup_location: "rollback-backups/murex"
+          backup_format: "full_snapshot"
+      
+      - id: "restore-previous-version"
+        name: "Restore Previous Version"
+        type: "restore"
+        system: "murex"
+        config:
+          target_version: "previous"
+          backup_location: "version-backups/murex"
+          restore_data: true
+          restore_config: true
+      
+      - id: "validate-restored-version"
+        name: "Validate Restored Version"
+        type: "validate"
+        system: "murex"
+        config:
+          checks:
+            - type: "data_quality"
+              threshold: 0.95
+            - type: "schema_validation"
+              must_pass: true
+      
+      - id: "resume-ingestion"
+        name: "Resume Ingestion"
+        type: "control"
+        action: "start"
+        system: "murex"
+        config:
+          start_ingestion: true
+          validate_on_start: true
+  
+  # Downstream System Rollback
+  downstream_rollback:
+    id: "downstream-rollback"
+    name: "Downstream Systems Rollback"
+    description: "Rollback all downstream systems to previous state"
+    
+    prerequisites:
+      - "Point-in-time snapshot exists"
+      - "All systems are in consistent state"
+      - "Rollback approved by data operations"
+    
+    systems:
+      - "etl_data_factory"
+      - "sap_fioneer"
+      - "etl_warehouse"
+      - "bcrs"
+      - "rco"
+      - "axiomsl"
+    
+    steps:
+      - id: "stop-all-downstream"
+        name: "Stop All Downstream Processing"
+        type: "control"
+        action: "stop"
+        systems:
+          - "etl_data_factory"
+          - "sap_fioneer"
+          - "etl_warehouse"
+          - "bcrs"
+          - "rco"
+          - "axiomsl"
+        config:
+          stop_processing: true
+          drain_pending: true
+          timeout: 600
+      
+      - id: "backup-current-downstream"
+        name: "Backup Current Downstream State"
+        type: "backup"
+        systems:
+          - "etl_data_factory"
+          - "sap_fioneer"
+          - "etl_warehouse"
+          - "bcrs"
+          - "rco"
+          - "axiomsl"
+        config:
+          backup_location: "rollback-backups/downstream"
+          backup_format: "point_in_time"
+      
+      - id: "restore-previous-downstream"
+        name: "Restore Previous Downstream State"
+        type: "restore"
+        systems:
+          - "etl_data_factory"
+          - "sap_fioneer"
+          - "etl_warehouse"
+          - "bcrs"
+          - "rco"
+          - "axiomsl"
+        config:
+          snapshot_location: "version-backups/downstream"
+          restore_point_in_time: true
+          restore_order:
+            - "etl_warehouse"
+            - "sap_fioneer"
+            - "etl_data_factory"
+            - "bcrs"
+            - "rco"
+            - "axiomsl"
+      
+      - id: "validate-restored-downstream"
+        name: "Validate Restored Downstream Systems"
+        type: "validate"
+        systems:
+          - "etl_data_factory"
+          - "sap_fioneer"
+          - "etl_warehouse"
+          - "bcrs"
+          - "rco"
+          - "axiomsl"
+        config:
+          checks:
+            - type: "data_quality"
+              threshold: 0.95
+            - type: "consistency_check"
+              must_pass: true
+        parallel: true
+      
+      - id: "resume-downstream"
+        name: "Resume Downstream Processing"
+        type: "control"
+        action: "start"
+        systems:
+          - "etl_data_factory"
+          - "sap_fioneer"
+          - "etl_warehouse"
+          - "bcrs"
+          - "rco"
+          - "axiomsl"
+        config:
+          start_processing: true
+          validate_on_start: true
+        parallel: true
+  
+  # Full System Rollback
+  full_system_rollback:
+    id: "full-system-rollback"
+    name: "Full System Rollback"
+    description: "Rollback all systems including Murex and downstream"
+    
+    prerequisites:
+      - "All backups exist"
+      - "Rollback approved by data operations and management"
+    
+    steps:
+      - id: "execute-downstream-rollback"
+        name: "Execute Downstream Rollback"
+        type: "procedure"
+        procedure: "downstream_rollback"
+      
+      - id: "execute-murex-rollback"
+        name: "Execute Murex Rollback"
+        type: "procedure"
+        procedure: "murex_rollback"
+      
+      - id: "validate-full-system"
+        name: "Validate Full System"
+        type: "validate"
+        systems:
+          - "murex"
+          - "etl_data_factory"
+          - "sap_fioneer"
+          - "etl_warehouse"
+          - "bcrs"
+          - "rco"
+          - "axiomsl"
+        config:
+          checks:
+            - type: "data_quality"
+              threshold: 0.95
+            - type: "cross_system_consistency"
+              must_pass: true
+            - type: "reconciliation_status"
+              must_be: "reconciled"
+      
+      - id: "generate-rollback-report"
+        name: "Generate Full System Rollback Report"
+        type: "report"
+        config:
+          report_type: "full_system_rollback"
+          include_all_systems: true
+          include_reason: true
+          output_format: "json"
+          output_location: "reports/full-system-rollback"
+

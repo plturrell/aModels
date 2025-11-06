@@ -1,0 +1,200 @@
+# Lineage Mappings for Actual Data Flow
+# Murex → ETL Data Factory → SAP Fioneer Subledger → ETL Warehouse → (parallel) BCRS/RCO/AxiomSL
+
+lineage_mappings:
+  # Stage 1: Murex to ETL Data Factory
+  - id: "murex-to-etl-data-factory"
+    name: "Murex to ETL Data Factory"
+    source:
+      system: "murex"
+      entity: "trades"
+    target:
+      system: "etl_data_factory"
+      entity: "staging_trades"
+    transformation: "murex-extract-transform"
+    dependencies:
+      - "murex.trades.executed"
+      - "murex.trades.status == 'executed'"
+    description: "Extract trades from Murex and stage in ETL Data Factory"
+  
+  # Stage 2: ETL Data Factory to SAP Fioneer Subledger
+  - id: "etl-data-factory-to-sap-fioneer"
+    name: "ETL Data Factory to SAP Fioneer Subledger"
+    source:
+      system: "etl_data_factory"
+      entity: "staging_trades"
+    target:
+      system: "sap_fioneer"
+      entity: "subledger_entries"
+    transformation: "etl-to-sap-fioneer-transform"
+    dependencies:
+      - "etl_data_factory.staging_trades.validated"
+      - "etl_data_factory.staging_trades.transformed"
+    description: "Transform and load staged trades to SAP Fioneer Subledger"
+  
+  # Stage 3: SAP Fioneer Subledger to ETL Warehouse
+  - id: "sap-fioneer-to-etl-warehouse"
+    name: "SAP Fioneer Subledger to ETL Warehouse"
+    source:
+      system: "sap_fioneer"
+      entity: "subledger_entries"
+    target:
+      system: "etl_warehouse"
+      entity: "warehouse_trades"
+    transformation: "sap-fioneer-to-warehouse-transform"
+    dependencies:
+      - "sap_fioneer.subledger_entries.posted"
+      - "sap_fioneer.subledger_entries.reconciled"
+    description: "Extract from SAP Fioneer Subledger and load to ETL Warehouse"
+  
+  # Stage 4a: ETL Warehouse to BCRS (Capital)
+  - id: "etl-warehouse-to-bcrs"
+    name: "ETL Warehouse to BCRS (Capital)"
+    source:
+      system: "etl_warehouse"
+      entity: "warehouse_trades"
+    target:
+      system: "bcrs"
+      entity: "credit_exposures"
+    transformation: "warehouse-to-bcrs-capital-transform"
+    dependencies:
+      - "etl_warehouse.warehouse_trades.validated"
+      - "etl_warehouse.warehouse_trades.ready_for_capital"
+    parallel: true
+    parallel_group: "downstream_calculations"
+    description: "Calculate capital exposures from warehouse trades (parallel)"
+  
+  # Stage 4b: ETL Warehouse to RCO (Liquidity)
+  - id: "etl-warehouse-to-rco"
+    name: "ETL Warehouse to RCO (Liquidity)"
+    source:
+      system: "etl_warehouse"
+      entity: "warehouse_trades"
+    target:
+      system: "rco"
+      entity: "liquidity_positions"
+    transformation: "warehouse-to-rco-liquidity-transform"
+    dependencies:
+      - "etl_warehouse.warehouse_trades.validated"
+      - "etl_warehouse.warehouse_trades.ready_for_liquidity"
+    parallel: true
+    parallel_group: "downstream_calculations"
+    description: "Calculate liquidity positions from warehouse trades (parallel)"
+  
+  # Stage 4c: ETL Warehouse to AxiomSL (Local Regulatory Reporting)
+  - id: "etl-warehouse-to-axiomsl"
+    name: "ETL Warehouse to AxiomSL (Local Reg Reporting)"
+    source:
+      system: "etl_warehouse"
+      entity: "warehouse_trades"
+    target:
+      system: "axiomsl"
+      entity: "regulatory_reports"
+    transformation: "warehouse-to-axiomsl-regulatory-transform"
+    dependencies:
+      - "etl_warehouse.warehouse_trades.validated"
+      - "etl_warehouse.warehouse_trades.ready_for_regulatory"
+    parallel: true
+    parallel_group: "downstream_calculations"
+    description: "Generate local regulatory reports from warehouse trades (parallel)"
+
+# Lineage Dependencies
+lineage_dependencies:
+  # Sequential dependencies
+  sequential:
+    - step: "murex-to-etl-data-factory"
+      must_complete_before:
+        - "etl-data-factory-to-sap-fioneer"
+    
+    - step: "etl-data-factory-to-sap-fioneer"
+      must_complete_before:
+        - "sap-fioneer-to-etl-warehouse"
+    
+    - step: "sap-fioneer-to-etl-warehouse"
+      must_complete_before:
+        - "etl-warehouse-to-bcrs"
+        - "etl-warehouse-to-rco"
+        - "etl-warehouse-to-axiomsl"
+  
+  # Parallel dependencies
+  parallel:
+    - group: "downstream_calculations"
+      steps:
+        - "etl-warehouse-to-bcrs"
+        - "etl-warehouse-to-rco"
+        - "etl-warehouse-to-axiomsl"
+      description: "All three downstream systems can process in parallel"
+      completion_requirement: "all"  # or "any" or "majority"
+  
+  # Data quality gates
+  quality_gates:
+    - step: "murex-to-etl-data-factory"
+      gates:
+        - name: "completeness"
+          threshold: 0.95
+        - name: "accuracy"
+          threshold: 0.90
+    
+    - step: "etl-data-factory-to-sap-fioneer"
+      gates:
+        - name: "completeness"
+          threshold: 0.98
+        - name: "accuracy"
+          threshold: 0.95
+        - name: "reconciliation"
+          threshold: 1.0
+    
+    - step: "sap-fioneer-to-etl-warehouse"
+      gates:
+        - name: "completeness"
+          threshold: 0.98
+        - name: "accuracy"
+          threshold: 0.99
+    
+    - step: "etl-warehouse-to-bcrs"
+      gates:
+        - name: "completeness"
+          threshold: 0.95
+        - name: "calculation_accuracy"
+          threshold: 0.95
+    
+    - step: "etl-warehouse-to-rco"
+      gates:
+        - name: "completeness"
+          threshold: 0.95
+        - name: "calculation_accuracy"
+          threshold: 0.95
+    
+    - step: "etl-warehouse-to-axiomsl"
+      gates:
+        - name: "completeness"
+          threshold: 0.98
+        - name: "regulatory_compliance"
+          threshold: 1.0
+
+# Lineage Graph Path
+lineage_graph_path:
+  full_path: "Murex → ETL Data Factory → SAP Fioneer Subledger → ETL Warehouse → (parallel) [BCRS, RCO, AxiomSL]"
+  
+  stages:
+    - stage: 1
+      name: "Source Extraction"
+      systems: ["Murex"]
+      output: "Staged trades in ETL Data Factory"
+    
+    - stage: 2
+      name: "Primary Processing"
+      systems: ["ETL Data Factory", "SAP Fioneer Subledger"]
+      output: "Subledger entries in SAP Fioneer"
+    
+    - stage: 3
+      name: "Warehouse Loading"
+      systems: ["SAP Fioneer Subledger", "ETL Warehouse"]
+      output: "Validated trades in ETL Warehouse"
+    
+    - stage: 4
+      name: "Parallel Calculations"
+      systems: ["ETL Warehouse", "BCRS", "RCO", "AxiomSL"]
+      output: "Capital exposures, liquidity positions, regulatory reports"
+      parallel: true
+

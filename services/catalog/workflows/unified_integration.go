@@ -3,6 +3,7 @@ package workflows
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -27,6 +28,7 @@ type UnifiedWorkflowIntegration struct {
 	qualityMonitor     *quality.QualityMonitor
 	deepResearchClient *research.DeepResearchClient
 	reportStore        *research.ReportStore
+	versionManager     *VersionManager
 	logger             *log.Logger
 }
 
@@ -40,6 +42,7 @@ func NewUnifiedWorkflowIntegration(
 	registry *iso11179.MetadataRegistry,
 	qualityMonitor *quality.QualityMonitor,
 	reportStore *research.ReportStore,
+	versionManager *VersionManager,
 	logger *log.Logger,
 ) *UnifiedWorkflowIntegration {
 	// Create Deep Research client
@@ -56,6 +59,7 @@ func NewUnifiedWorkflowIntegration(
 		qualityMonitor:     qualityMonitor,
 		deepResearchClient: deepResearchClient,
 		reportStore:        reportStore,
+		versionManager:     versionManager,
 		logger:             logger,
 	}
 }
@@ -205,6 +209,26 @@ func (uwi *UnifiedWorkflowIntegration) BuildCompleteDataProduct(
 
 	// Register in catalog
 	uwi.registry.RegisterDataElement(dataElement)
+
+	// Create initial version if version manager is available
+	if uwi.versionManager != nil {
+		version := "1.0.0"
+		createdBy := enhanced.ProductOwner
+		if createdBy == "" {
+			createdBy = "system"
+		}
+		
+		_, err := uwi.versionManager.CreateVersion(ctx, dataElement.Identifier, version, product, createdBy)
+		if err != nil {
+			if uwi.logger != nil {
+				uwi.logger.Printf("Warning: Failed to create version for data product %s: %v", dataElement.Identifier, err)
+			}
+		} else {
+			if uwi.logger != nil {
+				uwi.logger.Printf("Created version %s for data product %s", version, dataElement.Identifier)
+			}
+		}
+	}
 
 	if uwi.logger != nil {
 		uwi.logger.Printf("Complete data product built: %s (quality=%.2f, state=%s)",

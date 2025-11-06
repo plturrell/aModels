@@ -1,0 +1,47 @@
+{
+  "features": [
+    {
+      "type": "job_type_distribution",
+      "data": {
+        "Job:Command": 53,
+        "Job:Dummy": 14
+      }
+    },
+    {
+      "type": "event_dependency_counts",
+      "data": {
+        "triggers": 49,
+        "waits_for": 49,
+        "cleans_up": 49
+      }
+    },
+    {
+      "type": "top_hosts",
+      "data": {
+        "haasedge93twqtwpop07.50531.app.standardchartered.com": 53
+      }
+    },
+    {
+      "type": "top_commands",
+      "data": {
+        "$script_path/jbs_sgmi_fnd_plp.sh": 15,
+        "$script_path/jbs_tableau_out_refresh.sh": 12,
+        "$script_path/jbs_sgmi_stg_filewatcher.sh": 7,
+        "$script_path/jbs_sgmi_stg_filewatcher_adj.sh": 6,
+        "$script_path/jbs_sgmi_stg_ingestion.sh": 6,
+        "$script_path/jbs_sgmi_rmi_stg_filewatcher.sh": 2,
+        "$script_path/jbs_sgmi_housekeeping_run.sh": 1,
+        "$script_path/jbs_archival_sgmi.sh": 1,
+        "$script_path/sgmi_stg_MFU.sh": 1,
+        "$script_path/tableau_24months_refresh.sh": 1
+      }
+    }
+  ],
+  "node_count": 67,
+  "edge_count": 98,
+  "has_historical_data": false,
+  "has_learned_patterns": true,
+  "has_temporal_patterns": true,
+  "domain_filtered": false,
+  "privacy_applied": false
+}

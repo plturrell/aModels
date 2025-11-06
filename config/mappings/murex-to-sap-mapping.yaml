@@ -1,0 +1,158 @@
+# Murex to SAP Schema Mapping
+# Maps Murex trade data to SAP GL journal entry format
+
+schema_mapping:
+  id: "murex-to-sap-mapping"
+  name: "Murex to SAP GL Mapping"
+  version: "1.0.0"
+  description: "Schema mapping from Murex trades to SAP journal entries"
+  
+  source:
+    system: "murex"
+    entity: "trades"
+    schema_version: "1.0.0"
+  
+  target:
+    system: "sap_gl"
+    entity: "journal_entries"
+    schema_version: "1.0.0"
+  
+  # Field-level mappings
+  field_mappings:
+    # Direct mappings (identity transformation)
+    - source: "trade_id"
+      target: "entry_id"
+      transformation: "format"
+      transformation_config:
+        format: "JE-{value}"
+      required: true
+      description: "Trade ID formatted as journal entry ID"
+    
+    - source: "trade_date"
+      target: "entry_date"
+      transformation: "identity"
+      required: true
+      description: "Trade date becomes entry date"
+    
+    - source: "notional_amount"
+      target: "debit_amount"
+      transformation: "identity"
+      required: true
+      description: "Notional amount becomes debit amount"
+    
+    - source: "currency"
+      target: "currency"
+      transformation: "identity"
+      required: true
+      description: "Currency code unchanged"
+    
+    # Lookup mappings
+    - source: "counterparty_id"
+      target: "account"
+      transformation: "lookup"
+      transformation_config:
+        lookup_table: "counterparty_to_account"
+        lookup_key: "counterparty_id"
+        lookup_fields:
+          - "account"
+          - "account_type"
+        default_value: "UNKNOWN"
+      required: false
+      description: "Counterparty ID mapped to SAP account via lookup table"
+    
+    # Calculated fields
+    - source: "notional_amount"
+      target: "credit_amount"
+      transformation: "copy"
+      required: true
+      description: "Credit amount equals debit amount for single-sided entries"
+    
+    # Constant fields
+    - source: ""
+      target: "description"
+      transformation: "constant"
+      transformation_config:
+        value: "Trade from Murex"
+      required: true
+      description: "Description field set to constant"
+    
+    # Derived fields
+    - source: "trade_id"
+      target: "reference"
+      transformation: "format"
+      transformation_config:
+        format: "MUREX-{value}"
+      required: false
+      description: "Reference field derived from trade ID"
+  
+  # Validation rules
+  validation_rules:
+    - field: "trade_id"
+      rule: "required"
+      message: "Trade ID is required"
+    
+    - field: "trade_date"
+      rule: "required"
+      message: "Trade date is required"
+    
+    - field: "notional_amount"
+      rule: "> 0"
+      message: "Notional amount must be greater than zero"
+    
+    - field: "currency"
+      rule: "in_list"
+      values: ["USD", "EUR", "GBP", "SGD", "JPY", "CHF", "AUD", "CAD", "HKD", "CNY"]
+      message: "Currency must be a valid ISO 4217 currency code"
+    
+    - field: "entry_id"
+      rule: "unique"
+      message: "Entry ID must be unique"
+    
+    - field: "debit_amount"
+      rule: "equals"
+      target_field: "credit_amount"
+      tolerance: 0.01
+      message: "Debit and credit amounts must balance"
+  
+  # Data quality checks
+  quality_checks:
+    - name: "completeness"
+      check: "required_fields"
+      fields:
+        - "trade_id"
+        - "trade_date"
+        - "notional_amount"
+        - "currency"
+      threshold: 0.98
+      description: "98% of required fields must be present"
+    
+    - name: "accuracy"
+      check: "transformation_accuracy"
+      threshold: 0.99
+      description: "99% transformation accuracy"
+    
+    - name: "consistency"
+      check: "cross_field_consistency"
+      rules:
+        - fields: ["debit_amount", "credit_amount"]
+          check: "equals"
+          tolerance: 0.01
+      threshold: 0.98
+      description: "98% of records must have consistent field values"
+  
+  # Error handling
+  error_handling:
+    missing_source_field: "warn"
+    transformation_failure: "error"
+    validation_failure: "error"
+    lookup_failure: "warn"
+    default_value_on_error: true
+  
+  # Metadata
+  metadata:
+    owner: "Finance Operations"
+    steward: "finance-steward@example.com"
+    created_at: "2025-01-XX"
+    updated_at: "2025-01-XX"
+    notes: "This mapping handles Murex trades to SAP journal entries. Counterparty lookup required for account mapping."
+

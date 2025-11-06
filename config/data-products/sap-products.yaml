@@ -1,0 +1,231 @@
+# SAP Data Products Definition
+# Define all data products from SAP GL system
+
+data_products:
+  - id: "sap-journal-entries"
+    name: "SAP Journal Entries"
+    description: "Journal entries from SAP General Ledger"
+    source_system: "SAP_GL"
+    version: "1.0.0"
+    
+    schema:
+      fields:
+        - name: "entry_id"
+          type: "string"
+          required: true
+          description: "Unique journal entry identifier"
+        
+        - name: "entry_date"
+          type: "date"
+          required: true
+          description: "Date of journal entry"
+        
+        - name: "posting_date"
+          type: "date"
+          required: true
+          description: "Date entry was posted to GL"
+        
+        - name: "account"
+          type: "string"
+          required: true
+          description: "GL account code"
+          constraints:
+            pattern: "^[0-9]{10}$"  # Example: 10-digit account code
+        
+        - name: "account_type"
+          type: "string"
+          required: false
+          description: "Type of account (Asset, Liability, Equity, Revenue, Expense)"
+          constraints:
+            enum: ["Asset", "Liability", "Equity", "Revenue", "Expense"]
+        
+        - name: "debit_amount"
+          type: "decimal"
+          required: false
+          description: "Debit amount (null if credit entry)"
+          constraints:
+            min: 0
+        
+        - name: "credit_amount"
+          type: "decimal"
+          required: false
+          description: "Credit amount (null if debit entry)"
+          constraints:
+            min: 0
+        
+        - name: "currency"
+          type: "string"
+          required: true
+          description: "Currency code (ISO 4217)"
+          constraints:
+            pattern: "^[A-Z]{3}$"
+        
+        - name: "description"
+          type: "string"
+          required: false
+          description: "Journal entry description"
+          max_length: 255
+        
+        - name: "document_type"
+          type: "string"
+          required: false
+          description: "Document type (e.g., 'JE', 'INV', 'PAY')"
+        
+        - name: "reference"
+          type: "string"
+          required: false
+          description: "Reference number (e.g., trade ID, invoice number)"
+        
+        - name: "company_code"
+          type: "string"
+          required: false
+          description: "SAP company code"
+        
+        - name: "fiscal_year"
+          type: "integer"
+          required: false
+          description: "Fiscal year"
+        
+        - name: "fiscal_period"
+          type: "integer"
+          required: false
+          description: "Fiscal period (month)"
+          constraints:
+            min: 1
+            max: 12
+      
+      primary_key:
+        - "entry_id"
+      
+      indexes:
+        - name: "idx_account"
+          fields: ["account"]
+        - name: "idx_posting_date"
+          fields: ["posting_date"]
+        - name: "idx_reference"
+          fields: ["reference"]
+    
+    quality_slos:
+      - name: "freshness"
+        target: 0.95
+        window: "24h"
+        description: "95% of journal entries available within 24 hours"
+      
+      - name: "completeness"
+        target: 0.98
+        window: "24h"
+        description: "98% of journal entry data complete"
+      
+      - name: "accuracy"
+        target: 0.99
+        window: "24h"
+        description: "99% of journal entries accurate"
+      
+      - name: "balance_check"
+        target: 1.0
+        window: "24h"
+        description: "100% of entries must balance (debit = credit)"
+    
+    metadata:
+      owner: "Finance Operations"
+      steward: "finance-steward@example.com"
+      update_frequency: "real-time"
+      retention_period: "10 years"
+  
+  - id: "sap-account-balances"
+    name: "SAP Account Balances"
+    description: "Account balances from SAP GL"
+    source_system: "SAP_GL"
+    version: "1.0.0"
+    
+    schema:
+      fields:
+        - name: "account"
+          type: "string"
+          required: true
+          description: "GL account code"
+        
+        - name: "account_name"
+          type: "string"
+          required: false
+          description: "Account name"
+        
+        - name: "account_type"
+          type: "string"
+          required: true
+          description: "Type of account"
+          constraints:
+            enum: ["Asset", "Liability", "Equity", "Revenue", "Expense"]
+        
+        - name: "balance_date"
+          type: "date"
+          required: true
+          description: "Date of balance snapshot"
+        
+        - name: "opening_balance"
+          type: "decimal"
+          required: true
+          description: "Opening balance for period"
+        
+        - name: "debit_total"
+          type: "decimal"
+          required: true
+          description: "Total debits for period"
+          constraints:
+            min: 0
+        
+        - name: "credit_total"
+          type: "decimal"
+          required: true
+          description: "Total credits for period"
+          constraints:
+            min: 0
+        
+        - name: "closing_balance"
+          type: "decimal"
+          required: true
+          description: "Closing balance for period"
+        
+        - name: "currency"
+          type: "string"
+          required: true
+          description: "Currency code"
+        
+        - name: "fiscal_year"
+          type: "integer"
+          required: true
+          description: "Fiscal year"
+        
+        - name: "fiscal_period"
+          type: "integer"
+          required: true
+          description: "Fiscal period"
+      
+      primary_key:
+        - "account"
+        - "balance_date"
+        - "fiscal_year"
+        - "fiscal_period"
+    
+    quality_slos:
+      - name: "freshness"
+        target: 0.95
+        window: "24h"
+        description: "95% of account balances available within 24 hours"
+      
+      - name: "completeness"
+        target: 0.98
+        window: "24h"
+        description: "98% of account balance data complete"
+      
+      - name: "balance_accuracy"
+        target: 0.99
+        window: "24h"
+        description: "99% of balances calculated accurately"
+    
+    metadata:
+      owner: "Finance Operations"
+      steward: "finance-steward@example.com"
+      update_frequency: "daily"
+      retention_period: "10 years"
+
