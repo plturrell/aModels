@@ -51,6 +51,7 @@ Key environment variables:
 - `DMS_STORAGE_ROOT` (local filesystem path)
 - `DMS_EXTRACT_URL` (HTTP base for the Extract service, e.g., `http://extract:8081`)
 - `DMS_CATALOG_URL` (HTTP base for the Catalog service, e.g., `http://catalog:8084`)
+- When `DMS_EXTRACT_URL` is provided the service will first attempt DeepSeek OCR for image uploads before running text extraction and catalog registration.
 
 ### Tests
 
