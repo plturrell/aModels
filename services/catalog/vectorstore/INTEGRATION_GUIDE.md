@@ -259,10 +259,47 @@ Content-Type: application/json
 }
 ```
 
-### Get Information
+### Get Information by ID
 
 ```bash
 GET /vectorstore/{id}
+```
+
+### List Public Information
+
+```bash
+GET /vectorstore?type={type}&system={system}&limit={limit}&offset={offset}
+```
+
+**Query Parameters:**
+- `type` - Filter by type (break_pattern, regulatory_rule, best_practice, knowledge_base)
+- `system` - Filter by system (murex, sap_fioneer, bcrs, rco, axiomsl, general)
+- `category` - Filter by category
+- `tags` - Filter by tags (comma-separated)
+- `is_public` - Filter by public status (true/false/1/0)
+- `limit` - Max results (default: 100)
+- `offset` - Pagination offset (default: 0)
+- `order_by` - Order by field (created_at, updated_at, title)
+- `order_desc` - Order descending (true/false/1/0)
+
+**Examples:**
+
+```bash
+# List all break patterns for Murex
+curl "http://localhost:8084/vectorstore?type=break_pattern&system=murex&limit=20"
+
+# List all public regulatory rules
+curl "http://localhost:8084/vectorstore?type=regulatory_rule&is_public=true"
+
+# List best practices, ordered by creation date
+curl "http://localhost:8084/vectorstore?type=best_practice&order_by=created_at&order_desc=true"
+
+# List all public information for a category
+curl "http://localhost:8084/vectorstore?category=finance&is_public=true&limit=50"
+
+# Paginated listing
+curl "http://localhost:8084/vectorstore?limit=10&offset=0"  # First page
+curl "http://localhost:8084/vectorstore?limit=10&offset=10" # Second page
 ```
 
 ## Multi-System Support

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -190,5 +191,79 @@ func (h *HANAVectorStoreHandler) HandleGetInformation(w http.ResponseWriter, r *
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(info)
+}
+
+// HandleListPublicInformation handles GET /vectorstore with query parameters
+func (h *HANAVectorStoreHandler) HandleListPublicInformation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	ctx := r.Context()
+
+	// Parse query parameters
+	options := &ListOptions{}
+	
+	if typeParam := r.URL.Query().Get("type"); typeParam != "" {
+		options.Type = typeParam
+	}
+	
+	if systemParam := r.URL.Query().Get("system"); systemParam != "" {
+		options.System = systemParam
+	}
+	
+	if categoryParam := r.URL.Query().Get("category"); categoryParam != "" {
+		options.Category = categoryParam
+	}
+	
+	if tagsParam := r.URL.Query().Get("tags"); tagsParam != "" {
+		options.Tags = strings.Split(tagsParam, ",")
+	}
+	
+	if publicParam := r.URL.Query().Get("is_public"); publicParam != "" {
+		isPublic := publicParam == "true" || publicParam == "1"
+		options.IsPublic = &isPublic
+	}
+	
+	if limitParam := r.URL.Query().Get("limit"); limitParam != "" {
+		if limit, err := strconv.Atoi(limitParam); err == nil && limit > 0 {
+			options.Limit = limit
+		}
+	}
+	if options.Limit <= 0 {
+		options.Limit = 100 // Default limit
+	}
+	
+	if offsetParam := r.URL.Query().Get("offset"); offsetParam != "" {
+		if offset, err := strconv.Atoi(offsetParam); err == nil && offset >= 0 {
+			options.Offset = offset
+		}
+	}
+	
+	if orderByParam := r.URL.Query().Get("order_by"); orderByParam != "" {
+		options.OrderBy = orderByParam
+	}
+	
+	if orderDescParam := r.URL.Query().Get("order_desc"); orderDescParam != "" {
+		options.OrderDesc = orderDescParam == "true" || orderDescParam == "1"
+	}
+
+	// List public information
+	results, err := h.store.ListPublicInformation(ctx, options)
+	if err != nil {
+		h.logger.Printf("List failed: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to list information: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"results": results,
+		"count":   len(results),
+		"limit":   options.Limit,
+		"offset":  options.Offset,
+	})
 }
 
