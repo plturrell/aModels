@@ -247,7 +247,14 @@ def test_predictive_analytics_available() -> bool:
         
         # Try analytics endpoint on catalog service
         try:
-            response = httpx.get(f"{ANALYTICS_URL}/health", timeout=5.0)
+            # Try healthz endpoint first
+            response = httpx.get(f"{ANALYTICS_URL}/healthz", timeout=5.0)
+            if response.status_code == 200:
+                print(f"✅ Analytics service available (predictive analytics is part of it)")
+                print(f"   Service: catalog")
+                return True
+            # Try analytics dashboard endpoint
+            response = httpx.get(f"{ANALYTICS_URL}/catalog/analytics/dashboard", timeout=5.0)
             if response.status_code == 200:
                 print(f"✅ Analytics service available (predictive analytics is part of it)")
                 print(f"   Service: catalog")
