@@ -1,23 +1,21 @@
-
-// Package disabled: depends on missing AgentSDK package
 package flightcatalog
 
 import (
 	"context"
 	"fmt"
-
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightclient"
 )
 
 // Catalog aggregates suite and tool metadata required by training pipelines.
 type Catalog struct {
-	Suites []flightclient.ServiceSuiteInfo
-	Tools  []flightclient.ToolInfo
+	Suites []ServiceSuiteInfo
+	Tools  []ToolInfo
 }
 
 // Fetch retrieves the current Agent SDK catalog via Arrow Flight.
+// Note: This is a stub implementation that returns an empty catalog.
+// The actual AgentSDK dependency has been replaced with local stubs.
 func Fetch(ctx context.Context, addr string) (Catalog, error) {
-	client, err := flightclient.Dial(ctx, addr)
+	client, err := Dial(ctx, addr)
 	if err != nil {
 		return Catalog{}, fmt.Errorf("dial flight server: %w", err)
 	}

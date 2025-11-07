@@ -1,5 +1,3 @@
-
-// Package disabled: depends on missing ai_benchmarks and AgentSDK packages
 package localai
 
 import (
@@ -10,7 +8,6 @@ import (
 	"time"
 
 	"ai_benchmarks/pkg/catalog/flightcatalog"
-	catalogprompt "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightcatalog/prompt"
 )
 
 // EnhancedInferenceEngine provides advanced inference capabilities with domain routing
@@ -19,7 +16,7 @@ type EnhancedInferenceEngine struct {
 	DomainRouter  *DomainRouter
 	ModelRegistry *ModelRegistry
 	AgentCatalog  *flightcatalog.Catalog
-	catalogView   catalogprompt.Enrichment
+	catalogView flightcatalog.Enrichment
 }
 
 // DomainRouter routes requests to appropriate model domains
@@ -42,7 +39,7 @@ func WithAgentCatalog(cat *flightcatalog.Catalog) EngineOption {
 			return
 		}
 		engine.AgentCatalog = cat
-		engine.catalogView = catalogprompt.Enrich(catalogprompt.Catalog{
+		engine.catalogView = flightcatalog.Enrich(flightcatalog.PromptCatalog{
 			Suites: cat.Suites,
 			Tools:  cat.Tools,
 		})
@@ -439,17 +436,15 @@ func (eie *EnhancedInferenceEngine) GetBestModelForTask(taskType string) (string
 	return modelName, nil
 }
 
-func (eie *EnhancedInferenceEngine) catalogEnrichment() catalogprompt.Enrichment {
+func (eie *EnhancedInferenceEngine) catalogEnrichment() flightcatalog.Enrichment {
 	if eie == nil || eie.AgentCatalog == nil {
-		return catalogprompt.Enrichment{}
+		return flightcatalog.Enrichment{}
 	}
-	if eie.catalogView.Prompt == "" &&
-		len(eie.catalogView.UniqueTools) == 0 &&
-		len(eie.catalogView.StandaloneTools) == 0 &&
-		len(eie.catalogView.Implementations) == 0 &&
-		eie.catalogView.Stats.SuiteCount == 0 &&
-		eie.catalogView.Stats.UniqueToolCount == 0 {
-		eie.catalogView = catalogprompt.Enrich(catalogprompt.Catalog{
+	// Check if catalog view needs to be refreshed (stub implementation)
+	// In the real implementation, this would check various fields
+	// Since Enrichment contains slices/maps, we check if Prompt is empty as a proxy
+	if eie.catalogView.Prompt == "" && eie.catalogView.Summary == "" {
+		eie.catalogView = flightcatalog.Enrich(flightcatalog.PromptCatalog{
 			Suites: eie.AgentCatalog.Suites,
 			Tools:  eie.AgentCatalog.Tools,
 		})
@@ -460,7 +455,7 @@ func (eie *EnhancedInferenceEngine) catalogEnrichment() catalogprompt.Enrichment
 // Helper methods
 
 // CatalogEnrichment exposes the cached Agent SDK catalog view for callers outside the package.
-func (eie *EnhancedInferenceEngine) CatalogEnrichment() catalogprompt.Enrichment {
+func (eie *EnhancedInferenceEngine) CatalogEnrichment() flightcatalog.Enrichment {
 	return eie.catalogEnrichment()
 }
 

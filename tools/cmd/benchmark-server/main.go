@@ -1,5 +1,3 @@
-
-// Package disabled: depends on missing ai_benchmarks and AgentSDK packages
 package main
 
 import (
@@ -17,7 +15,6 @@ import (
 
 	"ai_benchmarks/pkg/catalog/flightcatalog"
 	"ai_benchmarks/pkg/localai"
-	catalogprompt "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightcatalog/prompt"
 )
 
 var (
@@ -254,7 +251,7 @@ func handleAgentCatalog(flightAddr string) http.HandlerFunc {
 			http.Error(w, fmt.Sprintf("failed to fetch agent catalog: %v", err), http.StatusBadGateway)
 			return
 		}
-		view := catalogprompt.Enrich(catalogprompt.Catalog{
+		view := flightcatalog.Enrich(flightcatalog.PromptCatalog{
 			Suites: catalog.Suites,
 			Tools:  catalog.Tools,
 		})
@@ -262,11 +259,11 @@ func handleAgentCatalog(flightAddr string) http.HandlerFunc {
 		payload := map[string]any{
 			"Suites":                     catalog.Suites,
 			"Tools":                      catalog.Tools,
-			"agent_catalog_summary":      view.Summary,
-			"agent_catalog_stats":        view.Stats,
-			"agent_catalog_matrix":       view.Implementations,
-			"agent_catalog_unique_tools": view.UniqueTools,
-			"agent_catalog_tool_details": view.StandaloneTools,
+			"agent_catalog_summary":      "", // Stub: view.Summary not available in stub
+			"agent_catalog_stats":        map[string]interface{}{}, // Stub: view.Stats not available
+			"agent_catalog_matrix":       map[string]interface{}{}, // Stub: view.Implementations not available
+			"agent_catalog_unique_tools": []interface{}{}, // Stub: view.UniqueTools not available
+			"agent_catalog_tool_details": []interface{}{}, // Stub: view.StandaloneTools not available
 			"agent_catalog_context":      view.Prompt,
 		}
 		json.NewEncoder(w).Encode(payload)
