@@ -89,7 +89,7 @@ func main() {
 	mux.Handle("/agentflow/", flowProxy)
 	mux.Handle("/agentflow", flowProxy)
 
-	// Proxy search requests to search-inference service
+	// Proxy search requests to gateway service (unified search endpoints)
 	searchEndpoint := strings.TrimSpace(os.Getenv("SHELL_SEARCH_ENDPOINT"))
 	if searchEndpoint == "" {
 		gatewayURL := strings.TrimSpace(os.Getenv("SHELL_GATEWAY_URL"))
@@ -97,15 +97,33 @@ func main() {
 			gatewayURL = strings.TrimSpace(os.Getenv("GATEWAY_URL"))
 		}
 		if gatewayURL != "" {
-			searchEndpoint = gatewayURL + "/search"
+			// Gateway has /search/* endpoints, so proxy to gateway directly
+			searchEndpoint = gatewayURL
 		} else {
+			// Fallback to search-inference service
 			searchEndpoint = "http://localhost:8090"
 		}
 	}
 	if searchEndpoint != "" {
+		// Proxy /search/* to gateway/search/* or search-inference service
 		searchProxy := app.proxyHandler(strings.TrimSuffix(searchEndpoint, "/"), "/search")
 		mux.Handle("/search/", searchProxy)
 		mux.Handle("/search", searchProxy)
+	}
+	
+	// Proxy gateway API requests (for narrative, dashboard, export endpoints)
+	gatewayURL := strings.TrimSpace(os.Getenv("SHELL_GATEWAY_URL"))
+	if gatewayURL == "" {
+		gatewayURL = strings.TrimSpace(os.Getenv("GATEWAY_URL"))
+	}
+	if gatewayURL != "" {
+		gatewayURL = strings.TrimSuffix(gatewayURL, "/")
+		// Proxy /api/* to gateway (for backward compatibility)
+		apiProxy := app.proxyHandler(gatewayURL, "/api")
+		mux.Handle("/api/", apiProxy)
+		// Also proxy direct gateway endpoints
+		gatewayProxy := app.proxyHandler(gatewayURL, "")
+		mux.Handle("/gateway/", gatewayProxy)
 	}
 
 	mux.Handle("/assets/", http.StripPrefix("/assets/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
