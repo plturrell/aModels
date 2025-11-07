@@ -5,41 +5,392 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>aModels</title>
     <style>
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 16px; }
-      h1 { font-size: 16px; margin: 0 0 8px; }
-      p { margin: 0 0 12px; }
-      a { color: #0b67ff; text-decoration: none; }
+      * {
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        padding: 16px;
+        width: 380px;
+        background: #f7fafc;
+      }
+      
+      h1 {
+        font-size: 20px;
+        font-weight: 600;
+        margin: 0 0 4px 0;
+        color: #1a202c;
+      }
+      
+      .connection-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        margin-bottom: 16px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        background: white;
+      }
+      
+      .connection-status.connected {
+        color: #047857;
+        border: 1px solid #d1fae5;
+      }
+      
+      .connection-status.disconnected {
+        color: #991b1b;
+        border: 1px solid #fee2e2;
+      }
+      
+      .connection-status.checking {
+        color: #1e40af;
+        border: 1px solid #dbeafe;
+      }
+      
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      
+      .status-dot.connected {
+        background: #10b981;
+        box-shadow: 0 0 0 2px #d1fae5;
+      }
+      
+      .status-dot.disconnected {
+        background: #ef4444;
+        box-shadow: 0 0 0 2px #fee2e2;
+      }
+      
+      .status-dot.checking {
+        background: #3b82f6;
+        animation: pulse 2s ease-in-out infinite;
+      }
+      
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+      
+      .section {
+        background: white;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 12px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+      
+      .section h2 {
+        font-size: 14px;
+        font-weight: 600;
+        margin: 0 0 12px 0;
+        color: #2d3748;
+      }
+      
+      .actions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      
+      button {
+        width: 100%;
+        padding: 10px 16px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        background: white;
+        font-size: 14px;
+        font-weight: 500;
+        color: #2d3748;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-align: left;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      button:hover:not(:disabled) {
+        background: #f7fafc;
+        border-color: #cbd5e0;
+        transform: translateY(-1px);
+      }
+      
+      button:focus {
+        outline: 2px solid #667eea;
+        outline-offset: 2px;
+      }
+      
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      
+      button.primary {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+      }
+      
+      button.primary:hover:not(:disabled) {
+        background: #5a67d8;
+        border-color: #5a67d8;
+      }
+      
+      .button-icon {
+        font-size: 16px;
+      }
+      
+      .advanced-toggle {
+        text-align: center;
+        margin: 12px 0;
+      }
+      
+      .advanced-toggle button {
+        background: transparent;
+        border: none;
+        color: #667eea;
+        font-size: 13px;
+        padding: 8px;
+        justify-content: center;
+      }
+      
+      .advanced-toggle button:hover {
+        background: #eef2ff;
+        transform: none;
+      }
+      
+      .advanced-section {
+        display: none;
+      }
+      
+      .advanced-section.visible {
+        display: block;
+      }
+      
+      .chat-section {
+        background: white;
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+      
+      .chat-section label {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        color: #4a5568;
+        margin-bottom: 8px;
+      }
+      
+      .chat-section textarea {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 14px;
+        font-family: inherit;
+        resize: vertical;
+        min-height: 70px;
+      }
+      
+      .chat-section textarea:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+      
+      .chat-controls {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+      }
+      
+      .chat-controls input {
+        flex: 1;
+        padding: 8px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 13px;
+      }
+      
+      .chat-controls input:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+      
+      .chat-controls button {
+        width: auto;
+        padding: 8px 16px;
+      }
+      
+      #status {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        display: none;
+      }
+      
+      #status.visible {
+        display: block;
+      }
+      
+      #status.success {
+        background: #d1fae5;
+        color: #047857;
+        border: 1px solid #a7f3d0;
+      }
+      
+      #status.error {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+      }
+      
+      #status.loading {
+        background: #dbeafe;
+        color: #1e40af;
+        border: 1px solid #bfdbfe;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      
+      .spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid #3b82f6;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+        flex-shrink: 0;
+        margin-top: 2px;
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      
+      .footer {
+        text-align: center;
+        margin-top: 12px;
+      }
+      
+      .footer a {
+        color: #667eea;
+        text-decoration: none;
+        font-size: 13px;
+      }
+      
+      .footer a:hover {
+        text-decoration: underline;
+      }
     </style>
   </head>
   <body>
     <h1>aModels</h1>
-    <p>Check gateway health via Options → Gateway URL.</p>
-    <button id="check">Check Health</button>
-    <hr/>
-    <button id="run-ocr">Run Extract OCR (demo)</button>
-    <button id="run-sql" style="margin-left:6px">Run Data SQL (demo)</button>
-    <div style="margin-top:8px">
-      <button id="run-telemetry">Get Telemetry Recent</button>
-      <button id="run-agentflow" style="margin-left:6px">Run AgentFlow</button>
+    
+    <div class="connection-status checking" id="connection-status" role="status" aria-live="polite">
+      <div class="status-dot checking"></div>
+      <span>Checking connection...</span>
     </div>
-    <div style="margin-top:8px">
-      <button id="run-search">Search (OpenSearch)</button>
-      <button id="redis-set" style="margin-left:6px">Redis Set</button>
-      <button id="redis-get" style="margin-left:6px">Redis Get</button>
-    </div>
-    <div style="margin-top:8px">
-      <button id="open-browser">Open Layer4 Browser</button>
-    </div>
-    <hr/>
-    <div>
-      <label for="chat-prompt">LocalAI Prompt</label>
-      <textarea id="chat-prompt" rows="3" style="width:100%" placeholder="Ask something..."></textarea>
-      <div style="margin-top:6px">
-        <input id="chat-model" type="text" placeholder="model (e.g., gpt-3.5-turbo)" style="width:60%" />
-        <button id="chat-send" style="margin-left:6px">Send</button>
+    
+    <div class="section">
+      <h2>Quick Actions</h2>
+      <div class="actions">
+        <button id="run-ocr" aria-label="Extract text from images">
+          <span class="button-icon">📄</span>
+          <span>Extract Text</span>
+        </button>
+        <button id="run-sql" aria-label="Query your data with SQL">
+          <span class="button-icon">🔍</span>
+          <span>Query Data</span>
+        </button>
+        <button id="run-telemetry" aria-label="View recent telemetry data">
+          <span class="button-icon">📊</span>
+          <span>View Telemetry</span>
+        </button>
+        <button id="open-browser" aria-label="Open browser shell interface">
+          <span class="button-icon">🌐</span>
+          <span>Open Browser Shell</span>
+        </button>
       </div>
     </div>
-    <div id="status" style="margin-top:8px;color:#0b67ff"></div>
+    
+    <div class="advanced-toggle">
+      <button id="toggle-advanced" aria-label="Toggle advanced tools" aria-expanded="false">
+        <span id="toggle-text">Show Advanced Tools ▼</span>
+      </button>
+    </div>
+    
+    <div class="advanced-section" id="advanced-section">
+      <div class="section">
+        <h2>Advanced Tools</h2>
+        <div class="actions">
+          <button id="run-agentflow" aria-label="Run agent workflow">
+            <span class="button-icon">⚡</span>
+            <span>Run AgentFlow</span>
+          </button>
+          <button id="run-search" aria-label="Search using OpenSearch">
+            <span class="button-icon">🔎</span>
+            <span>OpenSearch Query</span>
+          </button>
+          <button id="redis-set" aria-label="Set value in Redis cache">
+            <span class="button-icon">💾</span>
+            <span>Redis Set</span>
+          </button>
+          <button id="redis-get" aria-label="Get value from Redis cache">
+            <span class="button-icon">📥</span>
+            <span>Redis Get</span>
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="chat-section">
+      <label for="chat-prompt">LocalAI Chat</label>
+      <textarea 
+        id="chat-prompt" 
+        placeholder="Ask a question..."
+        aria-label="Chat prompt input"
+      ></textarea>
+      <div class="chat-controls">
+        <input 
+          id="chat-model" 
+          type="text" 
+          placeholder="Model (default: gpt-3.5-turbo)"
+          aria-label="Model selection"
+        />
+        <button id="chat-send" class="primary" aria-label="Send chat message">
+          Send
+        </button>
+      </div>
+    </div>
+    
+    <div id="status" role="alert" aria-live="assertive"></div>
+    
+    <div class="footer">
+      <a href="#" id="settings-link" aria-label="Open extension settings">Settings</a>
+      <span style="color: #cbd5e0; margin: 0 8px;">•</span>
+      <a href="#" id="help-link" aria-label="View help documentation">Help</a>
+    </div>
+    
+    <!-- Phase 2: Design System & Enhanced Features -->
+    <link rel="stylesheet" href="design-system.css">
+    <link rel="stylesheet" href="command-palette.css">
+    <link rel="stylesheet" href="tooltips.css">
+    
+    <script src="errors.js"></script>
+    <script src="connection-manager.js"></script>
+    <script src="command-palette.js"></script>
+    <script src="tooltips.js"></script>
     <script src="popup.js"></script>
   </body>
   </html>

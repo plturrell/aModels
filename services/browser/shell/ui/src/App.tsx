@@ -10,6 +10,7 @@ import { FlowsModule } from "./modules/Flows/FlowsModule";
 import { TelemetryModule } from "./modules/Telemetry/TelemetryModule";
 import { SearchModule } from "./modules/Search/SearchModule";
 import { PerplexityModule } from "./modules/Perplexity/PerplexityModule";
+import { DMSModule } from "./modules/DMS/DMSModule";
 
 import styles from "./App.module.css";
 
@@ -19,6 +20,8 @@ const renderModule = (moduleId: ShellModuleId) => {
       return <LocalAIModule />;
     case "dms":
       return <DocumentsModule />;
+    case "dms-processing":
+      return <DMSModule />;
     case "flows":
       return <FlowsModule />;
     case "telemetry":

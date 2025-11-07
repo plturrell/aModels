@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Welcome to aModels</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        padding: 24px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      
+      .container {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        max-width: 480px;
+        width: 100%;
+        padding: 32px;
+      }
+      
+      .logo {
+        text-align: center;
+        font-size: 48px;
+        margin-bottom: 8px;
+      }
+      
+      h1 {
+        text-align: center;
+        font-size: 24px;
+        font-weight: 600;
+        margin: 0 0 8px 0;
+        color: #1a202c;
+      }
+      
+      .subtitle {
+        text-align: center;
+        color: #718096;
+        font-size: 14px;
+        margin: 0 0 32px 0;
+      }
+      
+      .step {
+        display: none;
+        animation: fadeIn 0.3s ease-in;
+      }
+      
+      .step.active {
+        display: block;
+      }
+      
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      
+      .step-indicator {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        margin-bottom: 24px;
+      }
+      
+      .step-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #e2e8f0;
+        transition: all 0.3s ease;
+      }
+      
+      .step-dot.active {
+        width: 24px;
+        border-radius: 4px;
+        background: #667eea;
+      }
+      
+      .feature-list {
+        list-style: none;
+        padding: 0;
+        margin: 24px 0;
+      }
+      
+      .feature-list li {
+        padding: 12px 0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 14px;
+        color: #4a5568;
+      }
+      
+      .feature-list li::before {
+        content: "✓";
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #e6fffa;
+        color: #047857;
+        font-weight: bold;
+        flex-shrink: 0;
+      }
+      
+      .input-group {
+        margin: 24px 0;
+      }
+      
+      label {
+        display: block;
+        font-size: 14px;
+        font-weight: 500;
+        color: #2d3748;
+        margin-bottom: 8px;
+      }
+      
+      input[type="text"] {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: border-color 0.2s ease;
+      }
+      
+      input[type="text"]:focus {
+        outline: none;
+        border-color: #667eea;
+      }
+      
+      .hint {
+        font-size: 12px;
+        color: #718096;
+        margin-top: 6px;
+      }
+      
+      .status {
+        margin: 16px 0;
+        padding: 12px;
+        border-radius: 8px;
+        font-size: 14px;
+        display: none;
+      }
+      
+      .status.visible {
+        display: block;
+      }
+      
+      .status.success {
+        background: #d1fae5;
+        color: #047857;
+        border: 1px solid #a7f3d0;
+      }
+      
+      .status.error {
+        background: #fee2e2;
+        color: #991b1b;
+        border: 1px solid #fecaca;
+      }
+      
+      .status.loading {
+        background: #dbeafe;
+        color: #1e40af;
+        border: 1px solid #bfdbfe;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      
+      .spinner {
+        width: 16px;
+        height: 16px;
+        border: 2px solid #3b82f6;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      
+      .buttons {
+        display: flex;
+        gap: 12px;
+        margin-top: 24px;
+      }
+      
+      button {
+        flex: 1;
+        padding: 12px 24px;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+      
+      button:focus {
+        outline: 2px solid #667eea;
+        outline-offset: 2px;
+      }
+      
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      
+      .btn-primary {
+        background: #667eea;
+        color: white;
+      }
+      
+      .btn-primary:hover:not(:disabled) {
+        background: #5a67d8;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+      }
+      
+      .btn-secondary {
+        background: #e2e8f0;
+        color: #4a5568;
+      }
+      
+      .btn-secondary:hover:not(:disabled) {
+        background: #cbd5e0;
+      }
+      
+      .success-icon {
+        font-size: 64px;
+        text-align: center;
+        margin: 24px 0;
+      }
+      
+      .link {
+        color: #667eea;
+        text-decoration: none;
+        font-weight: 500;
+      }
+      
+      .link:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="logo">🚀</div>
+      <h1>Welcome to aModels</h1>
+      <p class="subtitle">Let's get you set up in 3 quick steps</p>
+      
+      <div class="step-indicator">
+        <div class="step-dot active"></div>
+        <div class="step-dot"></div>
+        <div class="step-dot"></div>
+      </div>
+      
+      <!-- Step 1: Introduction -->
+      <div class="step active" id="step1">
+        <h2 style="font-size: 18px; margin-bottom: 16px;">What You Can Do</h2>
+        <ul class="feature-list">
+          <li>Extract data from any website automatically</li>
+          <li>Chat with LocalAI while browsing</li>
+          <li>Query your data without leaving the browser</li>
+          <li>Automate repetitive web tasks</li>
+        </ul>
+        <div class="buttons">
+          <button class="btn-primary" onclick="nextStep()" aria-label="Continue to gateway setup">
+            Get Started
+          </button>
+        </div>
+      </div>
+      
+      <!-- Step 2: Gateway Configuration -->
+      <div class="step" id="step2">
+        <h2 style="font-size: 18px; margin-bottom: 16px;">Connect to Gateway</h2>
+        <p style="color: #718096; font-size: 14px; margin-bottom: 24px;">
+          The gateway coordinates all aModels services. Enter its URL below.
+        </p>
+        
+        <div class="input-group">
+          <label for="gateway-url-input">Gateway URL</label>
+          <input 
+            type="text" 
+            id="gateway-url-input" 
+            value="http://localhost:8000"
+            placeholder="http://localhost:8000"
+            aria-label="Gateway URL input"
+          />
+          <div class="hint">Default: http://localhost:8000 (for local development)</div>
+        </div>
+        
+        <div class="status" id="connection-status">
+          <div class="spinner"></div>
+          <span>Testing connection...</span>
+        </div>
+        
+        <div class="buttons">
+          <button class="btn-secondary" onclick="prevStep()" aria-label="Go back to introduction">
+            Back
+          </button>
+          <button class="btn-primary" onclick="testConnection()" id="test-btn" aria-label="Test gateway connection">
+            Test Connection
+          </button>
+        </div>
+      </div>
+      
+      <!-- Step 3: Success -->
+      <div class="step" id="step3">
+        <div class="success-icon">✅</div>
+        <h2 style="font-size: 18px; margin-bottom: 16px; text-align: center;">You're All Set!</h2>
+        <p style="color: #718096; font-size: 14px; text-align: center; margin-bottom: 24px;">
+          Your gateway is connected and ready to use.
+        </p>
+        
+        <div style="background: #f7fafc; padding: 16px; border-radius: 8px; margin: 24px 0;">
+          <h3 style="font-size: 14px; margin: 0 0 12px 0; color: #2d3748;">Quick Tips</h3>
+          <ul style="margin: 0; padding-left: 20px; color: #4a5568; font-size: 13px;">
+            <li style="margin-bottom: 8px;">Click the extension icon to access tools</li>
+            <li style="margin-bottom: 8px;">Visit Settings to change the gateway URL anytime</li>
+            <li style="margin-bottom: 8px;">Check out <a href="https://github.com" class="link">the documentation</a> for guides</li>
+          </ul>
+        </div>
+        
+        <div class="buttons">
+          <button class="btn-primary" onclick="finish()" aria-label="Finish setup and close welcome screen">
+            Start Using aModels
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <script src="welcome.js"></script>
+  </body>
+</html>

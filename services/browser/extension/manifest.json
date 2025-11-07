@@ -1,16 +1,34 @@
 {
   "manifest_version": 3,
   "name": "aModels Tools",
-  "version": "0.0.1",
-  "description": "Layer4 tools in your browser via the unified gateway.",
+  "version": "0.2.0",
+  "description": "Browser automation and AI tools via the unified gateway.",
   "action": {
     "default_title": "aModels",
     "default_popup": "popup.html"
   },
   "options_page": "options.html",
-  "permissions": ["storage"],
+  "permissions": ["storage", "tabs"],
   "host_permissions": [
-    "http://localhost/*"
+    "http://localhost/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "welcome.html",
+        "welcome.js",
+        "errors.js",
+        "design-system.css",
+        "command-palette.js",
+        "command-palette.css",
+        "tooltips.js",
+        "tooltips.css",
+        "connection-manager.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
   ]
 }
 

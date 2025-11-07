@@ -50,6 +50,12 @@ const NAV_ITEMS: Array<{ id: ShellModuleId; label: string; description: string; 
     icon: DashboardIcon
   },
   {
+    id: "dms-processing",
+    label: "DMS Processing",
+    description: "Document processing & intelligence",
+    icon: DescriptionIcon
+  },
+  {
     id: "home",
     label: "Home",
     description: "Overview and quick links",
