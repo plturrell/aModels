@@ -33,6 +33,10 @@ async def upload_document(
 async def list_documents(
     db: AsyncSession = Depends(get_db_session),
 ) -> List[DocumentRead]:
+    """
+    List all documents, ordered by creation date (newest first).
+    Returns up to 50 most recent documents.
+    """
     result = await db.execute(
         select(Document).order_by(Document.created_at.desc()).limit(50)
     )

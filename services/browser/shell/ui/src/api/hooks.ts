@@ -21,8 +21,8 @@ export interface DocumentRecord {
   storage_path: string;
   catalog_identifier?: string | null;
   extraction_summary?: string | null;
-  created_at: string;
-  updated_at: string;
+  created_at: string; // ISO 8601 datetime string from FastAPI
+  updated_at: string; // ISO 8601 datetime string from FastAPI
 }
 
 export function useDocuments() {

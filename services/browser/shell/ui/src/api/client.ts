@@ -3,17 +3,58 @@ import { useEffect, useMemo, useState } from "react";
 export const API_BASE = import.meta.env.VITE_SHELL_API ?? "";
 
 async function fetchJSON<T>(endpoint: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    headers: { Accept: "application/json" },
-    ...init
-  });
+  const url = `${API_BASE}${endpoint}`;
+  
+  try {
+    const response = await fetch(url, {
+      headers: { 
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...init?.headers
+      },
+      ...init
+    });
 
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`Request failed (${response.status}): ${message}`);
+    if (!response.ok) {
+      let errorMessage = `Request failed (${response.status})`;
+      try {
+        const errorText = await response.text();
+        if (errorText) {
+          // Try to parse as JSON for structured error messages
+          try {
+            const errorJson = JSON.parse(errorText);
+            errorMessage = errorJson.detail || errorJson.message || errorText;
+          } catch {
+            errorMessage = errorText;
+          }
+        }
+      } catch {
+        errorMessage = `HTTP ${response.status} ${response.statusText}`;
+      }
+      throw new Error(errorMessage);
+    }
+
+    // Handle empty responses
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      const text = await response.text();
+      if (!text.trim()) {
+        return null as T;
+      }
+      return JSON.parse(text) as T;
+    }
+
+    return (await response.json()) as T;
+  } catch (error) {
+    if (error instanceof Error) {
+      // Enhance network errors with more context
+      if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
+        throw new Error(`Network error: Unable to reach ${url}. Check if the service is running and accessible.`);
+      }
+      throw error;
+    }
+    throw new Error(`Unexpected error: ${String(error)}`);
   }
-
-  return (await response.json()) as T;
 }
 
 export interface ApiState<T> {

@@ -149,7 +149,25 @@ export function DocumentsModule() {
 
           {error ? (
             <Alert severity="error" sx={{ mt: 2 }}>
-              Unable to load documents: {error.message}
+              <Typography variant="body2" fontWeight={500} gutterBottom>
+                Unable to load documents
+              </Typography>
+              <Typography variant="body2" component="pre" sx={{ 
+                fontSize: '0.75rem', 
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                mb: 0
+              }}>
+                {error.message}
+              </Typography>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={refresh}
+                sx={{ mt: 1 }}
+              >
+                Retry
+              </Button>
             </Alert>
           ) : null}
 
