@@ -27,6 +27,8 @@ import (
 	"github.com/plturrell/aModels/services/catalog/streaming"
 	"github.com/plturrell/aModels/services/catalog/triplestore"
 	"github.com/plturrell/aModels/services/catalog/workflows"
+	"github.com/plturrell/aModels/services/catalog/integration"
+	"github.com/plturrell/aModels/pkg/sap"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -649,6 +651,62 @@ func main() {
 		mux.HandleFunc("/catalog/ws", wsHandler.HandleWebSocket)
 		mux.HandleFunc("/catalog/ws/subscribe", wsHandler.HandleWebSocketSubscribe)
 		structLogger.Info("WebSocket endpoints registered", nil)
+	}
+
+	// HANA Cloud inbound integration endpoints
+	hanaHost := os.Getenv("HANA_HOST")
+	hanaUser := os.Getenv("HANA_USER")
+	hanaPassword := os.Getenv("HANA_PASSWORD")
+	hanaDatabase := os.Getenv("HANA_DATABASE")
+	hanaSchema := os.Getenv("HANA_SCHEMA")
+	extractServiceURL := os.Getenv("EXTRACT_SERVICE_URL")
+	trainingServiceURL := os.Getenv("TRAINING_SERVICE_URL")
+	localaiURL := os.Getenv("LOCALAI_URL")
+	searchServiceURL := os.Getenv("SEARCH_SERVICE_URL")
+
+	if hanaHost != "" && hanaUser != "" && hanaPassword != "" {
+		hanaConfig := sap.HANAConfig{
+			Host:     hanaHost,
+			Port:     getEnvOrDefault("HANA_PORT", "39015"),
+			User:     hanaUser,
+			Password: hanaPassword,
+			Database: hanaDatabase,
+			Schema:   hanaSchema,
+			Encrypt:  os.Getenv("HANA_ENCRYPT") == "true",
+		}
+
+		hanaClient, err := sap.NewHANAClient(hanaConfig)
+		if err != nil {
+			structLogger.Error("Failed to initialize HANA client", err, nil)
+		} else {
+			hanaIntegration := integration.NewHANAInboundIntegration(
+				hanaClient,
+				extractServiceURL,
+				trainingServiceURL,
+				localaiURL,
+				searchServiceURL,
+				privacyDomainIntegration,
+				legacyLogger,
+			)
+
+			hanaHandler := api.NewHANAInboundHandler(hanaIntegration, legacyLogger)
+
+			// Register HANA inbound endpoints with authentication
+			mux.Handle("/catalog/integration/hana/process", 
+				authMiddleware(http.HandlerFunc(hanaHandler.HandleProcessHANATables)))
+			mux.HandleFunc("/catalog/integration/hana/status/", hanaHandler.HandleGetStatus)
+
+			structLogger.Info("HANA Cloud inbound integration endpoints registered", map[string]interface{}{
+				"endpoints": []string{
+					"POST /catalog/integration/hana/process",
+					"GET /catalog/integration/hana/status/:request_id",
+				},
+				"hana_host": hanaHost,
+				"hana_schema": hanaSchema,
+			})
+		}
+	} else {
+		structLogger.Info("HANA Cloud integration not configured (HANA_HOST, HANA_USER, HANA_PASSWORD required)", nil)
 	}
 
 	// Apply authentication middleware to protected endpoints (mandatory in production)
