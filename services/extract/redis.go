@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"strings"
 	"time"
 
@@ -35,7 +34,7 @@ func NewRedisPersistence(addr, password string, db int) (*RedisPersistence, erro
 // SaveVector saves a vector to Redis with metadata.
 func (p *RedisPersistence) SaveVector(key string, vector []float32, metadata map[string]any) error {
 	ctx := context.Background()
-	
+
 	// Serialize the vector to JSON
 	jsonVector, err := json.Marshal(vector)
 	if err != nil {
@@ -67,7 +66,7 @@ func (p *RedisPersistence) SaveVector(key string, vector []float32, metadata map
 // GetVector retrieves a vector and metadata from Redis.
 func (p *RedisPersistence) GetVector(key string) ([]float32, map[string]any, error) {
 	ctx := context.Background()
-	
+
 	result, err := p.client.HMGet(ctx, key, "vector", "metadata").Result()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get vector: %w", err)
@@ -106,7 +105,7 @@ func (p *RedisPersistence) GetVector(key string) ([]float32, map[string]any, err
 // This is a fallback implementation - for production use pgvector or OpenSearch.
 func (p *RedisPersistence) SearchSimilar(queryVector []float32, artifactType string, limit int, threshold float32) ([]VectorSearchResult, error) {
 	ctx := context.Background()
-	
+
 	// SCAN for all keys matching pattern
 	pattern := "*"
 	if artifactType != "" {
@@ -125,7 +124,7 @@ func (p *RedisPersistence) SearchSimilar(queryVector []float32, artifactType str
 	// Calculate cosine similarity for each vector
 	type scoredResult struct {
 		result VectorSearchResult
-		score   float32
+		score  float32
 	}
 	scoredResults := []scoredResult{}
 
@@ -143,7 +142,7 @@ func (p *RedisPersistence) SearchSimilar(queryVector []float32, artifactType str
 		}
 
 		// Calculate cosine similarity
-		score := cosineSimilarity(queryVector, vector)
+		score := float32(cosineSimilarity(queryVector, vector))
 		if score >= threshold {
 			artifactType := ""
 			artifactID := ""
@@ -201,7 +200,7 @@ func (p *RedisPersistence) SearchSimilar(queryVector []float32, artifactType str
 // This is a basic implementation - for production use OpenSearch.
 func (p *RedisPersistence) SearchByText(query string, artifactType string, limit int) ([]VectorSearchResult, error) {
 	ctx := context.Background()
-	
+
 	pattern := "*"
 	if artifactType != "" {
 		pattern = fmt.Sprintf("%s:*", artifactType)
@@ -270,12 +269,12 @@ func (p *RedisPersistence) SearchByText(query string, artifactType string, limit
 
 			results = append(results, VectorSearchResult{
 				Key:          key,
-				ArtifactType:  artifactType,
-				ArtifactID:    artifactID,
-				Vector:        vector,
-				Metadata:      metadata,
-				Score:         1.0, // Text match doesn't have similarity score
-				Text:          text,
+				ArtifactType: artifactType,
+				ArtifactID:   artifactID,
+				Vector:       vector,
+				Metadata:     metadata,
+				Score:        1.0, // Text match doesn't have similarity score
+				Text:         text,
 			})
 
 			if limit > 0 && len(results) >= limit {
@@ -285,26 +284,6 @@ func (p *RedisPersistence) SearchByText(query string, artifactType string, limit
 	}
 
 	return results, nil
-}
-
-// cosineSimilarity calculates cosine similarity between two vectors
-func cosineSimilarity(a, b []float32) float32 {
-	if len(a) != len(b) {
-		return 0.0
-	}
-
-	var dotProduct, normA, normB float32
-	for i := 0; i < len(a); i++ {
-		dotProduct += a[i] * b[i]
-		normA += a[i] * a[i]
-		normB += b[i] * b[i]
-	}
-
-	if normA == 0 || normB == 0 {
-		return 0.0
-	}
-
-	return dotProduct / (float32(math.Sqrt(float64(normA))) * float32(math.Sqrt(float64(normB))))
 }
 
 // SaveSchema stores graph nodes and edges as JSON payloads under deterministic keys.

@@ -25,3 +25,5 @@ localai/logs/
 localai/tmp/
 
 .gocache/
+# Node dependencies
+node_modules/

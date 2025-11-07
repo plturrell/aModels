@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 )
 
 // Project represents a project in the catalog.
@@ -28,11 +27,11 @@ type InformationSystem struct {
 
 // Catalog represents the entire catalog of projects, systems, and information systems.
 type Catalog struct {
-	Projects           []Project                       `json:"projects"`
-	Systems            []System                        `json:"systems"`
-	InformationSystems []InformationSystem             `json:"information_systems"`
-	PetriNets          map[string]any                  `json:"petri_nets,omitempty"` // Petri net workflows
-	SignavioProcesses  map[string]SignavioCatalogEntry `json:"signavio_processes,omitempty"`
+	Projects           []Project                         `json:"projects"`
+	Systems            []System                          `json:"systems"`
+	InformationSystems []InformationSystem               `json:"information_systems"`
+	PetriNets          map[string]any                    `json:"petri_nets,omitempty"` // Petri net workflows
+	SignavioProcesses  map[string]SignavioProcessSummary `json:"signavio_processes,omitempty"`
 
 	mu       sync.RWMutex
 	filePath string
@@ -136,31 +135,43 @@ func (c *Catalog) EnsureInformationSystem(id, name string) bool {
 	return true
 }
 
-// SignavioCatalogEntry captures metadata for Signavio processes persisted in the catalog.
-type SignavioCatalogEntry struct {
-	Name      string    `json:"name"`
-	Source    string    `json:"source,omitempty"`
-	TaskCount int       `json:"task_count"`
-	LaneCount int       `json:"lane_count"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
-// UpdateSignavioProcess upserts a Signavio process entry in the catalog.
-func (c *Catalog) UpdateSignavioProcess(id string, entry SignavioCatalogEntry) {
-	id = strings.TrimSpace(id)
-	if id == "" {
+// UpsertSignavioProcess stores or updates a Signavio process summary in the catalog.
+func (c *Catalog) UpsertSignavioProcess(summary SignavioProcessSummary) {
+	if strings.TrimSpace(summary.ID) == "" {
 		return
 	}
 
-	if entry.Name = strings.TrimSpace(entry.Name); entry.Name == "" {
-		entry.Name = id
-	}
-	entry.UpdatedAt = time.Now().UTC()
-
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	if c.SignavioProcesses == nil {
-		c.SignavioProcesses = make(map[string]SignavioCatalogEntry)
+		c.SignavioProcesses = make(map[string]SignavioProcessSummary)
 	}
-	c.SignavioProcesses[id] = entry
+
+	// Merge with existing entry to preserve richer metadata if available.
+	if existing, exists := c.SignavioProcesses[summary.ID]; exists {
+		if summary.Name == "" {
+			summary.Name = existing.Name
+		}
+		if summary.SourceFile == "" {
+			summary.SourceFile = existing.SourceFile
+		}
+		if summary.ElementCount == 0 {
+			summary.ElementCount = existing.ElementCount
+		}
+		if len(summary.ElementTypes) == 0 {
+			summary.ElementTypes = existing.ElementTypes
+		}
+		if len(summary.Elements) == 0 {
+			summary.Elements = existing.Elements
+		}
+		if len(summary.Properties) == 0 {
+			summary.Properties = existing.Properties
+		}
+		if len(summary.Labels) == 0 {
+			summary.Labels = existing.Labels
+		}
+	}
+
+	c.SignavioProcesses[summary.ID] = summary
 }

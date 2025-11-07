@@ -145,7 +145,6 @@ func (mme *MultiModalExtractor) GenerateUnifiedEmbeddings(
 	columnsJSON, _ := json.Marshal(columns)
 
 	args := []string{
-		"./scripts/unified_multimodal_extraction.py",
 		"--mode", "embed",
 	}
 	if text != "" {
@@ -159,7 +158,7 @@ func (mme *MultiModalExtractor) GenerateUnifiedEmbeddings(
 		args = append(args, "--columns", string(columnsJSON))
 	}
 
-	cmd := exec.Command("python3", args...)
+	cmd := exec.Command("python3", append([]string{"./scripts/unified_multimodal_extraction.py"}, args...)...)
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -194,7 +193,6 @@ func (mme *MultiModalExtractor) ExtractUnified(
 	columnsJSON, _ := json.Marshal(columns)
 
 	args := []string{
-		"./scripts/unified_multimodal_extraction.py",
 		"--mode", "unified",
 	}
 	if imagePath != "" {
@@ -217,7 +215,7 @@ func (mme *MultiModalExtractor) ExtractUnified(
 		args = append(args, "--training-data", trainingDataPath)
 	}
 
-	cmd := exec.Command("python3", args...)
+	cmd := exec.Command("python3", append([]string{"./scripts/unified_multimodal_extraction.py"}, args...)...)
 
 	output, err := cmd.Output()
 	if err != nil {

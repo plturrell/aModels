@@ -26,7 +26,7 @@ func NewAdvancedWorkflowConverter(logger *log.Logger) *AdvancedWorkflowConverter
 		enableParallelExecution: os.Getenv("ENABLE_PARALLEL_WORKFLOWS") == "true",
 		enableCheckpointing:     os.Getenv("ENABLE_WORKFLOW_CHECKPOINTING") == "true",
 		enableDynamicSpawning:   os.Getenv("ENABLE_DYNAMIC_AGENT_SPAWNING") == "true",
-		maxParallelAgents:       parseEnvIntValue(os.Getenv("MAX_PARALLEL_AGENTS"), 10),
+		maxParallelAgents:       parseIntEnv(os.Getenv("MAX_PARALLEL_AGENTS"), 10),
 		checkpointInterval:      parseDurationEnv(os.Getenv("WORKFLOW_CHECKPOINT_INTERVAL"), 30*time.Second),
 	}
 }
@@ -34,19 +34,20 @@ func NewAdvancedWorkflowConverter(logger *log.Logger) *AdvancedWorkflowConverter
 // ConvertPetriNetToAdvancedLangGraph converts a Petri net to an advanced LangGraph workflow
 // with multi-agent support, parallel execution, and checkpointing.
 func (awc *AdvancedWorkflowConverter) ConvertPetriNetToAdvancedLangGraph(net *PetriNet) *AdvancedLangGraphWorkflow {
-	baseWorkflow := awc.ConvertPetriNetToLangGraph(net)
 	workflow := &AdvancedLangGraphWorkflow{
-		LangGraphWorkflow: *baseWorkflow,
+		LangGraphWorkflow: *awc.ConvertPetriNetToLangGraph(net),
 		ParallelBranches:  []ParallelBranch{},
 		Checkpoints:       []Checkpoint{},
 		AgentGroups:       []AgentGroup{},
 	}
-	workflow.Metadata = map[string]any{
-		"advanced_features": map[string]any{
-			"parallel_execution": awc.enableParallelExecution,
-			"checkpointing":      awc.enableCheckpointing,
-			"dynamic_spawning":   awc.enableDynamicSpawning,
-		},
+
+	if workflow.Metadata == nil {
+		workflow.Metadata = make(map[string]any)
+	}
+	workflow.Metadata["advanced_features"] = map[string]any{
+		"parallel_execution": awc.enableParallelExecution,
+		"checkpointing":      awc.enableCheckpointing,
+		"dynamic_spawning":   awc.enableDynamicSpawning,
 	}
 
 	// Identify parallel branches (transitions that can run concurrently)
@@ -284,7 +285,6 @@ func (awc *AdvancedWorkflowConverter) shouldSpawnDynamically(transition *Transit
 	return false
 }
 
-// Helper functions
 func parseDurationEnv(envVar string, defaultValue time.Duration) time.Duration {
 	if envVar == "" {
 		return defaultValue

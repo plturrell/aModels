@@ -1,14 +1,13 @@
 package main
 
 import (
-	stdctx "context"
+	stdcontext "context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"regexp"
-	"slices"
 	"sort"
 	"strings"
 )
@@ -20,6 +19,16 @@ type AdvancedExtractionResult struct {
 	HardcodedLists        []HardcodedList        `json:"hardcoded_lists"`
 	TableClassifications  []TableClassification  `json:"table_classifications"`
 	TestingEndpoints      []TestingEndpoint      `json:"testing_endpoints"`
+}
+
+// TableProcessSequence represents the sequence/order of table processing.
+type TableProcessSequence struct {
+	SequenceID   string   `json:"sequence_id"`
+	Tables       []string `json:"tables"`      // Ordered list of tables
+	SourceType   string   `json:"source_type"` // sql, controlm, ddl, etc.
+	SourceFile   string   `json:"source_file"`
+	SequenceType string   `json:"sequence_type"` // insert, update, select, etc.
+	Order        int      `json:"order"`         // Processing order
 }
 
 // CodeParameter represents a parameter found in code.
@@ -41,6 +50,17 @@ type HardcodedList struct {
 	SourceFile string   `json:"source_file"`
 	Type       string   `json:"type"` // IN clause, enum, constant list, etc.
 	Context    string   `json:"context"`
+}
+
+// TableClassification classifies a table as transaction or reference.
+// Phase 5: Extended with Props for quality scores and review flags.
+type TableClassification struct {
+	TableName      string         `json:"table_name"`
+	Classification string         `json:"classification"`  // transaction, reference, lookup, staging, etc.
+	Confidence     float64        `json:"confidence"`      // 0.0 to 1.0
+	Evidence       []string       `json:"evidence"`        // Reasons for classification
+	Patterns       []string       `json:"patterns"`        // Patterns that led to classification
+	Props          map[string]any `json:"props,omitempty"` // Phase 5: Additional properties (quality_score, needs_review)
 }
 
 // TestingEndpoint represents a testing/test endpoint.
@@ -386,7 +406,7 @@ func (ae *AdvancedExtractor) classifyTable(tableName, context, sourceID string) 
 
 	// Phase 10: Try LNN-based classification if available
 	if ae.terminologyLearner != nil {
-		ctx := stdctx.Background()
+		ctx := stdcontext.Background()
 		domain, domainConf := ae.terminologyLearner.InferDomain(ctx, tableName, tableName, map[string]any{"context": context})
 
 		// Map domain to table classification
@@ -527,6 +547,10 @@ func (ae *AdvancedExtractor) extractTableSequencesFromControlM(controlMContent, 
 	// Control-M files contain job dependencies which indicate processing order
 	// Look for job dependencies and extract table references from job commands
 
+	// Pattern: Job dependencies indicate sequence
+	dependencyPattern := regexp.MustCompile(`(?i)(?:wait|depend|after)\s*[=:]\s*(\w+)`)
+	_ = dependencyPattern.FindAllStringSubmatch(controlMContent, -1)
+
 	// Extract table names from SQL commands in jobs
 	tablePattern := regexp.MustCompile(`(?i)(?:table|from|into|update)\s+(\w+)`)
 	tableMatches := tablePattern.FindAllStringSubmatch(controlMContent, -1)
@@ -535,7 +559,7 @@ func (ae *AdvancedExtractor) extractTableSequencesFromControlM(controlMContent, 
 	for _, match := range tableMatches {
 		if len(match) >= 2 {
 			tableName := match[1]
-			if !slices.Contains(tables, tableName) {
+			if !containsString(tables, tableName) {
 				tables = append(tables, tableName)
 			}
 		}
@@ -716,59 +740,74 @@ func (ae *AdvancedExtractor) classifyTableWithAdvancedSAPRPT(tableName, context,
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
-			Source:         sourceID,
 		}, 0.0, false
 	}
 
-	var response map[string]any
-	if err := json.Unmarshal(output, &response); err != nil {
+	var payload map[string]any
+	if err := json.Unmarshal(output, &payload); err != nil {
 		return TableClassification{
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
-			Source:         sourceID,
 		}, 0.0, false
 	}
 
 	classification := "unknown"
-	if cls, ok := response["classification"].(string); ok {
+	if cls, ok := payload["classification"].(string); ok {
 		classification = cls
 	}
 
 	confidence := 0.0
-	if conf, ok := response["classification_confidence"].(float64); ok {
+	if conf, ok := payload["classification_confidence"].(float64); ok {
 		confidence = conf
 	}
 
 	qualityScore := 0.0
-	if qs, ok := response["quality_score"].(float64); ok {
+	if qs, ok := payload["quality_score"].(float64); ok {
 		qualityScore = qs
 	}
 
 	needsReview := false
-	if nr, ok := response["needs_review"].(bool); ok {
+	if nr, ok := payload["needs_review"].(bool); ok {
 		needsReview = nr
 	}
 
 	evidence := []string{}
-	if ev, ok := response["uncertainty_reason"].(string); ok && ev != "" {
+	if ev, ok := payload["uncertainty_reason"].(string); ok && ev != "" {
 		evidence = append(evidence, ev)
 	}
-	if method, ok := response["method"].(string); ok {
+	if method, ok := payload["method"].(string); ok {
 		evidence = append(evidence, fmt.Sprintf("Method: %s", method))
 	}
 
-	classificationResult := TableClassification{
+	result := TableClassification{
 		TableName:      tableName,
 		Classification: classification,
 		Confidence:     confidence,
 		Evidence:       evidence,
-		Source:         sourceID,
-		Props:          make(map[string]any),
+		Props: map[string]any{
+			"source":  sourceID,
+			"context": context,
+		},
 	}
-	classificationResult.Props["quality_score"] = qualityScore
-	classificationResult.Props["needs_review"] = needsReview
-	return classificationResult, qualityScore, needsReview
+	result.Props["quality_score"] = qualityScore
+	result.Props["needs_review"] = needsReview
+	return result, qualityScore, needsReview
+}
+
+// classifyTableWithSAPRPT provides a lightweight fallback when SAP-RPT tooling is not available.
+func (ae *AdvancedExtractor) classifyTableWithSAPRPT(tableName, context, sourceID string) TableClassification {
+	return TableClassification{
+		TableName:      tableName,
+		Classification: "unknown",
+		Confidence:     0.0,
+		Evidence:       []string{"sap-rpt lightweight classifier unavailable"},
+		Patterns:       []string{},
+		Props: map[string]any{
+			"source":  sourceID,
+			"context": context,
+		},
+	}
 }
 
 // classifyTableWithFullSAPRPT calls the Python script to classify using full SAP_RPT_OSS_Classifier with training data
@@ -796,7 +835,6 @@ func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sou
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
-			Source:         sourceID,
 		}
 	}
 
@@ -816,34 +854,38 @@ func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sou
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
-			Source:         sourceID,
-			Props:          make(map[string]any),
+			Props: map[string]any{
+				"source":  sourceID,
+				"context": context,
+			},
 		}
 	}
 
-	var result map[string]any
-	if err := json.Unmarshal(output, &result); err != nil {
+	var payload map[string]any
+	if err := json.Unmarshal(output, &payload); err != nil {
 		return TableClassification{
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
-			Source:         sourceID,
-			Props:          make(map[string]any),
+			Props: map[string]any{
+				"source":  sourceID,
+				"context": context,
+			},
 		}
 	}
 
 	classification := "unknown"
-	if cls, ok := result["classification"].(string); ok {
+	if cls, ok := payload["classification"].(string); ok {
 		classification = cls
 	}
 
 	confidence := 0.0
-	if conf, ok := result["confidence"].(float64); ok {
+	if conf, ok := payload["confidence"].(float64); ok {
 		confidence = conf
 	}
 
 	evidence := []string{}
-	if ev, ok := result["evidence"].([]interface{}); ok {
+	if ev, ok := payload["evidence"].([]interface{}); ok {
 		for _, e := range ev {
 			if str, ok := e.(string); ok {
 				evidence = append(evidence, str)
@@ -856,8 +898,10 @@ func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sou
 		Classification: classification,
 		Confidence:     confidence,
 		Evidence:       evidence,
-		Source:         sourceID,
-		Props:          make(map[string]any),
+		Props: map[string]any{
+			"source":  sourceID,
+			"context": context,
+		},
 	}
 }
 
@@ -878,23 +922,11 @@ func parseValueList(valuesStr string) []string {
 	return values
 }
 
-// containsAny returns true if s contains any of the substrings in patterns
-func containsAny(s string, patterns []string) bool {
-	for _, p := range patterns {
-		if strings.Contains(s, p) {
+func containsAny(str string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if strings.Contains(str, pattern) {
 			return true
 		}
 	}
 	return false
-}
-
-// classifyTableWithSAPRPT provides a basic fallback if full SAP-RPT classifier is unavailable
-func (ae *AdvancedExtractor) classifyTableWithSAPRPT(tableName, context, sourceID string) TableClassification {
-	return TableClassification{
-		TableName:      tableName,
-		Classification: "unknown",
-		Confidence:     0.0,
-		Evidence:       []string{"sap-rpt fallback used"},
-		Patterns:       []string{},
-	}
 }

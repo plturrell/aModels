@@ -66,23 +66,6 @@ func (mp *MathematicalProcessor) ComputeStatistics(values []float64) map[string]
 	return stats
 }
 
-// sqrt computes square root (simplified implementation)
-func sqrt(x float64) float64 {
-	if x < 0 {
-		return 0
-	}
-	if x == 0 {
-		return 0
-	}
-
-	// Newton's method approximation
-	guess := x
-	for i := 0; i < 10; i++ {
-		guess = (guess + x/guess) / 2
-	}
-	return guess
-}
-
 // ComputeCorrelation computes correlation coefficient between two datasets
 func (mp *MathematicalProcessor) ComputeCorrelation(x, y []float64) float64 {
 	if !mp.enabled || len(x) != len(y) || len(x) == 0 {
