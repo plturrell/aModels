@@ -202,11 +202,11 @@ func (m *manager) initNeo4j() error {
 	}
 	username := os.Getenv("NEO4J_USERNAME")
 	if username == "" {
-		username = "neo4j"
+		return fmt.Errorf("NEO4J_USERNAME environment variable is required and cannot be empty")
 	}
 	password := os.Getenv("NEO4J_PASSWORD")
 	if password == "" {
-		password = "password"
+		return fmt.Errorf("NEO4J_PASSWORD environment variable is required and cannot be empty")
 	}
 
 	driver, err := neo4j.NewDriverWithContext(raw, neo4j.BasicAuth(username, password, ""))

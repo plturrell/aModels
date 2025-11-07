@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -29,12 +30,54 @@ type APIError struct {
 	Timestamp string `json:"timestamp"`
 }
 
+// sanitizeError sanitizes error messages to prevent information leakage.
+// Removes sensitive information like passwords, tokens, database structure, etc.
+func sanitizeError(err error, statusCode int) string {
+	if err == nil {
+		return ""
+	}
+
+	errMsg := err.Error()
+	
+	// For 5xx errors, don't expose internal details to clients
+	if statusCode >= 500 {
+		// Check for sensitive keywords
+		sensitiveKeywords := []string{
+			"password", "credential", "token", "secret", "key",
+			"database", "connection", "sql", "query",
+			"file", "path", "directory",
+		}
+		
+		lowerMsg := strings.ToLower(errMsg)
+		for _, keyword := range sensitiveKeywords {
+			if strings.Contains(lowerMsg, keyword) {
+				return "An internal error occurred. Please contact support if this persists."
+			}
+		}
+		
+		// For other 5xx errors, return generic message
+		return "An internal server error occurred."
+	}
+	
+	// For 4xx errors, we can be more specific but still sanitize
+	// Remove potential file paths, connection strings, etc.
+	if strings.Contains(errMsg, "://") {
+		// Likely contains URLs/connection strings
+		return "Invalid request. Please check your input."
+	}
+	
+	return errMsg
+}
+
 // HandleError handles an error and writes an appropriate response.
 func (eh *ErrorHandler) HandleError(w http.ResponseWriter, r *http.Request, err error, statusCode int) {
+	// Sanitize error details before sending to client
+	sanitizedDetails := sanitizeError(err, statusCode)
+	
 	apiErr := APIError{
 		Code:      statusCode,
 		Message:   http.StatusText(statusCode),
-		Details:   err.Error(),
+		Details:   sanitizedDetails,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 

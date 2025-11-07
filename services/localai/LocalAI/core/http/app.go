@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/dave-gray101/v2keyauth"
 	"github.com/gofiber/websocket/v2"
@@ -183,13 +184,38 @@ func API(application *application.Application) (*fiber.App, error) {
 
 	if application.ApplicationConfig().CORS {
 		var c func(ctx *fiber.Ctx) error
-		if application.ApplicationConfig().CORSAllowOrigins == "" {
-			c = cors.New()
+		allowedOrigins := application.ApplicationConfig().CORSAllowOrigins
+		
+		// Security: Require explicit origins in production
+		// Empty CORSAllowOrigins defaults to allowing all origins, which is insecure
+		if allowedOrigins == "" {
+			// In production, fail if CORS is enabled without explicit origins
+			if os.Getenv("ENVIRONMENT") == "production" || os.Getenv("ENV") == "production" {
+				log.Error().Msg("CORS is enabled but CORS_ALLOW_ORIGINS is not set. This is insecure in production. Please set CORS_ALLOW_ORIGINS to specific allowed origins.")
+				// Disable CORS in production if origins are not specified
+				log.Warn().Msg("Disabling CORS due to missing CORS_ALLOW_ORIGINS in production")
+			} else {
+				// Development: warn but allow (for local development only)
+				log.Warn().Msg("CORS_ALLOW_ORIGINS not set - allowing all origins (INSECURE - only for development)")
+				c = cors.New()
+			}
 		} else {
-			c = cors.New(cors.Config{AllowOrigins: application.ApplicationConfig().CORSAllowOrigins})
+			// Parse comma-separated origins
+			origins := strings.Split(allowedOrigins, ",")
+			for i := range origins {
+				origins[i] = strings.TrimSpace(origins[i])
+			}
+			c = cors.New(cors.Config{
+				AllowOrigins:     strings.Join(origins, ","),
+				AllowCredentials: false, // Disable credentials when using multiple origins
+				AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
+				AllowHeaders:     "Origin,Content-Type,Accept,Authorization",
+			})
 		}
 
-		router.Use(c)
+		if c != nil {
+			router.Use(c)
+		}
 	}
 
 	if application.ApplicationConfig().CSRF {

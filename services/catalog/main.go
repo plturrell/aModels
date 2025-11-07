@@ -51,11 +51,13 @@ func main() {
 	}
 	neo4jUsername := os.Getenv("NEO4J_USERNAME")
 	if neo4jUsername == "" {
-		neo4jUsername = "neo4j"
+		structLogger.Error("NEO4J_USERNAME environment variable is required", nil, nil)
+		os.Exit(1)
 	}
 	neo4jPassword := os.Getenv("NEO4J_PASSWORD")
 	if neo4jPassword == "" {
-		neo4jPassword = "password"
+		structLogger.Error("NEO4J_PASSWORD environment variable is required", nil, nil)
+		os.Exit(1)
 	}
 
 	baseURI := os.Getenv("CATALOG_BASE_URI")
@@ -378,10 +380,16 @@ func main() {
 		structLogger.Info("Advanced handlers initialized", nil)
 	}
 
-	// Initialize auth middleware
-	authMiddleware := security.NewAuthMiddleware(legacyLogger)
-	// Register default token for testing (in production, load from config)
-	authMiddleware.RegisterToken("test-token", "test-user")
+	// Initialize JWT auth middleware (required for production)
+	jwtAuthMiddleware, err := security.NewJWTAuthMiddleware(legacyLogger)
+	if err != nil {
+		structLogger.Error("Failed to initialize JWT auth middleware", err, nil)
+		os.Exit(1)
+	}
+	structLogger.Info("JWT authentication middleware initialized", map[string]interface{}{
+		"token_expiry":   "15m",
+		"refresh_expiry": "7d",
+	})
 
 	// Initialize production readiness middleware
 	errorHandler := api.NewErrorHandler(legacyLogger)
@@ -615,15 +623,22 @@ func main() {
 		structLogger.Info("WebSocket endpoints registered", nil)
 	}
 
-	// Apply auth middleware to protected endpoints (optional - can be enabled via env var)
-	useAuth := os.Getenv("ENABLE_AUTH") == "true"
-	if useAuth {
-		protectedMux := http.NewServeMux()
-		protectedMux.HandleFunc("/catalog/data-elements", catalogHandlers.HandleCreateDataElement)
-		protectedMux.HandleFunc("/catalog/data-products/build", dataProductHandler.HandleBuildDataProduct)
-		mux.Handle("/catalog/", authMiddleware.Middleware(protectedMux))
-		structLogger.Info("Authentication enabled", nil)
-	}
+	// Apply JWT auth middleware to protected endpoints (mandatory in production)
+	// In production, authentication is always required
+	protectedMux := http.NewServeMux()
+	protectedMux.HandleFunc("/catalog/data-elements", catalogHandlers.HandleCreateDataElement)
+	protectedMux.HandleFunc("/catalog/data-products/build", dataProductHandler.HandleBuildDataProduct)
+	
+	// Apply JWT authentication to all protected endpoints
+	mux.Handle("/catalog/data-elements", jwtAuthMiddleware.Middleware(http.HandlerFunc(catalogHandlers.HandleCreateDataElement)))
+	mux.Handle("/catalog/data-products/build", jwtAuthMiddleware.Middleware(http.HandlerFunc(dataProductHandler.HandleBuildDataProduct)))
+	
+	structLogger.Info("JWT authentication enabled for protected endpoints", map[string]interface{}{
+		"protected_endpoints": []string{
+			"/catalog/data-elements",
+			"/catalog/data-products/build",
+		},
+	})
 
 	// Apply production readiness middleware (order matters: recovery -> rate limit -> monitoring -> metrics)
 	handler := errorHandler.RecoveryMiddleware(

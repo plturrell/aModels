@@ -102,20 +102,51 @@ class DatabaseAdmin:
         if not self._allow_mutations and keyword in _READONLY_BLOCKLIST:
             raise PermissionError(f"{keyword.upper()} statements are disabled in read-only mode")
 
+        # Security: Validate limit is a positive integer
         effective_limit = limit if limit and limit > 0 else self._default_limit
+        if effective_limit <= 0:
+            effective_limit = self._default_limit
+        if effective_limit > 10000:  # Maximum limit to prevent resource exhaustion
+            effective_limit = 10000
+
+        # Security: Use parameterized query for LIMIT clause to prevent SQL injection
+        # Note: The base SQL statement still needs to be executed as-is since this is a query executor
+        # However, we parameterize the LIMIT value which is user-controlled
         text_for_execution = statement
+        use_parameterized_limit = False
+        
         if effective_limit and keyword in {"select", "with"} and " limit " not in statement.lower():
-            text_for_execution = f"{statement} LIMIT {effective_limit + 1}"
+            # Use parameterized query for LIMIT to prevent injection
+            # PostgreSQL supports parameterized LIMIT
+            text_for_execution = f"{statement} LIMIT %s"
+            use_parameterized_limit = True
 
         with self._pool.connection() as conn, conn.cursor(row_factory=dict_row) as cursor:
-            cursor.execute(text_for_execution)
-            description = cursor.description
-            if description is None:
-                affected = cursor.rowcount if cursor.rowcount != -1 else 0
-                return QueryResult(columns=[], rows=[], row_count=affected, truncated=False)
+            try:
+                if use_parameterized_limit:
+                    # Execute with parameterized LIMIT
+                    cursor.execute(text_for_execution, (effective_limit + 1,))
+                else:
+                    # Execute query as-is (for queries that already have LIMIT or non-SELECT queries)
+                    cursor.execute(text_for_execution)
+                
+                description = cursor.description
+                if description is None:
+                    affected = cursor.rowcount if cursor.rowcount != -1 else 0
+                    return QueryResult(columns=[], rows=[], row_count=affected, truncated=False)
 
-            rows = cursor.fetchall()
-            column_names = [col.name for col in description]
+                rows = cursor.fetchall()
+                column_names = [col.name for col in description]
+
+            except Exception as e:
+                # Security: Sanitize error messages to prevent information leakage
+                error_msg = str(e)
+                # Remove potential sensitive information from error messages
+                # Only return generic error messages to clients
+                if "password" in error_msg.lower() or "credential" in error_msg.lower():
+                    raise ValueError("Database error occurred. Please check your query syntax.")
+                # For other errors, return a sanitized version
+                raise ValueError(f"Query execution failed: {type(e).__name__}")
 
         truncated = False
         if effective_limit and len(rows) > effective_limit:
