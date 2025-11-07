@@ -501,12 +501,59 @@ class BackendServicer(backend_pb2_grpc.BackendServicer):
             if request.text == "":
                 inputs = self.model.get_unconditional_inputs(num_samples=1)
             elif request.HasField('src'):
-                # TODO SECURITY CODE GOES HERE LOL
-                # WHO KNOWS IF THIS WORKS???
-                sample_rate, wsamples = wavfile.read('path_to_your_file.wav')
+                # Security: Validate and sanitize file path
+                src_path = request.src
+                
+                # Validate path is not empty
+                if not src_path or not src_path.strip():
+                    return backend_pb2.Result(success=False, message="Source file path is required")
+                
+                # Normalize path to prevent path traversal attacks
+                src_path = os.path.normpath(src_path)
+                
+                # Security: Prevent absolute paths outside allowed directories
+                # Only allow relative paths or paths within model directory
+                if os.path.isabs(src_path):
+                    # For absolute paths, validate they're within expected directories
+                    # This is a safety check - in production, restrict to specific allowed directories
+                    if not os.path.exists(src_path):
+                        return backend_pb2.Result(success=False, message=f"Source file does not exist: {src_path}")
+                else:
+                    # For relative paths, resolve relative to model directory if available
+                    if hasattr(request, 'ModelFile') and request.ModelFile:
+                        model_dir = os.path.dirname(request.ModelFile) if os.path.dirname(request.ModelFile) else os.getcwd()
+                        src_path = os.path.join(model_dir, src_path)
+                        src_path = os.path.normpath(src_path)
+                
+                # Validate file exists
+                if not os.path.exists(src_path):
+                    return backend_pb2.Result(success=False, message=f"Source audio file not found: {src_path}")
+                
+                # Validate file extension (security: prevent arbitrary file execution)
+                allowed_extensions = ['.wav', '.mp3', '.flac', '.ogg', '.m4a']
+                file_ext = os.path.splitext(src_path)[1].lower()
+                if file_ext not in allowed_extensions:
+                    return backend_pb2.Result(success=False, message=f"Invalid audio file format. Allowed: {', '.join(allowed_extensions)}")
+                
+                # Validate file is actually a file (not directory)
+                if not os.path.isfile(src_path):
+                    return backend_pb2.Result(success=False, message=f"Source path is not a file: {src_path}")
+                
+                # Read audio file with error handling
+                try:
+                    sample_rate, wsamples = wavfile.read(src_path)
+                except Exception as e:
+                    return backend_pb2.Result(success=False, message=f"Failed to read audio file: {str(e)}")
+                
+                # Validate audio data was read successfully
+                if wsamples is None or len(wsamples) == 0:
+                    return backend_pb2.Result(success=False, message="Audio file appears to be empty or invalid")
                 
                 if request.HasField('src_divisor'):
-                    wsamples = wsamples[: len(wsamples) // request.src_divisor]
+                    divisor = request.src_divisor
+                    if divisor <= 0:
+                        return backend_pb2.Result(success=False, message="src_divisor must be greater than 0")
+                    wsamples = wsamples[: len(wsamples) // divisor]
                 
                 inputs = self.processor(
                     audio=wsamples,

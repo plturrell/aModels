@@ -109,11 +109,148 @@ func (o *GPUOrchestrator) allocateViaDeepAgents(ctx context.Context, serviceName
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	// Extract allocation strategy from agent response
-	// For now, fall back to standard analysis
-	// TODO: Parse agent response to extract allocation strategy
+	// Parse agent response to extract allocation strategy
+	allocationReq := o.parseAllocationStrategy(agentResponse, serviceName, workloadType, workloadData)
+	if allocationReq != nil {
+		// Use parsed allocation strategy
+		return o.allocator.Allocate(allocationReq)
+	}
 
+	// Fall back to standard scheduling if parsing fails
+	if o.logger != nil {
+		o.logger.Printf("Failed to parse allocation strategy from agent response, using standard scheduling")
+	}
 	return o.scheduler.Schedule(serviceName, workloadType, workloadData)
+}
+
+// parseAllocationStrategy extracts allocation strategy from agent response.
+// Looks for JSON in messages or result containing: required_gpus, min_memory_mb, priority.
+func (o *GPUOrchestrator) parseAllocationStrategy(
+	agentResponse struct {
+		Messages []map[string]interface{} `json:"messages"`
+		Result   interface{}               `json:"result,omitempty"`
+	},
+	serviceName string,
+	workloadType string,
+	workloadData map[string]interface{},
+) *gpu_allocator.AllocationRequest {
+	// Try to extract from Result field first
+	if agentResponse.Result != nil {
+		if req := o.extractAllocationFromData(agentResponse.Result, serviceName); req != nil {
+			return req
+		}
+	}
+
+	// Try to extract from Messages (look for assistant messages with JSON content)
+	for _, msg := range agentResponse.Messages {
+		if role, ok := msg["role"].(string); ok && role == "assistant" {
+			if content, ok := msg["content"].(string); ok {
+				// Try to parse JSON from content
+				var data interface{}
+				if err := json.Unmarshal([]byte(content), &data); err == nil {
+					if req := o.extractAllocationFromData(data, serviceName); req != nil {
+						return req
+					}
+				}
+			}
+			// Also check if message has direct allocation data
+			if req := o.extractAllocationFromData(msg, serviceName); req != nil {
+				return req
+			}
+		}
+	}
+
+	return nil
+}
+
+// extractAllocationFromData extracts allocation request from various data formats.
+func (o *GPUOrchestrator) extractAllocationFromData(data interface{}, serviceName string) *gpu_allocator.AllocationRequest {
+	// Convert to map for easier access
+	var dataMap map[string]interface{}
+	switch v := data.(type) {
+	case map[string]interface{}:
+		dataMap = v
+	default:
+		// Try to marshal/unmarshal to convert to map
+		jsonBytes, err := json.Marshal(data)
+		if err != nil {
+			return nil
+		}
+		if err := json.Unmarshal(jsonBytes, &dataMap); err != nil {
+			return nil
+		}
+	}
+
+	// Extract allocation fields
+	req := &gpu_allocator.AllocationRequest{
+		ServiceName: serviceName,
+		RequiredGPUs: 1, // Default
+		Priority:     5,  // Default medium priority
+	}
+
+	// Extract required_gpus
+	if rg, ok := dataMap["required_gpus"].(float64); ok {
+		req.RequiredGPUs = int(rg)
+	} else if rg, ok := dataMap["required_gpus"].(int); ok {
+		req.RequiredGPUs = rg
+	}
+
+	// Extract min_memory_mb
+	if mm, ok := dataMap["min_memory_mb"].(float64); ok {
+		req.MinMemoryMB = int64(mm)
+	} else if mm, ok := dataMap["min_memory_mb"].(int64); ok {
+		req.MinMemoryMB = mm
+	} else if mm, ok := dataMap["min_memory_mb"].(int); ok {
+		req.MinMemoryMB = int64(mm)
+	}
+
+	// Extract priority
+	if p, ok := dataMap["priority"].(float64); ok {
+		req.Priority = int(p)
+	} else if p, ok := dataMap["priority"].(int); ok {
+		req.Priority = p
+	}
+
+	// Extract max_memory_mb (optional)
+	if mm, ok := dataMap["max_memory_mb"].(float64); ok {
+		req.MaxMemoryMB = int64(mm)
+	} else if mm, ok := dataMap["max_memory_mb"].(int64); ok {
+		req.MaxMemoryMB = mm
+	} else if mm, ok := dataMap["max_memory_mb"].(int); ok {
+		req.MaxMemoryMB = int64(mm)
+	}
+
+	// Extract max_utilization (optional)
+	if mu, ok := dataMap["max_utilization"].(float64); ok {
+		req.MaxUtilization = mu
+	}
+
+	// Extract preferred_gpus (optional)
+	if pg, ok := dataMap["preferred_gpus"].([]interface{}); ok {
+		preferredGPUs := make([]int, 0, len(pg))
+		for _, gpuID := range pg {
+			switch v := gpuID.(type) {
+			case float64:
+				preferredGPUs = append(preferredGPUs, int(v))
+			case int:
+				preferredGPUs = append(preferredGPUs, v)
+			}
+		}
+		if len(preferredGPUs) > 0 {
+			req.PreferredGPUs = preferredGPUs
+		}
+	}
+
+	// Only return if we found at least required_gpus or min_memory_mb
+	if req.RequiredGPUs > 0 || req.MinMemoryMB > 0 {
+		if o.logger != nil {
+			o.logger.Printf("Parsed allocation strategy: GPUs=%d, MemoryMB=%d, Priority=%d",
+				req.RequiredGPUs, req.MinMemoryMB, req.Priority)
+		}
+		return req
+	}
+
+	return nil
 }
 
 // ReleaseGPUs releases GPUs for a service

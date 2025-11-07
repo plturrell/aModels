@@ -2484,8 +2484,7 @@ func (a *ArchitecturalAnalyzer) functionUsesHttprr(fn *ast.FuncDecl) bool {
 				httrrHelperPatterns := []string{
 					"newHTTPRRClient", "newOpenAIEmbedder", "newTestClient",
 					"newTestLLM", "newTestEmbedder", "setupHTTPRR",
-					"createTestClient", "createHTTPRRClient", "newErnieTestClient",
-					"newErnieTestLLM", "newPalmTestLLM",
+					"createTestClient", "createHTTPRRClient", "newPalmTestLLM",
 				}
 				for _, pattern := range httrrHelperPatterns {
 					if ident.Name == pattern {
@@ -2634,10 +2633,10 @@ func (a *ArchitecturalAnalyzer) checkTestProviderConstructors(fn *ast.FuncDecl) 
 func (a *ArchitecturalAnalyzer) isProviderConstructorCall(call *ast.CallExpr) bool {
 	providerConstructors := []string{
 		// LLM providers
-		"jina.New", "ernie.New", "googleai.New", "anthropic.New", "openai.New",
-		"mistral.New", "cohere.New", "huggingface.New", "ollama.New",
+		"jina.New", "googleai.New", "anthropic.New", "openai.New",
+		"mistral.New", "huggingface.New", "ollama.New",
 		"bedrock.New", "vertexai.New", "llamafile.New", "maritaca.New",
-		"watsonx.New", "cloudflare.New", "perplexity.New", "groq.New",
+		"watsonx.New", "perplexity.New", "groq.New",
 		"deepseek.New", "nvidia.New",
 
 		// Embedding providers
@@ -2845,10 +2844,8 @@ func (a *ArchitecturalAnalyzer) containsHardcodedApiUrl(call *ast.CallExpr) bool
 	hardcodedUrls := []string{
 		"api.jina.ai",
 		"generativelanguage.googleapis.com",
-		"aip.baidubce.com",
 		"api.openai.com",
 		"api.anthropic.com",
-		"api.cohere.ai",
 		"api.mistral.ai",
 		"api.together.xyz",
 		"api.groq.com",

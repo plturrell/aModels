@@ -23,6 +23,7 @@ type MurexConnector struct {
 	apiKey        string
 	openAPISpec   map[string]interface{}
 	discoveredEndpoints map[string]EndpointInfo
+	allowMockData bool // If true, allows returning mock data on API failures (development only)
 }
 
 // EndpointInfo represents information about an API endpoint from OpenAPI spec.
@@ -51,12 +52,22 @@ func NewMurexConnector(config map[string]interface{}, logger *log.Logger) *Murex
 
 	apiKey, _ := config["api_key"].(string)
 	
+	// Check if mock data is allowed (only for development/testing)
+	// Default to false (production mode) - mocks disabled
+	allowMockData := false
+	if mockVal, ok := config["allow_mock_data"].(bool); ok {
+		allowMockData = mockVal
+	} else if mockVal, ok := config["allow_mock_data"].(string); ok {
+		allowMockData = (mockVal == "true" || mockVal == "1")
+	}
+	
 	mc := &MurexConnector{
 		config:        config,
 		logger:        logger,
 		baseURL:       baseURL,
 		apiKey:        apiKey,
 		discoveredEndpoints: make(map[string]EndpointInfo),
+		allowMockData: allowMockData,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -449,9 +460,17 @@ func (mc *MurexConnector) ExtractData(ctx context.Context, query map[string]inte
 	// Execute request
 	resp, err := mc.httpClient.Do(req)
 	if err != nil {
-		// If API call fails, return mock data for development/testing
+		// In production, return error instead of mock data
+		if !mc.allowMockData {
+			if mc.logger != nil {
+				mc.logger.Printf("Error: Murex API call failed: %v", err)
+			}
+			return nil, fmt.Errorf("Murex API request failed: %w", err)
+		}
+		
+		// Only return mock data if explicitly enabled for development/testing
 		if mc.logger != nil {
-			mc.logger.Printf("Warning: API call failed, returning mock data: %v", err)
+			mc.logger.Printf("Warning: API call failed, returning mock data (development mode): %v", err)
 		}
 		return mc.getMockData(tableName, query), nil
 	}
@@ -532,7 +551,8 @@ func containsString(s, substr string) bool {
 	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
-// getMockData returns mock data when API is unavailable (for development/testing).
+// getMockData returns mock data when API is unavailable (for development/testing only).
+// This should only be called when allowMockData is true.
 func (mc *MurexConnector) getMockData(tableName string, query map[string]interface{}) []map[string]interface{} {
 	if tableName == "trades" {
 		return []map[string]interface{}{

@@ -265,20 +265,51 @@ func ParseFunctionCall(llmresult string, functionConfig FunctionsConfig) []FuncC
 					continue
 					//return result, fmt.Errorf("unable to find function name in result")
 				}
-				// Similarly, while here arguments is a map[string]interface{}, OpenAI actually want a stringified object
-				args, ok := s[functionArgumentsKey] // arguments needs to be a string, but we return an object from the grammar result (TODO: fix)
+				// Handle arguments which can be either a string (OpenAI format) or an object (grammar result)
+				args, ok := s[functionArgumentsKey]
 				if !ok {
 					continue
 					//return result, fmt.Errorf("unable to find arguments in result")
 				}
-				d, _ := json.Marshal(args)
+				
+				// Convert arguments to JSON string, handling both string and object types
+				var argsJSON string
+				switch v := args.(type) {
+				case string:
+					// Already a string - validate it's valid JSON
+					var test interface{}
+					if err := json.Unmarshal([]byte(v), &test); err != nil {
+						// Not valid JSON, treat as plain string and wrap it
+						argsJSON = fmt.Sprintf(`{"value": %q}`, v)
+					} else {
+						// Valid JSON string, use as-is
+						argsJSON = v
+					}
+				case map[string]interface{}:
+					// Object type - marshal to JSON string
+					if d, err := json.Marshal(v); err == nil {
+						argsJSON = string(d)
+					} else {
+						log.Debug().Err(err).Msg("failed to marshal arguments object")
+						continue
+					}
+				default:
+					// Other types - marshal to JSON
+					if d, err := json.Marshal(v); err == nil {
+						argsJSON = string(d)
+					} else {
+						log.Debug().Err(err).Msg("failed to marshal arguments")
+						continue
+					}
+				}
+				
 				funcName, ok := func_name.(string)
 				if !ok {
 					continue
 					//return result, fmt.Errorf("unable to cast function name to string")
 				}
 
-				result = append(result, FuncCallResults{Name: funcName, Arguments: string(d)})
+				result = append(result, FuncCallResults{Name: funcName, Arguments: argsJSON})
 			}
 		}
 

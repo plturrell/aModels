@@ -1,11 +1,14 @@
 package regulatory
 
 import (
+	"bytes"
 	"context"
-	// "encoding/json" // unused - removed to fix compilation
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/plturrell/aModels/services/extract/langextract"
@@ -322,20 +325,49 @@ func (rse *RegulatorySpecExtractor) getExamples(regulatoryType string) []interfa
 
 // callLangExtract calls the LangExtract service.
 func (rse *RegulatorySpecExtractor) callLangExtract(ctx context.Context, req langextract.ExtractionRequest) (*langextract.ExtractionResponse, error) {
-	// In production, would make actual HTTP call to LangExtract
-	// For now, return a structured response
-	
-	// This would be the actual implementation:
-	// body, _ := json.Marshal(req)
-	// httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, rse.langextractURL+"/extract", bytes.NewReader(body))
-	// resp, err := rse.httpClient.Do(httpReq)
-	// ... parse response
-	
-	// For now, return a mock response structure
-	return &langextract.ExtractionResponse{
-		Extractions: []langextract.ExtractionResult{},
-		ProcessingTime: 2 * time.Second,
-	}, nil
+	// Check if langextract URL is configured
+	if rse.langextractURL == "" {
+		return nil, fmt.Errorf("langextract URL is not configured")
+	}
+
+	// Marshal request to JSON
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal extraction request: %w", err)
+	}
+
+	// Create HTTP request
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, rse.langextractURL+"/extract", bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	// Execute request
+	resp, err := rse.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call langextract service: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		// Read error response body (limit to 2048 bytes)
+		errorBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return nil, fmt.Errorf("langextract service returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(errorBody)))
+	}
+
+	// Decode response
+	var langResp langextract.ExtractionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&langResp); err != nil {
+		return nil, fmt.Errorf("failed to decode langextract response: %w", err)
+	}
+
+	if rse.logger != nil {
+		rse.logger.Printf("Successfully called langextract, received %d extractions", len(langResp.Extractions))
+	}
+
+	return &langResp, nil
 }
 
 // parseExtractionResponse parses LangExtract response into RegulatorySpec.

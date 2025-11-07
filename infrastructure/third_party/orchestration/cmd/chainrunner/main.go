@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	catalogprompt "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightcatalog/prompt"
+	// catalogprompt "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightcatalog/prompt" // Disabled: missing package
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/catalog/flightcatalog"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/chains"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/llms"
@@ -67,29 +67,31 @@ func run() error {
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to fetch agent catalog from %s: %v\n", addr, err)
 		} else {
-			enrichment := catalogprompt.Enrich(catalogprompt.Catalog{
-				Suites: cat.Suites,
-				Tools:  cat.Tools,
-			})
-			contextText := enrichment.Prompt
+			// catalogprompt disabled - missing package
+			// enrichment := catalogprompt.Enrich(catalogprompt.Catalog{
+			// 	Suites: cat.Suites,
+			// 	Tools:  cat.Tools,
+			// })
+			// contextText := enrichment.Prompt
+			contextText := "" // Disabled: missing catalogprompt package
 
 			meta["agent_catalog"] = cat.Suites
 			meta["agent_tools"] = cat.Tools
-			if enrichment.Summary != "" {
-				meta["agent_catalog_summary"] = enrichment.Summary
-			}
-			if enrichment.Stats.SuiteCount > 0 || enrichment.Stats.UniqueToolCount > 0 {
-				meta["agent_catalog_stats"] = enrichment.Stats
-			}
-			if len(enrichment.Implementations) > 0 {
-				meta["agent_catalog_matrix"] = enrichment.Implementations
-			}
-			if len(enrichment.UniqueTools) > 0 {
-				meta["agent_catalog_unique_tools"] = enrichment.UniqueTools
-			}
-			if len(enrichment.StandaloneTools) > 0 {
-				meta["agent_catalog_tool_details"] = enrichment.StandaloneTools
-			}
+			// if enrichment.Summary != "" {
+			// 	meta["agent_catalog_summary"] = enrichment.Summary
+			// }
+			// if enrichment.Stats.SuiteCount > 0 || enrichment.Stats.UniqueToolCount > 0 {
+			// 	meta["agent_catalog_stats"] = enrichment.Stats
+			// }
+			// if len(enrichment.Implementations) > 0 {
+			// 	meta["agent_catalog_matrix"] = enrichment.Implementations
+			// }
+			// if len(enrichment.UniqueTools) > 0 {
+			// 	meta["agent_catalog_unique_tools"] = enrichment.UniqueTools
+			// }
+			// if len(enrichment.StandaloneTools) > 0 {
+			// 	meta["agent_catalog_tool_details"] = enrichment.StandaloneTools
+			// }
 			if contextText != "" {
 				meta[catalogContextKey] = contextText
 			}

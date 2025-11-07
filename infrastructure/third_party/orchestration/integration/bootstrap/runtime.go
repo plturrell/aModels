@@ -8,10 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA/pkg/hanapool"
+	// HANA packages disabled - missing dependencies
+	// "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA/pkg/hanapool"
 	localai "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/llms/localai"
-	hanaMemory "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/memory/hana"
-	hanaVector "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/vectorstores/hana"
+	// hanaMemory "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/memory/hana"
+	// hanaVector "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/vectorstores/hana"
 )
 
 // Config captures the bootstrap settings for LocalAI and HANA wiring.
@@ -25,7 +26,7 @@ type Config struct {
 	LocalAITimeout     time.Duration
 
 	EnableHANA  bool
-	HANAConfig  *hanapool.Config
+	HANAConfig  interface{} // *hanapool.Config - disabled due to missing package
 	HANASchema  string
 	SkipVector  bool
 	SkipHistory bool
@@ -34,9 +35,9 @@ type Config struct {
 // Runtime aggregates the shared infrastructure needed by orchestration chains.
 type Runtime struct {
 	LocalAI       *localai.LLM
-	HANAPool      *hanapool.Pool
-	MemoryManager *hanaMemory.HANAChatMessageHistoryManager
-	VectorStore   *hanaVector.HANAVectorStore
+	HANAPool      interface{} // *hanapool.Pool - disabled due to missing package
+	MemoryManager interface{} // *hanaMemory.HANAChatMessageHistoryManager - disabled due to missing package
+	VectorStore   interface{} // *hanaVector.HANAVectorStore - disabled due to missing package
 	httpClient    *http.Client
 	hanaSchema    string
 }
@@ -102,35 +103,36 @@ func NewRuntime(cfg *Config) (*Runtime, error) {
 		return rt, nil
 	}
 
-	var pool *hanapool.Pool
-	if cfg.HANAConfig != nil {
-		pool, err = hanapool.NewPool(cfg.HANAConfig)
-	} else {
-		pool, err = hanapool.NewPoolFromEnv()
-	}
-	if err != nil {
-		return nil, fmt.Errorf("bootstrap hana pool: %w", err)
-	}
-
-	rt.HANAPool = pool
-	if rt.hanaSchema == "" && cfg.HANAConfig != nil {
-		rt.hanaSchema = cfg.HANAConfig.Schema
-	}
+	// HANA integration disabled due to missing packages
+	// var pool *hanapool.Pool
+	// if cfg.HANAConfig != nil {
+	// 	pool, err = hanapool.NewPool(cfg.HANAConfig)
+	// } else {
+	// 	pool, err = hanapool.NewPoolFromEnv()
+	// }
+	// if err != nil {
+	// 	return nil, fmt.Errorf("bootstrap hana pool: %w", err)
+	// }
+	//
+	// rt.HANAPool = pool
+	// if rt.hanaSchema == "" && cfg.HANAConfig != nil {
+	// 	rt.hanaSchema = cfg.HANAConfig.Schema
+	// }
 	if rt.hanaSchema == "" {
 		rt.hanaSchema = "AGENTICAI"
 	}
 
-	if !cfg.SkipHistory {
-		rt.MemoryManager = hanaMemory.NewHANAChatMessageHistoryManager(pool)
-	}
-
-	if !cfg.SkipVector {
-		vectorStore, err := hanaVector.NewHANAVectorStore(pool)
-		if err != nil {
-			return nil, fmt.Errorf("bootstrap hana vector store: %w", err)
-		}
-		rt.VectorStore = vectorStore
-	}
+	// if !cfg.SkipHistory {
+	// 	rt.MemoryManager = hanaMemory.NewHANAChatMessageHistoryManager(pool)
+	// }
+	//
+	// if !cfg.SkipVector {
+	// 	vectorStore, err := hanaVector.NewHANAVectorStore(pool)
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("bootstrap hana vector store: %w", err)
+	// 	}
+	// 	rt.VectorStore = vectorStore
+	// }
 
 	return rt, nil
 }
@@ -141,20 +143,23 @@ func (r *Runtime) Close() error {
 		return nil
 	}
 
-	if r.HANAPool != nil {
-		if err := r.HANAPool.Close(); err != nil {
-			return err
-		}
-	}
+	// HANA pool close disabled due to missing package
+	// if r.HANAPool != nil {
+	// 	if err := r.HANAPool.Close(); err != nil {
+	// 		return err
+	// 	}
+	// }
 	return nil
 }
 
 // NewChatHistory provides a convenience helper to create or retrieve a chat history.
-func (r *Runtime) NewChatHistory(agentID, sessionID string) (*hanaMemory.HANAChatMessageHistory, error) {
-	if r == nil || r.MemoryManager == nil {
-		return nil, fmt.Errorf("hana-backed memory disabled")
-	}
-	return r.MemoryManager.GetOrCreateHistory(agentID, sessionID)
+func (r *Runtime) NewChatHistory(agentID, sessionID string) (interface{}, error) {
+	// HANA memory disabled due to missing package
+	// if r == nil || r.MemoryManager == nil {
+	// 	return nil, fmt.Errorf("hana-backed memory disabled")
+	// }
+	// return r.MemoryManager.GetOrCreateHistory(agentID, sessionID)
+	return nil, fmt.Errorf("hana-backed memory disabled - missing dependencies")
 }
 
 // HTTPClient exposes the LocalAI HTTP client for advanced integrations.

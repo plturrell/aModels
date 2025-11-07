@@ -11,10 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer1_Blockchain/infrastructure/common"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer1_Blockchain/processes/agents"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA/pkg/privacy"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA/pkg/storage"
+	// Missing packages disabled
+	// "github.com/plturrell/agenticAiETH/agenticAiETH_layer1_Blockchain/infrastructure/common"
+	// "github.com/plturrell/agenticAiETH/agenticAiETH_layer1_Blockchain/processes/agents"
+	// "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA/pkg/privacy"
+	// "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA/pkg/storage"
 )
 
 // GCStats represents garbage collection statistics
@@ -266,7 +267,11 @@ func NewBenchmarkSuite() *BenchmarkSuite {
 }
 
 // RunPrivacyBenchmarks runs privacy-related benchmarks
+// DISABLED: depends on missing privacy package
 func (bs *BenchmarkSuite) RunPrivacyBenchmarks() error {
+	return fmt.Errorf("privacy benchmarks disabled - missing dependencies")
+	// All code below disabled due to missing privacy package
+	/*
 	// Initialize privacy manager
 	privacyManager := privacy.NewUnifiedPrivacyManager()
 
@@ -343,10 +348,14 @@ func (bs *BenchmarkSuite) RunPrivacyBenchmarks() error {
 	}
 
 	return nil
+	*/
 }
 
 // RunVectorBenchmarks runs vector search benchmarks
+// DISABLED: depends on missing storage package
 func (bs *BenchmarkSuite) RunVectorBenchmarks() error {
+	return fmt.Errorf("vector benchmarks disabled - missing dependencies")
+	/*
 	// Create mock pool for testing
 	mockPool := &MockPool{
 		executeFunc: func(ctx context.Context, query string, args ...interface{}) (MockResult, error) {
@@ -394,10 +403,14 @@ func (bs *BenchmarkSuite) RunVectorBenchmarks() error {
 	}
 
 	return nil
+	*/
 }
 
 // RunGraphBenchmarks runs graph traversal benchmarks
+// DISABLED: depends on missing storage package
 func (bs *BenchmarkSuite) RunGraphBenchmarks() error {
+	return fmt.Errorf("graph benchmarks disabled - missing dependencies")
+	/*
 	// Create mock pool for testing
 	mockPool := &MockPool{
 		executeFunc: func(ctx context.Context, query string, args ...interface{}) (MockResult, error) {
@@ -458,10 +471,14 @@ func (bs *BenchmarkSuite) RunGraphBenchmarks() error {
 	}
 
 	return nil
+	*/
 }
 
 // RunAgentBenchmarks runs agent operation benchmarks
+// DISABLED: depends on missing agents and common packages
 func (bs *BenchmarkSuite) RunAgentBenchmarks() error {
+	return fmt.Errorf("agent benchmarks disabled - missing dependencies")
+	/*
 	searchOps := agents.NewSearchOperations()
 
 	// Benchmark 1: Agent registration
@@ -509,10 +526,14 @@ func (bs *BenchmarkSuite) RunAgentBenchmarks() error {
 	}
 
 	return nil
+	*/
 }
 
 // RunDatabaseBenchmarks runs database operation benchmarks
+// DISABLED: depends on missing storage package
 func (bs *BenchmarkSuite) RunDatabaseBenchmarks() error {
+	return fmt.Errorf("database benchmarks disabled - missing dependencies")
+	/*
 	// Create mock pool for testing
 	mockPool := &MockPool{
 		executeFunc: func(ctx context.Context, query string, args ...interface{}) (MockResult, error) {
@@ -571,6 +592,7 @@ func (bs *BenchmarkSuite) RunDatabaseBenchmarks() error {
 	}
 
 	return nil
+	*/
 }
 
 // RunAllBenchmarks runs all benchmark suites
@@ -639,12 +661,13 @@ func (p *MockPool) Execute(ctx context.Context, query string, args ...interface{
 	return MockResult{lastInsertID: 1, rowsAffected: 1}, nil
 }
 
-func main() {
-	// Run comprehensive performance benchmarking
-	suite := NewBenchmarkSuite()
-	if err := suite.RunAllBenchmarks(); err != nil {
-		log.Fatalf("Benchmarking failed: %v", err)
-	}
-
-	log.Println("🎉 All benchmarks completed successfully!")
-}
+// main function removed to avoid duplicate declaration
+// func main() {
+// 	// Run comprehensive performance benchmarking
+// 	suite := NewBenchmarkSuite()
+// 	if err := suite.RunAllBenchmarks(); err != nil {
+// 		log.Fatalf("Benchmarking failed: %v", err)
+// 	}
+//
+// 	log.Println("🎉 All benchmarks completed successfully!")
+// }

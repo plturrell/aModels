@@ -1,3 +1,7 @@
+//go:build ignore
+// +build ignore
+
+// Package disabled: depends on missing HANA packages
 package hana
 
 import (

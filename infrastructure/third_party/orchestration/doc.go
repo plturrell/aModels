@@ -112,7 +112,6 @@
 //   - PostgreSQL with pgvector
 //   - Redis
 //   - Milvus
-//   - MongoDB Atlas Vector Search
 //   - OpenSearch
 //   - Azure AI Search
 //

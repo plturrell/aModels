@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -18,6 +19,7 @@ type OpenSearchPersistence struct {
 	url      string
 	username string
 	password string
+	apiKey   string // API key for header-based authentication
 	logger   *log.Logger
 	index    string
 }
@@ -27,9 +29,13 @@ func NewOpenSearchPersistence(url string, logger *log.Logger) (*OpenSearchPersis
 	// Remove trailing slash
 	url = strings.TrimSuffix(url, "/")
 
-	username := ""
-	password := ""
-	// TODO: Add authentication if needed
+	// Read authentication from environment variables
+	username := strings.TrimSpace(os.Getenv("OPENSEARCH_USERNAME"))
+	password := strings.TrimSpace(os.Getenv("OPENSEARCH_PASSWORD"))
+	apiKey := strings.TrimSpace(os.Getenv("OPENSEARCH_API_KEY"))
+	
+	// If API key is provided without username/password, use API key authentication
+	// Otherwise, use basic auth with username/password
 
 	p := &OpenSearchPersistence{
 		client: &http.Client{
@@ -38,6 +44,7 @@ func NewOpenSearchPersistence(url string, logger *log.Logger) (*OpenSearchPersis
 		url:      url,
 		username: username,
 		password: password,
+		apiKey:   apiKey,
 		logger:   logger,
 		index:    "embeddings",
 	}
@@ -53,6 +60,20 @@ func NewOpenSearchPersistence(url string, logger *log.Logger) (*OpenSearchPersis
 	return p, nil
 }
 
+// setAuth sets authentication on the HTTP request.
+// Supports both basic auth (username/password) and API key authentication.
+func (p *OpenSearchPersistence) setAuth(req *http.Request) {
+	if p.apiKey != "" {
+		// API key authentication (header-based)
+		req.Header.Set("X-Api-Key", p.apiKey)
+		// Some OpenSearch setups use Authorization header with API key
+		req.Header.Set("Authorization", "ApiKey "+p.apiKey)
+	} else if p.username != "" && p.password != "" {
+		// Basic authentication
+		req.SetBasicAuth(p.username, p.password)
+	}
+}
+
 // EnsureIndex creates the embeddings index with vector mapping if it doesn't exist.
 func (p *OpenSearchPersistence) EnsureIndex(ctx context.Context) error {
 	// Check if index exists
@@ -62,9 +83,7 @@ func (p *OpenSearchPersistence) EnsureIndex(ctx context.Context) error {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	if p.username != "" && p.password != "" {
-		req.SetBasicAuth(p.username, p.password)
-	}
+	p.setAuth(req)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -122,9 +141,7 @@ func (p *OpenSearchPersistence) EnsureIndex(ctx context.Context) error {
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	if p.username != "" && p.password != "" {
-		req.SetBasicAuth(p.username, p.password)
-	}
+	p.setAuth(req)
 
 	resp, err = p.client.Do(req)
 	if err != nil {
@@ -187,9 +204,7 @@ func (p *OpenSearchPersistence) IndexVector(key string, vector []float32, metada
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	if p.username != "" && p.password != "" {
-		req.SetBasicAuth(p.username, p.password)
-	}
+	p.setAuth(req)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -220,9 +235,7 @@ func (p *OpenSearchPersistence) GetVector(key string) ([]float32, map[string]any
 		return nil, nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	if p.username != "" && p.password != "" {
-		req.SetBasicAuth(p.username, p.password)
-	}
+	p.setAuth(req)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -374,9 +387,7 @@ func (p *OpenSearchPersistence) searchSimilar(queryVector []float32, query strin
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	if p.username != "" && p.password != "" {
-		req.SetBasicAuth(p.username, p.password)
-	}
+	p.setAuth(req)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -475,9 +486,7 @@ func (p *OpenSearchPersistence) SearchByText(query string, artifactType string, 
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	if p.username != "" && p.password != "" {
-		req.SetBasicAuth(p.username, p.password)
-	}
+	p.setAuth(req)
 
 	resp, err := p.client.Do(req)
 	if err != nil {

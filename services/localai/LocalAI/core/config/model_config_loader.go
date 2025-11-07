@@ -76,42 +76,80 @@ func (lo *LoadOptions) Apply(options ...ConfigLoaderOption) {
 	}
 }
 
-// TODO: either in the next PR or the next commit, I want to merge these down into a single function that looks at the first few characters of the file to determine if we need to deserialize to []BackendConfig or BackendConfig
-func readMultipleModelConfigsFromFile(file string, opts ...ConfigLoaderOption) ([]*ModelConfig, error) {
-	c := &[]*ModelConfig{}
-	f, err := os.ReadFile(file)
-	if err != nil {
-		return nil, fmt.Errorf("readMultipleModelConfigsFromFile cannot read config file %q: %w", file, err)
-	}
-	if err := yaml.Unmarshal(f, c); err != nil {
-		return nil, fmt.Errorf("readMultipleModelConfigsFromFile cannot unmarshal config file %q: %w", file, err)
-	}
-
-	for _, cc := range *c {
-		cc.modelConfigFile = file
-		cc.SetDefaults(opts...)
-	}
-
-	return *c, nil
-}
-
-func readModelConfigFromFile(file string, opts ...ConfigLoaderOption) (*ModelConfig, error) {
+// readModelConfigsFromFile reads model config(s) from a file.
+// Automatically detects if the file contains a single config or an array of configs
+// by examining the first few characters of the file.
+func readModelConfigsFromFile(file string, opts ...ConfigLoaderOption) ([]*ModelConfig, error) {
 	lo := &LoadOptions{}
 	lo.Apply(opts...)
 
-	c := &ModelConfig{}
 	f, err := os.ReadFile(file)
 	if err != nil {
-		return nil, fmt.Errorf("readModelConfigFromFile cannot read config file %q: %w", file, err)
-	}
-	if err := yaml.Unmarshal(f, c); err != nil {
-		return nil, fmt.Errorf("readModelConfigFromFile cannot unmarshal config file %q: %w", file, err)
+		return nil, fmt.Errorf("readModelConfigsFromFile cannot read config file %q: %w", file, err)
 	}
 
-	c.SetDefaults(opts...)
+	// Check first few characters to determine if it's an array or single object
+	// Arrays typically start with '-' (YAML list item) or '[' (JSON array)
+	// Single objects start with a letter or '{'
+	contentStr := strings.TrimSpace(string(f))
+	isArray := false
+	
+	// Check for YAML array indicators
+	if strings.HasPrefix(contentStr, "-") || strings.HasPrefix(contentStr, "[") {
+		isArray = true
+	} else {
+		// Try to detect by attempting to parse as array first
+		var testArray []interface{}
+		if err := yaml.Unmarshal(f, &testArray); err == nil && len(testArray) > 0 {
+			isArray = true
+		}
+	}
+
+	if isArray {
+		// Parse as array of configs
+		c := &[]*ModelConfig{}
+		if err := yaml.Unmarshal(f, c); err != nil {
+			return nil, fmt.Errorf("readModelConfigsFromFile cannot unmarshal config array from file %q: %w", file, err)
+		}
+
+		for _, cc := range *c {
+			cc.modelConfigFile = file
+			cc.SetDefaults(opts...)
+		}
+
+		return *c, nil
+	}
+
+	// Parse as single config
+	c := &ModelConfig{}
+	if err := yaml.Unmarshal(f, c); err != nil {
+		return nil, fmt.Errorf("readModelConfigsFromFile cannot unmarshal config from file %q: %w", file, err)
+	}
 
 	c.modelConfigFile = file
-	return c, nil
+	c.SetDefaults(opts...)
+
+	return []*ModelConfig{c}, nil
+}
+
+// readMultipleModelConfigsFromFile reads multiple model configs from a file (deprecated, use readModelConfigsFromFile)
+func readMultipleModelConfigsFromFile(file string, opts ...ConfigLoaderOption) ([]*ModelConfig, error) {
+	return readModelConfigsFromFile(file, opts...)
+}
+
+// readModelConfigFromFile reads a single model config from a file (deprecated, use readModelConfigsFromFile)
+func readModelConfigFromFile(file string, opts ...ConfigLoaderOption) (*ModelConfig, error) {
+	configs, err := readModelConfigsFromFile(file, opts...)
+	if err != nil {
+		return nil, err
+	}
+	if len(configs) == 0 {
+		return nil, fmt.Errorf("readModelConfigFromFile: no configs found in file %q", file)
+	}
+	if len(configs) > 1 {
+		return nil, fmt.Errorf("readModelConfigFromFile: expected single config but found %d in file %q", len(configs), file)
+	}
+	return configs[0], nil
 }
 
 // Load a config file for a model

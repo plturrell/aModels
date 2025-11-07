@@ -254,56 +254,6 @@ func (cf *CalculatorFunction) parseNumber(s string) (float64, error) {
 	return result, nil
 }
 
-// WeatherFunction handles weather queries
-type WeatherFunction struct{}
-
-func (wf *WeatherFunction) GetDefinition() FunctionDefinition {
-	return FunctionDefinition{
-		Name:        "get_weather",
-		Description: "Get current weather information for a location",
-		Parameters: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"location": map[string]interface{}{
-					"type":        "string",
-					"description": "City name or location",
-				},
-				"unit": map[string]interface{}{
-					"type":        "string",
-					"enum":        []string{"celsius", "fahrenheit"},
-					"description": "Temperature unit",
-					"default":     "celsius",
-				},
-			},
-			"required": []string{"location"},
-		},
-	}
-}
-
-func (wf *WeatherFunction) Call(ctx context.Context, arguments map[string]interface{}) (interface{}, error) {
-	location, ok := arguments["location"].(string)
-	if !ok {
-		return nil, fmt.Errorf("location parameter is required")
-	}
-
-	unit := "celsius"
-	if u, ok := arguments["unit"].(string); ok {
-		unit = u
-	}
-
-	// Mock weather data - in production, you'd call a real weather API
-	weather := map[string]interface{}{
-		"location":    location,
-		"temperature": 22.5,
-		"unit":        unit,
-		"condition":   "sunny",
-		"humidity":    65,
-		"wind_speed":  10.2,
-	}
-
-	return weather, nil
-}
-
 // DatabaseFunction handles database queries
 type DatabaseFunction struct {
 	server *VaultGemmaServer
@@ -342,18 +292,83 @@ func (df *DatabaseFunction) Call(ctx context.Context, arguments map[string]inter
 		limit = int(l)
 	}
 
-	// Use the existing SQL query tool
-	if df.server.hanaPool != nil {
-		// This would integrate with the existing HANA tools
-		// For now, return a mock response
-		return map[string]interface{}{
-			"query":  query,
-			"limit":  limit,
-			"result": "Database query executed successfully",
-		}, nil
+	// Security: Validate query - only allow SELECT statements
+	queryUpper := strings.TrimSpace(strings.ToUpper(query))
+	if !strings.HasPrefix(queryUpper, "SELECT") {
+		return nil, fmt.Errorf("only SELECT queries are allowed for security reasons")
 	}
 
-	return nil, fmt.Errorf("database not available")
+	// Security: Prevent dangerous SQL operations
+	dangerousKeywords := []string{"DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "CREATE", "TRUNCATE", "EXEC", "EXECUTE"}
+	for _, keyword := range dangerousKeywords {
+		if strings.Contains(queryUpper, keyword) {
+			return nil, fmt.Errorf("query contains forbidden keyword: %s. Only SELECT queries are allowed", keyword)
+		}
+	}
+
+	// Use the existing HANA pool to execute query
+	if df.server.hanaPool == nil {
+		return nil, fmt.Errorf("database not available - HANA pool not configured")
+	}
+
+	// Apply limit to query if not already present
+	// Note: This is a simple approach - in production, you might want more sophisticated query parsing
+	if limit > 0 && !strings.Contains(strings.ToUpper(query), "LIMIT") {
+		query = fmt.Sprintf("%s LIMIT %d", query, limit)
+	}
+
+	// Execute query
+	rows, err := df.server.hanaPool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute query: %w", err)
+	}
+	defer rows.Close()
+
+	// Get column names
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get column names: %w", err)
+	}
+
+	// Scan results into map
+	var results []map[string]interface{}
+	for rows.Next() {
+		// Create slice to hold values
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		// Scan row into values
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+
+		// Create map for this row
+		rowMap := make(map[string]interface{})
+		for i, col := range columns {
+			val := values[i]
+			// Convert []byte to string for better JSON serialization
+			if b, ok := val.([]byte); ok {
+				rowMap[col] = string(b)
+			} else {
+				rowMap[col] = val
+			}
+		}
+		results = append(results, rowMap)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return map[string]interface{}{
+		"query":    query,
+		"limit":    limit,
+		"rows":     results,
+		"rowCount": len(results),
+	}, nil
 }
 
 // HandleFunctionCalling handles function calling requests
@@ -768,7 +783,7 @@ func (s *VaultGemmaServer) generateFunctionCallingResponse(ctx context.Context, 
 // shouldSuggestFunctions determines if we should suggest function calls
 func (s *VaultGemmaServer) shouldSuggestFunctions(content string, tools []FunctionTool) bool {
 	// Simple heuristic: suggest functions if content contains certain keywords
-	keywords := []string{"calculate", "compute", "weather", "database", "query", "search"}
+	keywords := []string{"calculate", "compute", "database", "query", "search"}
 
 	contentLower := strings.ToLower(content)
 	for _, keyword := range keywords {
@@ -805,25 +820,6 @@ func (s *VaultGemmaServer) suggestFunctionCalls(content string, tools []Function
 		}
 	}
 
-	// Suggest weather function if content contains weather keywords
-	if strings.Contains(contentLower, "weather") || strings.Contains(contentLower, "temperature") {
-		for _, tool := range tools {
-			if tool.Function.Name == "get_weather" {
-				toolCalls = append(toolCalls, ToolCall{
-					ID:   fmt.Sprintf("call_%d", time.Now().UnixNano()),
-					Type: "function",
-					Function: FunctionCall{
-						Name: "get_weather",
-						Arguments: map[string]interface{}{
-							"location": "New York", // This would be extracted from content
-							"unit":     "celsius",
-						},
-					},
-				})
-				break
-			}
-		}
-	}
 
 	return toolCalls
 }
@@ -848,6 +844,5 @@ func (s *VaultGemmaServer) estimateTokens(messages []ChatMessage) int {
 // registerBuiltinFunctions registers built-in functions
 func (s *VaultGemmaServer) registerBuiltinFunctions() {
 	s.functionRegistry.RegisterFunction("calculator", &CalculatorFunction{})
-	s.functionRegistry.RegisterFunction("get_weather", &WeatherFunction{})
 	s.functionRegistry.RegisterFunction("query_database", &DatabaseFunction{server: s})
 }

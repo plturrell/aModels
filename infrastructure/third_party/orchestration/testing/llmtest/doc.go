@@ -56,7 +56,7 @@
 // # Provider Coverage
 //
 // The package is used to test all LangChain Go providers:
-// anthropic, bedrock, cloudflare, cohere, ernie, fake, googleai,
+// anthropic, bedrock, cloudflare, cohere, fake, googleai,
 // huggingface, llamafile, local, maritaca, mistral, ollama, openai,
 // watsonx, and more.
 package llmtest

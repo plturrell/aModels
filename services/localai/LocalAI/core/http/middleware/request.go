@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -24,6 +25,17 @@ type correlationIDKeyType string
 
 // CorrelationIDKey to track request across process boundary
 const CorrelationIDKey correlationIDKeyType = "correlationID"
+
+// validateBase64 validates that a string is properly base64 encoded.
+// Returns true if the string is valid base64, false otherwise.
+func validateBase64(s string) bool {
+	if s == "" {
+		return false
+	}
+	// Try to decode the string - if it succeeds, it's valid base64
+	_, err := base64.StdEncoding.DecodeString(s)
+	return err == nil
+}
 
 type RequestExtractor struct {
 	modelConfigLoader *config.ModelConfigLoader
@@ -300,38 +312,56 @@ func mergeOpenAIRequestAndModelConfig(config *config.ModelConfig, input *schema.
 					//input.Messages[i].StringContent = pp.Text
 				case "video", "video_url":
 					// Decode content as base64 either if it's an URL or base64 text
-					base64, err := utils.GetContentURIAsBase64(pp.VideoURL.URL)
+					base64Data, err := utils.GetContentURIAsBase64(pp.VideoURL.URL)
 					if err != nil {
 						log.Error().Msgf("Failed encoding video: %s", err)
 						continue CONTENT
 					}
-					input.Messages[i].StringVideos = append(input.Messages[i].StringVideos, base64) // TODO: make sure that we only return base64 stuff
+					// Validate base64 encoding before appending
+					if !validateBase64(base64Data) {
+						log.Error().Msgf("Invalid base64 encoding for video content")
+						continue CONTENT
+					}
+					input.Messages[i].StringVideos = append(input.Messages[i].StringVideos, base64Data)
 					vidIndex++
 					nrOfVideosInMessage++
 				case "audio_url", "audio":
 					// Decode content as base64 either if it's an URL or base64 text
-					base64, err := utils.GetContentURIAsBase64(pp.AudioURL.URL)
+					base64Data, err := utils.GetContentURIAsBase64(pp.AudioURL.URL)
 					if err != nil {
 						log.Error().Msgf("Failed encoding audio: %s", err)
 						continue CONTENT
 					}
-					input.Messages[i].StringAudios = append(input.Messages[i].StringAudios, base64) // TODO: make sure that we only return base64 stuff
+					// Validate base64 encoding before appending
+					if !validateBase64(base64Data) {
+						log.Error().Msgf("Invalid base64 encoding for audio content")
+						continue CONTENT
+					}
+					input.Messages[i].StringAudios = append(input.Messages[i].StringAudios, base64Data)
 					audioIndex++
 					nrOfAudiosInMessage++
 				case "input_audio":
-					// TODO: make sure that we only return base64 stuff
+					// Validate base64 encoding before appending
+					if !validateBase64(pp.InputAudio.Data) {
+						log.Error().Msgf("Invalid base64 encoding for input_audio content")
+						continue CONTENT
+					}
 					input.Messages[i].StringAudios = append(input.Messages[i].StringAudios, pp.InputAudio.Data)
 					audioIndex++
 					nrOfAudiosInMessage++
 				case "image_url", "image":
 					// Decode content as base64 either if it's an URL or base64 text
-					base64, err := utils.GetContentURIAsBase64(pp.ImageURL.URL)
+					base64Data, err := utils.GetContentURIAsBase64(pp.ImageURL.URL)
 					if err != nil {
 						log.Error().Msgf("Failed encoding image: %s", err)
 						continue CONTENT
 					}
-
-					input.Messages[i].StringImages = append(input.Messages[i].StringImages, base64) // TODO: make sure that we only return base64 stuff
+					// Validate base64 encoding before appending
+					if !validateBase64(base64Data) {
+						log.Error().Msgf("Invalid base64 encoding for image content")
+						continue CONTENT
+					}
+					input.Messages[i].StringImages = append(input.Messages[i].StringImages, base64Data)
 
 					imgIndex++
 					nrOfImgsInMessage++
