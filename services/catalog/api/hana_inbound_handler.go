@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -48,8 +49,12 @@ func (h *HANAInboundHandler) HandleProcessHANATables(w http.ResponseWriter, r *h
 		req.ProjectID = "default"
 	}
 
+	// Store request in context for token forwarding
+	ctx := r.Context()
+	ctx = context.WithValue(ctx, "http_request", r)
+
 	// Process HANA tables through the pipeline
-	response, err := h.hanaIntegration.ProcessHANATables(r.Context(), req)
+	response, err := h.hanaIntegration.ProcessHANATables(ctx, req)
 	if err != nil {
 		h.logger.Printf("[HANA_INBOUND] Processing failed: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
