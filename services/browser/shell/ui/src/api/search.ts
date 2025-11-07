@@ -61,6 +61,41 @@ export interface VisualizationData {
   total_results: number;
 }
 
+export interface DashboardChart {
+  type: string;  // bar, line, pie, scatter, heatmap, network
+  title: string;
+  data_source: string;
+  x_axis?: string;
+  y_axis?: string;
+  config?: Record<string, unknown>;
+}
+
+export interface DashboardMetric {
+  label: string;
+  value: string | number;
+  format?: string;  // number, percentage, currency
+}
+
+export interface DashboardSpecification {
+  title: string;
+  description: string;
+  charts: DashboardChart[];
+  metrics: DashboardMetric[];
+  insights: string[];
+}
+
+export interface Dashboard {
+  specification: DashboardSpecification;
+  enriched: boolean;
+  error?: string;
+}
+
+export interface Narrative {
+  markdown: string;
+  sections: Record<string, string>;
+  enriched: boolean;
+}
+
 export interface UnifiedSearchResponse {
   query: string;
   sources: Record<string, unknown>;
@@ -69,6 +104,8 @@ export interface UnifiedSearchResponse {
   query_enrichment?: QueryEnrichment;
   result_enrichment?: ResultEnrichment;
   visualization?: VisualizationData;
+  dashboard?: Dashboard;
+  narrative?: Narrative;
   metadata: {
     sources_queried: number;
     sources_successful: number;
@@ -150,7 +187,9 @@ export async function unifiedSearch(request: UnifiedSearchRequest): Promise<Unif
         enable_framework: request.enable_framework ?? false,
         enable_plot: request.enable_plot ?? false,
         enable_stdlib: request.enable_stdlib ?? true,
-        stdlib_operations: request.stdlib_operations ?? ["deduplicate", "sort_by_score"]
+        stdlib_operations: request.stdlib_operations ?? ["deduplicate", "sort_by_score"],
+        enable_dashboard: request.enable_dashboard ?? false,
+        enable_narrative: request.enable_narrative ?? false
       })
     });
 

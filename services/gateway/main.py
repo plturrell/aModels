@@ -746,6 +746,154 @@ async def _enrich_results_with_framework(results: list, query: str) -> Dict[str,
     return {"enriched": False}
 
 
+async def _format_results_for_prompt(results: list, max_results: int = 10) -> str:
+    """
+    Format search results for use in LLM prompts.
+    """
+    formatted = []
+    for i, result in enumerate(results[:max_results]):
+        formatted.append(
+            f"Result {i+1}:\n"
+            f"  Source: {result.get('source', 'unknown')}\n"
+            f"  Score: {result.get('score', 0.0):.3f}\n"
+            f"  Content: {result.get('content', '')[:300]}...\n"
+        )
+    return "\n".join(formatted)
+
+
+async def _generate_dashboard_with_framework(
+    search_results: Dict[str, Any],
+    query: str
+) -> Dict[str, Any]:
+    """
+    Use framework to generate dashboard specification from search results.
+    """
+    try:
+        results_summary = await _format_results_for_prompt(search_results["combined_results"])
+        viz_data = search_results.get("visualization", {})
+        
+        orchestration_payload = {
+            "orchestration_request": {
+                "chain_name": "dashboard_generator",
+                "inputs": {
+                    "query": query,
+                    "search_results": results_summary,
+                    "visualization_data": json.dumps(viz_data) if viz_data else "{}",
+                    "metadata": json.dumps(search_results.get("metadata", {}))
+                }
+            }
+        }
+        
+        r = await client.post(
+            f"{GRAPH_SERVICE_URL}/orchestration/process",
+            json=orchestration_payload,
+            timeout=15.0
+        )
+        
+        if r.status_code == 200:
+            result = r.json()
+            dashboard_text = result.get("orchestration_text", "")
+            # Try to parse JSON from response
+            try:
+                # Extract JSON from markdown code blocks if present
+                import re
+                json_match = re.search(r'```json\s*(\{.*?\})\s*```', dashboard_text, re.DOTALL)
+                if json_match:
+                    dashboard_text = json_match.group(1)
+                else:
+                    json_match = re.search(r'\{.*\}', dashboard_text, re.DOTALL)
+                    if json_match:
+                        dashboard_text = json_match.group(0)
+                
+                dashboard_spec = json.loads(dashboard_text)
+                return {
+                    "specification": dashboard_spec,
+                    "enriched": True
+                }
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse dashboard JSON from LLM response: {dashboard_text[:200]}")
+                return {"enriched": False, "error": "Failed to parse dashboard specification"}
+    except Exception as e:
+        logger.warning(f"Framework dashboard generation error: {e}")
+    
+    return {"enriched": False}
+
+
+async def _generate_narrative_with_framework(
+    search_results: Dict[str, Any],
+    query: str,
+    dashboard_spec: Dict[str, Any] = None
+) -> Dict[str, Any]:
+    """
+    Use framework to generate narrative from search results.
+    """
+    try:
+        results_summary = await _format_results_for_prompt(search_results["combined_results"], max_results=10)
+        dashboard_insights = []
+        if dashboard_spec and dashboard_spec.get("enriched"):
+            dashboard_insights = dashboard_spec.get("specification", {}).get("insights", [])
+        
+        key_findings = []
+        for result in search_results["combined_results"][:5]:
+            if result.get("score", 0.0) > 0.7:  # High relevance results
+                key_findings.append(f"- {result.get('content', '')[:100]}...")
+        
+        orchestration_payload = {
+            "orchestration_request": {
+                "chain_name": "narrative_generator",
+                "inputs": {
+                    "query": query,
+                    "search_results_summary": results_summary,
+                    "dashboard_insights": "\n".join(dashboard_insights) if dashboard_insights else "No dashboard insights available",
+                    "key_findings": "\n".join(key_findings) if key_findings else "No key findings identified"
+                }
+            }
+        }
+        
+        r = await client.post(
+            f"{GRAPH_SERVICE_URL}/orchestration/process",
+            json=orchestration_payload,
+            timeout=15.0
+        )
+        
+        if r.status_code == 200:
+            result = r.json()
+            narrative_text = result.get("orchestration_text", "")
+            return {
+                "markdown": narrative_text,
+                "sections": _parse_narrative_sections(narrative_text),
+                "enriched": True
+            }
+    except Exception as e:
+        logger.warning(f"Framework narrative generation error: {e}")
+    
+    return {"enriched": False}
+
+
+def _parse_narrative_sections(narrative_text: str) -> Dict[str, str]:
+    """
+    Parse narrative into sections (executive summary, findings, etc.)
+    """
+    sections = {}
+    current_section = None
+    current_content = []
+    
+    for line in narrative_text.split("\n"):
+        # Check for markdown headers
+        if line.startswith("#"):
+            if current_section:
+                sections[current_section] = "\n".join(current_content).strip()
+            current_section = line.lstrip("#").strip().lower().replace(" ", "_")
+            current_content = []
+        else:
+            current_content.append(line)
+    
+    if current_section:
+        sections[current_section] = "\n".join(current_content).strip()
+    
+    return sections
+
+
 async def _generate_visualization_data(results: list) -> Dict[str, Any]:
     """
     Generate data for visualization (plot service).
@@ -816,6 +964,8 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
     enable_plot = payload.get("enable_plot", False)  # Visualization data
     enable_stdlib = payload.get("enable_stdlib", True)  # Result processing (default enabled)
     stdlib_operations = payload.get("stdlib_operations", ["deduplicate", "sort_by_score"])
+    enable_dashboard = payload.get("enable_dashboard", False)  # Generate dynamic dashboard
+    enable_narrative = payload.get("enable_narrative", False)  # Generate narrative report
     
     # Validate query
     if not query:
@@ -1008,11 +1158,154 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
         visualization_data = await _generate_visualization_data(results["combined_results"])
         results["visualization"] = visualization_data
     
+    # Framework: Generate dynamic dashboard (optional)
+    dashboard_spec = None
+    if enable_dashboard and results["combined_results"]:
+        dashboard_spec = await _generate_dashboard_with_framework(results, query)
+        if dashboard_spec.get("enriched"):
+            results["dashboard"] = dashboard_spec
+    
+    # Framework: Generate narrative report (optional)
+    if enable_narrative and results["combined_results"]:
+        narrative = await _generate_narrative_with_framework(
+            results,
+            query,
+            dashboard_spec=dashboard_spec
+        )
+        if narrative.get("enriched"):
+            results["narrative"] = narrative
+    
     # Add execution time to metadata
     execution_time = (time.time() - start_time) * 1000  # Convert to milliseconds
     results["metadata"]["execution_time_ms"] = round(execution_time, 2)
     
     return results
+
+
+@app.post("/search/narrative")
+async def generate_search_narrative(payload: Dict[str, Any]) -> Any:
+    """
+    Generate narrative from search results using framework.
+    
+    Request:
+    {
+        "query": "search query",
+        "search_results": {...},  // Optional: if not provided, performs search first
+        "enable_framework": true
+    }
+    """
+    query = payload.get("query", "")
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+    
+    search_results = payload.get("search_results")
+    
+    # If search results not provided, perform search first
+    if not search_results:
+        search_payload = {
+            "query": query,
+            "enable_framework": True,
+            "enable_plot": True
+        }
+        search_response = await unified_search(search_payload)
+        search_results = search_response
+    
+    # Generate narrative
+    narrative = await _generate_narrative_with_framework(search_results, query)
+    
+    return {
+        "query": query,
+        "narrative": narrative,
+        "search_metadata": search_results.get("metadata", {})
+    }
+
+
+@app.post("/search/dashboard")
+async def generate_search_dashboard(payload: Dict[str, Any]) -> Any:
+    """
+    Generate dashboard configuration from search results using framework.
+    
+    Request:
+    {
+        "query": "search query",
+        "search_results": {...},  // Optional: if not provided, performs search first
+        "enable_framework": true,
+        "enable_plot": true
+    }
+    """
+    query = payload.get("query", "")
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+    
+    search_results = payload.get("search_results")
+    
+    # If search results not provided, perform search first
+    if not search_results:
+        search_payload = {
+            "query": query,
+            "enable_framework": True,
+            "enable_plot": True
+        }
+        search_response = await unified_search(search_payload)
+        search_results = search_response
+    
+    # Generate dashboard
+    dashboard = await _generate_dashboard_with_framework(search_results, query)
+    
+    return {
+        "query": query,
+        "dashboard": dashboard,
+        "search_metadata": search_results.get("metadata", {})
+    }
+
+
+@app.post("/search/narrative-dashboard")
+async def generate_narrative_and_dashboard(payload: Dict[str, Any]) -> Any:
+    """
+    Generate both narrative and dashboard from search results.
+    
+    Request:
+    {
+        "query": "search query",
+        "search_results": {...},  // Optional
+        "enable_framework": true,
+        "enable_plot": true
+    }
+    """
+    import asyncio
+    
+    query = payload.get("query", "")
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+    
+    search_results = payload.get("search_results")
+    
+    # If search results not provided, perform search first
+    if not search_results:
+        search_payload = {
+            "query": query,
+            "enable_framework": True,
+            "enable_plot": True
+        }
+        search_response = await unified_search(search_payload)
+        search_results = search_response
+    
+    # Generate both in parallel
+    narrative_task = _generate_narrative_with_framework(search_results, query)
+    dashboard_task = _generate_dashboard_with_framework(search_results, query)
+    
+    narrative, dashboard = await asyncio.gather(
+        narrative_task,
+        dashboard_task,
+        return_exceptions=True
+    )
+    
+    return {
+        "query": query,
+        "narrative": narrative if not isinstance(narrative, Exception) else {"error": str(narrative)},
+        "dashboard": dashboard if not isinstance(dashboard, Exception) else {"error": str(dashboard)},
+        "search_metadata": search_results.get("metadata", {})
+    }
 
 
 @app.post("/localai/chat")

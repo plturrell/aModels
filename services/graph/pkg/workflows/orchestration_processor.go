@@ -389,6 +389,44 @@ func createOrchestrationChain(chainName, localAIURL string) (chains.Chain, error
 		)
 		return chains.NewLLMChain(llm, promptTemplate), nil
 
+	case "dashboard_generator", "dashboard":
+		// Chain for generating dashboard specifications from search results
+		promptTemplate := prompts.NewPromptTemplate(
+			"You are a data visualization expert. Analyze the following search results and generate a dashboard specification.\n\n"+
+				"Search Query: {{.query}}\n"+
+				"Search Results: {{.search_results}}\n"+
+				"Visualization Data: {{.visualization_data}}\n"+
+				"Metadata: {{.metadata}}\n\n"+
+				"Generate a JSON dashboard specification with:\n"+
+				"1. Dashboard title and description\n"+
+				"2. Chart specifications (type, data source, axes, styling)\n"+
+				"3. Key metrics to highlight\n"+
+				"4. Recommended visualizations based on data patterns\n\n"+
+				"Return only valid JSON matching this schema:\n"+
+				`{"title": "Dashboard title", "description": "Dashboard description", "charts": [{"type": "bar|line|pie|scatter|heatmap|network", "title": "Chart title", "data_source": "source_distribution|score_statistics|timeline|results", "x_axis": "field_name", "y_axis": "field_name", "config": {}}], "metrics": [{"label": "Metric label", "value": "value or expression", "format": "number|percentage|currency"}], "insights": ["insight 1", "insight 2"]}`,
+			[]string{"query", "search_results", "visualization_data", "metadata"},
+		)
+		return chains.NewLLMChain(llm, promptTemplate), nil
+
+	case "narrative_generator", "narrative":
+		// Chain for generating narratives from search results
+		promptTemplate := prompts.NewPromptTemplate(
+			"You are a data analyst and storyteller. Create a comprehensive narrative report based on the following search results.\n\n"+
+				"Search Query: {{.query}}\n"+
+				"Search Results Summary: {{.search_results_summary}}\n"+
+				"Dashboard Insights: {{.dashboard_insights}}\n"+
+				"Key Findings: {{.key_findings}}\n\n"+
+				"Generate a narrative report with:\n"+
+				"1. Executive Summary (2-3 sentences)\n"+
+				"2. Key Findings (bullet points)\n"+
+				"3. Data Insights (detailed analysis)\n"+
+				"4. Recommendations (actionable items)\n"+
+				"5. Conclusion (summary and next steps)\n\n"+
+				"Format the narrative in Markdown with proper headings, lists, and emphasis.",
+			[]string{"query", "search_results_summary", "dashboard_insights", "key_findings"},
+		)
+		return chains.NewLLMChain(llm, promptTemplate), nil
+
 	default:
 		// Default to simple LLM chain with custom input
 		promptTemplate := prompts.NewPromptTemplate(

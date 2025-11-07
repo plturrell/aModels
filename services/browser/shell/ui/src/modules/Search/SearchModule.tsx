@@ -45,6 +45,9 @@ export function SearchModule() {
   const [enableFramework, setEnableFramework] = useState<boolean>(false);
   const [enablePlot, setEnablePlot] = useState<boolean>(false);
   const [selectedTab, setSelectedTab] = useState<number>(0);
+  const [narrative, setNarrative] = useState<string | null>(null);
+  const [dashboard, setDashboard] = useState<Record<string, unknown> | null>(null);
+  const [generating, setGenerating] = useState<boolean>(false);
 
   const handleSearch = async () => {
     const trimmedQuery = query.trim();
@@ -62,7 +65,9 @@ export function SearchModule() {
         use_perplexity: usePerplexity,
         enable_framework: enableFramework,
         enable_plot: enablePlot,
-        enable_stdlib: true
+        enable_stdlib: true,
+        enable_dashboard: enableDashboard,
+        enable_narrative: enableNarrative
       });
       setResults(response.combined_results || []);
       setSources(response.sources || {});
@@ -81,6 +86,73 @@ export function SearchModule() {
     setResults([]);
     setError(null);
     setHasSearched(false);
+    setNarrative(null);
+    setDashboard(null);
+    setSearchResponse(null);
+  };
+
+  const handleGenerateNarrative = async () => {
+    if (!searchResponse) return;
+    
+    setGenerating(true);
+    setError(null);
+    
+    try {
+      const response = await generateNarrative(query, searchResponse);
+      if (response.narrative.enriched && response.narrative.markdown) {
+        setNarrative(response.narrative.markdown);
+        setSelectedTab(3); // Switch to narrative tab
+      } else {
+        setError(new Error("Failed to generate narrative"));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleGenerateDashboard = async () => {
+    if (!searchResponse) return;
+    
+    setGenerating(true);
+    setError(null);
+    
+    try {
+      const response = await generateDashboard(query, searchResponse);
+      if (response.dashboard.enriched && response.dashboard.specification) {
+        setDashboard(response.dashboard.specification);
+        setSelectedTab(4); // Switch to dashboard tab
+      } else {
+        setError(new Error("Failed to generate dashboard"));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleGenerateBoth = async () => {
+    if (!searchResponse) return;
+    
+    setGenerating(true);
+    setError(null);
+    
+    try {
+      const response = await generateNarrativeAndDashboard(query, searchResponse);
+      if (response.narrative.enriched && response.narrative.markdown) {
+        setNarrative(response.narrative.markdown);
+      }
+      if (response.dashboard.enriched && response.dashboard.specification) {
+        setDashboard(response.dashboard.specification);
+      }
+      setSelectedTab(3); // Switch to narrative tab
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -131,6 +203,16 @@ export function SearchModule() {
               >
                 {loading ? "Searching…" : "Search"}
               </Button>
+              {hasSearched && results.length > 0 && (
+                <Button
+                  variant="outlined"
+                  onClick={handleGenerateBoth}
+                  disabled={generating}
+                  startIcon={generating ? <CircularProgress size={16} /> : undefined}
+                >
+                  {generating ? "Generating…" : "Generate Report"}
+                </Button>
+              )}
             </Box>
             <Stack spacing={1}>
               <FormControlLabel
@@ -162,6 +244,26 @@ export function SearchModule() {
                   />
                 }
                 label="Generate visualization data"
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={enableDashboard}
+                    onChange={(e) => setEnableDashboard(e.target.checked)}
+                    disabled={loading}
+                  />
+                }
+                label="Generate dynamic dashboard (AI-powered)"
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={enableNarrative}
+                    onChange={(e) => setEnableNarrative(e.target.checked)}
+                    disabled={loading}
+                  />
+                }
+                label="Generate narrative report (AI-powered)"
               />
             </Stack>
           </Stack>
@@ -205,6 +307,8 @@ export function SearchModule() {
               <Tab label="By Source" />
               {searchResponse?.visualization && <Tab label="Visualization" />}
               {searchResponse?.result_enrichment && <Tab label="AI Insights" />}
+              {searchResponse?.dashboard && <Tab label="Dashboard" />}
+              {searchResponse?.narrative && <Tab label="Narrative" />}
             </Tabs>
           </Box>
           
@@ -328,6 +432,153 @@ export function SearchModule() {
               <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
                 {searchResponse.result_enrichment.summary || "No summary available"}
               </Typography>
+            </Paper>
+          )}
+          
+          {selectedTab === 4 && narrative && (
+            <Paper variant="outlined" sx={{ p: 3 }}>
+              <Stack spacing={2}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="h6">
+                    Generated Narrative
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleGenerateNarrative}
+                    disabled={generating}
+                  >
+                    Regenerate
+                  </Button>
+                </Box>
+                <Divider />
+                <Typography 
+                  variant="body1" 
+                  sx={{ 
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    lineHeight: 1.8
+                  }}
+                  component="div"
+                >
+                  {narrative.split('\n').map((line, idx) => {
+                    if (line.startsWith('#')) {
+                      const level = line.match(/^#+/)?.[0].length || 1;
+                      const text = line.replace(/^#+\s*/, '');
+                      return (
+                        <Typography 
+                          key={idx} 
+                          variant={level === 1 ? 'h5' : level === 2 ? 'h6' : 'subtitle1'}
+                          sx={{ mt: level === 1 ? 2 : 1, mb: 1 }}
+                        >
+                          {text}
+                        </Typography>
+                      );
+                    }
+                    if (line.startsWith('- ') || line.startsWith('* ')) {
+                      return (
+                        <Box key={idx} sx={{ ml: 2, mb: 0.5 }}>
+                          <Typography variant="body2" component="span">
+                            • {line.substring(2)}
+                          </Typography>
+                        </Box>
+                      );
+                    }
+                    return (
+                      <Typography key={idx} variant="body2" sx={{ mb: 1 }}>
+                        {line || '\u00A0'}
+                      </Typography>
+                    );
+                  })}
+                </Typography>
+              </Stack>
+            </Paper>
+          )}
+          
+          {selectedTab === 5 && dashboard && (
+            <Paper variant="outlined" sx={{ p: 3 }}>
+              <Stack spacing={2}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="h6">
+                    Generated Dashboard
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleGenerateDashboard}
+                    disabled={generating}
+                  >
+                    Regenerate
+                  </Button>
+                </Box>
+                <Divider />
+                {dashboard.title && (
+                  <Typography variant="h5">{dashboard.title}</Typography>
+                )}
+                {dashboard.description && (
+                  <Typography variant="body2" color="text.secondary">
+                    {dashboard.description as string}
+                  </Typography>
+                )}
+                {dashboard.insights && Array.isArray(dashboard.insights) && dashboard.insights.length > 0 && (
+                  <Box>
+                    <Typography variant="h6" gutterBottom>
+                      Insights
+                    </Typography>
+                    <List>
+                      {(dashboard.insights as string[]).map((insight, idx) => (
+                        <ListItem key={idx}>
+                          <ListItemText primary={insight} />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </Box>
+                )}
+                {dashboard.charts && Array.isArray(dashboard.charts) && (
+                  <Box>
+                    <Typography variant="h6" gutterBottom>
+                      Recommended Charts ({dashboard.charts.length})
+                    </Typography>
+                    <List>
+                      {(dashboard.charts as Array<Record<string, unknown>>).map((chart, idx) => (
+                        <ListItem key={idx}>
+                          <ListItemText
+                            primary={chart.title as string || `Chart ${idx + 1}`}
+                            secondary={
+                              <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                                <Chip label={chart.type as string} size="small" />
+                                <Chip label={chart.data_source as string} size="small" variant="outlined" />
+                              </Stack>
+                            }
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+                  </Box>
+                )}
+                {dashboard.metrics && Array.isArray(dashboard.metrics) && (
+                  <Box>
+                    <Typography variant="h6" gutterBottom>
+                      Key Metrics
+                    </Typography>
+                    <Stack direction="row" spacing={2} flexWrap="wrap">
+                      {(dashboard.metrics as Array<Record<string, unknown>>).map((metric, idx) => (
+                        <Paper key={idx} variant="outlined" sx={{ p: 2, minWidth: 150 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            {metric.label as string}
+                          </Typography>
+                          <Typography variant="h6">
+                            {metric.value as string | number}
+                          </Typography>
+                        </Paper>
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
+                <Alert severity="info">
+                  Dashboard specification generated. Chart rendering will be implemented in a future update.
+                </Alert>
+              </Stack>
             </Paper>
           )}
         </Panel>
