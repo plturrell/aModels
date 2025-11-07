@@ -1,0 +1,40 @@
+INFO:     Started server process [218749]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:59898 - "GET /healthz HTTP/1.1" 200 OK
+Retry attempt 1/2 after 0.50s: All connection attempts failed
+Retry attempt 2/2 after 1.00s: All connection attempts failed
+All 3 retry attempts failed
+Search inference service connection error: Connection refused: http://localhost:8090 - Service may not be running (after retries)
+Retry attempt 1/2 after 0.50s: All connection attempts failed
+Retry attempt 2/2 after 1.00s: All connection attempts failed
+All 3 retry attempts failed
+Knowledge graph search connection error: Connection refused: http://localhost:9002 - Service may not be running (after retries)
+Retry attempt 1/2 after 0.50s: All connection attempts failed
+INFO:     127.0.0.1:59902 - "GET / HTTP/1.1" 404 Not Found
+Retry attempt 2/2 after 1.00s: All connection attempts failed
+INFO:     127.0.0.1:59902 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+All 3 retry attempts failed
+Catalog search connection error: Connection refused: http://localhost:8084 - Service may not be running (after retries)
+INFO:     127.0.0.1:59900 - "POST /search/unified HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59900 - "GET /healthz HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59916 - "GET /healthz HTTP/1.1" 200 OK
+Retry attempt 1/2 after 0.50s: All connection attempts failed
+Retry attempt 2/2 after 1.00s: All connection attempts failed
+All 3 retry attempts failed
+Search inference service connection error: Connection refused: http://localhost:8090 - Service may not be running (after retries)
+Retry attempt 1/2 after 0.50s: All connection attempts failed
+Retry attempt 2/2 after 1.00s: All connection attempts failed
+All 3 retry attempts failed
+Knowledge graph search connection error: Connection refused: http://localhost:9002 - Service may not be running (after retries)
+Retry attempt 1/2 after 0.50s: All connection attempts failed
+Retry attempt 2/2 after 1.00s: All connection attempts failed
+All 3 retry attempts failed
+Catalog search connection error: Connection refused: http://localhost:8084 - Service may not be running (after retries)
+INFO:     127.0.0.1:58494 - "POST /search/unified HTTP/1.1" 200 OK
+Retry attempt 1/2 after 0.50s: All connection attempts failed
+Retry attempt 2/2 after 1.00s: All connection attempts failed
+All 3 retry attempts failed
+Search inference service connection error: Connection refused: http://localhost:8090 - Service may not be running (after retries)
+INFO:     127.0.0.1:58502 - "POST /search/unified HTTP/1.1" 200 OK
