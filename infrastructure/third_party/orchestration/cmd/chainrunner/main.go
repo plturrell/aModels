@@ -11,7 +11,8 @@ import (
 	"time"
 
 	// catalogprompt "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightcatalog/prompt" // Disabled: missing package
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/catalog/flightcatalog"
+	// flightcatalog disabled - build constraints exclude all Go files
+	// "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/catalog/flightcatalog"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/chains"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/llms"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/llms/localai"
@@ -60,67 +61,69 @@ func run() error {
 
 	ctx := context.Background()
 	llm, meta := buildLLM(req)
-	if addr := strings.TrimSpace(os.Getenv("AGENTSDK_FLIGHT_ADDR")); addr != "" {
-		catalogCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		cat, err := flightcatalog.Fetch(catalogCtx, addr)
-		cancel()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to fetch agent catalog from %s: %v\n", addr, err)
-		} else {
-			// catalogprompt disabled - missing package
-			// enrichment := catalogprompt.Enrich(catalogprompt.Catalog{
-			// 	Suites: cat.Suites,
-			// 	Tools:  cat.Tools,
-			// })
-			// contextText := enrichment.Prompt
-			contextText := "" // Disabled: missing catalogprompt package
-
-			meta["agent_catalog"] = cat.Suites
-			meta["agent_tools"] = cat.Tools
-			// if enrichment.Summary != "" {
-			// 	meta["agent_catalog_summary"] = enrichment.Summary
-			// }
-			// if enrichment.Stats.SuiteCount > 0 || enrichment.Stats.UniqueToolCount > 0 {
-			// 	meta["agent_catalog_stats"] = enrichment.Stats
-			// }
-			// if len(enrichment.Implementations) > 0 {
-			// 	meta["agent_catalog_matrix"] = enrichment.Implementations
-			// }
-			// if len(enrichment.UniqueTools) > 0 {
-			// 	meta["agent_catalog_unique_tools"] = enrichment.UniqueTools
-			// }
-			// if len(enrichment.StandaloneTools) > 0 {
-			// 	meta["agent_catalog_tool_details"] = enrichment.StandaloneTools
-			// }
-			if contextText != "" {
-				meta[catalogContextKey] = contextText
-			}
-
-			if req.Extra == nil {
-				req.Extra = map[string]any{}
-			}
-			req.Extra["agent_catalog"] = cat
-			req.Extra["agent_tools"] = cat.Tools
-			if enrichment.Summary != "" {
-				req.Extra["agent_catalog_summary"] = enrichment.Summary
-			}
-			if enrichment.Stats.SuiteCount > 0 || enrichment.Stats.UniqueToolCount > 0 {
-				req.Extra["agent_catalog_stats"] = enrichment.Stats
-			}
-			if len(enrichment.Implementations) > 0 {
-				req.Extra["agent_catalog_matrix"] = enrichment.Implementations
-			}
-			if len(enrichment.UniqueTools) > 0 {
-				req.Extra["agent_catalog_unique_tools"] = enrichment.UniqueTools
-			}
-			if len(enrichment.StandaloneTools) > 0 {
-				req.Extra["agent_catalog_tool_details"] = enrichment.StandaloneTools
-			}
-			if contextText != "" {
-				req.Extra[catalogContextKey] = contextText
-			}
-		}
-	}
+	// flightcatalog disabled - package excluded by build constraints
+	// if addr := strings.TrimSpace(os.Getenv("AGENTSDK_FLIGHT_ADDR")); addr != "" {
+	// 	catalogCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	// 	cat, err := flightcatalog.Fetch(catalogCtx, addr)
+	// 	cancel()
+	// 	if err != nil {
+	// 		fmt.Fprintf(os.Stderr, "Warning: failed to fetch agent catalog from %s: %v\n", addr, err)
+	// 	} else {
+	// 		// catalogprompt disabled - missing package
+	// 		// enrichment := catalogprompt.Enrich(catalogprompt.Catalog{
+	// 		// 	Suites: cat.Suites,
+	// 		// 	Tools:  cat.Tools,
+	// 		// })
+	// 		// contextText := enrichment.Prompt
+	// 		contextText := "" // Disabled: missing catalogprompt package
+	//
+	// 		meta["agent_catalog"] = cat.Suites
+	// 		meta["agent_tools"] = cat.Tools
+	// 		// if enrichment.Summary != "" {
+	// 		// 	meta["agent_catalog_summary"] = enrichment.Summary
+	// 		// }
+	// 		// if enrichment.Stats.SuiteCount > 0 || enrichment.Stats.UniqueToolCount > 0 {
+	// 		// 	meta["agent_catalog_stats"] = enrichment.Stats
+	// 		// }
+	// 		// if len(enrichment.Implementations) > 0 {
+	// 		// 	meta["agent_catalog_matrix"] = enrichment.Implementations
+	// 		// }
+	// 		// if len(enrichment.UniqueTools) > 0 {
+	// 		// 	meta["agent_catalog_unique_tools"] = enrichment.UniqueTools
+	// 		// }
+	// 		// if len(enrichment.StandaloneTools) > 0 {
+	// 		// 	meta["agent_catalog_tool_details"] = enrichment.StandaloneTools
+	// 		// }
+	// 		if contextText != "" {
+	// 			meta[catalogContextKey] = contextText
+	// 		}
+	//
+	// 		if req.Extra == nil {
+	// 			req.Extra = map[string]any{}
+	// 		}
+	// 		req.Extra["agent_catalog"] = cat
+	// 		req.Extra["agent_tools"] = cat.Tools
+	// 		// enrichment disabled - missing catalogprompt package
+	// 		// if enrichment.Summary != "" {
+	// 		// 	req.Extra["agent_catalog_summary"] = enrichment.Summary
+	// 		// }
+	// 		// if enrichment.Stats.SuiteCount > 0 || enrichment.Stats.UniqueToolCount > 0 {
+	// 		// 	req.Extra["agent_catalog_stats"] = enrichment.Stats
+	// 		// }
+	// 		// if len(enrichment.Implementations) > 0 {
+	// 		// 	req.Extra["agent_catalog_matrix"] = enrichment.Implementations
+	// 		// }
+	// 		// if len(enrichment.UniqueTools) > 0 {
+	// 		// 	req.Extra["agent_catalog_unique_tools"] = enrichment.UniqueTools
+	// 		// }
+	// 		// if len(enrichment.StandaloneTools) > 0 {
+	// 		// 	req.Extra["agent_catalog_tool_details"] = enrichment.StandaloneTools
+	// 		// }
+	// 		if contextText != "" {
+	// 			req.Extra[catalogContextKey] = contextText
+	// 		}
+	// 	}
+	// }
 
 	start := time.Now()
 	var (

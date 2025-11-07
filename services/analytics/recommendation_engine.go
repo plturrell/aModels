@@ -2,7 +2,7 @@ package analytics
 
 import (
 	"context"
-	"fmt"
+	// "fmt" // Unused
 	"log"
 )
 

@@ -18,8 +18,8 @@ type MAS610Reporting struct {
 	logger            *log.Logger
 }
 
-// ExtractionResult represents the result of an extraction (from extract/regulatory package).
-type ExtractionResult = regulatory.ExtractionResult
+// ExtractionResult is already defined in bcbs239.go - using the same type alias
+// type ExtractionResult = regulatory.ExtractionResult
 
 // RegulatorySpec represents a regulatory specification (from extract/regulatory package).
 type RegulatorySpec = regulatory.RegulatorySpec
@@ -137,6 +137,13 @@ type MAS610Section struct {
 	Order        int
 	Fields       []MAS610Field
 	Subsections  []MAS610Section
+}
+
+// ValidationRule represents a validation rule for a field.
+type ValidationRule struct {
+	RuleType    string
+	RuleValue   interface{}
+	RuleMessage string
 }
 
 // MAS610Field represents a field in a MAS 610 report.

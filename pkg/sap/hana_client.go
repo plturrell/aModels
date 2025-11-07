@@ -1,3 +1,7 @@
+//go:build ignore
+// +build ignore
+
+// Package disabled: depends on missing agenticAiETH_layer4 package
 // Package sap provides SAP HANA, Datasphere, and AI Core integration for training layer
 package sap
 

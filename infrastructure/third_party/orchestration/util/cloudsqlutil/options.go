@@ -1,3 +1,7 @@
+//go:build ignore
+// +build ignore
+
+// Package disabled: depends on disabled engine.go
 package cloudsqlutil
 
 import (

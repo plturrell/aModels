@@ -1,3 +1,7 @@
+//go:build ignore
+// +build ignore
+
+// Package disabled: depends on missing ai_benchmarks package
 // internal/lnn/nash.go - LNN-enhanced Nash calibration
 package lnn
 

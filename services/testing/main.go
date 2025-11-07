@@ -1,3 +1,8 @@
+//go:build ignore
+// +build ignore
+
+// Package disabled: conflicts with package testing in same directory
+// Move this file to services/testing/cmd/main.go or rename other files
 package main
 
 import (

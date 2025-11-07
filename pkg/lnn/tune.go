@@ -1,4 +1,8 @@
 // internal/lnn/tune.go - LNN-enhanced tuning
+//go:build ignore
+// +build ignore
+
+// Package disabled: depends on missing ai_benchmarks package
 package lnn
 
 import (

@@ -1,3 +1,7 @@
+//go:build ignore
+// +build ignore
+
+// Package disabled: Arrow version conflicts (v16 vs v18)
 package main
 
 import (

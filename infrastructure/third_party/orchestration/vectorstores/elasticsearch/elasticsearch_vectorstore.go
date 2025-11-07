@@ -3,6 +3,7 @@ package elasticsearch
 import (
 	"bytes"
 	"context"
+	"crypto/md5"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -120,12 +121,39 @@ func (es *ElasticsearchVectorStore) AddDocuments(ctx context.Context, documents 
 	// Prepare bulk request
 	var bulkBody strings.Builder
 	for _, doc := range documents {
+		// Generate ID from content hash if not in metadata
+		docID := ""
+		if doc.Metadata != nil {
+			if id, ok := doc.Metadata["id"].(string); ok {
+				docID = id
+			}
+		}
+		if docID == "" {
+			hash := md5.Sum([]byte(doc.PageContent))
+			docID = fmt.Sprintf("%x", hash)
+		}
+
+		// Extract embedding from metadata if present
+		var embedding []float64
+		if doc.Metadata != nil {
+			if emb, ok := doc.Metadata["embedding"].([]float64); ok {
+				embedding = emb
+			} else if emb, ok := doc.Metadata["embedding"].([]interface{}); ok {
+				embedding = make([]float64, len(emb))
+				for i, v := range emb {
+					if f, ok := v.(float64); ok {
+						embedding[i] = f
+					}
+				}
+			}
+		}
+
 		// Convert schema.Document to our Document format
 		esDoc := &Document{
-			ID:        doc.ID,
+			ID:        docID,
 			Content:   doc.PageContent,
 			Metadata:  doc.Metadata,
-			Embedding: doc.Embedding,
+			Embedding: embedding,
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
 		}
@@ -172,11 +200,20 @@ func (es *ElasticsearchVectorStore) SimilaritySearch(ctx context.Context, query 
 	// Convert results to schema.Document
 	documents := make([]schema.Document, len(results))
 	for i, result := range results {
+		// Store ID and embedding in metadata
+		metadata := result.Document.Metadata
+		if metadata == nil {
+			metadata = make(map[string]interface{})
+		}
+		metadata["id"] = result.Document.ID
+		if len(result.Document.Embedding) > 0 {
+			metadata["embedding"] = result.Document.Embedding
+		}
+
 		documents[i] = schema.Document{
-			ID:          result.Document.ID,
 			PageContent: result.Document.Content,
-			Metadata:    result.Document.Metadata,
-			Embedding:   result.Document.Embedding,
+			Metadata:    metadata,
+			Score:       float32(result.Score),
 		}
 	}
 
@@ -199,11 +236,20 @@ func (es *ElasticsearchVectorStore) SimilaritySearchWithScore(ctx context.Contex
 	documents := make([]schema.Document, len(results))
 	scores := make([]float64, len(results))
 	for i, result := range results {
+		// Store ID and embedding in metadata
+		metadata := result.Document.Metadata
+		if metadata == nil {
+			metadata = make(map[string]interface{})
+		}
+		metadata["id"] = result.Document.ID
+		if len(result.Document.Embedding) > 0 {
+			metadata["embedding"] = result.Document.Embedding
+		}
+
 		documents[i] = schema.Document{
-			ID:          result.Document.ID,
 			PageContent: result.Document.Content,
-			Metadata:    result.Document.Metadata,
-			Embedding:   result.Document.Embedding,
+			Metadata:    metadata,
+			Score:       float32(result.Score),
 		}
 		scores[i] = result.Score
 	}
@@ -271,37 +317,57 @@ func (es *ElasticsearchVectorStore) GetDocument(ctx context.Context, id string) 
 	}
 
 	// Convert to schema.Document
-	doc := &schema.Document{
-		ID: id,
-	}
+	doc := &schema.Document{}
 
 	if content, ok := source["content"].(string); ok {
 		doc.PageContent = content
 	}
 
-	if metadata, ok := source["metadata"].(map[string]interface{}); ok {
-		doc.Metadata = metadata
-	}
-
-	if embedding, ok := source["embedding"].([]interface{}); ok {
-		doc.Embedding = make([]float64, len(embedding))
-		for i, v := range embedding {
-			if f, ok := v.(float64); ok {
-				doc.Embedding[i] = f
-			}
+	metadata := make(map[string]interface{})
+	if meta, ok := source["metadata"].(map[string]interface{}); ok {
+		for k, v := range meta {
+			metadata[k] = v
 		}
 	}
+	// Store ID and embedding in metadata
+	metadata["id"] = id
 
+	if embedding, ok := source["embedding"].([]interface{}); ok {
+		embeddingSlice := make([]float64, len(embedding))
+		for i, v := range embedding {
+			if f, ok := v.(float64); ok {
+				embeddingSlice[i] = f
+			}
+		}
+		metadata["embedding"] = embeddingSlice
+	}
+
+	doc.Metadata = metadata
 	return doc, nil
 }
 
 // UpdateDocument updates a document
 func (es *ElasticsearchVectorStore) UpdateDocument(ctx context.Context, id string, document *schema.Document) error {
+	// Extract embedding from metadata if present
+	var embedding []float64
+	if document.Metadata != nil {
+		if emb, ok := document.Metadata["embedding"].([]float64); ok {
+			embedding = emb
+		} else if emb, ok := document.Metadata["embedding"].([]interface{}); ok {
+			embedding = make([]float64, len(emb))
+			for i, v := range emb {
+				if f, ok := v.(float64); ok {
+					embedding[i] = f
+				}
+			}
+		}
+	}
+
 	esDoc := &Document{
 		ID:        id,
 		Content:   document.PageContent,
 		Metadata:  document.Metadata,
-		Embedding: document.Embedding,
+		Embedding: embedding,
 		UpdatedAt: time.Now(),
 	}
 

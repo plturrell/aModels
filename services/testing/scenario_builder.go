@@ -52,7 +52,7 @@ func (sb *ScenarioBuilder) BuildScenarioFromPetriNet(ctx context.Context, petriN
 	outputTables := make(map[string]bool)
 	
 	for _, transition := range transitions {
-		props := parseProperties(transition["properties"])
+		// props := parseProperties(transition["properties"]) // Unused in this scope
 		
 		processConfig := &ProcessTestConfig{
 			ProcessID:    getString(transition, "transition", ""),

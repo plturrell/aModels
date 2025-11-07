@@ -1,3 +1,7 @@
+//go:build ignore
+// +build ignore
+
+// Package disabled: depends on missing ai_benchmarks packages and functions from disabled main.go
 package main
 
 import (
