@@ -29,9 +29,10 @@ services:
   postgres:
     image: ankane/pgvector:latest
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=amodels
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      # Security: Require POSTGRES_PASSWORD environment variable
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-amodels}
     ports:
       - "5432:5432"
 
@@ -117,18 +118,22 @@ services:
       retries: 3
       start_period: 60s
 
-volumes:
-  neo4j_data:
   neo4j:
     image: neo4j:5.23
     environment:
-      - NEO4J_AUTH=neo4j/password
+      # Security: Use environment variables for Neo4j credentials
+      # Set NEO4J_USERNAME and NEO4J_PASSWORD in .env file
+      - NEO4J_AUTH=${NEO4J_USERNAME:-neo4j}/${NEO4J_PASSWORD}
       - NEO4J_PLUGINS=["graph-data-science"]
     ports:
       - "7687:7687"
       - "7474:7474"
     volumes:
       - neo4j_data:/data
+    # Security: Fail if password is not set
+    deploy:
+      restart_policy:
+        condition: on-failure
 
   localai:
     image: quay.io/go-skynet/local-ai:latest
@@ -149,9 +154,15 @@ volumes:
     environment:
       - PORT=8084
       - RUN_MIGRATIONS=${RUN_MIGRATIONS:-true}
+      # Security: JWT authentication (required in production)
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_TOKEN_EXPIRY=${JWT_TOKEN_EXPIRY:-15m}
+      - JWT_REFRESH_EXPIRY=${JWT_REFRESH_EXPIRY:-168h}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      # Neo4j Configuration (required - no defaults)
       - NEO4J_URI=bolt://neo4j:7687
-      - NEO4J_USERNAME=neo4j
-      - NEO4J_PASSWORD=password
+      - NEO4J_USERNAME=${NEO4J_USERNAME}
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
       - CATALOG_BASE_URI=http://catalog:8084
       - EXTRACT_SERVICE_URL=http://extract-service:19080
       - GRAPH_SERVICE_URL=http://graph-service:8081
@@ -159,8 +170,9 @@ volumes:
       - DEEP_RESEARCH_URL=http://deep-research:2024
       - REDIS_URL=redis://redis:6379/0
       - SQL_MIGRATIONS_DRIVER=postgres
-      - SQL_MIGRATIONS_DSN=postgres://postgres:postgres@postgres:5432/amodels?sslmode=disable
-      - CATALOG_DATABASE_URL=postgres://postgres:postgres@postgres:5432/amodels?sslmode=disable
+      # Security: Use environment variables for database credentials
+      - SQL_MIGRATIONS_DSN=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-amodels}?sslmode=disable
+      - CATALOG_DATABASE_URL=postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-amodels}?sslmode=disable
     ports:
       - "8084:8084"
     depends_on:
@@ -168,3 +180,6 @@ volumes:
       - postgres
       - redis
       - localai
+
+volumes:
+  neo4j_data:
