@@ -4,7 +4,7 @@
  */
 
 export default async function loadGraph(requestId, query = null) {
-  const apiBase = process.env.PERPLEXITY_API_BASE || "http://localhost:8080";
+  const apiBase = process.env.PERPLEXITY_API_BASE || "http://localhost:8000";
   
   try {
     // If query provided, execute it

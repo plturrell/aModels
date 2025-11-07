@@ -6,7 +6,7 @@
 export default async function(options = {}) {
   const { limit = 100, offset = 0 } = options;
   
-  const apiBase = process.env.PERPLEXITY_API_BASE || "http://localhost:8080";
+  const apiBase = process.env.PERPLEXITY_API_BASE || "http://localhost:8000";
   const url = `${apiBase}/api/perplexity/history?limit=${limit}&offset=${offset}`;
   
   try {

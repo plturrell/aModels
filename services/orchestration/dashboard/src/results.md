@@ -22,10 +22,16 @@ Explore processed documents, visualize relationships, and discover patterns in y
 ## Results Overview
 
 ```js
-// Get request ID from URL or input
-const requestId = typeof Inputs !== "undefined"
-  ? await Inputs.text({label: "Request ID", value: ""})
-  : new URLSearchParams(window.location.search).get("request_id") || "";
+// Get request ID from URL parameters (deep linking support)
+const urlParams = typeof window !== "undefined" 
+  ? new URLSearchParams(window.location.search)
+  : new URLSearchParams();
+const urlRequestId = urlParams.get("request_id") || "";
+
+// Input for request ID (if not in URL)
+const requestId = typeof Inputs !== "undefined" && !urlRequestId
+  ? await Inputs.text({label: "Request ID", value: urlRequestId, placeholder: "Enter request ID or use ?request_id=xxx in URL"})
+  : urlRequestId;
 
 const results = requestId ? await resultsData(requestId) : null;
 const intelligence = requestId ? await intelligenceData(requestId) : null;
@@ -34,7 +40,7 @@ const intelligence = requestId ? await intelligenceData(requestId) : null;
 ```js
 // Intelligence Summary Card
 html`<div class="card">
-  ${intelligence ? html`
+  ${intelligenceError ? emptyStateError(intelligenceError) : intelligence ? html`
     <h3>Intelligence Summary</h3>
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 24px;">
       <div style="text-align: center;">
@@ -62,12 +68,7 @@ html`<div class="card">
         <div style="font-size: 14px; color: #86868b;">KG Nodes</div>
       </div>
     </div>
-  ` : html`
-    <div class="empty-state">
-      <div class="empty-state-title">No Results Available</div>
-      <p>Enter a request ID to view results</p>
-    </div>
-  `}
+  ` : emptyStateNoRequest()}
 </div>`
 ```
 
@@ -350,11 +351,7 @@ html`<div class="card">
         </div>
       `)}
     </div>
-  ` : html`
-    <div class="empty-state">
-      <p>No documents available</p>
-    </div>
-  `}
+  ` : emptyStateNoData("No documents available")}
 </div>`
 ```
 

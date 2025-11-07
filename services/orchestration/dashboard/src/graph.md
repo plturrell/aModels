@@ -16,9 +16,16 @@ import {loadIntelligence} from "../data/loaders/intelligence.js";
 ```
 
 ```js
-// Get request ID from URL or default
-const urlParams = new URLSearchParams(window.location.search);
-const requestId = urlParams.get("request_id") || "demo";
+// Get request ID from URL parameters (deep linking support)
+const urlParams = typeof window !== "undefined" 
+  ? new URLSearchParams(window.location.search)
+  : new URLSearchParams();
+const urlRequestId = urlParams.get("request_id") || "";
+
+// Input for request ID (if not in URL)
+const requestId = typeof Inputs !== "undefined" && !urlRequestId
+  ? await Inputs.text({label: "Request ID", value: urlRequestId, placeholder: "Enter request ID or use ?request_id=xxx in URL"})
+  : urlRequestId || "demo";
 ```
 
 ```js

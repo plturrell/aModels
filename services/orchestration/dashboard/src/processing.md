@@ -7,6 +7,7 @@ description: Real-time processing status, progress, and statistics
 import * as Plot from "@observablehq/plot";
 import processingStatus from "../data/loaders/processing.js";
 import {html} from "@observablehq/stdlib";
+import {emptyStateNoRequest, emptyStateLoading, emptyStateError} from "../components/emptyState.js";
 ```
 
 # Processing Dashboard
@@ -49,7 +50,7 @@ const status = requestId ? await autoRefreshStatus(requestId).next().then(r => r
 ```js
 // Processing Status Card
 html`<div class="card">
-  ${status ? html`
+  ${statusError ? emptyStateError(statusError) : status ? html`
     <h3>Request: ${status.request_id}</h3>
     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 24px;">
       <div style="text-align: center;">
@@ -80,12 +81,7 @@ html`<div class="card">
         ${status.progress_percent?.toFixed(1) || 0}%
       </div>
     </div>
-  ` : html`
-    <div class="empty-state">
-      <div class="empty-state-title">No Request Selected</div>
-      <p>Enter a request ID to view processing status</p>
-    </div>
-  `}
+  ` : emptyStateNoRequest()}
 </div>`
 ```
 

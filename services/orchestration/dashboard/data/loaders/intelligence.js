@@ -8,7 +8,7 @@ export default async function(requestId) {
     throw new Error("Request ID is required");
   }
   
-  const apiBase = process.env.PERPLEXITY_API_BASE || "http://localhost:8080";
+  const apiBase = process.env.PERPLEXITY_API_BASE || "http://localhost:8000";
   const url = `${apiBase}/api/perplexity/results/${requestId}/intelligence`;
   
   try {
