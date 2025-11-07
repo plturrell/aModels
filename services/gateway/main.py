@@ -28,6 +28,7 @@ GRAPH_SERVICE_URL = os.getenv("GRAPH_SERVICE_URL", "http://localhost:8081")
 SAP_BDC_URL = os.getenv("SAP_BDC_URL", "http://localhost:8083")
 CATALOG_URL = os.getenv("CATALOG_URL", "http://localhost:8084")
 DEEP_RESEARCH_URL = os.getenv("DEEP_RESEARCH_URL", "http://localhost:8085")
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
 
 logger = logging.getLogger(__name__)
 if LOCALAI_URL == GRAPH_SERVICE_URL:
@@ -404,6 +405,7 @@ async def data_sql(payload: Dict[str, Any]) -> Any:
 
 @app.post("/search/_search")
 async def opensearch_search(payload: Dict[str, Any]) -> Any:
+    """OpenSearch/Elasticsearch search endpoint."""
     try:
         r = await client.post(f"{OPENSEARCH_URL}/_search", json=payload)
         r.raise_for_status()
@@ -412,6 +414,148 @@ async def opensearch_search(payload: Dict[str, Any]) -> Any:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except httpx.RequestError as e:
         raise HTTPException(status_code=502, detail=f"OpenSearch error: {e}")
+
+
+@app.post("/search/unified")
+async def unified_search(payload: Dict[str, Any]) -> Any:
+    """
+    Unified search endpoint that combines multiple search backends:
+    - Search Inference Service (semantic search)
+    - Knowledge Graph Search (extract service)
+    - Catalog Semantic Search
+    - Perplexity AI (if API key configured)
+    
+    Request format:
+    {
+        "query": "search text",
+        "top_k": 10,
+        "sources": ["inference", "knowledge_graph", "catalog", "perplexity"],  // Optional: which sources to use
+        "use_perplexity": true  // Optional: enable Perplexity web search
+    }
+    """
+    query = payload.get("query", "")
+    top_k = payload.get("top_k", 10)
+    sources = payload.get("sources", ["inference", "knowledge_graph", "catalog"])
+    use_perplexity = payload.get("use_perplexity", False) and PERPLEXITY_API_KEY != ""
+    
+    if not query:
+        raise HTTPException(status_code=400, detail="query is required")
+    
+    results = {
+        "query": query,
+        "sources": {},
+        "combined_results": [],
+        "total_count": 0
+    }
+    
+    # 1. Search Inference Service
+    if "inference" in sources:
+        try:
+            search_payload = {"query": query, "top_k": top_k}
+            r = await client.post(f"{SEARCH_INFERENCE_URL}/v1/search", json=search_payload, timeout=10.0)
+            if r.status_code == 200:
+                inference_results = r.json()
+                results["sources"]["inference"] = inference_results.get("results", [])
+                for result in inference_results.get("results", []):
+                    results["combined_results"].append({
+                        "source": "inference",
+                        "id": result.get("id"),
+                        "content": result.get("content"),
+                        "similarity": result.get("similarity"),
+                        "score": result.get("similarity", 0.0)
+                    })
+        except Exception as e:
+            logger.warning(f"Search inference service error: {e}")
+            results["sources"]["inference"] = {"error": str(e)}
+    
+    # 2. Knowledge Graph Search (Extract Service)
+    if "knowledge_graph" in sources:
+        try:
+            kg_payload = {
+                "query": query,
+                "limit": top_k,
+                "use_semantic": True,
+                "use_hybrid_search": True
+            }
+            r = await client.post(f"{EXTRACT_URL}/knowledge-graph/search", json=kg_payload, timeout=10.0)
+            if r.status_code == 200:
+                kg_results = r.json()
+                results["sources"]["knowledge_graph"] = kg_results.get("results", [])
+                for result in kg_results.get("results", []):
+                    results["combined_results"].append({
+                        "source": "knowledge_graph",
+                        "id": result.get("id"),
+                        "content": result.get("content") or result.get("text", ""),
+                        "similarity": result.get("score", 0.0),
+                        "score": result.get("score", 0.0),
+                        "metadata": result.get("metadata", {})
+                    })
+        except Exception as e:
+            logger.warning(f"Knowledge graph search error: {e}")
+            results["sources"]["knowledge_graph"] = {"error": str(e)}
+    
+    # 3. Catalog Semantic Search
+    if "catalog" in sources:
+        try:
+            catalog_payload = {"query": query, "limit": top_k}
+            r = await client.post(f"{CATALOG_URL}/catalog/semantic-search", json=catalog_payload, timeout=10.0)
+            if r.status_code == 200:
+                catalog_results = r.json()
+                results["sources"]["catalog"] = catalog_results.get("results", [])
+                for result in catalog_results.get("results", []):
+                    results["combined_results"].append({
+                        "source": "catalog",
+                        "id": result.get("id"),
+                        "content": result.get("content") or result.get("text", ""),
+                        "similarity": result.get("score", 0.0),
+                        "score": result.get("score", 0.0),
+                        "metadata": result.get("metadata", {})
+                    })
+        except Exception as e:
+            logger.warning(f"Catalog search error: {e}")
+            results["sources"]["catalog"] = {"error": str(e)}
+    
+    # 4. Perplexity AI (web search)
+    if use_perplexity and PERPLEXITY_API_KEY:
+        try:
+            perplexity_payload = {
+                "model": "sonar",
+                "messages": [{"role": "user", "content": query}],
+                "max_tokens": 500
+            }
+            r = await client.post(
+                "https://api.perplexity.ai/chat/completions",
+                json=perplexity_payload,
+                headers={"Authorization": f"Bearer {PERPLEXITY_API_KEY}"},
+                timeout=30.0
+            )
+            if r.status_code == 200:
+                perplexity_response = r.json()
+                content = perplexity_response.get("choices", [{}])[0].get("message", {}).get("content", "")
+                citations = perplexity_response.get("citations", [])
+                results["sources"]["perplexity"] = {
+                    "content": content,
+                    "citations": citations
+                }
+                results["combined_results"].append({
+                    "source": "perplexity",
+                    "id": "perplexity-web",
+                    "content": content,
+                    "similarity": 1.0,  # Perplexity results are always relevant
+                    "score": 1.0,
+                    "citations": citations,
+                    "metadata": {"type": "web_search"}
+                })
+        except Exception as e:
+            logger.warning(f"Perplexity search error: {e}")
+            results["sources"]["perplexity"] = {"error": str(e)}
+    
+    # Sort combined results by score (descending)
+    results["combined_results"].sort(key=lambda x: x.get("score", 0.0), reverse=True)
+    results["combined_results"] = results["combined_results"][:top_k]
+    results["total_count"] = len(results["combined_results"])
+    
+    return results
 
 
 @app.post("/localai/chat")

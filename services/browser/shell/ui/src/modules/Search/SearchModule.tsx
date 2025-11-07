@@ -12,13 +12,17 @@ import {
   CircularProgress,
   Chip,
   Stack,
-  Divider
+  Divider,
+  FormControlLabel,
+  Checkbox,
+  Tabs,
+  Tab
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 
 import { Panel } from "../../components/Panel";
-import { searchDocuments, type SearchResult } from "../../api/search";
+import { unifiedSearch, type UnifiedSearchResult } from "../../api/search";
 
 const formatSimilarity = (similarity: number) => {
   return `${(similarity * 100).toFixed(1)}%`;
@@ -31,10 +35,13 @@ const truncateContent = (content: string, maxLength: number = 200) => {
 
 export function SearchModule() {
   const [query, setQuery] = useState<string>("");
-  const [results, setResults] = useState<SearchResult[]>([]);
+  const [results, setResults] = useState<UnifiedSearchResult[]>([]);
+  const [sources, setSources] = useState<Record<string, unknown>>({});
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
+  const [usePerplexity, setUsePerplexity] = useState<boolean>(false);
+  const [selectedTab, setSelectedTab] = useState<number>(0);
 
   const handleSearch = async () => {
     const trimmedQuery = query.trim();
@@ -45,14 +52,18 @@ export function SearchModule() {
     setHasSearched(true);
 
     try {
-      const response = await searchDocuments({
+      const response = await unifiedSearch({
         query: trimmedQuery,
-        top_k: 20
+        top_k: 20,
+        sources: ["inference", "knowledge_graph", "catalog"],
+        use_perplexity: usePerplexity
       });
-      setResults(response.results || []);
+      setResults(response.combined_results || []);
+      setSources(response.sources || {});
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
       setResults([]);
+      setSources({});
     } finally {
       setLoading(false);
     }
@@ -90,29 +101,41 @@ export function SearchModule() {
         }
       >
         <Stack spacing={2}>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <TextField
-              fullWidth
-              placeholder="Enter your search query..."
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={loading}
-              variant="outlined"
-              InputProps={{
-                startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />
-              }}
+          <Stack spacing={2}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                fullWidth
+                placeholder="Enter your search query..."
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={loading}
+                variant="outlined"
+                InputProps={{
+                  startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />
+                }}
+              />
+              <Button
+                variant="contained"
+                startIcon={loading ? <CircularProgress size={16} /> : <SearchIcon />}
+                onClick={handleSearch}
+                disabled={!query.trim() || loading}
+                sx={{ minWidth: 120 }}
+              >
+                {loading ? "Searching…" : "Search"}
+              </Button>
+            </Box>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={usePerplexity}
+                  onChange={(e) => setUsePerplexity(e.target.checked)}
+                  disabled={loading}
+                />
+              }
+              label="Include Perplexity web search (requires API key)"
             />
-            <Button
-              variant="contained"
-              startIcon={loading ? <CircularProgress size={16} /> : <SearchIcon />}
-              onClick={handleSearch}
-              disabled={!query.trim() || loading}
-              sx={{ minWidth: 120 }}
-            >
-              {loading ? "Searching…" : "Search"}
-            </Button>
-          </Box>
+          </Stack>
 
           {error ? (
             <Alert severity="error">
@@ -146,46 +169,93 @@ export function SearchModule() {
       </Panel>
 
       {hasSearched && !loading && results.length > 0 && (
-        <Panel title="Search Results" subtitle={`Found ${results.length} result${results.length !== 1 ? 's' : ''}`}>
-          <List>
-            {results.map((result, index) => (
-              <Box key={result.id}>
-                <ListItem alignItems="flex-start" sx={{ py: 2 }}>
-                  <ListItemText
-                    primary={
-                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                        <Typography variant="body2" fontWeight={500}>
-                          Result #{index + 1}
-                        </Typography>
-                        <Chip
-                          label={formatSimilarity(result.similarity)}
-                          size="small"
-                          color="primary"
-                          variant="outlined"
-                        />
-                        <Typography variant="caption" color="text.secondary">
-                          ID: {result.id}
-                        </Typography>
-                      </Stack>
-                    }
-                    secondary={
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          mt: 1,
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word'
-                        }}
-                      >
-                        {truncateContent(result.content)}
-                      </Typography>
-                    }
-                  />
-                </ListItem>
-                {index < results.length - 1 && <Divider />}
-              </Box>
-            ))}
-          </List>
+        <Panel title="Search Results" subtitle={`Found ${results.length} result${results.length !== 1 ? 's' : ''} across multiple sources`}>
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+            <Tabs value={selectedTab} onChange={(_, newValue) => setSelectedTab(newValue)}>
+              <Tab label="All Results" />
+              <Tab label="By Source" />
+            </Tabs>
+          </Box>
+          
+          {selectedTab === 0 && (
+            <List>
+              {results.map((result, index) => (
+                <Box key={`${result.source}-${result.id}-${index}`}>
+                  <ListItem alignItems="flex-start" sx={{ py: 2 }}>
+                    <ListItemText
+                      primary={
+                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap">
+                          <Typography variant="body2" fontWeight={500}>
+                            Result #{index + 1}
+                          </Typography>
+                          <Chip
+                            label={result.source}
+                            size="small"
+                            color="secondary"
+                            variant="outlined"
+                          />
+                          <Chip
+                            label={formatSimilarity(result.similarity)}
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                          />
+                          <Typography variant="caption" color="text.secondary">
+                            ID: {result.id}
+                          </Typography>
+                        </Stack>
+                      }
+                      secondary={
+                        <>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              mt: 1,
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-word'
+                            }}
+                          >
+                            {truncateContent(result.content)}
+                          </Typography>
+                          {result.citations && result.citations.length > 0 && (
+                            <Box sx={{ mt: 1 }}>
+                              <Typography variant="caption" color="text.secondary">
+                                Citations: {result.citations.join(", ")}
+                              </Typography>
+                            </Box>
+                          )}
+                        </>
+                      }
+                    />
+                  </ListItem>
+                  {index < results.length - 1 && <Divider />}
+                </Box>
+              ))}
+            </List>
+          )}
+          
+          {selectedTab === 1 && (
+            <Stack spacing={2}>
+              {Object.entries(sources).map(([sourceName, sourceData]) => (
+                <Paper key={sourceName} variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom>
+                    {sourceName.charAt(0).toUpperCase() + sourceName.slice(1).replace('_', ' ')}
+                  </Typography>
+                  {sourceData && typeof sourceData === 'object' && 'error' in sourceData ? (
+                    <Alert severity="error">{(sourceData as {error: string}).error}</Alert>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      {Array.isArray(sourceData) 
+                        ? `${sourceData.length} results` 
+                        : typeof sourceData === 'object' && sourceData !== null && 'content' in sourceData
+                        ? "Web search result available"
+                        : "No results"}
+                    </Typography>
+                  )}
+                </Paper>
+              ))}
+            </Stack>
+          )}
         </Panel>
       )}
 
