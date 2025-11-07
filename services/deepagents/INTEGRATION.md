@@ -433,6 +433,5 @@ result, err := deepAgentNode(ctx, state)
 ## References
 
 - [DeepAgents README](./README.md)
-- [Lang Infrastructure Review](../../docs/lang-infrastructure-review.md)
 - [deepagents PyPI](https://pypi.org/project/deepagents/)
 

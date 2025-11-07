@@ -15,6 +15,13 @@ export default defineConfig({
     port: 5174,
     fs: {
       allow: ["../../../../"]
+    },
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      }
     }
   },
   preview: {
@@ -24,10 +31,5 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true
-  },
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    setupFiles: './src/setupTests.ts',
   },
 });

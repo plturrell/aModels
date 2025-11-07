@@ -22,6 +22,11 @@ type PerplexityHandler struct {
 	logger       *log.Logger
 }
 
+// GetJobProcessor returns the job processor.
+func (h *PerplexityHandler) GetJobProcessor() *agents.JobProcessor {
+	return h.jobProcessor
+}
+
 // NewPerplexityHandler creates a new Perplexity handler.
 func NewPerplexityHandler(logger *log.Logger) (*PerplexityHandler, error) {
 	// Load configuration from environment

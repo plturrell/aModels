@@ -24,6 +24,24 @@ func main() {
 		logger.Fatalf("Failed to create Perplexity handler: %v", err)
 	}
 
+	// Create DMS handler
+	dmsHandler, err := api.NewDMSHandler(logger)
+	if err != nil {
+		logger.Fatalf("Failed to create DMS handler: %v", err)
+	}
+
+	// Create Relational handler
+	relationalHandler, err := api.NewRelationalHandler(logger)
+	if err != nil {
+		logger.Fatalf("Failed to create Relational handler: %v", err)
+	}
+
+	// Create Murex handler
+	murexHandler, err := api.NewMurexHandler(logger)
+	if err != nil {
+		logger.Fatalf("Failed to create Murex handler: %v", err)
+	}
+
 	// Setup HTTP routes
 	mux := http.NewServeMux()
 
@@ -111,6 +129,259 @@ func main() {
 		perplexityHandler.HandleBatchProcess(w, r)
 	})
 
+	// DMS API endpoints
+	mux.HandleFunc("/api/dms/process", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		dmsHandler.HandleProcessDocuments(w, r)
+	})
+
+	mux.HandleFunc("/api/dms/status/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		dmsHandler.HandleGetStatus(w, r)
+	})
+
+	mux.HandleFunc("/api/dms/results/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		// Check if it's intelligence endpoint
+		path := r.URL.Path
+		if len(path) > len("/api/dms/results/") && path[len(path)-len("/intelligence"):] == "/intelligence" {
+			dmsHandler.HandleGetIntelligence(w, r)
+			return
+		}
+		// Check if it's export endpoint
+		if len(path) > len("/api/dms/results/") && path[len(path)-len("/export"):] == "/export" {
+			dmsHandler.HandleExportResults(w, r)
+			return
+		}
+		dmsHandler.HandleGetResults(w, r)
+	})
+
+	mux.HandleFunc("/api/dms/history", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		dmsHandler.HandleGetHistory(w, r)
+	})
+
+	mux.HandleFunc("/api/dms/search", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		dmsHandler.HandleSearchQuery(w, r)
+	})
+
+	mux.HandleFunc("/api/dms/jobs/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		dmsHandler.HandleCancelJob(w, r)
+	})
+
+	mux.HandleFunc("/api/dms/batch", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		dmsHandler.HandleBatchProcess(w, r)
+	})
+
+	mux.HandleFunc("/api/dms/graph/", func(w http.ResponseWriter, r *http.Request) {
+		// Handle knowledge graph query
+		path := r.URL.Path
+		if len(path) > len("/api/dms/graph/") && path[len(path)-len("/query"):] == "/query" {
+			if r.Method != http.MethodPost {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			dmsHandler.HandleKnowledgeGraphQuery(w, r)
+			return
+		}
+		// Handle relationships endpoint
+		if len(path) > len("/api/dms/graph/") && path[len(path)-len("/relationships"):] == "/relationships" {
+			if r.Method != http.MethodGet {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			// For now, return relationships from results/intelligence
+			// This could be enhanced later
+			http.Error(w, "Not implemented", http.StatusNotImplemented)
+			return
+		}
+		http.Error(w, "Not found", http.StatusNotFound)
+	})
+
+	mux.HandleFunc("/api/dms/domains/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		dmsHandler.HandleDomainQuery(w, r)
+	})
+
+	mux.HandleFunc("/api/dms/catalog/search", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		dmsHandler.HandleCatalogSearch(w, r)
+	})
+
+	mux.HandleFunc("/api/dms/documents/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		dmsHandler.HandleGetDocument(w, r)
+	})
+
+	// Relational API endpoints
+	mux.HandleFunc("/api/relational/process", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		relationalHandler.HandleProcessTables(w, r)
+	})
+
+	mux.HandleFunc("/api/relational/status/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		relationalHandler.HandleGetStatus(w, r)
+	})
+
+	mux.HandleFunc("/api/relational/results/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		// Check if it's intelligence endpoint
+		path := r.URL.Path
+		if len(path) > len("/api/relational/results/") && path[len(path)-len("/intelligence"):] == "/intelligence" {
+			relationalHandler.HandleGetIntelligence(w, r)
+			return
+		}
+		// Check if it's export endpoint
+		if len(path) > len("/api/relational/results/") && path[len(path)-len("/export"):] == "/export" {
+			relationalHandler.HandleExportResults(w, r)
+			return
+		}
+		relationalHandler.HandleGetResults(w, r)
+	})
+
+	mux.HandleFunc("/api/relational/history", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		relationalHandler.HandleGetHistory(w, r)
+	})
+
+	mux.HandleFunc("/api/relational/search", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		relationalHandler.HandleSearchQuery(w, r)
+	})
+
+	mux.HandleFunc("/api/relational/jobs/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		relationalHandler.HandleCancelJob(w, r)
+	})
+
+	mux.HandleFunc("/api/relational/batch", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		relationalHandler.HandleBatchProcess(w, r)
+	})
+
+	mux.HandleFunc("/api/relational/graph/", func(w http.ResponseWriter, r *http.Request) {
+		// Handle knowledge graph query
+		path := r.URL.Path
+		if len(path) > len("/api/relational/graph/") && path[len(path)-len("/query"):] == "/query" {
+			if r.Method != http.MethodPost {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			relationalHandler.HandleKnowledgeGraphQuery(w, r)
+			return
+		}
+		http.Error(w, "Not found", http.StatusNotFound)
+	})
+
+	mux.HandleFunc("/api/relational/domains/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		relationalHandler.HandleDomainQuery(w, r)
+	})
+
+	mux.HandleFunc("/api/relational/catalog/search", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		relationalHandler.HandleCatalogSearch(w, r)
+	})
+
+	// Murex API endpoints
+	mux.HandleFunc("/api/murex/process", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		murexHandler.HandleProcessTrades(w, r)
+	})
+
+	mux.HandleFunc("/api/murex/status/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		murexHandler.HandleGetStatus(w, r)
+	})
+
+	mux.HandleFunc("/api/murex/results/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		// Check if it's intelligence endpoint
+		path := r.URL.Path
+		if len(path) > len("/api/murex/results/") && path[len(path)-len("/intelligence"):] == "/intelligence" {
+			murexHandler.HandleGetIntelligence(w, r)
+			return
+		}
+		murexHandler.HandleGetResults(w, r)
+	})
+
+	mux.HandleFunc("/api/murex/history", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		murexHandler.HandleGetHistory(w, r)
+	})
 
 	// Health check
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {

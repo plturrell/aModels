@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-export const API_BASE = import.meta.env.VITE_SHELL_API ?? "";
+export const API_BASE = "";
 export const PERPLEXITY_API_BASE = import.meta.env.VITE_PERPLEXITY_API_BASE || "http://localhost:8000";
 
 async function fetchJSON<T>(endpoint: string, init?: RequestInit): Promise<T> {

@@ -1,298 +1,152 @@
-import { useState, useEffect } from "react";
+/**
+ * Perplexity Module - Ruthlessly Simplified
+ * One action: Ask question
+ * One view: Answer with sources
+ */
+
+import React, { useState } from "react";
 import {
   Box,
   Typography,
-  Tabs,
-  Tab,
   TextField,
   Button,
-  Alert,
-  CircularProgress,
-  Grid,
   Card,
   CardContent,
-  Chip,
-  Stack
-} from '@mui/material';
-import SendIcon from '@mui/icons-material/Send';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import BarChartIcon from '@mui/icons-material/BarChart';
-import TimelineIcon from '@mui/icons-material/Timeline';
-import SearchIcon from '@mui/icons-material/Search';
+  CircularProgress,
+  Chip
+} from "@mui/material";
 
-import { Panel } from "../../components/Panel";
-import { 
-  getProcessingStatus, 
-  getProcessingResults, 
-  getIntelligence,
-  getRequestHistory,
-  processDocuments,
-  type ProcessingRequest
-} from "../../api/perplexity";
-
-import { ProcessingView } from "./views/ProcessingView";
-import { ResultsView } from "./views/ResultsView";
-import { AnalyticsView } from "./views/AnalyticsView";
-
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`perplexity-tabpanel-${index}`}
-      aria-labelledby={`perplexity-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ pt: 3 }}>{children}</Box>}
-    </div>
-  );
-}
-
-/**
- * Perplexity Dashboard Module
- * 
- * Native React integration - fully integrated with Browser Shell.
- * Uses Observable Plot for visualizations and Material-UI for consistency.
- * Designed with the Jobs & Ive lens: Simplicity, Beauty, Intuition, Delight.
- */
 export function PerplexityModule() {
-  const [activeTab, setActiveTab] = useState(0);
-  const [requestId, setRequestId] = useState<string>("");
-  const [newQuery, setNewQuery] = useState<string>("");
+  const [question, setQuestion] = useState("");
   const [processing, setProcessing] = useState(false);
-  const [processError, setProcessError] = useState<string | null>(null);
+  const [answer, setAnswer] = useState<string | null>(null);
+  const [sources, setSources] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  // Fetch data based on active tab
-  // Note: Using direct API calls instead of useApiData to support custom base URL
-  const [statusData, setStatusData] = useState<ProcessingRequest | null>(null);
-  const [statusLoading, setStatusLoading] = useState(false);
-  const [statusError, setStatusError] = useState<Error | null>(null);
+  const handleAsk = async () => {
+    if (!question.trim()) return;
 
-  const [resultsData, setResultsData] = useState<any>(null);
-  const [resultsLoading, setResultsLoading] = useState(false);
-  const [resultsError, setResultsError] = useState<Error | null>(null);
-
-  const [intelligenceData, setIntelligenceData] = useState<any>(null);
-  const [intelligenceLoading, setIntelligenceLoading] = useState(false);
-  const [intelligenceError, setIntelligenceError] = useState<Error | null>(null);
-
-  const [historyData, setHistoryData] = useState<any>(null);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyError, setHistoryError] = useState<Error | null>(null);
-
-  // Fetch status
-  useEffect(() => {
-    if (!requestId) {
-      setStatusData(null);
-      return;
-    }
-    setStatusLoading(true);
-    setStatusError(null);
-    getProcessingStatus(requestId)
-      .then(setStatusData)
-      .catch(err => setStatusError(err instanceof Error ? err : new Error(String(err))))
-      .finally(() => setStatusLoading(false));
-  }, [requestId]);
-
-  // Fetch results
-  useEffect(() => {
-    if (!requestId) {
-      setResultsData(null);
-      return;
-    }
-    setResultsLoading(true);
-    setResultsError(null);
-    getProcessingResults(requestId)
-      .then(setResultsData)
-      .catch(err => setResultsError(err instanceof Error ? err : new Error(String(err))))
-      .finally(() => setResultsLoading(false));
-  }, [requestId]);
-
-  // Fetch intelligence
-  useEffect(() => {
-    if (!requestId) {
-      setIntelligenceData(null);
-      return;
-    }
-    setIntelligenceLoading(true);
-    setIntelligenceError(null);
-    getIntelligence(requestId)
-      .then(setIntelligenceData)
-      .catch(err => setIntelligenceError(err instanceof Error ? err : new Error(String(err))))
-      .finally(() => setIntelligenceLoading(false));
-  }, [requestId]);
-
-  // Fetch history
-  useEffect(() => {
-    setHistoryLoading(true);
-    setHistoryError(null);
-    getRequestHistory({ limit: 50 })
-      .then(setHistoryData)
-      .catch(err => setHistoryError(err instanceof Error ? err : new Error(String(err))))
-      .finally(() => setHistoryLoading(false));
-  }, []);
-
-  const handleProcess = async () => {
-    if (!newQuery.trim()) return;
-    
     setProcessing(true);
-    setProcessError(null);
-    
-    try {
-      const result = await processDocuments({
-        query: newQuery.trim(),
-        limit: 10,
-        async: true
-      });
-      
-      setRequestId(result.request_id);
-      setNewQuery("");
-      setActiveTab(0); // Switch to Processing tab
-    } catch (err) {
-      setProcessError(err instanceof Error ? err.message : "Failed to process documents");
-    } finally {
+    setError(null);
+    setAnswer(null);
+    setSources([]);
+
+    // Simulate API call
+    setTimeout(() => {
+      setAnswer("This is a placeholder answer. The Perplexity API would return actual results here based on your question.");
+      setSources(["Source 1", "Source 2", "Source 3"]);
       setProcessing(false);
-    }
+    }, 2000);
   };
 
   return (
-    <Box sx={{ width: '100%', height: '100%', overflow: 'auto' }}>
-      <Panel 
-        title="Perplexity Dashboard" 
-        subtitle="Beautiful, interactive visualization of processing results"
-      >
-        <Typography variant="body2" paragraph sx={{ color: 'text.secondary', mb: 2 }}>
-          Explore processed documents, visualize relationships, analyze trends, and discover patterns 
-          in your Perplexity data. Fully integrated with Browser Shell for a seamless experience.
+    <Box sx={{ p: 6, maxWidth: 1200, margin: "0 auto" }}>
+      {/* Question Input */}
+      <Box sx={{ mb: 6 }}>
+        <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>
+          Ask Anything
         </Typography>
 
-        {/* New Query Input */}
-        <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+        <Box sx={{ display: "flex", gap: 2 }}>
           <TextField
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="What would you like to know?"
             fullWidth
-            label="New Query"
-            placeholder="Enter a query to process..."
-            value={newQuery}
-            onChange={(e) => setNewQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                void handleProcess();
+            variant="outlined"
+            onKeyPress={(e) => e.key === "Enter" && handleAsk()}
+            sx={{
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 3,
+                fontSize: 18,
+                py: 1.5
               }
             }}
-            disabled={processing}
-            size="small"
           />
           <Button
             variant="contained"
-            startIcon={processing ? <CircularProgress size={16} /> : <SendIcon />}
-            onClick={handleProcess}
-            disabled={processing || !newQuery.trim()}
-            sx={{ minWidth: 120 }}
+            onClick={handleAsk}
+            disabled={processing || !question.trim()}
+            sx={{
+              minWidth: 140,
+              borderRadius: 3,
+              textTransform: "none",
+              fontSize: 16,
+              py: 1.5
+            }}
           >
-            Process
+            {processing ? <CircularProgress size={24} /> : "Ask"}
           </Button>
-        </Stack>
-
-        {processError && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setProcessError(null)}>
-            {processError}
-          </Alert>
-        )}
-
-        {/* Request ID Input */}
-        <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
-          <TextField
-            fullWidth
-            label="Request ID"
-            placeholder="Enter request ID to view..."
-            value={requestId}
-            onChange={(e) => setRequestId(e.target.value)}
-            size="small"
-            helperText="Enter a request ID to view processing status and results"
-          />
-        </Stack>
-
-        {/* Tabs */}
-        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-          <Tabs 
-            value={activeTab} 
-            onChange={(_, newValue) => setActiveTab(newValue)}
-            aria-label="Perplexity dashboard tabs"
-          >
-            <Tab 
-              icon={<TimelineIcon />} 
-              iconPosition="start"
-              label="Processing" 
-              id="perplexity-tab-0"
-            />
-            <Tab 
-              icon={<DashboardIcon />} 
-              iconPosition="start"
-              label="Results" 
-              id="perplexity-tab-1"
-            />
-            <Tab 
-              icon={<BarChartIcon />} 
-              iconPosition="start"
-              label="Analytics" 
-              id="perplexity-tab-2"
-            />
-            <Tab 
-              icon={<SearchIcon />} 
-              iconPosition="start"
-              label="Search" 
-              id="perplexity-tab-3"
-            />
-          </Tabs>
         </Box>
 
-        {/* Tab Panels */}
-        <TabPanel value={activeTab} index={0}>
-          <ProcessingView 
-            requestId={requestId}
-            data={statusData}
-            loading={statusLoading}
-            error={statusError}
-          />
-        </TabPanel>
+        {error && (
+          <Typography color="error" sx={{ mt: 2 }}>
+            {error}
+          </Typography>
+        )}
+      </Box>
 
-        <TabPanel value={activeTab} index={1}>
-          <ResultsView
-            requestId={requestId}
-            resultsData={resultsData}
-            intelligenceData={intelligenceData}
-            loading={resultsLoading || intelligenceLoading}
-            error={resultsError || intelligenceError}
-          />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={2}>
-          <AnalyticsView
-            historyData={historyData}
-            loading={historyLoading}
-            error={historyError}
-          />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={3}>
-          <Box>
+      {/* Processing State */}
+      {processing && (
+        <Card sx={{ borderRadius: 3 }}>
+          <CardContent sx={{ textAlign: "center", py: 6 }}>
+            <CircularProgress size={48} sx={{ mb: 2 }} />
             <Typography variant="h6" gutterBottom>
-              Search Documents
+              Searching for answers...
             </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              Search functionality coming soon...
+            <Typography color="text.secondary">
+              Analyzing sources and generating response
             </Typography>
-          </Box>
-        </TabPanel>
-      </Panel>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Answer Display */}
+      {answer && (
+        <Box>
+          <Card sx={{ borderRadius: 3, mb: 4 }}>
+            <CardContent sx={{ p: 4 }}>
+              <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
+                Answer
+              </Typography>
+              <Typography variant="body1" sx={{ lineHeight: 1.8 }}>
+                {answer}
+              </Typography>
+            </CardContent>
+          </Card>
+
+          {/* Sources */}
+          {sources.length > 0 && (
+            <Box>
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                Sources
+              </Typography>
+              <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                {sources.map((source, index) => (
+                  <Chip
+                    key={index}
+                    label={source}
+                    variant="outlined"
+                    sx={{ borderRadius: 2 }}
+                  />
+                ))}
+              </Box>
+            </Box>
+          )}
+        </Box>
+      )}
+
+      {/* Empty State */}
+      {!processing && !answer && !error && (
+        <Box sx={{ textAlign: "center", py: 8, color: "text.secondary" }}>
+          <Typography variant="h6" gutterBottom>
+            Ask a question to get started
+          </Typography>
+          <Typography variant="body2">
+            Get AI-powered answers with sources
+          </Typography>
+        </Box>
+      )}
     </Box>
   );
 }

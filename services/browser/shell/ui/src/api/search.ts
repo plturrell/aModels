@@ -22,6 +22,8 @@ export interface UnifiedSearchRequest extends SearchRequest {
   enable_plot?: boolean;  // Visualization data
   enable_stdlib?: boolean;  // Result processing (default: true)
   stdlib_operations?: string[];  // Operations: deduplicate, sort_by_score, truncate_content
+  enable_dashboard?: boolean;
+  enable_narrative?: boolean;
 }
 
 export interface UnifiedSearchResult extends SearchResult {
@@ -170,7 +172,7 @@ export async function searchDocuments(request: SearchRequest): Promise<SearchRes
 }
 
 export async function unifiedSearch(request: UnifiedSearchRequest): Promise<UnifiedSearchResponse> {
-  const url = `${API_BASE}/search/unified`;
+  const url = `${API_BASE}/api/search/unified`;
   
   try {
     const response = await fetch(url, {
@@ -215,7 +217,7 @@ export async function unifiedSearch(request: UnifiedSearchRequest): Promise<Unif
     if (contentType && contentType.includes("application/json")) {
       const text = await response.text();
       if (!text.trim()) {
-        return { query: request.query, sources: {}, combined_results: [], total_count: 0 };
+        return { query: request.query, sources: {}, combined_results: [], total_count: 0, metadata: { sources_queried: 0, sources_successful: 0, sources_failed: 0, execution_time_ms: 0 } };
       }
       return JSON.parse(text) as UnifiedSearchResponse;
     }

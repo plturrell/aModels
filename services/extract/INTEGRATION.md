@@ -460,6 +460,5 @@ result, err := extractor.ExtractBCBS239(ctx, document, source, version, user)
 ## References
 
 - [Extract Service README](./README.md)
-- [Lang Infrastructure Review](../../docs/lang-infrastructure-review.md)
 - [LangExtract Documentation](../../infrastructure/third_party/langextract/README.md)
 

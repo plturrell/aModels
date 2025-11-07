@@ -377,5 +377,4 @@ If API calls fail:
 - [Extract Integration Guide](../services/extract/INTEGRATION.md)
 - [Graph Integration Guide](../services/graph/INTEGRATION.md)
 - [Orchestration Integration Guide](../services/orchestration/INTEGRATION.md)
-- [Lang Infrastructure Review](./lang-infrastructure-review.md)
 

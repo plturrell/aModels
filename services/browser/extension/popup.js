@@ -287,67 +287,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Check if first run
   await checkFirstRun();
   
-  // Set up event listeners
-  document.getElementById('run-ocr').addEventListener('click', window.runOcr);
-  document.getElementById('run-sql').addEventListener('click', window.runSql);
-  document.getElementById('run-telemetry').addEventListener('click', window.runTelemetry);
-  document.getElementById('run-agentflow').addEventListener('click', window.runAgentFlow);
-  document.getElementById('run-search').addEventListener('click', window.runSearch);
-  document.getElementById('redis-set').addEventListener('click', window.redisSet);
-  document.getElementById('redis-get').addEventListener('click', window.redisGet);
-  document.getElementById('chat-send').addEventListener('click', window.chatSend);
-  document.getElementById('open-browser').addEventListener('click', window.openBrowser);
-  document.getElementById('toggle-advanced').addEventListener('click', window.toggleAdvanced);
-  document.getElementById('settings-link').addEventListener('click', (e) => {
-    e.preventDefault();
-    openSettings();
-  });
-  document.getElementById('help-link').addEventListener('click', (e) => {
-    e.preventDefault();
-    openHelp();
-  });
-  
-  // Enable Enter key in chat
-  document.getElementById('chat-prompt').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      window.chatSend();
-    }
-  });
-  
-  // Show command palette hint
-  showCommandPaletteHint();
+  // Make command hint clickable to open palette
+  const commandHint = document.querySelector('.command-hint');
+  if (commandHint) {
+    commandHint.addEventListener('click', () => {
+      if (window.commandPalette) {
+        window.commandPalette.open();
+      }
+    });
+  }
   
   // Connection is now managed by ConnectionManager (connection-manager.js)
-  // No need for manual connection checks here
+  // Command palette is opened via Cmd+K (handled in command-palette.js)
 });
-
-function showCommandPaletteHint() {
-  // Show a quick tip about Cmd+K on first 3 opens
-  chrome.storage.local.get(['commandPaletteHintShown'], (result) => {
-    const shownCount = result.commandPaletteHintShown || 0;
-    
-    if (shownCount < 3) {
-      const hint = document.createElement('div');
-      hint.className = 'quick-tip';
-      hint.innerHTML = `
-        <span class="quick-tip-icon">💡</span>
-        <span class="quick-tip-text">
-          Press <kbd>Cmd/Ctrl+K</kbd> to open the command palette for quick access to all features!
-        </span>
-        <button class="quick-tip-dismiss" aria-label="Dismiss hint">✕</button>
-      `;
-      
-      // Insert after h1
-      const h1 = document.querySelector('h1');
-      h1.after(hint);
-      
-      // Dismiss handler
-      hint.querySelector('.quick-tip-dismiss').addEventListener('click', () => {
-        hint.remove();
-      });
-      
-      // Increment counter
-      chrome.storage.local.set({ commandPaletteHintShown: shownCount + 1 });
-    }
-  });
-}

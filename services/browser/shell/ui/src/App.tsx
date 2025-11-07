@@ -1,48 +1,33 @@
-import { ShellLayout } from "./components/ShellLayout";
-import { NavPanel } from "./components/NavPanel";
-import { useThemeEffect } from "./hooks/useThemeEffect";
-import { useShellStore, type ShellModuleId } from "./state/useShellStore";
+import { useState } from 'react';
+import { ThemeProvider, CssBaseline, Typography } from "@mui/material";
+import { WorkbenchLayout } from "./components/WorkbenchLayout";
+import { SessionsPanel } from "./components/SessionsPanel";
+import { AgentLogPanel } from "./components/AgentLogPanel";
+import { Canvas } from "./components/Canvas";
+import { CommandPalette } from "./components/CommandPalette";
+import theme from "./theme";
 
-import { HomeModule } from "./modules/Home/HomeModule";
-import { LocalAIModule } from "./modules/LocalAI/LocalAIModule";
-import { DocumentsModule } from "./modules/Documents/DocumentsModule";
-import { FlowsModule } from "./modules/Flows/FlowsModule";
-import { TelemetryModule } from "./modules/Telemetry/TelemetryModule";
-import { SearchModule } from "./modules/Search/SearchModule";
-import { PerplexityModule } from "./modules/Perplexity/PerplexityModule";
-import { DMSModule } from "./modules/DMS/DMSModule";
+function App() {
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [activeSession, setActiveSession] = useState<any>(null);
 
-import styles from "./App.module.css";
-
-const renderModule = (moduleId: ShellModuleId) => {
-  switch (moduleId) {
-    case "localai":
-      return <LocalAIModule />;
-    case "dms":
-      return <DocumentsModule />;
-    case "dms-processing":
-      return <DMSModule />;
-    case "flows":
-      return <FlowsModule />;
-    case "telemetry":
-      return <TelemetryModule />;
-    case "search":
-      return <SearchModule />;
-    case "perplexity":
-      return <PerplexityModule />;
-    case "home":
-    default:
-      return <HomeModule />;
-  }
-};
-
-export default function App() {
-  useThemeEffect();
-  const activeModule = useShellStore((state) => state.activeModule);
+  const handleCommand = (command: string, data: any) => {
+    const newSession = { id: Date.now(), command, data };
+    setSessions([...sessions, newSession]);
+    setActiveSession(newSession);
+  };
 
   return (
-    <ShellLayout nav={<NavPanel />}>
-      <div className={styles.main}>{renderModule(activeModule)}</div>
-    </ShellLayout>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <CommandPalette onCommand={handleCommand} />
+      <WorkbenchLayout
+        sessions={<SessionsPanel sessions={sessions} onSelect={setActiveSession} />}
+        canvas={<Canvas session={activeSession} />}
+        agentLog={<AgentLogPanel session={activeSession} />}
+      />
+    </ThemeProvider>
   );
 }
+
+export default App;

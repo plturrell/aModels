@@ -266,6 +266,468 @@ async def perplexity_catalog_search(payload: Dict[str, Any]) -> Any:
     except httpx.RequestError as e:
         raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
 
+# DMS API endpoints - proxy to orchestration service
+@app.post("/api/dms/process")
+async def dms_process(payload: Dict[str, Any]) -> Any:
+    """Process documents from DMS."""
+    global _orchestration_available, _last_health_check
+    import time as time_module
+    if time_module.time() - _last_health_check > 30:
+        _orchestration_available = await check_orchestration_health()
+        _last_health_check = time_module.time()
+    
+    if not _orchestration_available:
+        return {
+            "request_id": f"mock_{int(time.time())}",
+            "status": "pending",
+            "message": "Orchestration service not running. Start it with: cd services/orchestration && go run ./cmd/server/main.go",
+            "status_url": "/api/dms/status/mock",
+            "results_url": "/api/dms/results/mock"
+        }
+    
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/dms/process", json=payload, timeout=300.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        logger.warning(f"Orchestration service unavailable: {e}")
+        _orchestration_available = False
+        return {
+            "request_id": f"mock_{int(time.time())}",
+            "status": "pending",
+            "message": f"Orchestration service error: {e}. Using mock response.",
+            "status_url": "/api/dms/status/mock",
+            "results_url": "/api/dms/results/mock"
+        }
+
+@app.get("/api/dms/status/{request_id}")
+async def dms_status(request_id: str) -> Any:
+    """Get DMS processing status."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/dms/status/{request_id}", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/dms/results/{request_id}")
+async def dms_results(request_id: str) -> Any:
+    """Get DMS processing results."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/dms/results/{request_id}", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/dms/results/{request_id}/intelligence")
+async def dms_intelligence(request_id: str) -> Any:
+    """Get DMS intelligence data."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/dms/results/{request_id}/intelligence", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/dms/history")
+async def dms_history(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    status: Optional[str] = None,
+    document_id: Optional[str] = None
+) -> Any:
+    """Get DMS request history."""
+    try:
+        params = {"limit": limit, "offset": offset}
+        if status:
+            params["status"] = status
+        if document_id:
+            params["document_id"] = document_id
+        r = await client.get(f"{ORCHESTRATION_URL}/api/dms/history", params=params, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.post("/api/dms/search")
+async def dms_search(payload: Dict[str, Any]) -> Any:
+    """Search DMS indexed documents."""
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/dms/search", json=payload, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/dms/results/{request_id}/export")
+async def dms_export(request_id: str, format: str = Query("json")) -> Any:
+    """Export DMS results."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/dms/results/{request_id}/export", params={"format": format}, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.post("/api/dms/batch")
+async def dms_batch(payload: Dict[str, Any]) -> Any:
+    """Batch process multiple DMS documents."""
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/dms/batch", json=payload, timeout=300.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.delete("/api/dms/jobs/{request_id}")
+async def dms_cancel_job(request_id: str) -> Any:
+    """Cancel a DMS job."""
+    try:
+        r = await client.delete(f"{ORCHESTRATION_URL}/api/dms/jobs/{request_id}", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.post("/api/dms/graph/{request_id}/query")
+async def dms_graph_query(request_id: str, payload: Dict[str, Any]) -> Any:
+    """Query DMS knowledge graph."""
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/dms/graph/{request_id}/query", json=payload, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/dms/domains/{domain}/documents")
+async def dms_domain_documents(domain: str, limit: int = Query(50), offset: int = Query(0)) -> Any:
+    """Get DMS documents by domain."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/dms/domains/{domain}/documents", params={"limit": limit, "offset": offset}, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.post("/api/dms/catalog/search")
+async def dms_catalog_search(payload: Dict[str, Any]) -> Any:
+    """Search DMS catalog."""
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/dms/catalog/search", json=payload, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/dms/documents/{document_id}")
+async def dms_get_document(document_id: str) -> Any:
+    """Get a specific DMS document."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/dms/documents/{document_id}", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+# Relational API endpoints - proxy to orchestration service
+@app.post("/api/relational/process")
+async def relational_process(payload: Dict[str, Any]) -> Any:
+    """Process tables from relational database."""
+    global _orchestration_available, _last_health_check
+    import time as time_module
+    if time_module.time() - _last_health_check > 30:
+        _orchestration_available = await check_orchestration_health()
+        _last_health_check = time_module.time()
+    
+    if not _orchestration_available:
+        return {
+            "request_id": f"mock_{int(time.time())}",
+            "status": "pending",
+            "message": "Orchestration service not running. Start it with: cd services/orchestration && go run ./cmd/server/main.go",
+            "status_url": "/api/relational/status/mock",
+            "results_url": "/api/relational/results/mock"
+        }
+    
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/relational/process", json=payload, timeout=300.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        logger.warning(f"Orchestration service unavailable: {e}")
+        _orchestration_available = False
+        return {
+            "request_id": f"mock_{int(time.time())}",
+            "status": "pending",
+            "message": f"Orchestration service error: {e}. Using mock response.",
+            "status_url": "/api/relational/status/mock",
+            "results_url": "/api/relational/results/mock"
+        }
+
+@app.get("/api/relational/status/{request_id}")
+async def relational_status(request_id: str) -> Any:
+    """Get relational processing status."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/relational/status/{request_id}", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/relational/results/{request_id}")
+async def relational_results(request_id: str) -> Any:
+    """Get relational processing results."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/relational/results/{request_id}", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/relational/results/{request_id}/intelligence")
+async def relational_intelligence(request_id: str) -> Any:
+    """Get relational intelligence data."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/relational/results/{request_id}/intelligence", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/relational/history")
+async def relational_history(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    status: Optional[str] = None,
+    table: Optional[str] = None
+) -> Any:
+    """Get relational request history."""
+    try:
+        params = {"limit": limit, "offset": offset}
+        if status:
+            params["status"] = status
+        if table:
+            params["table"] = table
+        r = await client.get(f"{ORCHESTRATION_URL}/api/relational/history", params=params, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.post("/api/relational/search")
+async def relational_search(payload: Dict[str, Any]) -> Any:
+    """Search relational indexed tables."""
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/relational/search", json=payload, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/relational/results/{request_id}/export")
+async def relational_export(request_id: str, format: str = Query("json")) -> Any:
+    """Export relational results."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/relational/results/{request_id}/export", params={"format": format}, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.post("/api/relational/batch")
+async def relational_batch(payload: Dict[str, Any]) -> Any:
+    """Batch process multiple relational tables."""
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/relational/batch", json=payload, timeout=300.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.delete("/api/relational/jobs/{request_id}")
+async def relational_cancel_job(request_id: str) -> Any:
+    """Cancel a relational job."""
+    try:
+        r = await client.delete(f"{ORCHESTRATION_URL}/api/relational/jobs/{request_id}", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.post("/api/relational/graph/{request_id}/query")
+async def relational_graph_query(request_id: str, payload: Dict[str, Any]) -> Any:
+    """Query relational knowledge graph."""
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/relational/graph/{request_id}/query", json=payload, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/relational/domains/{domain}/tables")
+async def relational_domain_tables(domain: str, limit: int = Query(50), offset: int = Query(0)) -> Any:
+    """Get relational tables by domain."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/relational/domains/{domain}/tables", params={"limit": limit, "offset": offset}, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.post("/api/relational/catalog/search")
+async def relational_catalog_search(payload: Dict[str, Any]) -> Any:
+    """Search relational catalog."""
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/relational/catalog/search", json=payload, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+# Murex API endpoints - proxy to orchestration service
+@app.post("/api/murex/process")
+async def murex_process(payload: Dict[str, Any]) -> Any:
+    """Process Murex trades."""
+    global _orchestration_available, _last_health_check
+    import time as time_module
+    if time_module.time() - _last_health_check > 30:
+        _orchestration_available = await check_orchestration_health()
+        _last_health_check = time_module.time()
+    
+    if not _orchestration_available:
+        return {
+            "request_id": f"mock_{int(time.time())}",
+            "status": "pending",
+            "message": "Orchestration service not running. Start it with: cd services/orchestration && go run ./cmd/server/main.go",
+            "status_url": "/api/murex/status/mock",
+            "results_url": "/api/murex/results/mock"
+        }
+    
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/murex/process", json=payload, timeout=300.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        logger.warning(f"Orchestration service unavailable: {e}")
+        _orchestration_available = False
+        return {
+            "request_id": f"mock_{int(time.time())}",
+            "status": "pending",
+            "message": f"Orchestration service error: {e}. Using mock response.",
+            "status_url": "/api/murex/status/mock",
+            "results_url": "/api/murex/results/mock"
+        }
+
+@app.get("/api/murex/status/{request_id}")
+async def murex_status(request_id: str) -> Any:
+    """Get Murex processing status."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/murex/status/{request_id}", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/murex/results/{request_id}")
+async def murex_results(request_id: str) -> Any:
+    """Get Murex processing results."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/murex/results/{request_id}", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/murex/results/{request_id}/intelligence")
+async def murex_intelligence(request_id: str) -> Any:
+    """Get Murex intelligence data."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/murex/results/{request_id}/intelligence", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/murex/history")
+async def murex_history(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    status: Optional[str] = None,
+    table: Optional[str] = None
+) -> Any:
+    """Get Murex request history."""
+    try:
+        params = {"limit": limit, "offset": offset}
+        if status:
+            params["status"] = status
+        if table:
+            params["table"] = table
+        r = await client.get(f"{ORCHESTRATION_URL}/api/murex/history", params=params, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

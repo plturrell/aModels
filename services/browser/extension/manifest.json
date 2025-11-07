@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "aModels Tools",
-  "version": "0.2.0",
-  "description": "Browser automation and AI tools via the unified gateway.",
+  "name": "aModels",
+  "version": "0.3.0",
+  "description": "Press Cmd+K. Do anything.",
   "action": {
     "default_title": "aModels",
     "default_popup": "popup.html"

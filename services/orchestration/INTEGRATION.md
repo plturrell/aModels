@@ -367,6 +367,5 @@ Agents track their status:
 
 ## References
 
-- [Lang Infrastructure Review](../../docs/lang-infrastructure-review.md)
 - [Orchestration Framework](../../infrastructure/third_party/orchestration/README.md)
 

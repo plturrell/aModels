@@ -401,6 +401,5 @@ The browser gateway provides a proxy endpoint for AgentFlow execution.
 ## References
 
 - [AgentFlow README](./README.md)
-- [Lang Infrastructure Review](../../docs/lang-infrastructure-review.md)
 - [LangFlow Documentation](https://docs.langflow.org/)
 

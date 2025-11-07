@@ -525,6 +525,5 @@ if success, ok := state["orchestration_success"].(bool); ok && !success {
 ## References
 
 - [Graph Service README](./README.md)
-- [Lang Infrastructure Review](../../docs/lang-infrastructure-review.md)
 - [Orchestration Integration Documentation](../../docs/orchestration-langchain-integration.md)
 

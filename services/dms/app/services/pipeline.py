@@ -17,7 +17,12 @@ logger = logging.getLogger(__name__)
 
 
 async def orchestrate_document(document_id: str) -> None:
-    """Run extraction and catalog registration for a stored document."""
+    """Run extraction and catalog registration for a stored document.
+    
+    Optionally calls orchestration service for full pipeline processing.
+    """
+    import os
+    
     settings = get_settings()
     session_factory = get_session_factory()
 
@@ -27,6 +32,37 @@ async def orchestrate_document(document_id: str) -> None:
             logger.warning("document %s not found for orchestration", document_id)
             return
 
+        # Check if orchestration service is available and should be used
+        orchestration_url = os.getenv("ORCHESTRATION_URL", "http://localhost:8080")
+        use_orchestration = os.getenv("DMS_USE_ORCHESTRATION", "false").lower() == "true"
+        
+        if use_orchestration:
+            # Call orchestration service for full pipeline processing
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=300.0) as client:
+                    payload = {
+                        "document_id": document_id,
+                        "async": True,  # Process asynchronously
+                    }
+                    response = await client.post(
+                        f"{orchestration_url}/api/dms/process",
+                        json=payload
+                    )
+                    if response.status_code == 202:
+                        # Job submitted successfully
+                        data = response.json()
+                        request_id = data.get("request_id")
+                        logger.info("Document %s submitted to orchestration service with request_id %s", document_id, request_id)
+                        # Store request_id for tracking (could add to document metadata)
+                        return
+                    else:
+                        logger.warning("Orchestration service returned status %d, falling back to local processing", response.status_code)
+            except Exception as exc:
+                logger.warning("Failed to call orchestration service (non-fatal): %s", exc)
+                # Fall through to local processing
+
+        # Local processing (original logic)
         ocr_text: Optional[str] = None
         summary_text: Optional[str] = None
         catalog_identifier: Optional[str] = None

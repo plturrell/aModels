@@ -1,42 +1,27 @@
 /**
- * DMS Module
- * Main component for DMS document management and processing
+ * DMS Module - Ruthlessly Simplified
+ * One action: Process documents
+ * One view: Status + Results
  */
 
 import React, { useState, useEffect } from "react";
 import {
   Box,
   Typography,
-  Tabs,
-  Tab,
   TextField,
   Button,
-  Alert,
-  CircularProgress
+  CircularProgress,
+  Card,
+  CardContent,
+  Grid
 } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
-import DashboardIcon from "@mui/icons-material/Dashboard";
-import BarChartIcon from "@mui/icons-material/BarChart";
-import TimelineIcon from "@mui/icons-material/Timeline";
-import DescriptionIcon from "@mui/icons-material/Description";
 import { Panel } from "../../components/Panel";
 import {
-  getDMSStatus,
   getDMSResults,
-  getDMSIntelligence,
-  getDMSHistory,
   processDMSDocuments,
-  listDMSDocuments,
-  type DMSProcessingRequest,
-  type DMSProcessedDocument,
-  type DMSRequestIntelligence,
-  type DMSRequestHistory,
-  type DMSDocument
+  type DMSProcessedDocument
 } from "../../api/dms";
-import { ProcessingView } from "./views/ProcessingView";
-import { ResultsView } from "./views/ResultsView";
-import { AnalyticsView } from "./views/AnalyticsView";
-import { DocumentsView } from "./views/DocumentsView";
 
 interface TabPanelProps {
   children?: React.ReactNode;
