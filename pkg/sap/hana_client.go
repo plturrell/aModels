@@ -1,6 +1,5 @@
-
-// Package disabled: depends on missing agenticAiETH_layer4 package
 // Package sap provides SAP HANA, Datasphere, and AI Core integration for training layer
+// HANA is used as an external data source, not part of core aModels functionality
 package sap
 
 import (
@@ -13,7 +12,6 @@ import (
 	"time"
 
 	_ "github.com/SAP/go-hdb/driver"
-	"github.com/agenticAiETH/agenticAiETH_layer4/pkg/contracts"
 )
 
 // HANAClient provides HANA database connectivity for training data
@@ -367,7 +365,7 @@ func (c *HANAClient) CreateTrainingResultsTable(ctx context.Context) error {
 }
 
 // InsertTrainingResult persists a standardized training result to HANA.
-func (c *HANAClient) InsertTrainingResult(ctx context.Context, result contracts.TrainingResult) error {
+func (c *HANAClient) InsertTrainingResult(ctx context.Context, result TrainingResult) error {
 	evalMetrics, err := json.Marshal(result.Evaluation)
 	if err != nil {
 		return fmt.Errorf("failed to marshal evaluation metrics: %w", err)

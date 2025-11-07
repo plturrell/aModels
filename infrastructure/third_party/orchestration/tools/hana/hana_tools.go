@@ -1,7 +1,5 @@
-//go:build ignore
-// +build ignore
-
-// Package disabled: depends on missing HANA packages
+// Package hana provides HANA tools for querying and accessing HANA data
+// HANA is used as an external data source, not part of core aModels functionality
 package hana
 
 import (
@@ -10,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA/pkg/hanapool"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA/pkg/storage"
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/util/hanapool"
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/util/storage"
 )
 
 // SQLQueryTool executes SQL queries against HANA

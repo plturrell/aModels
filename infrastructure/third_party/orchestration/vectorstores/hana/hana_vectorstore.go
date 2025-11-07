@@ -1,16 +1,14 @@
-//go:build ignore
-// +build ignore
-
-// Package disabled: depends on missing HANA packages
+// Package hana provides HANA vector store integration
+// HANA is used as an external data source, not part of core aModels functionality
 package hana
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA/pkg/hanapool"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA/pkg/storage"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/schema"
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/util/hanapool"
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/util/storage"
 )
 
 // HANAVectorStore implements vector store interface using HANA
