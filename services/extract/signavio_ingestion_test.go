@@ -2,7 +2,7 @@ package main
 
 import "testing"
 
-const sampleBPMN = `<?xml version="1.0" encoding="UTF-8"?>
+const sampleBPMNIngestion = `<?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL">
   <process id="Process_1" name="Sample Onboarding">
     <laneSet>
@@ -21,7 +21,7 @@ const sampleBPMN = `<?xml version="1.0" encoding="UTF-8"?>
 </definitions>`
 
 func TestParseSignavioProcesses(t *testing.T) {
-	models, err := parseSignavioProcesses([]byte(sampleBPMN))
+	models, err := parseSignavioProcesses([]byte(sampleBPMNIngestion))
 	if err != nil {
 		t.Fatalf("parseSignavioProcesses returned error: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestParseSignavioProcesses(t *testing.T) {
 }
 
 func TestSignavioModelsToGraph(t *testing.T) {
-	models, err := parseSignavioProcesses([]byte(sampleBPMN))
+	models, err := parseSignavioProcesses([]byte(sampleBPMNIngestion))
 	if err != nil {
 		t.Fatalf("parseSignavioProcesses returned error: %v", err)
 	}

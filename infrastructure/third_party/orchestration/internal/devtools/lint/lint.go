@@ -322,6 +322,8 @@ func fixModuleName(dir, expectedModuleName string) error {
 // It finds all go.mod files and ensures they have a replace directive pointing to the root module.
 // This is critical for local development to ensure that changes in the root module are reflected
 // in the dependent modules without requiring publishing a new version.
+//
+//lint:ignore U1000 Reserved for future use in development workflows (not enabled in standard mode)
 func checkMissingReplaceDirectives(fix bool) error {
 	// Find all go.mod files
 	var goModPaths []string
@@ -426,6 +428,10 @@ func checkMissingReplaceDirectives(fix bool) error {
 }
 
 // fixAddReplaceDirective adds a replace directive to the go.mod file in the specified directory.
+// This function is used by checkMissingReplaceDirectives, which is not currently enabled
+// in standard mode but may be used for development workflows.
+//
+//lint:ignore U1000 Reserved for future use with checkMissingReplaceDirectives
 func fixAddReplaceDirective(dir, rootModName string) error {
 	// Calculate relative path from module to root
 	absDir, err := filepath.Abs(dir)

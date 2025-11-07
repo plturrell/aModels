@@ -21,16 +21,6 @@ type AdvancedExtractionResult struct {
 	TestingEndpoints      []TestingEndpoint      `json:"testing_endpoints"`
 }
 
-// TableProcessSequence represents the sequence/order of table processing.
-type TableProcessSequence struct {
-	SequenceID   string   `json:"sequence_id"`
-	Tables       []string `json:"tables"`      // Ordered list of tables
-	SourceType   string   `json:"source_type"` // sql, controlm, ddl, etc.
-	SourceFile   string   `json:"source_file"`
-	SequenceType string   `json:"sequence_type"` // insert, update, select, etc.
-	Order        int      `json:"order"`         // Processing order
-}
-
 // CodeParameter represents a parameter found in code.
 type CodeParameter struct {
 	Name         string `json:"name"`
@@ -50,17 +40,6 @@ type HardcodedList struct {
 	SourceFile string   `json:"source_file"`
 	Type       string   `json:"type"` // IN clause, enum, constant list, etc.
 	Context    string   `json:"context"`
-}
-
-// TableClassification classifies a table as transaction or reference.
-// Phase 5: Extended with Props for quality scores and review flags.
-type TableClassification struct {
-	TableName      string         `json:"table_name"`
-	Classification string         `json:"classification"`  // transaction, reference, lookup, staging, etc.
-	Confidence     float64        `json:"confidence"`      // 0.0 to 1.0
-	Evidence       []string       `json:"evidence"`        // Reasons for classification
-	Patterns       []string       `json:"patterns"`        // Patterns that led to classification
-	Props          map[string]any `json:"props,omitempty"` // Phase 5: Additional properties (quality_score, needs_review)
 }
 
 // TestingEndpoint represents a testing/test endpoint.
@@ -416,6 +395,7 @@ func (ae *AdvancedExtractor) classifyTable(tableName, context, sourceID string) 
 				Classification: "unknown",
 				Confidence:     domainConf,
 				Evidence:       []string{fmt.Sprintf("LNN inferred domain: %s", domain)},
+				Source:         sourceID,
 				Patterns:       []string{},
 			}
 
@@ -438,6 +418,7 @@ func (ae *AdvancedExtractor) classifyTable(tableName, context, sourceID string) 
 		Classification: "unknown",
 		Confidence:     0.0,
 		Evidence:       []string{},
+		Source:         sourceID,
 		Patterns:       []string{},
 	}
 
@@ -740,6 +721,7 @@ func (ae *AdvancedExtractor) classifyTableWithAdvancedSAPRPT(tableName, context,
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
+			Source:         sourceID,
 		}, 0.0, false
 	}
 
@@ -749,6 +731,7 @@ func (ae *AdvancedExtractor) classifyTableWithAdvancedSAPRPT(tableName, context,
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
+			Source:         sourceID,
 		}, 0.0, false
 	}
 
@@ -785,8 +768,8 @@ func (ae *AdvancedExtractor) classifyTableWithAdvancedSAPRPT(tableName, context,
 		Classification: classification,
 		Confidence:     confidence,
 		Evidence:       evidence,
+		Source:         sourceID,
 		Props: map[string]any{
-			"source":  sourceID,
 			"context": context,
 		},
 	}
@@ -802,9 +785,9 @@ func (ae *AdvancedExtractor) classifyTableWithSAPRPT(tableName, context, sourceI
 		Classification: "unknown",
 		Confidence:     0.0,
 		Evidence:       []string{"sap-rpt lightweight classifier unavailable"},
+		Source:         sourceID,
 		Patterns:       []string{},
 		Props: map[string]any{
-			"source":  sourceID,
 			"context": context,
 		},
 	}
@@ -835,6 +818,7 @@ func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sou
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
+			Source:         sourceID,
 		}
 	}
 
@@ -854,25 +838,25 @@ func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sou
 			TableName:      tableName,
 			Classification: "unknown",
 			Confidence:     0.0,
+			Source:         sourceID,
 			Props: map[string]any{
-				"source":  sourceID,
 				"context": context,
 			},
 		}
 	}
 
-	var payload map[string]any
-	if err := json.Unmarshal(output, &payload); err != nil {
-		return TableClassification{
-			TableName:      tableName,
-			Classification: "unknown",
-			Confidence:     0.0,
-			Props: map[string]any{
-				"source":  sourceID,
-				"context": context,
-			},
+		var payload map[string]any
+		if err := json.Unmarshal(output, &payload); err != nil {
+			return TableClassification{
+				TableName:      tableName,
+				Classification: "unknown",
+				Confidence:     0.0,
+				Source:         sourceID,
+				Props: map[string]any{
+					"context": context,
+				},
+			}
 		}
-	}
 
 	classification := "unknown"
 	if cls, ok := payload["classification"].(string); ok {
@@ -898,8 +882,8 @@ func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sou
 		Classification: classification,
 		Confidence:     confidence,
 		Evidence:       evidence,
+		Source:         sourceID,
 		Props: map[string]any{
-			"source":  sourceID,
 			"context": context,
 		},
 	}
