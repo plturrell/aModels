@@ -20,7 +20,7 @@ echo ""
 
 # Set Docker network URLs (services accessible from Docker network)
 export LOCALAI_URL="http://localai:8080"
-export EXTRACT_SERVICE_URL="http://extract-service:19080"
+export EXTRACT_SERVICE_URL="http://extract-service:8082"
 export TRAINING_SERVICE_URL="http://training-service:8080"
 export POSTGRES_DSN="postgresql://postgres:postgres@postgres:5432/amodels"
 export REDIS_URL="redis://redis:6379/0"
