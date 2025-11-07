@@ -5,7 +5,7 @@
   "main": "main.js",
   "private": true,
   "scripts": {
-    "build:ui": "vite build",
+    "build:ui": "cd ui && vite build",
     "start": "npm run build:ui && electron ."
   },
   "dependencies": {

@@ -11,9 +11,15 @@ export default defineConfig({
     }
   },
   server: {
+    host: true,
+    port: 5174,
     fs: {
       allow: ["../../../../"]
     }
+  },
+  preview: {
+    host: true,
+    port: 5174
   },
   build: {
     outDir: "dist",

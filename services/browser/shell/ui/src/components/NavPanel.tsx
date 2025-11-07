@@ -6,6 +6,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import InsightsIcon from '@mui/icons-material/Insights';
 import SearchIcon from '@mui/icons-material/Search';
+import DashboardIcon from '@mui/icons-material/Dashboard';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
 
@@ -41,6 +42,12 @@ const NAV_ITEMS: Array<{ id: ShellModuleId; label: string; description: string; 
     label: "Search",
     description: "Semantic search across content",
     icon: SearchIcon
+  },
+  {
+    id: "perplexity",
+    label: "Perplexity",
+    description: "Processing results & analytics",
+    icon: DashboardIcon
   },
   {
     id: "home",

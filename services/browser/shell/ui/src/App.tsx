@@ -9,6 +9,7 @@ import { DocumentsModule } from "./modules/Documents/DocumentsModule";
 import { FlowsModule } from "./modules/Flows/FlowsModule";
 import { TelemetryModule } from "./modules/Telemetry/TelemetryModule";
 import { SearchModule } from "./modules/Search/SearchModule";
+import { PerplexityModule } from "./modules/Perplexity/PerplexityModule";
 
 import styles from "./App.module.css";
 
@@ -24,6 +25,8 @@ const renderModule = (moduleId: ShellModuleId) => {
       return <TelemetryModule />;
     case "search":
       return <SearchModule />;
+    case "perplexity":
+      return <PerplexityModule />;
     case "home":
     default:
       return <HomeModule />;

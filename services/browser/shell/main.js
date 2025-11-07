@@ -20,7 +20,6 @@ const defaultHomeUrl = (() => {
   return 'about:blank';
 })();
 const repoRootPath = path.resolve(__dirname, '../../..');
-const repoRootPath = path.resolve(__dirname, '../../..');
 
 function createSplitLayout() {
   if (!mainWindow || !webView || !panelView) return;

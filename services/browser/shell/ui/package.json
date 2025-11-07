@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview",
+    "preview": "vite preview --host",
+    "serve": "vite preview --host --port 5174",
     "test": "vitest"
   },
   "dependencies": {
@@ -14,6 +15,11 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.3.5",
     "@mui/material": "^7.3.5",
+    "@nivo/core": "^0.99.0",
+    "@nivo/network": "^0.99.0",
+    "@nivo/sankey": "^0.99.0",
+    "@nivo/tooltip": "^0.99.0",
+    "@observablehq/plot": "file:../../plot",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "yaml": "^2.6.0",

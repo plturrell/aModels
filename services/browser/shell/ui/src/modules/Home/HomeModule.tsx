@@ -27,6 +27,11 @@ const quickLinks = [
     label: "Semantic search",
     description: "Search across documents and knowledge graphs",
     targetModule: "search" as const
+  },
+  {
+    label: "Perplexity Dashboard",
+    description: "Visualize processing results and analytics",
+    targetModule: "perplexity" as const
   }
 ];
 

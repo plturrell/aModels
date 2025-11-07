@@ -4,7 +4,8 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+import time
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query
@@ -43,6 +44,226 @@ client = httpx.AsyncClient(timeout=30.0)
 
 app = FastAPI(title="aModels Gateway", version="0.1.0")
 redis_client: aioredis.Redis | None = None
+
+# Perplexity API endpoints - proxy to orchestration service
+ORCHESTRATION_URL = os.getenv("ORCHESTRATION_URL", "http://localhost:8080")
+
+# Check if orchestration service is available
+async def check_orchestration_health() -> bool:
+    """Check if orchestration service is available."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/healthz", timeout=2.0)
+        return r.status_code == 200
+    except:
+        return False
+
+# Cache health check result
+_orchestration_available = None
+_last_health_check = 0
+
+@app.post("/api/perplexity/process")
+async def perplexity_process(payload: Dict[str, Any]) -> Any:
+    """Process documents from Perplexity API."""
+    # Check if orchestration is available
+    global _orchestration_available, _last_health_check
+    import time as time_module
+    if time_module.time() - _last_health_check > 30:  # Check every 30 seconds
+        _orchestration_available = await check_orchestration_health()
+        _last_health_check = time_module.time()
+    
+    if not _orchestration_available:
+        # Return mock response if orchestration not available
+        return {
+            "request_id": f"mock_{int(time.time())}",
+            "status": "pending",
+            "message": "Orchestration service not running. Start it with: cd services/orchestration && go run ./cmd/server/main.go",
+            "status_url": "/api/perplexity/status/mock",
+            "results_url": "/api/perplexity/results/mock"
+        }
+    
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/perplexity/process", json=payload, timeout=300.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        # Fall back to mock if connection fails
+        logger.warning(f"Orchestration service unavailable: {e}")
+        _orchestration_available = False
+        return {
+            "request_id": f"mock_{int(time.time())}",
+            "status": "pending",
+            "message": f"Orchestration service error: {e}. Using mock response.",
+            "status_url": "/api/perplexity/status/mock",
+            "results_url": "/api/perplexity/results/mock"
+        }
+
+@app.get("/api/perplexity/status/{request_id}")
+async def perplexity_status(request_id: str) -> Any:
+    """Get processing status."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/perplexity/status/{request_id}", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/perplexity/results/{request_id}")
+async def perplexity_results(request_id: str) -> Any:
+    """Get processing results."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/perplexity/results/{request_id}", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/perplexity/results/{request_id}/intelligence")
+async def perplexity_intelligence(request_id: str) -> Any:
+    """Get intelligence data."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/perplexity/results/{request_id}/intelligence", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/perplexity/history")
+async def perplexity_history(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    status: Optional[str] = None,
+    query: Optional[str] = None
+) -> Any:
+    """Get request history."""
+    try:
+        params = {"limit": limit, "offset": offset}
+        if status:
+            params["status"] = status
+        if query:
+            params["query"] = query
+        r = await client.get(f"{ORCHESTRATION_URL}/api/perplexity/history", params=params, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.post("/api/perplexity/search")
+async def perplexity_search(payload: Dict[str, Any]) -> Any:
+    """Search indexed documents."""
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/perplexity/search", json=payload, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/perplexity/results/{request_id}/export")
+async def perplexity_export(request_id: str, format: str = Query("json")) -> Any:
+    """Export results."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/perplexity/results/{request_id}/export", params={"format": format}, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.post("/api/perplexity/batch")
+async def perplexity_batch(payload: Dict[str, Any]) -> Any:
+    """Batch process multiple queries."""
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/perplexity/batch", json=payload, timeout=300.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.delete("/api/perplexity/jobs/{request_id}")
+async def perplexity_cancel_job(request_id: str) -> Any:
+    """Cancel a job."""
+    try:
+        r = await client.delete(f"{ORCHESTRATION_URL}/api/perplexity/jobs/{request_id}", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/perplexity/learning/report")
+async def perplexity_learning_report() -> Any:
+    """Get learning report."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/perplexity/learning/report", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.post("/api/perplexity/graph/{request_id}/query")
+async def perplexity_graph_query(request_id: str, payload: Dict[str, Any]) -> Any:
+    """Query knowledge graph."""
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/perplexity/graph/{request_id}/query", json=payload, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/perplexity/graph/{request_id}/relationships")
+async def perplexity_relationships(request_id: str) -> Any:
+    """Get relationships."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/perplexity/graph/{request_id}/relationships", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.get("/api/perplexity/domains/{domain}/documents")
+async def perplexity_domain_documents(domain: str, limit: int = Query(50), offset: int = Query(0)) -> Any:
+    """Get documents by domain."""
+    try:
+        r = await client.get(f"{ORCHESTRATION_URL}/api/perplexity/domains/{domain}/documents", params={"limit": limit, "offset": offset}, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
+
+@app.post("/api/perplexity/catalog/search")
+async def perplexity_catalog_search(payload: Dict[str, Any]) -> Any:
+    """Search catalog."""
+    try:
+        r = await client.post(f"{ORCHESTRATION_URL}/api/perplexity/catalog/search", json=payload, timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
 
 app.add_middleware(
     CORSMiddleware,

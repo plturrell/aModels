@@ -7,7 +7,8 @@ description: Explore processed documents, relationships, and intelligence
 import * as Plot from "@observablehq/plot";
 import resultsData from "../data/loaders/results.js";
 import intelligenceData from "../data/loaders/intelligence.js";
-import {html} from "@observablehq/stdlib";
+import {html, DOM} from "@observablehq/stdlib";
+import {exportJSON, exportCSV, exportChartPNG, exportChartSVG} from "../components/export.js";
 ```
 
 # Results Dashboard

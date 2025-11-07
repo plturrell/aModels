@@ -25,7 +25,25 @@ const requestId = typeof Inputs !== "undefined"
   ? await Inputs.text({label: "Request ID", value: ""})
   : new URLSearchParams(window.location.search).get("request_id") || "";
 
-const status = requestId ? await processingStatus(requestId) : null;
+// Auto-refresh status every 2 seconds if processing
+async function* autoRefreshStatus(requestId) {
+  if (!requestId) return null;
+  
+  while (true) {
+    const status = await processingStatus(requestId);
+    yield status;
+    
+    // Stop refreshing if completed or failed
+    if (status?.status === "completed" || status?.status === "failed") {
+      return status;
+    }
+    
+    // Wait 2 seconds before next refresh
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+}
+
+const status = requestId ? await autoRefreshStatus(requestId).next().then(r => r.value) : null;
 ```
 
 ```js
