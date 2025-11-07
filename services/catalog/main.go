@@ -380,16 +380,36 @@ func main() {
 		structLogger.Info("Advanced handlers initialized", nil)
 	}
 
-	// Initialize JWT auth middleware (required for production)
-	jwtAuthMiddleware, err := security.NewJWTAuthMiddleware(legacyLogger)
-	if err != nil {
-		structLogger.Error("Failed to initialize JWT auth middleware", err, nil)
-		os.Exit(1)
+	// Initialize authentication middleware
+	// Priority: XSUAA (SAP BTP) > JWT (standalone)
+	var authMiddleware func(http.Handler) http.Handler
+	useXSUAA := os.Getenv("VCAP_SERVICES") != "" || os.Getenv("XSUAA_CLIENT_ID") != ""
+	
+	if useXSUAA {
+		// Use XSUAA authentication for SAP BTP deployment
+		xsuaaMiddleware, err := security.NewXSUAAMiddleware(legacyLogger)
+		if err != nil {
+			structLogger.Error("Failed to initialize XSUAA auth middleware", err, nil)
+			os.Exit(1)
+		}
+		authMiddleware = xsuaaMiddleware.Middleware
+		structLogger.Info("XSUAA authentication middleware initialized", map[string]interface{}{
+			"xsappname": os.Getenv("XS_APP_NAME"),
+			"client_id": os.Getenv("XSUAA_CLIENT_ID"),
+		})
+	} else {
+		// Use JWT authentication for standalone deployment
+		jwtAuthMiddleware, err := security.NewJWTAuthMiddleware(legacyLogger)
+		if err != nil {
+			structLogger.Error("Failed to initialize JWT auth middleware", err, nil)
+			os.Exit(1)
+		}
+		authMiddleware = jwtAuthMiddleware.Middleware
+		structLogger.Info("JWT authentication middleware initialized", map[string]interface{}{
+			"token_expiry":   "15m",
+			"refresh_expiry": "7d",
+		})
 	}
-	structLogger.Info("JWT authentication middleware initialized", map[string]interface{}{
-		"token_expiry":   "15m",
-		"refresh_expiry": "7d",
-	})
 
 	// Initialize production readiness middleware
 	errorHandler := api.NewErrorHandler(legacyLogger)
@@ -623,17 +643,20 @@ func main() {
 		structLogger.Info("WebSocket endpoints registered", nil)
 	}
 
-	// Apply JWT auth middleware to protected endpoints (mandatory in production)
+	// Apply authentication middleware to protected endpoints (mandatory in production)
 	// In production, authentication is always required
-	protectedMux := http.NewServeMux()
-	protectedMux.HandleFunc("/catalog/data-elements", catalogHandlers.HandleCreateDataElement)
-	protectedMux.HandleFunc("/catalog/data-products/build", dataProductHandler.HandleBuildDataProduct)
+	// Uses XSUAA when deployed on SAP BTP, JWT otherwise
 	
-	// Apply JWT authentication to all protected endpoints
-	mux.Handle("/catalog/data-elements", jwtAuthMiddleware.Middleware(http.HandlerFunc(catalogHandlers.HandleCreateDataElement)))
-	mux.Handle("/catalog/data-products/build", jwtAuthMiddleware.Middleware(http.HandlerFunc(dataProductHandler.HandleBuildDataProduct)))
+	// Apply authentication to all protected endpoints
+	mux.Handle("/catalog/data-elements", authMiddleware(http.HandlerFunc(catalogHandlers.HandleCreateDataElement)))
+	mux.Handle("/catalog/data-products/build", authMiddleware(http.HandlerFunc(dataProductHandler.HandleBuildDataProduct)))
 	
-	structLogger.Info("JWT authentication enabled for protected endpoints", map[string]interface{}{
+	authType := "XSUAA"
+	if !useXSUAA {
+		authType = "JWT"
+	}
+	structLogger.Info("Authentication enabled for protected endpoints", map[string]interface{}{
+		"auth_type": authType,
 		"protected_endpoints": []string{
 			"/catalog/data-elements",
 			"/catalog/data-products/build",
