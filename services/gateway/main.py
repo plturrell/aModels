@@ -10,6 +10,7 @@ import time
 import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, Response
 from redis import asyncio as aioredis
 
 
@@ -1183,7 +1184,10 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
 
 
 @app.post("/search/narrative")
-async def generate_search_narrative(payload: Dict[str, Any]) -> Any:
+async def generate_search_narrative(
+    payload: Dict[str, Any],
+    stream: bool = False
+) -> Any:
     """
     Generate narrative from search results using framework.
     
@@ -1211,7 +1215,48 @@ async def generate_search_narrative(payload: Dict[str, Any]) -> Any:
         search_results = search_response
     
     # Generate narrative
-    narrative = await _generate_narrative_with_framework(search_results, query)
+    if stream:
+        # Streaming mode
+        try:
+            from streaming_utils import stream_narrative_generation
+            
+            # Make streaming request to orchestration service
+            results_summary = await _format_results_for_prompt(search_results["combined_results"], max_results=10)
+            key_findings = []
+            for result in search_results["combined_results"][:5]:
+                if result.get("score", 0.0) > 0.7:
+                    key_findings.append(f"- {result.get('content', '')[:100]}...")
+            
+            orchestration_payload = {
+                "orchestration_request": {
+                    "chain_name": "narrative_generator",
+                    "inputs": {
+                        "query": query,
+                        "search_results_summary": results_summary,
+                        "dashboard_insights": "No dashboard insights available",
+                        "key_findings": "\n".join(key_findings) if key_findings else "No key findings identified"
+                    }
+                }
+            }
+            
+            # Note: This requires the orchestration service to support streaming
+            # For now, we'll return a non-streaming response
+            # In production, you'd use: r = await client.post(..., stream=True)
+            narrative = await _generate_narrative_with_framework(search_results, query)
+            
+            return Response(
+                content=json.dumps({
+                    "query": query,
+                    "narrative": narrative,
+                    "search_metadata": search_results.get("metadata", {})
+                }),
+                media_type="application/json"
+            )
+        except Exception as e:
+            logger.warning(f"Streaming not available, falling back to regular response: {e}")
+            narrative = await _generate_narrative_with_framework(search_results, query)
+    else:
+        narrative = await _generate_narrative_with_framework(search_results, query)
     
     return {
         "query": query,
@@ -1257,6 +1302,204 @@ async def generate_search_dashboard(payload: Dict[str, Any]) -> Any:
         "dashboard": dashboard,
         "search_metadata": search_results.get("metadata", {})
     }
+
+
+@app.get("/search/export/narrative/{query_hash}")
+async def export_narrative_to_powerpoint(
+    query_hash: str,
+    narrative_data: Dict[str, Any] = None
+) -> Any:
+    """
+    Export narrative to PowerPoint format.
+    
+    Note: This is a simplified endpoint. In production, you'd store the narrative
+    data and retrieve it by hash, or pass it in the request body.
+    """
+    try:
+        from export_powerpoint import create_powerpoint_from_narrative
+        
+        # For now, we'll need the narrative data in the request
+        # In production, this would be stored and retrieved by hash
+        if not narrative_data:
+            raise HTTPException(status_code=400, detail="Narrative data required")
+        
+        pptx_file = create_powerpoint_from_narrative(
+            narrative_data.get("narrative", {}),
+            narrative_data.get("query", ""),
+            narrative_data.get("search_metadata", {})
+        )
+        
+        return StreamingResponse(
+            pptx_file,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={
+                "Content-Disposition": f'attachment; filename="narrative_{query_hash}.pptx"'
+            }
+        )
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="PowerPoint export requires python-pptx. Install with: pip install python-pptx"
+        )
+    except Exception as e:
+        logger.error(f"PowerPoint export error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/search/export/narrative")
+async def export_narrative_to_powerpoint_post(payload: Dict[str, Any]) -> Any:
+    """
+    Export narrative to PowerPoint format.
+    
+    Request:
+    {
+        "query": "search query",
+        "narrative": {...},
+        "search_metadata": {...}
+    }
+    """
+    try:
+        from export_powerpoint import create_powerpoint_from_narrative
+        
+        query = payload.get("query", "search_results")
+        narrative = payload.get("narrative", {})
+        search_metadata = payload.get("search_metadata", {})
+        
+        if not narrative.get("enriched"):
+            raise HTTPException(status_code=400, detail="Narrative not available or not enriched")
+        
+        pptx_file = create_powerpoint_from_narrative(
+            narrative,
+            query,
+            search_metadata
+        )
+        
+        # Generate filename from query
+        import re
+        filename = re.sub(r'[^\w\s-]', '', query)[:50].strip().replace(' ', '_')
+        filename = filename or "narrative"
+        
+        return StreamingResponse(
+            pptx_file,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}_narrative.pptx"'
+            }
+        )
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="PowerPoint export requires python-pptx. Install with: pip install python-pptx"
+        )
+    except Exception as e:
+        logger.error(f"PowerPoint export error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/search/export/dashboard")
+async def export_dashboard_to_powerpoint(payload: Dict[str, Any]) -> Any:
+    """
+    Export dashboard to PowerPoint format.
+    
+    Request:
+    {
+        "query": "search query",
+        "dashboard": {...},
+        "search_metadata": {...}
+    }
+    """
+    try:
+        from export_powerpoint import create_powerpoint_from_dashboard
+        
+        query = payload.get("query", "search_results")
+        dashboard = payload.get("dashboard", {})
+        search_metadata = payload.get("search_metadata", {})
+        
+        if not dashboard.get("enriched"):
+            raise HTTPException(status_code=400, detail="Dashboard not available or not enriched")
+        
+        pptx_file = create_powerpoint_from_dashboard(
+            dashboard,
+            query,
+            search_metadata
+        )
+        
+        # Generate filename from query
+        import re
+        filename = re.sub(r'[^\w\s-]', '', query)[:50].strip().replace(' ', '_')
+        filename = filename or "dashboard"
+        
+        return StreamingResponse(
+            pptx_file,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}_dashboard.pptx"'
+            }
+        )
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="PowerPoint export requires python-pptx. Install with: pip install python-pptx"
+        )
+    except Exception as e:
+        logger.error(f"PowerPoint export error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/search/export/narrative-dashboard")
+async def export_narrative_and_dashboard_to_powerpoint(payload: Dict[str, Any]) -> Any:
+    """
+    Export combined narrative and dashboard to PowerPoint format.
+    
+    Request:
+    {
+        "query": "search query",
+        "narrative": {...},
+        "dashboard": {...},
+        "search_metadata": {...}
+    }
+    """
+    try:
+        from export_powerpoint import create_powerpoint_from_narrative_and_dashboard
+        
+        query = payload.get("query", "search_results")
+        narrative = payload.get("narrative", {})
+        dashboard = payload.get("dashboard", {})
+        search_metadata = payload.get("search_metadata", {})
+        
+        if not narrative.get("enriched") or not dashboard.get("enriched"):
+            raise HTTPException(
+                status_code=400,
+                detail="Both narrative and dashboard must be available and enriched"
+            )
+        
+        pptx_file = create_powerpoint_from_narrative_and_dashboard(
+            narrative,
+            dashboard,
+            query,
+            search_metadata
+        )
+        
+        # Generate filename from query
+        import re
+        filename = re.sub(r'[^\w\s-]', '', query)[:50].strip().replace(' ', '_')
+        filename = filename or "report"
+        
+        return StreamingResponse(
+            pptx_file,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}_report.pptx"'
+            }
+        )
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="PowerPoint export requires python-pptx. Install with: pip install python-pptx"
+        )
+    except Exception as e:
+        logger.error(f"PowerPoint export error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/search/narrative-dashboard")

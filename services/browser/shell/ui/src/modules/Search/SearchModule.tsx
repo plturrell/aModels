@@ -20,13 +20,18 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
+import DownloadIcon from '@mui/icons-material/Download';
 
 import { Panel } from "../../components/Panel";
+import { DashboardRenderer } from "../../components/DashboardRenderer";
 import { 
   unifiedSearch, 
   generateNarrative, 
   generateDashboard, 
   generateNarrativeAndDashboard,
+  exportNarrativeToPowerPoint,
+  exportDashboardToPowerPoint,
+  exportNarrativeAndDashboardToPowerPoint,
   type UnifiedSearchResult, 
   type UnifiedSearchResponse 
 } from "../../api/search";
@@ -55,6 +60,9 @@ export function SearchModule() {
   const [narrative, setNarrative] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<Record<string, unknown> | null>(null);
   const [generating, setGenerating] = useState<boolean>(false);
+  const [narrativeResponse, setNarrativeResponse] = useState<any>(null);
+  const [dashboardResponse, setDashboardResponse] = useState<any>(null);
+  const [exporting, setExporting] = useState<boolean>(false);
 
   const handleSearch = async () => {
     const trimmedQuery = query.trim();
@@ -108,6 +116,7 @@ export function SearchModule() {
       const response = await generateNarrative(query, searchResponse);
       if (response.narrative.enriched && response.narrative.markdown) {
         setNarrative(response.narrative.markdown);
+        setNarrativeResponse(response);
         setSelectedTab(3); // Switch to narrative tab
       } else {
         setError(new Error("Failed to generate narrative"));
@@ -129,6 +138,7 @@ export function SearchModule() {
       const response = await generateDashboard(query, searchResponse);
       if (response.dashboard.enriched && response.dashboard.specification) {
         setDashboard(response.dashboard.specification);
+        setDashboardResponse(response);
         setSelectedTab(4); // Switch to dashboard tab
       } else {
         setError(new Error("Failed to generate dashboard"));
@@ -154,11 +164,101 @@ export function SearchModule() {
       if (response.dashboard.enriched && response.dashboard.specification) {
         setDashboard(response.dashboard.specification);
       }
+      setNarrativeResponse({ narrative: response.narrative, search_metadata: response.search_metadata });
+      setDashboardResponse({ dashboard: response.dashboard, search_metadata: response.search_metadata });
       setSelectedTab(3); // Switch to narrative tab
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleExportNarrative = async () => {
+    if (!narrativeResponse) return;
+    
+    setExporting(true);
+    setError(null);
+    
+    try {
+      const blob = await exportNarrativeToPowerPoint(
+        query,
+        narrativeResponse.narrative,
+        narrativeResponse.search_metadata
+      );
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${query.replace(/[^a-z0-9]/gi, '_')}_narrative.pptx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportDashboard = async () => {
+    if (!dashboardResponse) return;
+    
+    setExporting(true);
+    setError(null);
+    
+    try {
+      const blob = await exportDashboardToPowerPoint(
+        query,
+        dashboardResponse.dashboard,
+        dashboardResponse.search_metadata
+      );
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${query.replace(/[^a-z0-9]/gi, '_')}_dashboard.pptx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportBoth = async () => {
+    if (!narrativeResponse || !dashboardResponse) return;
+    
+    setExporting(true);
+    setError(null);
+    
+    try {
+      const blob = await exportNarrativeAndDashboardToPowerPoint(
+        query,
+        narrativeResponse.narrative,
+        dashboardResponse.dashboard,
+        narrativeResponse.search_metadata || dashboardResponse.search_metadata
+      );
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${query.replace(/[^a-z0-9]/gi, '_')}_report.pptx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -449,14 +549,27 @@ export function SearchModule() {
                   <Typography variant="h6">
                     Generated Narrative
                   </Typography>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={handleGenerateNarrative}
-                    disabled={generating}
-                  >
-                    Regenerate
-                  </Button>
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={handleGenerateNarrative}
+                      disabled={generating}
+                    >
+                      Regenerate
+                    </Button>
+                    {narrativeResponse && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<DownloadIcon />}
+                        onClick={handleExportNarrative}
+                        disabled={exporting}
+                      >
+                        {exporting ? "Exporting..." : "Export PPTX"}
+                      </Button>
+                    )}
+                  </Stack>
                 </Box>
                 <Divider />
                 <Typography 
@@ -509,82 +622,33 @@ export function SearchModule() {
                   <Typography variant="h6">
                     Generated Dashboard
                   </Typography>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={handleGenerateDashboard}
-                    disabled={generating}
-                  >
-                    Regenerate
-                  </Button>
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={handleGenerateDashboard}
+                      disabled={generating}
+                    >
+                      Regenerate
+                    </Button>
+                    {dashboardResponse && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<DownloadIcon />}
+                        onClick={handleExportDashboard}
+                        disabled={exporting}
+                      >
+                        {exporting ? "Exporting..." : "Export PPTX"}
+                      </Button>
+                    )}
+                  </Stack>
                 </Box>
                 <Divider />
-                {dashboard.title && (
-                  <Typography variant="h5">{dashboard.title}</Typography>
-                )}
-                {dashboard.description && (
-                  <Typography variant="body2" color="text.secondary">
-                    {dashboard.description as string}
-                  </Typography>
-                )}
-                {dashboard.insights && Array.isArray(dashboard.insights) && dashboard.insights.length > 0 && (
-                  <Box>
-                    <Typography variant="h6" gutterBottom>
-                      Insights
-                    </Typography>
-                    <List>
-                      {(dashboard.insights as string[]).map((insight, idx) => (
-                        <ListItem key={idx}>
-                          <ListItemText primary={insight} />
-                        </ListItem>
-                      ))}
-                    </List>
-                  </Box>
-                )}
-                {dashboard.charts && Array.isArray(dashboard.charts) && (
-                  <Box>
-                    <Typography variant="h6" gutterBottom>
-                      Recommended Charts ({dashboard.charts.length})
-                    </Typography>
-                    <List>
-                      {(dashboard.charts as Array<Record<string, unknown>>).map((chart, idx) => (
-                        <ListItem key={idx}>
-                          <ListItemText
-                            primary={chart.title as string || `Chart ${idx + 1}`}
-                            secondary={
-                              <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                                <Chip label={chart.type as string} size="small" />
-                                <Chip label={chart.data_source as string} size="small" variant="outlined" />
-                              </Stack>
-                            }
-                          />
-                        </ListItem>
-                      ))}
-                    </List>
-                  </Box>
-                )}
-                {dashboard.metrics && Array.isArray(dashboard.metrics) && (
-                  <Box>
-                    <Typography variant="h6" gutterBottom>
-                      Key Metrics
-                    </Typography>
-                    <Stack direction="row" spacing={2} flexWrap="wrap">
-                      {(dashboard.metrics as Array<Record<string, unknown>>).map((metric, idx) => (
-                        <Paper key={idx} variant="outlined" sx={{ p: 2, minWidth: 150 }}>
-                          <Typography variant="caption" color="text.secondary">
-                            {metric.label as string}
-                          </Typography>
-                          <Typography variant="h6">
-                            {metric.value as string | number}
-                          </Typography>
-                        </Paper>
-                      ))}
-                    </Stack>
-                  </Box>
-                )}
-                <Alert severity="info">
-                  Dashboard specification generated. Chart rendering will be implemented in a future update.
-                </Alert>
+                <DashboardRenderer
+                  specification={dashboard as any}
+                  data={searchResponse?.visualization}
+                />
               </Stack>
             </Paper>
           )}
