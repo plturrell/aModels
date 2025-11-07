@@ -74,6 +74,13 @@ func main() {
 	mux.HandleFunc("/api/training/dataset", app.handleTrainingDataset)
 	mux.HandleFunc("/api/sgmi/raw", app.handleSgmiRaw)
 
+	// Proxy LocalAI chat requests to LocalAI service
+	if app.cfg.LocalAIBaseURL != "" {
+		localaiProxy := app.proxyHandler(app.cfg.LocalAIBaseURL, "/localai")
+		mux.Handle("/localai/", localaiProxy)
+		mux.Handle("/localai", localaiProxy)
+	}
+
 	dmsProxy := app.proxyHandler(app.cfg.DMSEndpoint, "/dms")
 	mux.Handle("/dms/", dmsProxy)
 	mux.Handle("/dms", dmsProxy)

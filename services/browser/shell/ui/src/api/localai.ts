@@ -52,19 +52,53 @@ export interface ChatResponse {
 }
 
 export async function sendLocalAIChat(request: ChatRequest): Promise<ChatResponse> {
-  const response = await fetch(`${API_BASE}/localai/chat`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json"
-    },
-    body: JSON.stringify(request)
-  });
+  const url = `${API_BASE}/localai/v1/chat/completions`;
+  
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify(request)
+    });
 
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(`LocalAI request failed (${response.status}): ${message}`);
+    if (!response.ok) {
+      let errorMessage = `LocalAI request failed (${response.status})`;
+      try {
+        const errorText = await response.text();
+        if (errorText) {
+          try {
+            const errorJson = JSON.parse(errorText);
+            errorMessage = errorJson.detail || errorJson.message || errorJson.error?.message || errorText;
+          } catch {
+            errorMessage = errorText;
+          }
+        }
+      } catch {
+        errorMessage = `HTTP ${response.status} ${response.statusText}`;
+      }
+      throw new Error(errorMessage);
+    }
+
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+      const text = await response.text();
+      if (!text.trim()) {
+        throw new Error("LocalAI returned an empty response");
+      }
+      return JSON.parse(text) as ChatResponse;
+    }
+
+    return (await response.json()) as ChatResponse;
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
+        throw new Error(`Network error: Unable to reach LocalAI service at ${url}. Check if the service is running and accessible.`);
+      }
+      throw error;
+    }
+    throw new Error(`Unexpected error: ${String(error)}`);
   }
-
-  return (await response.json()) as ChatResponse;
 }
