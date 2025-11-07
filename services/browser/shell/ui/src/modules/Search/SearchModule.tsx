@@ -80,9 +80,7 @@ export function SearchModule() {
         use_perplexity: usePerplexity,
         enable_framework: enableFramework,
         enable_plot: enablePlot,
-        enable_stdlib: true,
-        enable_dashboard: enableDashboard,
-        enable_narrative: enableNarrative
+        enable_stdlib: true
       });
       setResults(response.combined_results || []);
       setSources(response.sources || {});
