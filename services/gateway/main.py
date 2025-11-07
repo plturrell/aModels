@@ -433,19 +433,45 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
         "use_perplexity": true  // Optional: enable Perplexity web search
     }
     """
-    query = payload.get("query", "")
+    import time
+    start_time = time.time()
+    
+    # Request validation
+    query = payload.get("query", "").strip()
     top_k = payload.get("top_k", 10)
     sources = payload.get("sources", ["inference", "knowledge_graph", "catalog"])
     use_perplexity = payload.get("use_perplexity", False) and PERPLEXITY_API_KEY != ""
     
+    # Validate query
     if not query:
         raise HTTPException(status_code=400, detail="query is required")
+    if len(query) > 1000:
+        raise HTTPException(status_code=400, detail="query too long (max 1000 characters)")
+    
+    # Validate top_k
+    if not isinstance(top_k, int) or top_k < 1:
+        raise HTTPException(status_code=400, detail="top_k must be a positive integer")
+    if top_k > 100:
+        raise HTTPException(status_code=400, detail="top_k too large (max 100)")
+    
+    # Validate sources
+    valid_sources = ["inference", "knowledge_graph", "catalog", "perplexity"]
+    if not isinstance(sources, list):
+        raise HTTPException(status_code=400, detail="sources must be a list")
+    sources = [s for s in sources if s in valid_sources]
+    if not sources:
+        sources = ["inference", "knowledge_graph", "catalog"]
     
     results = {
         "query": query,
         "sources": {},
         "combined_results": [],
-        "total_count": 0
+        "total_count": 0,
+        "metadata": {
+            "sources_queried": len(sources),
+            "sources_successful": 0,
+            "sources_failed": 0
+        }
     }
     
     # 1. Search Inference Service
@@ -456,17 +482,21 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
             if r.status_code == 200:
                 inference_results = r.json()
                 results["sources"]["inference"] = inference_results.get("results", [])
+                results["metadata"]["sources_successful"] += 1
                 for result in inference_results.get("results", []):
                     results["combined_results"].append({
                         "source": "inference",
-                        "id": result.get("id"),
-                        "content": result.get("content"),
-                        "similarity": result.get("similarity"),
+                        "id": result.get("id", ""),
+                        "content": result.get("content", ""),
+                        "similarity": result.get("similarity", 0.0),
                         "score": result.get("similarity", 0.0)
                     })
+            else:
+                raise Exception(f"HTTP {r.status_code}: {r.text[:200]}")
         except Exception as e:
             logger.warning(f"Search inference service error: {e}")
             results["sources"]["inference"] = {"error": str(e)}
+            results["metadata"]["sources_failed"] += 1
     
     # 2. Knowledge Graph Search (Extract Service)
     if "knowledge_graph" in sources:
@@ -481,18 +511,22 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
             if r.status_code == 200:
                 kg_results = r.json()
                 results["sources"]["knowledge_graph"] = kg_results.get("results", [])
+                results["metadata"]["sources_successful"] += 1
                 for result in kg_results.get("results", []):
                     results["combined_results"].append({
                         "source": "knowledge_graph",
-                        "id": result.get("id"),
+                        "id": result.get("id", ""),
                         "content": result.get("content") or result.get("text", ""),
                         "similarity": result.get("score", 0.0),
                         "score": result.get("score", 0.0),
                         "metadata": result.get("metadata", {})
                     })
+            else:
+                raise Exception(f"HTTP {r.status_code}: {r.text[:200]}")
         except Exception as e:
             logger.warning(f"Knowledge graph search error: {e}")
             results["sources"]["knowledge_graph"] = {"error": str(e)}
+            results["metadata"]["sources_failed"] += 1
     
     # 3. Catalog Semantic Search
     if "catalog" in sources:
@@ -502,18 +536,22 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
             if r.status_code == 200:
                 catalog_results = r.json()
                 results["sources"]["catalog"] = catalog_results.get("results", [])
+                results["metadata"]["sources_successful"] += 1
                 for result in catalog_results.get("results", []):
                     results["combined_results"].append({
                         "source": "catalog",
-                        "id": result.get("id"),
+                        "id": result.get("id", ""),
                         "content": result.get("content") or result.get("text", ""),
                         "similarity": result.get("score", 0.0),
                         "score": result.get("score", 0.0),
                         "metadata": result.get("metadata", {})
                     })
+            else:
+                raise Exception(f"HTTP {r.status_code}: {r.text[:200]}")
         except Exception as e:
             logger.warning(f"Catalog search error: {e}")
             results["sources"]["catalog"] = {"error": str(e)}
+            results["metadata"]["sources_failed"] += 1
     
     # 4. Perplexity AI (web search)
     if use_perplexity and PERPLEXITY_API_KEY:
@@ -537,6 +575,7 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
                     "content": content,
                     "citations": citations
                 }
+                results["metadata"]["sources_successful"] += 1
                 results["combined_results"].append({
                     "source": "perplexity",
                     "id": "perplexity-web",
@@ -546,14 +585,21 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
                     "citations": citations,
                     "metadata": {"type": "web_search"}
                 })
+            else:
+                raise Exception(f"HTTP {r.status_code}: {r.text[:200]}")
         except Exception as e:
             logger.warning(f"Perplexity search error: {e}")
             results["sources"]["perplexity"] = {"error": str(e)}
+            results["metadata"]["sources_failed"] += 1
     
     # Sort combined results by score (descending)
     results["combined_results"].sort(key=lambda x: x.get("score", 0.0), reverse=True)
     results["combined_results"] = results["combined_results"][:top_k]
     results["total_count"] = len(results["combined_results"])
+    
+    # Add execution time to metadata
+    execution_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+    results["metadata"]["execution_time_ms"] = round(execution_time, 2)
     
     return results
 
