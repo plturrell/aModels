@@ -5,6 +5,7 @@ package stubs
 import (
 	"context"
 	"database/sql"
+	"os"
 )
 
 // Pool is a stub for HANA connection pool
@@ -12,6 +13,15 @@ type Pool struct{}
 
 // NewPool creates a new stub pool
 func NewPool(dsn string) (*Pool, error) {
+	return &Pool{}, nil
+}
+
+// NewPoolFromEnv creates a new pool from environment variables (stub)
+func NewPoolFromEnv() (*Pool, error) {
+	// Stub implementation - returns nil pool if HANA_DSN not set
+	if os.Getenv("HANA_DSN") == "" {
+		return nil, nil
+	}
 	return &Pool{}, nil
 }
 

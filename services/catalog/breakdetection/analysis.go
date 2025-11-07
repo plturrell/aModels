@@ -2,7 +2,6 @@ package breakdetection
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"strings"

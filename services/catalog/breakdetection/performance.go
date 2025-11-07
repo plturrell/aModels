@@ -62,8 +62,8 @@ func (po *PerformanceOptimizer) detectSequentially(
 
 	for key, baselineValue := range baselineEntries {
 		currentValue := currentEntries[key]
-		if break := detector(key, baselineValue, currentValue); break != nil {
-			breaks = append(breaks, break)
+		if br := detector(key, baselineValue, currentValue); br != nil {
+			breaks = append(breaks, br)
 		}
 	}
 
@@ -97,8 +97,8 @@ func (po *PerformanceOptimizer) detectParallel(ctx context.Context,
 		go func() {
 			defer wg.Done()
 			for job := range jobChan {
-				if break := detector(job.key, job.baseline, job.current); break != nil {
-					resultChan <- break
+				if br := detector(job.key, job.baseline, job.current); br != nil {
+					resultChan <- br
 				}
 			}
 		}()
@@ -127,9 +127,9 @@ func (po *PerformanceOptimizer) detectParallel(ctx context.Context,
 	}()
 
 	var breaks []*Break
-	for break := range resultChan {
-		if break != nil {
-			breaks = append(breaks, break)
+	for br := range resultChan {
+		if br != nil {
+			breaks = append(breaks, br)
 		}
 	}
 

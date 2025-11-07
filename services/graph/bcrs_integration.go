@@ -39,9 +39,14 @@ func (bi *BCRSIntegration) IngestCreditRisk(ctx context.Context, filters map[str
 	var nodes []DomainNode
 	for _, record := range data {
 		record["source_system"] = "BCRS"
-		risk, err := bi.mapper.MapCreditRisk(ctx, record)
-		if err != nil { if bi.logger != nil { bi.logger.Printf("map credit risk: %v", err) }; continue }
-		nodes = append(nodes, *risk.ToGraphNode())
+		// MapCreditRisk not available in ModelMapper interface - create node directly
+		node := DomainNode{
+			ID:    fmt.Sprintf("bcrs-credit-risk-%v", record["exposure_id"]),
+			Type:  "CreditRisk",
+			Label: "CreditRisk",
+			Properties: record,
+		}
+		nodes = append(nodes, node)
 	}
 	if len(nodes) > 0 {
 		if err := bi.graphClient.UpsertNodes(ctx, nodes); err != nil { return fmt.Errorf("upsert bcrs nodes: %w", err) }

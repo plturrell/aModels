@@ -406,7 +406,7 @@ func (rd *RegulatoryDetector) detectComplianceViolations(baseline, current map[s
 	for reportID, currentReport := range current {
 		// Check validation status
 		if currentReport.ValidationStatus == "failed" {
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-compliance-violation-%s", reportID),
 				SystemName:      SystemAxiomSL,
 				DetectionType:   DetectionTypeRegulatory,
@@ -424,7 +424,7 @@ func (rd *RegulatoryDetector) detectComplianceViolations(baseline, current map[s
 				CreatedAt:        time.Now(),
 				UpdatedAt:        time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 		}
 	}
 
@@ -440,7 +440,7 @@ func (rd *RegulatoryDetector) detectReportingBreaks(baseline, current map[string
 		currentReport, exists := current[reportID]
 		if !exists {
 			// Missing report
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-missing-report-%s", reportID),
 				SystemName:      SystemAxiomSL,
 				DetectionType:   DetectionTypeRegulatory,
@@ -455,7 +455,7 @@ func (rd *RegulatoryDetector) detectReportingBreaks(baseline, current map[string
 				CreatedAt:       time.Now(),
 				UpdatedAt:       time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 			continue
 		}
 
@@ -465,7 +465,7 @@ func (rd *RegulatoryDetector) detectReportingBreaks(baseline, current map[string
 			amountDiff = -amountDiff
 		}
 		if amountDiff > tolerance {
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-report-amount-mismatch-%s", reportID),
 				SystemName:      SystemAxiomSL,
 				DetectionType:   DetectionTypeRegulatory,
@@ -485,7 +485,7 @@ func (rd *RegulatoryDetector) detectReportingBreaks(baseline, current map[string
 				CreatedAt:        time.Now(),
 				UpdatedAt:        time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 		}
 	}
 
@@ -500,7 +500,7 @@ func (rd *RegulatoryDetector) detectCalculationErrors(baseline, current map[stri
 	for calculationID, currentCalculation := range current {
 		// Check if validation failed
 		if !currentCalculation.ValidationPassed {
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-calculation-validation-failed-%s", calculationID),
 				SystemName:      SystemAxiomSL,
 				DetectionType:   DetectionTypeRegulatory,
@@ -517,7 +517,7 @@ func (rd *RegulatoryDetector) detectCalculationErrors(baseline, current map[stri
 				CreatedAt:        time.Now(),
 				UpdatedAt:        time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 		}
 
 		// Check if expected value differs from output
@@ -527,7 +527,7 @@ func (rd *RegulatoryDetector) detectCalculationErrors(baseline, current map[stri
 				diff = -diff
 			}
 			if diff > tolerance {
-				break := &Break{
+				br := &Break{
 					BreakID:        fmt.Sprintf("break-calculation-mismatch-%s", calculationID),
 					SystemName:      SystemAxiomSL,
 					DetectionType:   DetectionTypeRegulatory,
@@ -546,7 +546,7 @@ func (rd *RegulatoryDetector) detectCalculationErrors(baseline, current map[stri
 					CreatedAt:        time.Now(),
 					UpdatedAt:        time.Now(),
 				}
-				breaks = append(breaks, break)
+				breaks = append(breaks, br)
 			}
 		}
 	}

@@ -444,7 +444,7 @@ func (fd *FinanceDetector) detectMissingJournalEntries(baseline, current map[str
 	
 	for entryID, baselineEntry := range baseline {
 		if _, exists := current[entryID]; !exists {
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-missing-entry-%s", entryID),
 				SystemName:      SystemSAPFioneer,
 				DetectionType:   DetectionTypeFinance,
@@ -459,7 +459,7 @@ func (fd *FinanceDetector) detectMissingJournalEntries(baseline, current map[str
 				CreatedAt:       time.Now(),
 				UpdatedAt:       time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 		}
 	}
 	
@@ -484,7 +484,7 @@ func (fd *FinanceDetector) detectAmountMismatches(baseline, current map[string]*
 				diff = -diff
 			}
 			if diff > tolerance {
-				break := &Break{
+				br := &Break{
 					BreakID:        fmt.Sprintf("break-amount-mismatch-%s-debit", entryID),
 					SystemName:      SystemSAPFioneer,
 					DetectionType:   DetectionTypeFinance,
@@ -504,7 +504,7 @@ func (fd *FinanceDetector) detectAmountMismatches(baseline, current map[string]*
 					CreatedAt:        time.Now(),
 					UpdatedAt:        time.Now(),
 				}
-				breaks = append(breaks, break)
+				breaks = append(breaks, br)
 			}
 		}
 		
@@ -515,7 +515,7 @@ func (fd *FinanceDetector) detectAmountMismatches(baseline, current map[string]*
 				diff = -diff
 			}
 			if diff > tolerance {
-				break := &Break{
+				br := &Break{
 					BreakID:        fmt.Sprintf("break-amount-mismatch-%s-credit", entryID),
 					SystemName:      SystemSAPFioneer,
 					DetectionType:   DetectionTypeFinance,
@@ -535,7 +535,7 @@ func (fd *FinanceDetector) detectAmountMismatches(baseline, current map[string]*
 					CreatedAt:        time.Now(),
 					UpdatedAt:        time.Now(),
 				}
-				breaks = append(breaks, break)
+				breaks = append(breaks, br)
 			}
 		}
 	}
@@ -552,7 +552,7 @@ func (fd *FinanceDetector) detectAccountBalanceBreaks(baseline, current map[stri
 		currentBalance, exists := current[account]
 		if !exists {
 			// Missing account balance
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-missing-balance-%s", account),
 				SystemName:      SystemSAPFioneer,
 				DetectionType:   DetectionTypeFinance,
@@ -567,7 +567,7 @@ func (fd *FinanceDetector) detectAccountBalanceBreaks(baseline, current map[stri
 				CreatedAt:       time.Now(),
 				UpdatedAt:       time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 			continue
 		}
 		
@@ -577,7 +577,7 @@ func (fd *FinanceDetector) detectAccountBalanceBreaks(baseline, current map[stri
 			diff = -diff
 		}
 		if diff > tolerance {
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-balance-mismatch-%s", account),
 				SystemName:      SystemSAPFioneer,
 				DetectionType:   DetectionTypeFinance,
@@ -597,7 +597,7 @@ func (fd *FinanceDetector) detectAccountBalanceBreaks(baseline, current map[stri
 				CreatedAt:        time.Now(),
 				UpdatedAt:        time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 		}
 	}
 	
@@ -645,7 +645,7 @@ func (fd *FinanceDetector) detectReconciliationBreaks(baseline, current map[stri
 	
 	tolerance := 0.01
 	if baselineBalance > tolerance || currentBalance > tolerance {
-		break := &Break{
+		br := &Break{
 			BreakID:        fmt.Sprintf("break-reconciliation-%d", time.Now().Unix()),
 			SystemName:      SystemSAPFioneer,
 			DetectionType:   DetectionTypeFinance,
@@ -672,7 +672,7 @@ func (fd *FinanceDetector) detectReconciliationBreaks(baseline, current map[stri
 			CreatedAt:        time.Now(),
 			UpdatedAt:        time.Now(),
 		}
-		breaks = append(breaks, break)
+		breaks = append(breaks, br)
 	}
 	
 	return breaks
@@ -689,7 +689,7 @@ func (fd *FinanceDetector) detectAccountMismatches(baseline, current map[string]
 		}
 		
 		if baselineEntry.Account != currentEntry.Account {
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-account-mismatch-%s", entryID),
 				SystemName:      SystemSAPFioneer,
 				DetectionType:   DetectionTypeFinance,
@@ -708,7 +708,7 @@ func (fd *FinanceDetector) detectAccountMismatches(baseline, current map[string]
 				CreatedAt:        time.Now(),
 				UpdatedAt:        time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 		}
 	}
 	

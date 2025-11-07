@@ -52,10 +52,9 @@ func (mcp *MurexCatalogPopulator) PopulateFromTerminology(ctx context.Context) e
 			element.AddMetadata("confidence", example.Confidence)
 			element.AddMetadata("timestamp", example.Timestamp.Format(time.RFC3339))
 
-			if err := mcp.registry.RegisterDataElement(element); err != nil {
-				if mcp.logger != nil {
-					mcp.logger.Printf("Warning: Failed to register data element %s: %v", element.ID, err)
-				}
+			mcp.registry.RegisterDataElement(element)
+			if mcp.logger != nil {
+				mcp.logger.Printf("Registered data element %s", element.Identifier)
 			}
 		}
 	}
@@ -75,10 +74,9 @@ func (mcp *MurexCatalogPopulator) PopulateFromTerminology(ctx context.Context) e
 			element.AddMetadata("business_role", role)
 			element.AddMetadata("confidence", example.Confidence)
 
-			if err := mcp.registry.RegisterDataElement(element); err != nil {
-				if mcp.logger != nil {
-					mcp.logger.Printf("Warning: Failed to register role element %s: %v", element.ID, err)
-				}
+			mcp.registry.RegisterDataElement(element)
+			if mcp.logger != nil {
+				mcp.logger.Printf("Registered role element %s", element.Identifier)
 			}
 		}
 	}
@@ -112,10 +110,9 @@ func (mcp *MurexCatalogPopulator) PopulateFromTrainingData(ctx context.Context) 
 		tableElement.AddMetadata("source_system", "murex")
 		tableElement.AddMetadata("table_name", schemaExample.TableName)
 
-		if err := mcp.registry.RegisterDataElement(tableElement); err != nil {
-			if mcp.logger != nil {
-				mcp.logger.Printf("Warning: Failed to register table element %s: %v", tableElement.ID, err)
-			}
+		mcp.registry.RegisterDataElement(tableElement)
+		if mcp.logger != nil {
+			mcp.logger.Printf("Registered table element %s", tableElement.Identifier)
 		}
 
 		// Register columns/fields
@@ -135,10 +132,9 @@ func (mcp *MurexCatalogPopulator) PopulateFromTrainingData(ctx context.Context) 
 				columnElement.AddMetadata("example_value", fmt.Sprintf("%v", column.Examples[0]))
 			}
 
-			if err := mcp.registry.RegisterDataElement(columnElement); err != nil {
-				if mcp.logger != nil {
-					mcp.logger.Printf("Warning: Failed to register column element %s: %v", columnElement.ID, err)
-				}
+			mcp.registry.RegisterDataElement(columnElement)
+			if mcp.logger != nil {
+				mcp.logger.Printf("Registered column element %s", columnElement.Identifier)
 			}
 		}
 	}
@@ -158,10 +154,9 @@ func (mcp *MurexCatalogPopulator) PopulateFromTrainingData(ctx context.Context) 
 		element.AddMetadata("pattern", fieldExample.Pattern)
 		element.AddMetadata("data_type", fieldExample.FieldType)
 
-		if err := mcp.registry.RegisterDataElement(element); err != nil {
-			if mcp.logger != nil {
-				mcp.logger.Printf("Warning: Failed to register field element %s: %v", element.ID, err)
-			}
+		mcp.registry.RegisterDataElement(element)
+		if mcp.logger != nil {
+			mcp.logger.Printf("Registered field element %s", element.Identifier)
 		}
 	}
 

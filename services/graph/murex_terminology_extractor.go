@@ -15,6 +15,7 @@ type MurexTerminologyExtractor struct {
 	logger      *log.Logger
 	terminology *ExtractedTerminology
 	trainingData  *TrainingData
+	domain      string // Domain name for terminology extraction
 }
 
 // ExtractedTerminology contains terminology extracted from Murex.
@@ -98,7 +99,25 @@ type ValuePattern struct {
 }
 
 func NewMurexTerminologyExtractor(conn Connector, logger *log.Logger) *MurexTerminologyExtractor {
-	return &MurexTerminologyExtractor{ connector: conn, logger: logger }
+	return &MurexTerminologyExtractor{
+		connector: conn,
+		logger: logger,
+		terminology: &ExtractedTerminology{
+			Domains:        make(map[string][]TerminologyExample),
+			Roles:          make(map[string][]TerminologyExample),
+			NamingPatterns: make(map[string][]TerminologyExample),
+			FieldDescriptions: make(map[string]string),
+			EntityTypes:    []string{},
+			Relationships:  []string{},
+		},
+		trainingData: &TrainingData{
+			SchemaExamples:   []SchemaExample{},
+			FieldExamples:    []FieldExample{},
+			RelationshipExamples: []RelationshipExample{},
+			ValuePatterns:    []ValuePattern{},
+		},
+		domain: "finance-risk-treasury", // Default domain
+	}
 }
 
 // ExtractFromOpenAPISpec extracts terminology from the OpenAPI specification.
@@ -205,7 +224,7 @@ func (mte *MurexTerminologyExtractor) ExtractFromAPIData(ctx context.Context, sa
 }
 
 // extractDomainTerminology extracts domain terminology from schema.
-func (mte *MurexTerminologyExtractor) extractDomainTerminology(schema *agents.SourceSchema) {
+func (mte *MurexTerminologyExtractor) extractDomainTerminology(schema *SourceSchema) {
 	// Finance-Risk-Treasury domain terms
 	financeDomain := []TerminologyExample{
 		{Text: "trade", Context: map[string]interface{}{"source": "murex"}, Confidence: 0.95, Source: "openapi_spec", Timestamp: time.Now()},
@@ -234,7 +253,7 @@ func (mte *MurexTerminologyExtractor) extractDomainTerminology(schema *agents.So
 }
 
 // extractFieldTerminology extracts field/role terminology.
-func (mte *MurexTerminologyExtractor) extractFieldTerminology(schema *agents.SourceSchema) {
+func (mte *MurexTerminologyExtractor) extractFieldTerminology(schema *SourceSchema) {
 	roleMappings := map[string]string{
 		"trade_id":      "identifier",
 		"id":            "identifier",
@@ -311,7 +330,7 @@ func (mte *MurexTerminologyExtractor) inferRole(fieldName, fieldType string) str
 }
 
 // extractNamingPatterns extracts naming convention patterns.
-func (mte *MurexTerminologyExtractor) extractNamingPatterns(schema *agents.SourceSchema) {
+func (mte *MurexTerminologyExtractor) extractNamingPatterns(schema *SourceSchema) {
 	patterns := map[string]int{
 		"snake_case":     0,
 		"camelCase":      0,
@@ -361,35 +380,48 @@ func (mte *MurexTerminologyExtractor) extractNamingPatterns(schema *agents.Sourc
 }
 
 // extractRelationshipTerminology extracts relationship terminology.
-func (mte *MurexTerminologyExtractor) extractRelationshipTerminology(schema *agents.SourceSchema) {
+func (mte *MurexTerminologyExtractor) extractRelationshipTerminology(schema *SourceSchema) {
+	// Note: SourceTable doesn't have ForeignKeys in the simplified schema
+	// This is a stub implementation - in production, foreign keys would be discovered separately
 	for _, table := range schema.Tables {
-		for _, fk := range table.ForeignKeys {
-			rel := fmt.Sprintf("%s -> %s", table.Name, fk.ReferencedTable)
-			mte.terminology.Relationships = append(mte.terminology.Relationships, rel)
+		// Extract relationships from table names and metadata if available
+		if metadata, ok := schema.Metadata["foreign_keys"].(map[string]interface{}); ok {
+			for _, fkInfo := range metadata {
+				if fkMap, ok := fkInfo.(map[string]interface{}); ok {
+					if refTable, ok := fkMap["referenced_table"].(string); ok {
+						rel := fmt.Sprintf("%s -> %s", table.Name, refTable)
+						mte.terminology.Relationships = append(mte.terminology.Relationships, rel)
 
-			// Create relationship example
-			example := RelationshipExample{
-				SourceType:   table.Name,
-				TargetType:   fk.ReferencedTable,
-				Relationship: "references",
-				Description:  fmt.Sprintf("%s references %s", table.Name, fk.ReferencedTable),
+						example := RelationshipExample{
+							SourceType:   table.Name,
+							TargetType:   refTable,
+							Relationship: "references",
+							Description:  fmt.Sprintf("%s references %s", table.Name, refTable),
+						}
+						mte.trainingData.RelationshipExamples = append(mte.trainingData.RelationshipExamples, example)
+					}
+				}
 			}
-			mte.trainingData.RelationshipExamples = append(mte.trainingData.RelationshipExamples, example)
 		}
 	}
 }
 
 // extractDataPatterns extracts patterns from actual data.
-func (mte *MurexTerminologyExtractor) extractDataPatterns(table agents.TableDefinition, data []map[string]interface{}) {
+func (mte *MurexTerminologyExtractor) extractDataPatterns(table SourceTable, data []map[string]interface{}) {
 	if len(data) == 0 {
 		return
 	}
 
 	// Create schema example
+	primaryKey := []string{}
+	if table.PrimaryKey != "" {
+		primaryKey = []string{table.PrimaryKey}
+	}
+
 	schemaExample := SchemaExample{
 		TableName:   table.Name,
 		Columns:     []ColumnInfo{},
-		PrimaryKey:  table.PrimaryKey,
+		PrimaryKey:  primaryKey,
 		Description: fmt.Sprintf("Murex %s table", table.Name),
 		Source:      "murex_api",
 	}
@@ -399,7 +431,7 @@ func (mte *MurexTerminologyExtractor) extractDataPatterns(table agents.TableDefi
 		colInfo := ColumnInfo{
 			Name:        column.Name,
 			Type:        column.Type,
-			Nullable:    column.Nullable,
+			Nullable:    false, // Default to false since SourceColumn doesn't have this field
 			Examples:    []interface{}{},
 		}
 
@@ -416,20 +448,12 @@ func (mte *MurexTerminologyExtractor) extractDataPatterns(table agents.TableDefi
 		schemaExample.Columns = append(schemaExample.Columns, colInfo)
 	}
 
-	// Extract foreign keys
-	for _, fk := range table.ForeignKeys {
-		schemaExample.ForeignKeys = append(schemaExample.ForeignKeys, ForeignKeyInfo{
-			Columns:           fk.Columns,
-			ReferencedTable:    fk.ReferencedTable,
-			ReferencedColumns:  fk.ReferencedColumns,
-		})
-	}
-
+	// Note: ForeignKeys not available in simplified SourceTable - would need to be discovered separately
 	mte.trainingData.SchemaExamples = append(mte.trainingData.SchemaExamples, schemaExample)
 }
 
 // extractValuePatterns extracts value patterns from data.
-func (mte *MurexTerminologyExtractor) extractValuePatterns(table agents.TableDefinition, data []map[string]interface{}) {
+func (mte *MurexTerminologyExtractor) extractValuePatterns(table SourceTable, data []map[string]interface{}) {
 	if len(data) == 0 {
 		return
 	}
@@ -544,7 +568,7 @@ func (mte *MurexTerminologyExtractor) inferValuePattern(fieldType string, exampl
 }
 
 // extractFieldExamplesFromData extracts field examples from actual data.
-func (mte *MurexTerminologyExtractor) extractFieldExamplesFromData(table agents.TableDefinition, data []map[string]interface{}) {
+func (mte *MurexTerminologyExtractor) extractFieldExamplesFromData(table SourceTable, data []map[string]interface{}) {
 	for _, column := range table.Columns {
 		domain := mte.domain // Use configured domain
 		role := mte.inferRole(column.Name, column.Type)
