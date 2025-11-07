@@ -1,9 +1,29 @@
 import { useMemo, useState } from "react";
+import {
+  Box,
+  Typography,
+  Button,
+  Alert,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Chip,
+  CircularProgress,
+  Stack,
+  Card,
+  CardContent,
+  TextField,
+  Divider
+} from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 
 import { Panel } from "../../components/Panel";
 import { useFlows, runFlow, type FlowInfo, type FlowRunResponse } from "../../api/agentflow";
-
-import styles from "./FlowsModule.module.css";
 
 const formatter = new Intl.DateTimeFormat(undefined, {
   year: "numeric",
@@ -82,174 +102,281 @@ export function FlowsModule() {
   };
 
   return (
-    <div className={styles.flows}>
+    <Box>
       <Panel
         title="AgentFlow"
         subtitle="Manage, sync, and execute LangFlow pipelines"
         actions={
-          <button type="button" className={styles.refreshButton} onClick={refresh} disabled={loading}>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={loading ? <CircularProgress size={16} /> : <RefreshIcon />}
+            onClick={refresh}
+            disabled={loading}
+          >
             {loading ? "Refreshing…" : "Refresh"}
-          </button>
+          </Button>
         }
       >
-        <div className={styles.hero}>
-          <div className={styles.heroCopy}>
-            <h1>Curate your orchestration lineup.</h1>
-            <p>
-              Preview local flows, monitor LangFlow sync status, and execute test runs without leaving
-              the browser shell.
-            </p>
-          </div>
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h5" gutterBottom>
+            Curate your orchestration lineup.
+          </Typography>
+          <Typography variant="body2" color="text.secondary" paragraph>
+            Preview local flows, monitor LangFlow sync status, and execute test runs without leaving
+            the browser shell.
+          </Typography>
 
-          <div className={styles.metricsRow}>
-            <div className={styles.metricCard}>
-              <span>Total flows</span>
-              <strong>{totalFlows}</strong>
-            </div>
-            <div className={styles.metricCard}>
-              <span>Synced to LangFlow</span>
-              <strong>{syncedFlows}</strong>
-              <small>{pendingSync} pending sync</small>
-            </div>
-            <div className={styles.metricCard}>
-              <span>Updated this week</span>
-              <strong>{recentlyUpdated}</strong>
-            </div>
-            <div className={styles.metricCard}>
-              <span>Selected flow</span>
-              <strong>{selectedFlow?.name ?? "—"}</strong>
-              <small>{selectedFlow ? selectedFlow.local_id : "Choose from the ledger"}</small>
-            </div>
-          </div>
+          <Stack direction="row" spacing={2} sx={{ mt: 3, flexWrap: 'wrap' }}>
+            <Card variant="outlined" sx={{ flex: 1, minWidth: 150 }}>
+              <CardContent>
+                <Typography variant="caption" color="text.secondary">
+                  Total flows
+                </Typography>
+                <Typography variant="h6">{totalFlows}</Typography>
+              </CardContent>
+            </Card>
+            <Card variant="outlined" sx={{ flex: 1, minWidth: 150 }}>
+              <CardContent>
+                <Typography variant="caption" color="text.secondary">
+                  Synced to LangFlow
+                </Typography>
+                <Typography variant="h6">{syncedFlows}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {pendingSync} pending sync
+                </Typography>
+              </CardContent>
+            </Card>
+            <Card variant="outlined" sx={{ flex: 1, minWidth: 150 }}>
+              <CardContent>
+                <Typography variant="caption" color="text.secondary">
+                  Updated this week
+                </Typography>
+                <Typography variant="h6">{recentlyUpdated}</Typography>
+              </CardContent>
+            </Card>
+            <Card variant="outlined" sx={{ flex: 1, minWidth: 150 }}>
+              <CardContent>
+                <Typography variant="caption" color="text.secondary">
+                  Selected flow
+                </Typography>
+                <Typography variant="h6">{selectedFlow?.name ?? "—"}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {selectedFlow ? selectedFlow.local_id : "Choose from the ledger"}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Stack>
 
           {error ? (
-            <div className={styles.errorBanner}>Unable to load flows: {error.message}</div>
+            <Alert severity="error" sx={{ mt: 2 }}>
+              Unable to load flows: {error.message}
+            </Alert>
           ) : null}
-        </div>
+        </Box>
       </Panel>
 
-      <div className={styles.layout}>
-        <Panel title="Flow ledger" subtitle="Local specs and sync status">
-          <div className={styles.tableWrapper}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Project</th>
-                  <th>Folder</th>
-                  <th>Status</th>
-                  <th>Updated</th>
-                  <th>Synced</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {flows.map((flow) => (
-                  <tr
-                    key={flow.local_id}
-                    className={flow.local_id === selectedId ? styles.selectedRow : undefined}
-                  >
-                    <td>
-                      <div className={styles.cellTitle}>{flow.name ?? flow.local_id}</div>
-                      <div className={styles.cellMeta}>{truncate(flow.description)}</div>
-                    </td>
-                    <td>{flow.project_id ?? "—"}</td>
-                    <td>{flow.folder_path ?? "—"}</td>
-                    <td>
-                      {flow.remote_id ? (
-                        <span className={styles.syncedPill}>Synced</span>
-                      ) : (
-                        <span className={styles.pendingPill}>Local only</span>
-                      )}
-                    </td>
-                    <td>
-                      {flow.updated_at ? formatter.format(new Date(flow.updated_at)) : "—"}
-                      <small>{relativeTime(flow.updated_at)}</small>
-                    </td>
-                    <td>
-                      {flow.synced_at ? formatter.format(new Date(flow.synced_at)) : "—"}
-                      <small>{relativeTime(flow.synced_at)}</small>
-                    </td>
-                    <td className={styles.actionsCell}>
-                      <button
-                        type="button"
-                        className={styles.secondaryButton}
-                        onClick={() => handleSelect(flow)}
-                      >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {!flows.length && !loading ? (
-                  <tr>
-                    <td colSpan={7} className={styles.emptyCell}>
-                      No flows discovered in the AgentFlow catalog.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </Panel>
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+        <Box sx={{ flex: 2 }}>
+          <Panel title="Flow ledger" subtitle="Local specs and sync status">
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Name</TableCell>
+                    <TableCell>Project</TableCell>
+                    <TableCell>Folder</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Updated</TableCell>
+                    <TableCell>Synced</TableCell>
+                    <TableCell align="right">Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {flows.map((flow) => (
+                    <TableRow
+                      key={flow.local_id}
+                      hover
+                      selected={flow.local_id === selectedId}
+                      onClick={() => handleSelect(flow)}
+                      sx={{ cursor: 'pointer' }}
+                    >
+                      <TableCell>
+                        <Typography variant="body2" fontWeight={500}>
+                          {flow.name ?? flow.local_id}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {truncate(flow.description)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {flow.project_id ?? "—"}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">
+                          {flow.folder_path ?? "—"}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {flow.remote_id ? (
+                          <Chip label="Synced" size="small" color="success" />
+                        ) : (
+                          <Chip label="Local only" size="small" color="warning" />
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {flow.updated_at ? (
+                          <>
+                            <Typography variant="body2">
+                              {formatter.format(new Date(flow.updated_at))}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {relativeTime(flow.updated_at)}
+                            </Typography>
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {flow.synced_at ? (
+                          <>
+                            <Typography variant="body2">
+                              {formatter.format(new Date(flow.synced_at))}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              {relativeTime(flow.synced_at)}
+                            </Typography>
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelect(flow);
+                          }}
+                        >
+                          View
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!flows.length && !loading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          No flows discovered in the AgentFlow catalog.
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Panel>
+        </Box>
 
-        <Panel title="Execution studio" subtitle="Run the selected flow">
-          {selectedFlow ? (
-            <div className={styles.runPanel}>
-              <div className={styles.runMeta}>
-                <div>
-                  <span className={styles.metaLabel}>Local ID</span>
-                  <p>{selectedFlow.local_id}</p>
-                </div>
-                <div>
-                  <span className={styles.metaLabel}>Remote ID</span>
-                  <p>{selectedFlow.remote_id ?? "Pending sync"}</p>
-                </div>
-              </div>
-              <label className={styles.inputLabel} htmlFor="flow-input">
-                Input value
-              </label>
-              <textarea
-                id="flow-input"
-                className={styles.promptInput}
-                value={inputValue}
-                rows={4}
-                onChange={(event) => setInputValue(event.target.value)}
-                placeholder="Provide the primary input value for this flow run"
-              />
-              <div className={styles.runActions}>
-                <button
-                  type="button"
-                  className={styles.primaryButton}
+        <Box sx={{ flex: 1 }}>
+          <Panel title="Execution studio" subtitle="Run the selected flow">
+            {selectedFlow ? (
+              <Stack spacing={2}>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Local ID
+                  </Typography>
+                  <Typography variant="body2">{selectedFlow.local_id}</Typography>
+                </Box>
+                <Divider />
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Remote ID
+                  </Typography>
+                  <Typography variant="body2">
+                    {selectedFlow.remote_id ?? "Pending sync"}
+                  </Typography>
+                </Box>
+                <Divider />
+                <TextField
+                  fullWidth
+                  label="Input value"
+                  multiline
+                  rows={4}
+                  value={inputValue}
+                  onChange={(event) => setInputValue(event.target.value)}
+                  placeholder="Provide the primary input value for this flow run"
+                />
+                <Button
+                  variant="contained"
+                  startIcon={<PlayArrowIcon />}
                   onClick={handleRun}
                   disabled={!inputValue.trim() || sending}
+                  fullWidth
                 >
                   {sending ? "Running…" : "Run flow"}
-                </button>
-              </div>
+                </Button>
 
-              {runError ? <div className={styles.errorBanner}>Run failed: {runError.message}</div> : null}
+                {runError ? (
+                  <Alert severity="error">Run failed: {runError.message}</Alert>
+                ) : null}
 
-              {runOutput ? (
-                <div className={styles.resultBlock}>
-                  <span className={styles.metaLabel}>Result payload</span>
-                  <pre>{JSON.stringify(runOutput.result, null, 2)}</pre>
-                  {runOutput.deepagents_analysis ? (
-                    <>
-                      <span className={styles.metaLabel}>DeepAgents analysis</span>
-                      <pre>{JSON.stringify(runOutput.deepagents_analysis, null, 2)}</pre>
-                    </>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className={styles.placeholder}>
-              <p>Select a flow from the ledger to run it against LangFlow.</p>
-            </div>
-          )}
-        </Panel>
-      </div>
-    </div>
+                {runOutput ? (
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                      Result payload
+                    </Typography>
+                    <Box
+                      component="pre"
+                      sx={{
+                        bgcolor: 'grey.100',
+                        p: 1,
+                        borderRadius: 1,
+                        overflow: 'auto',
+                        fontSize: '0.75rem',
+                        fontFamily: 'monospace'
+                      }}
+                    >
+                      {JSON.stringify(runOutput.result, null, 2)}
+                    </Box>
+                    {runOutput.deepagents_analysis ? (
+                      <>
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 2, mb: 1, display: 'block' }}>
+                          DeepAgents analysis
+                        </Typography>
+                        <Box
+                          component="pre"
+                          sx={{
+                            bgcolor: 'grey.100',
+                            p: 1,
+                            borderRadius: 1,
+                            overflow: 'auto',
+                            fontSize: '0.75rem',
+                            fontFamily: 'monospace'
+                          }}
+                        >
+                          {JSON.stringify(runOutput.deepagents_analysis, null, 2)}
+                        </Box>
+                      </>
+                    ) : null}
+                  </Paper>
+                ) : null}
+              </Stack>
+            ) : (
+              <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
+                <Typography variant="body2" color="text.secondary">
+                  Select a flow from the ledger to run it against LangFlow.
+                </Typography>
+              </Paper>
+            )}
+          </Panel>
+        </Box>
+      </Stack>
+    </Box>
   );
 }

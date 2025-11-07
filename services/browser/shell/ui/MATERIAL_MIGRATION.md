@@ -33,32 +33,44 @@ Migrating Browser UI from CSS modules to Material UI components for better consi
 - **File**: `tsconfig.json`
 - **Changes**: Excluded test files from build to prevent TypeScript errors
 
-## In Progress 🔄
+## Completed ✅
 
 ### LocalAIModule
-- Large component with chat interface
-- Needs migration of:
-  - Chat bubbles
-  - Input forms
-  - Buttons and controls
-  - Citation lists
-
-## Pending 📋
+- **File**: `src/modules/LocalAI/LocalAIModule.tsx`
+- **Changes**:
+  - Migrated chat bubbles to Material UI `Paper` components
+  - Replaced forms with Material UI `TextField`, `Button`, `Select`, `Slider`
+  - Citation lists use Material UI `List`, `ListItem`, `Chip`
+  - Model selection and temperature controls use Material UI form components
+  - Runtime snapshot and model inventory use Material UI `Stack` and `List`
+  - All styling uses Material UI `sx` prop and theme
 
 ### DocumentsModule
-- Document table/list
-- Metric cards
-- Action buttons
+- **File**: `src/modules/Documents/DocumentsModule.tsx`
+- **Changes**:
+  - Metric cards use Material UI `Card` and `CardContent`
+  - Document table uses Material UI `Table`, `TableContainer`, `TableRow`, `TableCell`
+  - Status indicators use Material UI `Chip` components
+  - Action buttons use Material UI `Button` with icons
+  - Next steps list uses Material UI `List` components
 
 ### FlowsModule
-- Flow table
-- Execution studio
-- Form inputs
+- **File**: `src/modules/Flows/FlowsModule.tsx`
+- **Changes**:
+  - Flow ledger table uses Material UI `Table` components
+  - Execution studio uses Material UI `TextField`, `Button`, `Paper`
+  - Metric cards use Material UI `Card` components
+  - Status chips use Material UI `Chip` with color variants
+  - Result display uses Material UI `Paper` with formatted JSON
 
 ### TelemetryModule
-- Metrics cards
-- Data tables
-- Schema reference
+- **File**: `src/modules/Telemetry/TelemetryModule.tsx`
+- **Changes**:
+  - Service defaults use Material UI `Stack` and `Divider`
+  - Session pulse cards use Material UI `Card` components
+  - Metrics table uses Material UI `Table` components
+  - Schema reference uses Material UI `List` with code formatting
+  - All styling uses Material UI theme system
 
 ## Migration Strategy
 
@@ -93,11 +105,12 @@ Migrating Browser UI from CSS modules to Material UI components for better consi
 
 ## Next Steps
 
-1. Continue migrating LocalAIModule (most complex)
-2. Migrate DocumentsModule
-3. Migrate FlowsModule
-4. Migrate TelemetryModule
-5. Remove unused CSS module files
-6. Add dark mode support
+1. ✅ ~~Continue migrating LocalAIModule (most complex)~~ - **COMPLETED**
+2. ✅ ~~Migrate DocumentsModule~~ - **COMPLETED**
+3. ✅ ~~Migrate FlowsModule~~ - **COMPLETED**
+4. ✅ ~~Migrate TelemetryModule~~ - **COMPLETED**
+5. Remove unused CSS module files (`.module.css` files)
+6. Add dark mode support using Material UI theme
 7. Test all modules thoroughly
+8. Optimize bundle size (consider code splitting for large modules)
 

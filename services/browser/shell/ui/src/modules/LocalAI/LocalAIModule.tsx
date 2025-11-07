@@ -1,6 +1,29 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { parse } from "yaml";
 import composeRaw from "#repo/services/localai/LocalAI/docker-compose.yaml?raw";
+import {
+  Box,
+  Typography,
+  TextField,
+  Button,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Slider,
+  Chip,
+  Link,
+  Alert,
+  CircularProgress,
+  Stack,
+  Paper,
+  List,
+  ListItem,
+  ListItemText,
+  Divider
+} from '@mui/material';
+import SendIcon from '@mui/icons-material/Send';
+import ClearIcon from '@mui/icons-material/Clear';
 
 import { Panel } from "../../components/Panel";
 import { useLocalAIInventory } from "../../api/hooks";
@@ -10,8 +33,6 @@ import {
   type ChatMessage,
   type NormalisedCitation
 } from "../../state/useLocalAIChatStore";
-
-import styles from "./LocalAIModule.module.css";
 
 interface ComposeService {
   ports?: Array<string | number>;
@@ -102,21 +123,34 @@ function renderInlineWithCitations(
 
     if (citation?.url) {
       nodes.push(
-        <a
+        <Link
           key={key}
           href={citation.url}
           target="_blank"
           rel="noreferrer"
-          className={styles.footnote}
+          sx={{ 
+            color: 'primary.main',
+            textDecoration: 'underline',
+            '&:hover': { textDecoration: 'none' }
+          }}
         >
           {label}
-        </a>
+        </Link>
       );
     } else {
       nodes.push(
-        <span key={key} className={styles.footnote}>
-          {label}
-        </span>
+        <Chip
+          key={key}
+          label={label}
+          size="small"
+          variant="outlined"
+          sx={{ 
+            height: 'auto',
+            fontSize: '0.75rem',
+            ml: 0.5,
+            mr: 0.5
+          }}
+        />
       );
     }
 
@@ -135,25 +169,38 @@ function renderInlineWithCitations(
 
 function CitationList({ citations }: { citations: NormalisedCitation[] }) {
   return (
-    <ul className={styles.citationList}>
-      {citations.map((citation, index) => (
-        <li key={citation.id ?? index} className={styles.citationItem}>
-          <span className={styles.citationBadge}>[[{index + 1}]]</span>
-          <div className={styles.citationContent}>
-            {citation.url ? (
-              <a href={citation.url} target="_blank" rel="noreferrer">
-                {citation.label}
-              </a>
-            ) : (
-              <span>{citation.label}</span>
-            )}
-            {citation.snippet ? (
-              <p className={styles.citationSnippet}>{citation.snippet}</p>
-            ) : null}
-          </div>
-        </li>
-      ))}
-    </ul>
+    <Box sx={{ mt: 2, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+      <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+        Citations
+      </Typography>
+      <List dense>
+        {citations.map((citation, index) => (
+          <ListItem key={citation.id ?? index} sx={{ py: 0.5, px: 0 }}>
+            <Chip
+              label={`[[${index + 1}]]`}
+              size="small"
+              sx={{ mr: 1, minWidth: 40 }}
+            />
+            <ListItemText
+              primary={
+                citation.url ? (
+                  <Link href={citation.url} target="_blank" rel="noreferrer">
+                    {citation.label}
+                  </Link>
+                ) : (
+                  <Typography variant="body2">{citation.label}</Typography>
+                )
+              }
+              secondary={citation.snippet ? (
+                <Typography variant="caption" color="text.secondary">
+                  {citation.snippet}
+                </Typography>
+              ) : undefined}
+            />
+          </ListItem>
+        ))}
+      </List>
+    </Box>
   );
 }
 
@@ -173,21 +220,35 @@ function ChatBubble({ message }: { message: ChatMessage }) {
       : "";
   const roleLabel = message.role === "assistant" ? "LocalAI" : "You";
 
+  const isAssistant = message.role === "assistant";
+  const bgColor = isAssistant ? 'primary.light' : 'grey.200';
+  const textColor = isAssistant ? 'primary.contrastText' : 'text.primary';
+
   return (
-    <article
-      className={[
-        styles.chatMessage,
-        message.role === "assistant" ? styles.assistantMessage : styles.userMessage,
-        message.streaming ? styles.streaming : "",
-        message.error ? styles.errored : ""
-      ].join(" ")}
+    <Paper
+      elevation={1}
+      sx={{
+        p: 2,
+        mb: 2,
+        bgcolor: isAssistant ? 'primary.light' : 'grey.100',
+        color: isAssistant ? 'primary.contrastText' : 'text.primary',
+        opacity: message.error ? 0.7 : 1,
+        borderLeft: isAssistant ? 4 : 0,
+        borderColor: isAssistant ? 'primary.dark' : 'transparent',
+        position: 'relative'
+      }}
     >
-      <div className={styles.messageBody}>
+      <Box sx={{ mb: 1 }}>
         {paragraphs.length
           ? paragraphs.map((paragraph, paragraphIndex) => {
               const lines = paragraph.split("\n");
               return (
-                <p key={`${message.id}-${paragraphIndex}`} className={styles.paragraph}>
+                <Typography
+                  key={`${message.id}-${paragraphIndex}`}
+                  variant="body1"
+                  paragraph
+                  sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                >
                   {lines.map((line, lineIndex) => (
                     <span key={`${message.id}-${paragraphIndex}-${lineIndex}`}>
                       {renderInlineWithCitations(
@@ -198,21 +259,53 @@ function ChatBubble({ message }: { message: ChatMessage }) {
                       {lineIndex < lines.length - 1 ? <br /> : null}
                     </span>
                   ))}
-                </p>
+                </Typography>
               );
             })
-          : renderInlineWithCitations(text, citations, `${message.id}-inline`)}
-        {message.streaming ? <span className={styles.cursor} aria-hidden="true" /> : null}
-      </div>
-      <footer className={styles.messageMeta}>
-        <span>{roleLabel}</span>
-        {timeLabel ? <span>{timeLabel}</span> : null}
-      </footer>
+          : (
+            <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {renderInlineWithCitations(text, citations, `${message.id}-inline`)}
+            </Typography>
+          )}
+        {message.streaming ? (
+          <Box
+            component="span"
+            sx={{
+              display: 'inline-block',
+              width: 8,
+              height: 16,
+              bgcolor: 'currentColor',
+              ml: 0.5,
+              animation: 'blink 1s infinite',
+              '@keyframes blink': {
+                '0%, 100%': { opacity: 1 },
+                '50%': { opacity: 0 }
+              }
+            }}
+            aria-hidden="true"
+          />
+        ) : null}
+      </Box>
+      
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
+        <Typography variant="caption" color="text.secondary">
+          {roleLabel}
+        </Typography>
+        {timeLabel ? (
+          <Typography variant="caption" color="text.secondary">
+            {timeLabel}
+          </Typography>
+        ) : null}
+      </Box>
+
       {message.error ? (
-        <p className={styles.messageError}>Message failed to send. Try again.</p>
+        <Alert severity="error" sx={{ mt: 1 }}>
+          Message failed to send. Try again.
+        </Alert>
       ) : null}
+      
       {citations.length ? <CitationList citations={citations} /> : null}
-    </article>
+    </Paper>
   );
 }
 
@@ -248,15 +341,31 @@ export function LocalAIModule() {
 
   if (!inventory) {
     return (
-      <div className={styles.placeholder}>
+      <Box>
         <Panel title="LocalAI Inventory" subtitle="Loading model catalog">
-          {loading ? <p>Loading LocalAI models…</p> : <p>Unable to load LocalAI inventory.</p>}
-          {error ? <p className={styles.error}>Error: {error.message}</p> : null}
-          <button type="button" onClick={refresh} disabled={loading}>
+          {loading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <CircularProgress size={20} />
+              <Typography>Loading LocalAI models…</Typography>
+            </Box>
+          ) : (
+            <Typography>Unable to load LocalAI inventory.</Typography>
+          )}
+          {error ? (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              Error: {error.message}
+            </Alert>
+          ) : null}
+          <Button
+            variant="outlined"
+            onClick={refresh}
+            disabled={loading}
+            sx={{ mt: 2 }}
+          >
             Reload
-          </button>
+          </Button>
         </Panel>
-      </div>
+      </Box>
     );
   }
 
@@ -277,7 +386,7 @@ export function LocalAIModule() {
     setDraft(prompt);
   };
 
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (event: React.KeyboardEvent) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
       const value = draft.trim();
@@ -288,39 +397,44 @@ export function LocalAIModule() {
   };
 
   const modelActions = (
-    <div className={styles.metaControls}>
-      <div className={styles.pillGroup}>
-        <label className={styles.selectLabel}>
-          <span>Model</span>
-          <select
-            className={styles.modelSelect}
-            value={model}
-            onChange={(event) => setModel(event.target.value)}
-          >
-            {modelOptions.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.id}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={styles.selectLabel}>
-          <span>Creativity</span>
-          <input
-            className={styles.temperatureSlider}
-            type="range"
-            min="0"
-            max="1"
-            step="0.1"
-            value={temperature}
-            onChange={(event) => setTemperature(Number(event.target.value))}
-          />
-          <small>{temperature.toFixed(1)}</small>
-        </label>
-      </div>
-      <button
-        type="button"
-        className={styles.resetButton}
+    <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+      <FormControl size="small" sx={{ minWidth: 120 }}>
+        <InputLabel>Model</InputLabel>
+        <Select
+          value={model}
+          label="Model"
+          onChange={(event) => setModel(event.target.value)}
+        >
+          {modelOptions.map((entry) => (
+            <MenuItem key={entry.id} value={entry.id}>
+              {entry.id}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+      
+      <Box sx={{ minWidth: 150, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography variant="caption" sx={{ minWidth: 60 }}>
+          Creativity
+        </Typography>
+        <Slider
+          value={temperature}
+          onChange={(_, value) => setTemperature(value as number)}
+          min={0}
+          max={1}
+          step={0.1}
+          size="small"
+          sx={{ flex: 1 }}
+        />
+        <Typography variant="caption" sx={{ minWidth: 30, textAlign: 'right' }}>
+          {temperature.toFixed(1)}
+        </Typography>
+      </Box>
+      
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<ClearIcon />}
         onClick={() => {
           resetChat();
           setDraft("");
@@ -328,128 +442,196 @@ export function LocalAIModule() {
         disabled={!messages.length && !chatError && !draft.trim().length}
       >
         Clear Thread
-      </button>
-    </div>
+      </Button>
+    </Stack>
   );
 
   return (
-    <div className={styles.localai}>
+    <Box>
       <Panel title="Live Answer" subtitle="LocalAI interprets SGMI context" actions={modelActions}>
-        <div className={styles.hero}>
-          <div className={styles.chatScroll} aria-live="polite">
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minHeight: 420 }}>
+          <Box
+            sx={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+              overflowY: 'auto',
+              maxHeight: 500,
+              pr: 1
+            }}
+            aria-live="polite"
+          >
             {messages.length ? (
               messages.map((message) => <ChatBubble key={message.id} message={message} />)
             ) : (
-              <div className={styles.chatPlaceholder}>
-                <p>Ask something grounded in SGMI—jobs, telemetry, or training drift.</p>
-                <div className={styles.seedRow}>
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 3,
+                  bgcolor: 'grey.50',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2
+                }}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Ask something grounded in SGMI—jobs, telemetry, or training drift.
+                </Typography>
+                <Stack direction="row" spacing={1} flexWrap="wrap">
                   {seedPrompts.map((prompt) => (
-                    <button
+                    <Button
                       key={prompt}
-                      type="button"
-                      className={styles.seedButton}
+                      variant="outlined"
+                      size="small"
                       onClick={() => handleSeedPrompt(prompt)}
                       disabled={pending}
+                      sx={{ textTransform: 'none' }}
                     >
                       {prompt}
-                    </button>
+                    </Button>
                   ))}
-                </div>
-              </div>
+                </Stack>
+              </Paper>
             )}
             {pending ? (
-              <div className={styles.typingIndicator} role="status" aria-live="assertive">
-                <span />
-                <span />
-                <span />
-              </div>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', py: 2 }}>
+                <CircularProgress size={16} />
+                <Typography variant="body2" color="text.secondary">
+                  Thinking...
+                </Typography>
+              </Box>
             ) : null}
-          </div>
+          </Box>
 
-          {chatError ? <div className={styles.errorBanner}>Error: {chatError}</div> : null}
-
-          {followUps.length ? (
-            <div className={styles.followUps}>
-              <span className={styles.followUpsLabel}>Suggested follow-ups</span>
-              <div className={styles.followUpRow}>
-                {followUps.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={styles.followUpButton}
-                    onClick={() => handleFollowUp(item)}
-                    disabled={pending}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </div>
+          {chatError ? (
+            <Alert severity="error">Error: {chatError}</Alert>
           ) : null}
 
-          <form className={styles.inputBar} onSubmit={handleSubmit}>
-            <textarea
-              className={styles.promptInput}
+          {followUps.length ? (
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                Suggested follow-ups
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap">
+                {followUps.map((item) => (
+                  <Button
+                    key={item.id}
+                    variant="outlined"
+                    size="small"
+                    onClick={() => handleFollowUp(item)}
+                    disabled={pending}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    {item.label}
+                  </Button>
+                ))}
+              </Stack>
+            </Box>
+          ) : null}
+
+          <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', gap: 1 }}>
+            <TextField
+              fullWidth
+              multiline
+              rows={3}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask about waits, telemetry, or training coverage…"
-              rows={3}
               disabled={pending}
+              variant="outlined"
             />
-            <button type="submit" className={styles.sendButton} disabled={pending || !draft.trim()}>
+            <Button
+              type="submit"
+              variant="contained"
+              startIcon={<SendIcon />}
+              disabled={pending || !draft.trim()}
+              sx={{ alignSelf: 'flex-end' }}
+            >
               {pending ? "Sending…" : "Send"}
-            </button>
-          </form>
-        </div>
+            </Button>
+          </Box>
+        </Box>
       </Panel>
 
-      <div className={styles.supportingRow}>
-        <Panel title="Runtime Snapshot" subtitle="services/localai/LocalAI/docker-compose.yaml" dense>
-          <dl className={styles.runtimeGrid}>
-            <div>
-              <dt>Image</dt>
-              <dd>{apiService?.image ?? "quay.io/go-skynet/local-ai:master"}</dd>
-            </div>
-            <div>
-              <dt>Ports</dt>
-              <dd>{exposedPorts.join(", ") || "8080:8080"}</dd>
-            </div>
-            <div>
-              <dt>Command</dt>
-              <dd>
-                <code>
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+        <Box sx={{ flex: 1 }}>
+          <Panel title="Runtime Snapshot" subtitle="services/localai/LocalAI/docker-compose.yaml" dense>
+            <Stack spacing={2}>
+              <Box>
+                <Typography variant="caption" color="text.secondary">Image</Typography>
+                <Typography variant="body2">
+                  {apiService?.image ?? "quay.io/go-skynet/local-ai:master"}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary">Ports</Typography>
+                <Typography variant="body2">
+                  {exposedPorts.join(", ") || "8080:8080"}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary">Command</Typography>
+                <Typography
+                  variant="body2"
+                  component="code"
+                  sx={{
+                    display: 'block',
+                    fontFamily: 'monospace',
+                    fontSize: '0.875rem',
+                    bgcolor: 'grey.100',
+                    p: 0.5,
+                    borderRadius: 1
+                  }}
+                >
                   {Array.isArray(apiService?.command)
                     ? apiService.command.join(" ")
                     : apiService?.command ?? "phi-2"}
-                </code>
-              </dd>
-            </div>
-            <div>
-              <dt>Base URL</dt>
-              <dd>
-                <a href={getBaseUrl()} target="_blank" rel="noreferrer">
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary">Base URL</Typography>
+                <Link href={getBaseUrl()} target="_blank" rel="noreferrer">
                   {getBaseUrl()}
-                </a>
-              </dd>
-            </div>
-          </dl>
-        </Panel>
+                </Link>
+              </Box>
+            </Stack>
+          </Panel>
+        </Box>
 
-        <Panel title="Model Inventory" subtitle={`Documented ${documentedModels.length} of ${modelOptions.length}`} dense>
-          <ul className={styles.modelList}>
-            {modelOptions.slice(0, 6).map((entry) => (
-              <li key={entry.id} className={entry.readme ? styles.modelReady : styles.modelTodo}>
-                <span>{entry.id}</span>
-                <small>{entry.readme ? "Doc complete" : "Needs README"}</small>
-              </li>
-            ))}
-            {modelOptions.length > 6 ? (
-              <li className={styles.modelMore}>+{modelOptions.length - 6} more models</li>
-            ) : null}
-          </ul>
-        </Panel>
-      </div>
-    </div>
+        <Box sx={{ flex: 1 }}>
+          <Panel
+            title="Model Inventory"
+            subtitle={`Documented ${documentedModels.length} of ${modelOptions.length}`}
+            dense
+          >
+            <List dense>
+              {modelOptions.slice(0, 6).map((entry) => (
+                <ListItem key={entry.id} sx={{ py: 0.5, px: 0 }}>
+                  <ListItemText
+                    primary={entry.id}
+                    secondary={entry.readme ? "Doc complete" : "Needs README"}
+                  />
+                  {entry.readme ? (
+                    <Chip label="Ready" size="small" color="success" />
+                  ) : (
+                    <Chip label="Todo" size="small" color="warning" />
+                  )}
+                </ListItem>
+              ))}
+              {modelOptions.length > 6 ? (
+                <ListItem>
+                  <ListItemText
+                    primary={`+${modelOptions.length - 6} more models`}
+                    primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
+                  />
+                </ListItem>
+              ) : null}
+            </List>
+          </Panel>
+        </Box>
+      </Stack>
+    </Box>
   );
 }
