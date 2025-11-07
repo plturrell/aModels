@@ -22,7 +22,14 @@ import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 
 import { Panel } from "../../components/Panel";
-import { unifiedSearch, type UnifiedSearchResult } from "../../api/search";
+import { 
+  unifiedSearch, 
+  generateNarrative, 
+  generateDashboard, 
+  generateNarrativeAndDashboard,
+  type UnifiedSearchResult, 
+  type UnifiedSearchResponse 
+} from "../../api/search";
 
 const formatSimilarity = (similarity: number) => {
   return `${(similarity * 100).toFixed(1)}%`;
@@ -307,8 +314,8 @@ export function SearchModule() {
               <Tab label="By Source" />
               {searchResponse?.visualization && <Tab label="Visualization" />}
               {searchResponse?.result_enrichment && <Tab label="AI Insights" />}
-              {searchResponse?.dashboard && <Tab label="Dashboard" />}
-              {searchResponse?.narrative && <Tab label="Narrative" />}
+              {narrative && <Tab label="Narrative" />}
+              {dashboard && <Tab label="Dashboard" />}
             </Tabs>
           </Box>
           
