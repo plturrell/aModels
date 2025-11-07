@@ -128,12 +128,43 @@ func LoadConfig() (*Config, error) {
 
 // Validate validates the configuration
 func (c *Config) Validate() error {
+	var errors []string
+	
+	// Required: Server port
 	if c.Server.Port == "" {
-		return fmt.Errorf("PORT is required")
+		errors = append(errors, "PORT is required")
 	}
-	if c.Training.OutputDir == "" {
-		return fmt.Errorf("TRAINING_OUTPUT_DIR cannot be empty")
+	
+	// Required: LangExtract configuration
+	if c.Langextract.URL == "" {
+		errors = append(errors, "LANGEXTRACT_API_URL is required")
 	}
+	if c.Langextract.APIKey == "" {
+		errors = append(errors, "LANGEXTRACT_API_KEY is required")
+	}
+	
+	// Required: Neo4j configuration (if Neo4j is being used)
+	// Check if any Neo4j fields are set, indicating Neo4j is being used
+	usingNeo4j := c.Persistence.Neo4jURI != "" || 
+		c.Persistence.Neo4jUsername != "" || 
+		c.Persistence.Neo4jPassword != ""
+	
+	if usingNeo4j {
+		if c.Persistence.Neo4jURI == "" {
+			errors = append(errors, "NEO4J_URI is required when using Neo4j")
+		}
+		if c.Persistence.Neo4jUsername == "" {
+			errors = append(errors, "NEO4J_USERNAME is required when using Neo4j")
+		}
+		if c.Persistence.Neo4jPassword == "" {
+			errors = append(errors, "NEO4J_PASSWORD is required when using Neo4j")
+		}
+	}
+	
+	if len(errors) > 0 {
+		return fmt.Errorf("configuration validation failed:\n  %s", strings.Join(errors, "\n  "))
+	}
+	
 	return nil
 }
 

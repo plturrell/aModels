@@ -1,5 +1,7 @@
 // Package stubs provides stubs for missing agenticAiETH dependencies
-// This replaces the missing agenticAiETH_layer4_Orchestration packages
+// NOTE: Orchestration stubs have been replaced with the actual framework.
+// This file is kept for backward compatibility but orchestration functionality
+// now uses the real framework from infrastructure/third_party/orchestration/
 package stubs
 
 import (

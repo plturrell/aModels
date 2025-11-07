@@ -44,16 +44,55 @@ class AgentResponse(BaseModel):
     result: Optional[Any] = None
 
 
+def validate_config():
+    """Validate required environment variables."""
+    errors = []
+    
+    # Required service URLs
+    required_vars = [
+        "EXTRACT_SERVICE_URL",
+        "AGENTFLOW_SERVICE_URL",
+        "GRAPH_SERVICE_URL",
+    ]
+    
+    for var in required_vars:
+        if not os.getenv(var):
+            errors.append(f"{var} is required")
+    
+    # At least one LLM provider must be configured
+    llm_providers = [
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "LOCALAI_URL",
+    ]
+    
+    has_llm = any(os.getenv(provider) for provider in llm_providers)
+    if not has_llm:
+        errors.append("At least one LLM provider must be configured (ANTHROPIC_API_KEY, OPENAI_API_KEY, or LOCALAI_URL)")
+    
+    if errors:
+        error_msg = "Configuration validation failed:\n  " + "\n  ".join(errors)
+        raise ValueError(error_msg)
+
+
 @app.on_event("startup")
 async def startup():
     """Initialize the deep agent on startup."""
+    # Validate configuration
+    try:
+        validate_config()
+        logger.info("Configuration validation passed")
+    except ValueError as e:
+        logger.error(f"Configuration validation failed: {e}")
+        raise
+    
     global _agent
     try:
         _agent = create_amodels_deep_agent()
-        print("DeepAgent initialized successfully")
+        logger.info("DeepAgent initialized successfully")
     except Exception as e:
-        print(f"Warning: Failed to initialize DeepAgent: {e}")
-        print("Agent will be created on first request")
+        logger.warning(f"Failed to initialize DeepAgent: {e}")
+        logger.warning("Agent will be created on first request")
 
 
 @app.get("/healthz")

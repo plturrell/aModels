@@ -46,6 +46,34 @@ type OrchestrationRequest struct {
 }
 
 // ProcessUnifiedWorkflowNode returns a node that processes a unified workflow request.
+//
+// This node orchestrates all lang infrastructure components:
+// - Knowledge Graph processing
+// - Orchestration chain execution
+// - AgentFlow flow execution
+// - DeepAgents analysis
+// - GraphRAG queries
+//
+// Workflow Modes:
+//   - "sequential": Components execute in order (KG → Orchestration → AgentFlow → DeepAgents)
+//   - "parallel": All components execute simultaneously
+//   - "conditional": Route based on results and quality metrics
+//
+// State Input:
+//   - unified_request: Unified workflow request with component-specific requests
+//   - unified_request.workflow_mode: Execution mode (sequential, parallel, conditional)
+//   - unified_request.knowledge_graph_request: Optional KG processing request
+//   - unified_request.orchestration_request: Optional orchestration chain request
+//   - unified_request.agentflow_request: Optional AgentFlow flow request
+//   - unified_request.graphrag_request: Optional GraphRAG query request
+//
+// State Output:
+//   - knowledge_graph: KG processing results (if requested)
+//   - orchestration_result: Chain execution results (if requested)
+//   - agentflow_result: Flow execution results (if requested)
+//   - graphrag_result: GraphRAG query results (if requested)
+//   - unified_workflow_complete: Workflow completion flag
+//   - unified_workflow_summary: Summary of processed components
 func ProcessUnifiedWorkflowNode(opts UnifiedProcessorOptions) stategraph.NodeFunc {
 	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
 		// Extract unified request from state

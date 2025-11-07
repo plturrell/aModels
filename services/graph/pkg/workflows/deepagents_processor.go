@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/langchain-ai/langgraph-go/pkg/stategraph"
+	"github.com/langchain-ai/langgraph-go/pkg/integration"
 )
 
 // DeepAgentsProcessorOptions configures the deep agents processing workflow.
@@ -44,6 +45,26 @@ var deepagentsHTTPClient = &http.Client{
 }
 
 // RunDeepAgentNode returns a node that runs a deep agent.
+//
+// This node:
+// - Extracts agent request from state
+// - Enriches messages with knowledge graph context (if available)
+// - Calls DeepAgents service HTTP API
+// - Uses retry logic for resilience
+// - Logs operation with correlation ID and duration
+//
+// State Input:
+//   - deepagents_request.messages: Chat messages for the agent
+//   - deepagents_request.stream: Whether to stream responses
+//   - deepagents_request.config: Optional agent configuration
+//   - knowledge_graph: Optional KG context to enrich messages
+//
+// State Output:
+//   - deepagents_result: Agent response with messages and result
+//   - deepagents_messages: Agent response messages
+//   - deepagents_text: Extracted text from last assistant message
+//   - deepagents_success: Execution success flag
+//   - deepagents_executed_at: Execution timestamp
 func RunDeepAgentNode(deepagentsServiceURL string) stategraph.NodeFunc {
 	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
 		// Extract deep agent request from state
@@ -92,7 +113,11 @@ func RunDeepAgentNode(deepagentsServiceURL string) stategraph.NodeFunc {
 			}
 		}
 
-		log.Printf("Running deep agent with %d messages", len(agentRequest.Messages))
+		// Start logged operation with correlation ID
+		op := integration.StartOperation(ctx, log.Default(), "deepagents.invoke")
+		defer op.End(nil)
+
+		op.Log("Running deep agent with %d messages", len(agentRequest.Messages))
 
 		// Enrich messages with knowledge graph context if available
 		enrichedMessages := make([]Message, len(agentRequest.Messages))
@@ -120,34 +145,61 @@ func RunDeepAgentNode(deepagentsServiceURL string) stategraph.NodeFunc {
 			requestBody["config"] = agentRequest.Config
 		}
 
-		body, err := json.Marshal(requestBody)
-		if err != nil {
-			return nil, fmt.Errorf("marshal deep agent request: %w", err)
-		}
-
-		// Call DeepAgents service
+		// Call DeepAgents service with retry logic
 		endpoint := strings.TrimRight(deepagentsServiceURL, "/") + "/invoke"
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
-		if err != nil {
-			return nil, fmt.Errorf("build deep agent request: %w", err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := deepagentsHTTPClient.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("request deep agent: %w", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			bodyBytes, _ := readBodyBytes(resp.Body, 4096)
-			return nil, fmt.Errorf("deep agent request failed with status %s: %s",
-				resp.Status, strings.TrimSpace(string(bodyBytes)))
-		}
-
+		
 		var agentResponse DeepAgentsResponse
-		if err := json.NewDecoder(resp.Body).Decode(&agentResponse); err != nil {
-			return nil, fmt.Errorf("decode deep agent response: %w", err)
+		err := integration.RetryWithBackoffResult(
+			ctx,
+			integration.DefaultRetryConfig(),
+			log.Default(),
+			"deepagents.invoke.execute",
+			func() (DeepAgentsResponse, error) {
+				body, err := json.Marshal(requestBody)
+				if err != nil {
+					return agentResponse, fmt.Errorf("marshal deep agent request: %w", err)
+				}
+
+				req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+				if err != nil {
+					return agentResponse, fmt.Errorf("build deep agent request: %w", err)
+				}
+				req.Header.Set("Content-Type", "application/json")
+
+				startTime := time.Now()
+				resp, err := deepagentsHTTPClient.Do(req)
+				duration := time.Since(startTime)
+				
+				if err != nil {
+					integration.LogHTTPRequest(ctx, log.Default(), "POST", endpoint, 0, duration, err)
+					return agentResponse, fmt.Errorf("request deep agent: %w", err)
+				}
+				defer resp.Body.Close()
+
+				integration.LogHTTPRequest(ctx, log.Default(), "POST", endpoint, resp.StatusCode, duration, nil)
+
+				if resp.StatusCode != http.StatusOK {
+					bodyBytes, _ := readBodyBytes(resp.Body, 4096)
+					err := fmt.Errorf("deep agent request failed with status %s: %s",
+						resp.Status, strings.TrimSpace(string(bodyBytes)))
+					// Check if retryable
+					if integration.IsRetryableHTTPStatus(resp.StatusCode) {
+						return agentResponse, err
+					}
+					// Non-retryable error
+					return agentResponse, fmt.Errorf("%w (non-retryable)", err)
+				}
+
+				var response DeepAgentsResponse
+				if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+					return agentResponse, fmt.Errorf("decode deep agent response: %w", err)
+				}
+				return response, nil
+			},
+		)
+		if err != nil {
+			op.End(err)
+			return nil, fmt.Errorf("execute deep agent: %w", err)
 		}
 
 		// Store results in state
@@ -168,7 +220,8 @@ func RunDeepAgentNode(deepagentsServiceURL string) stategraph.NodeFunc {
 			}
 		}
 
-		log.Printf("Deep agent executed successfully: %d messages returned", len(agentResponse.Messages))
+		op.Log("Deep agent executed successfully: %d messages returned", len(agentResponse.Messages))
+		op.End(nil)
 
 		return newState, nil
 	})

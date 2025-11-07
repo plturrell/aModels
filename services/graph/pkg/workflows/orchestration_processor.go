@@ -13,7 +13,11 @@ import (
 	"time"
 
 	"github.com/langchain-ai/langgraph-go/pkg/stategraph"
-	stubs "github.com/langchain-ai/langgraph-go/pkg/stubs"
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/chains"
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/llms/localai"
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/prompts"
+	
+	"github.com/langchain-ai/langgraph-go/pkg/integration"
 )
 
 // OrchestrationProcessorOptions configures the orchestration chain processing workflow.
@@ -23,6 +27,24 @@ type OrchestrationProcessorOptions struct {
 }
 
 // RunOrchestrationChainNode returns a node that runs an orchestration chain.
+//
+// This node:
+// - Extracts chain configuration from state
+// - Enriches chain inputs with knowledge graph context (if available)
+// - Creates and executes the orchestration chain using the framework
+// - Uses retry logic for resilience
+// - Logs operation with correlation ID and duration
+//
+// State Input:
+//   - orchestration_request.chain_name: Chain type to execute
+//   - orchestration_request.inputs: Chain input parameters
+//   - knowledge_graph: Optional KG context for enrichment
+//
+// State Output:
+//   - orchestration_result: Chain execution results
+//   - orchestration_text: Extracted text output
+//   - orchestration_success: Execution success flag
+//   - orchestration_executed_at: Execution timestamp
 func RunOrchestrationChainNode(localAIURL string) stategraph.NodeFunc {
 	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
 		// Extract chain configuration from state
@@ -63,11 +85,16 @@ func RunOrchestrationChainNode(localAIURL string) stategraph.NodeFunc {
 			}
 		}
 
-		log.Printf("Running orchestration chain: %s", chainName)
+		// Start logged operation with correlation ID
+		op := integration.StartOperation(ctx, log.Default(), fmt.Sprintf("orchestration.chain.%s", chainName))
+		defer op.End(nil)
+
+		op.Log("Running orchestration chain: %s", chainName)
 
 		// Create or load orchestration chain based on chain name
 		chain, err := createOrchestrationChain(chainName, localAIURL)
 		if err != nil {
+			op.End(err)
 			return nil, fmt.Errorf("create chain %s: %w", chainName, err)
 		}
 
@@ -123,9 +150,21 @@ func RunOrchestrationChainNode(localAIURL string) stategraph.NodeFunc {
 			}
 		}
 
-		// Execute chain
-		result, err := chain.Call(ctx, chainInputs)
+		// Execute chain using framework's Call function with retry logic
+		var result map[string]any
+		err = integration.RetryWithBackoff(
+			ctx,
+			integration.DefaultRetryConfig(),
+			log.Default(),
+			fmt.Sprintf("orchestration.chain.%s.execute", chainName),
+			func() error {
+				var execErr error
+				result, execErr = chains.Call(ctx, chain, chainInputs)
+				return execErr
+			},
+		)
 		if err != nil {
+			op.End(err)
 			return nil, fmt.Errorf("execute orchestration chain %s: %w", chainName, err)
 		}
 
@@ -147,8 +186,9 @@ func RunOrchestrationChainNode(localAIURL string) stategraph.NodeFunc {
 			newState["orchestration_text"] = output
 		}
 
-		log.Printf("Orchestration chain executed: chain=%s, output_keys=%v, success=true",
+		op.Log("Orchestration chain executed: chain=%s, output_keys=%v, success=true",
 			chainName, chain.GetOutputKeys())
+		op.End(nil)
 
 		return newState, nil
 	})
@@ -239,11 +279,22 @@ func ChainResultRoutingFunc(ctx context.Context, value any) ([]string, error) {
 }
 
 // createOrchestrationChain creates an orchestration chain based on the chain name.
-// Supports: "llm_chain", "question_answering", "summarization", "knowledge_graph_analyzer",
-// "data_quality_analyzer", "pipeline_analyzer", "sql_analyzer"
-func createOrchestrationChain(chainName, localAIURL string) (stubs.Chain, error) {
-	// Create LocalAI LLM instance
-	llm, err := stubs.NewLocalAI(localAIURL)
+//
+// Supported chain types:
+//   - "llm_chain", "default": Basic LLM chain with customizable prompt
+//   - "question_answering", "qa": Context-aware Q&A with context and question inputs
+//   - "summarization", "summarize": Text summarization with text input
+//   - "knowledge_graph_analyzer", "kg_analyzer": Analyzes knowledge graphs with KG metrics
+//   - "data_quality_analyzer", "quality_analyzer": Analyzes data quality metrics
+//   - "pipeline_analyzer", "pipeline": Analyzes data pipelines (Control-M, SQL, tables)
+//   - "sql_analyzer", "sql": Analyzes SQL queries with optimization suggestions
+//   - "agentflow_analyzer", "agentflow": Analyzes AgentFlow flow execution
+//
+// All chains use the orchestration framework from infrastructure/third_party/orchestration/
+// and are configured with LocalAI as the LLM backend.
+func createOrchestrationChain(chainName, localAIURL string) (chains.Chain, error) {
+	// Create LocalAI LLM instance using the orchestration framework
+	llm, err := localai.New(localai.WithBaseURL(localAIURL))
 	if err != nil {
 		return nil, fmt.Errorf("create LocalAI LLM: %w", err)
 	}
@@ -252,31 +303,31 @@ func createOrchestrationChain(chainName, localAIURL string) (stubs.Chain, error)
 	switch chainName {
 	case "llm_chain", "default":
 		// Simple LLM chain with customizable prompt
-		promptTemplate := stubs.NewPromptTemplate(
+		promptTemplate := prompts.NewPromptTemplate(
 			"Answer the following question or task:\n\n{{.input}}",
 			[]string{"input"},
 		)
-		return stubs.NewLLMChain(llm, promptTemplate), nil
+		return chains.NewLLMChain(llm, promptTemplate), nil
 
 	case "question_answering", "qa":
 		// Question answering chain with context support
-		promptTemplate := stubs.NewPromptTemplate(
+		promptTemplate := prompts.NewPromptTemplate(
 			"Context: {{.context}}\n\nQuestion: {{.question}}\n\nAnswer:",
 			[]string{"context", "question"},
 		)
-		return stubs.NewLLMChain(llm, promptTemplate), nil
+		return chains.NewLLMChain(llm, promptTemplate), nil
 
 	case "summarization", "summarize":
 		// Summarization chain
-		promptTemplate := stubs.NewPromptTemplate(
+		promptTemplate := prompts.NewPromptTemplate(
 			"Summarize the following text:\n\n{{.text}}\n\nSummary:",
 			[]string{"text"},
 		)
-		return stubs.NewLLMChain(llm, promptTemplate), nil
+		return chains.NewLLMChain(llm, promptTemplate), nil
 
 	case "knowledge_graph_analyzer", "kg_analyzer":
 		// Chain for analyzing knowledge graphs
-		promptTemplate := stubs.NewPromptTemplate(
+		promptTemplate := prompts.NewPromptTemplate(
 			"Analyze the following knowledge graph information:\n\n"+
 				"Nodes: {{.node_count}}\n"+
 				"Edges: {{.edge_count}}\n"+
@@ -286,11 +337,11 @@ func createOrchestrationChain(chainName, localAIURL string) (stubs.Chain, error)
 				"Provide insights and recommendations:\n\n{{.query}}",
 			[]string{"node_count", "edge_count", "quality_score", "quality_level", "knowledge_graph_context", "query"},
 		)
-		return stubs.NewLLMChain(llm, promptTemplate), nil
+		return chains.NewLLMChain(llm, promptTemplate), nil
 
 	case "data_quality_analyzer", "quality_analyzer":
 		// Chain for analyzing data quality metrics
-		promptTemplate := stubs.NewPromptTemplate(
+		promptTemplate := prompts.NewPromptTemplate(
 			"Analyze the following data quality metrics:\n\n"+
 				"Metadata Entropy: {{.metadata_entropy}}\n"+
 				"KL Divergence: {{.kl_divergence}}\n"+
@@ -300,11 +351,11 @@ func createOrchestrationChain(chainName, localAIURL string) (stubs.Chain, error)
 				"Provide data quality assessment and recommendations:\n\n{{.query}}",
 			[]string{"metadata_entropy", "kl_divergence", "quality_score", "quality_level", "issues", "query"},
 		)
-		return stubs.NewLLMChain(llm, promptTemplate), nil
+		return chains.NewLLMChain(llm, promptTemplate), nil
 
 	case "pipeline_analyzer", "pipeline":
 		// Chain for analyzing data pipelines
-		promptTemplate := stubs.NewPromptTemplate(
+		promptTemplate := prompts.NewPromptTemplate(
 			"Analyze the following data pipeline:\n\n"+
 				"Control-M Jobs: {{.controlm_jobs}}\n"+
 				"SQL Queries: {{.sql_queries}}\n"+
@@ -314,21 +365,21 @@ func createOrchestrationChain(chainName, localAIURL string) (stubs.Chain, error)
 				"Provide pipeline insights and optimization recommendations:\n\n{{.query}}",
 			[]string{"controlm_jobs", "sql_queries", "source_tables", "target_tables", "data_flow_path", "query"},
 		)
-		return stubs.NewLLMChain(llm, promptTemplate), nil
+		return chains.NewLLMChain(llm, promptTemplate), nil
 
 	case "sql_analyzer", "sql":
 		// Chain for analyzing SQL queries
-		promptTemplate := stubs.NewPromptTemplate(
+		promptTemplate := prompts.NewPromptTemplate(
 			"Analyze the following SQL query:\n\n{{.sql_query}}\n\n"+
 				"Context: {{.context}}\n\n"+
 				"Provide SQL analysis, optimization suggestions, and explain execution plan:\n\n{{.query}}",
 			[]string{"sql_query", "context", "query"},
 		)
-		return stubs.NewLLMChain(llm, promptTemplate), nil
+		return chains.NewLLMChain(llm, promptTemplate), nil
 
 	case "agentflow_analyzer", "agentflow":
 		// Chain for analyzing AgentFlow flows
-		promptTemplate := stubs.NewPromptTemplate(
+		promptTemplate := prompts.NewPromptTemplate(
 			"Analyze the following AgentFlow flow execution:\n\n"+
 				"Flow ID: {{.flow_id}}\n"+
 				"Flow Result: {{.flow_result}}\n"+
@@ -336,19 +387,34 @@ func createOrchestrationChain(chainName, localAIURL string) (stubs.Chain, error)
 				"Provide flow analysis and recommendations:\n\n{{.query}}",
 			[]string{"flow_id", "flow_result", "knowledge_graph_context", "query"},
 		)
-		return stubs.NewLLMChain(llm, promptTemplate), nil
+		return chains.NewLLMChain(llm, promptTemplate), nil
 
 	default:
 		// Default to simple LLM chain with custom input
-		promptTemplate := stubs.NewPromptTemplate(
+		promptTemplate := prompts.NewPromptTemplate(
 			"{{.input}}",
 			[]string{"input"},
 		)
-		return stubs.NewLLMChain(llm, promptTemplate), nil
+		return chains.NewLLMChain(llm, promptTemplate), nil
 	}
 }
 
 // QueryKnowledgeGraphForChainNode returns a node that queries knowledge graphs to inform chain execution.
+//
+// This node:
+// - Queries the knowledge graph via extract service
+// - Stores query results in state for chain enrichment
+// - Falls back to state knowledge graph if query fails
+//
+// State Input:
+//   - knowledge_graph_query: Cypher query to execute
+//   - knowledge_graph_query_params: Optional query parameters
+//   - project_id: Optional project ID filter
+//   - system_id: Optional system ID filter
+//
+// State Output:
+//   - knowledge_graph_context: Query results for chain enrichment
+//   - knowledge_graph_query_results: Raw query results
 func QueryKnowledgeGraphForChainNode(extractServiceURL string) stategraph.NodeFunc {
 	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
 		// Extract knowledge graph query from state
@@ -423,47 +489,6 @@ func QueryKnowledgeGraphForChainNode(extractServiceURL string) stategraph.NodeFu
 			}
 			return nil, fmt.Errorf("request knowledge graph query: %w", err)
 		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-			log.Printf("Knowledge graph query failed: %s", string(bodyBytes))
-			// Fall back to using knowledge graph from state if available
-			kgIface, ok := state["knowledge_graph"]
-			if ok {
-				newState := make(map[string]any, len(state)+1)
-				for k, v := range state {
-					newState[k] = v
-				}
-				newState["knowledge_graph_context"] = kgIface
-				return newState, nil
-			}
-			return state, nil
-		}
-
-		var queryResult struct {
-			Columns []string         `json:"columns"`
-			Data    []map[string]any `json:"data"`
-		}
-
-		if err := json.NewDecoder(resp.Body).Decode(&queryResult); err != nil {
-			return nil, fmt.Errorf("decode query response: %w", err)
-		}
-
-		// Store knowledge graph context for the chain
-		newState := make(map[string]any, len(state)+2)
-		for k, v := range state {
-			newState[k] = v
-		}
-		newState["knowledge_graph_context"] = map[string]any{
-			"query_results": queryResult.Data,
-			"columns":       queryResult.Columns,
-		}
-		newState["knowledge_graph_query_results"] = queryResult.Data
-
-		log.Printf("Knowledge graph query returned %d results for chain planning", len(queryResult.Data))
-
-		return newState, nil
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {

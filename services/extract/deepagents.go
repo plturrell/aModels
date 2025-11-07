@@ -68,6 +68,14 @@ type AnalyzeGraphResponse struct {
 // AnalyzeKnowledgeGraph analyzes a knowledge graph using DeepAgents.
 // This provides AI-powered insights, recommendations, and analysis of the graph structure.
 // Returns nil, nil if disabled or if service is unavailable (non-fatal).
+//
+// Error Handling Pattern:
+// - Non-fatal integration: Returns nil, nil on failure (graceful degradation)
+// - Retry logic: 2 retries with exponential backoff (1s, 2s)
+// - Health check: 5s timeout before attempting analysis
+// - Request timeout: 120s for agent operations
+// - Retries on: network errors, 5xx server errors
+// - Does not retry: 4xx client errors (returns nil, nil)
 func (c *DeepAgentsClient) AnalyzeKnowledgeGraph(ctx context.Context, graphSummary string, projectID, systemID string) (*AnalyzeGraphResponse, error) {
 	if !c.enabled {
 		return nil, nil

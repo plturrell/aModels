@@ -1,34 +1,45 @@
-import { useMemo } from "react";
+import React, { useMemo } from "react";
+import { Box, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Typography, Divider } from '@mui/material';
+import HomeIcon from '@mui/icons-material/Home';
+import ChatIcon from '@mui/icons-material/Chat';
+import DescriptionIcon from '@mui/icons-material/Description';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import InsightsIcon from '@mui/icons-material/Insights';
+import Brightness4Icon from '@mui/icons-material/Brightness4';
+import Brightness7Icon from '@mui/icons-material/Brightness7';
 
 import { useShellStore, type ShellModuleId } from "../state/useShellStore";
 
-import styles from "./NavPanel.module.css";
-
-const NAV_ITEMS: Array<{ id: ShellModuleId; label: string; description: string }> = [
+const NAV_ITEMS: Array<{ id: ShellModuleId; label: string; description: string; icon: React.ElementType }> = [
   {
     id: "localai",
     label: "LocalAI",
-    description: "Chat on top of vendored models"
+    description: "Chat on top of vendored models",
+    icon: ChatIcon
   },
   {
     id: "dms",
     label: "Documents",
-    description: "Curated library with relationships"
+    description: "Curated library with relationships",
+    icon: DescriptionIcon
   },
   {
     id: "flows",
     label: "Flows",
-    description: "AgentFlow / LangFlow orchestration"
+    description: "AgentFlow / LangFlow orchestration",
+    icon: AccountTreeIcon
   },
   {
     id: "telemetry",
     label: "Telemetry",
-    description: "Latency and usage instrumentation"
+    description: "Latency and usage instrumentation",
+    icon: InsightsIcon
   },
   {
     id: "home",
     label: "Home",
-    description: "Overview and quick links"
+    description: "Overview and quick links",
+    icon: HomeIcon
   }
 ];
 
@@ -45,34 +56,44 @@ export function NavPanel() {
   }, []);
 
   return (
-    <div className={styles.container}>
-      <header className={styles.branding}>
-        <span className={styles.glow} aria-hidden="true" />
-        <div>
-          <strong>aModels Shell</strong>
-          <p>Chromium host for documents, flows, and telemetry</p>
-        </div>
-      </header>
-
-      <nav className={styles.nav} aria-label="Primary">
+    <Box sx={{ overflow: 'auto', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 2, textAlign: 'center' }}>
+        <Typography variant="h6" component="div">
+          aModels Shell
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Chromium host for documents, flows, and telemetry
+        </Typography>
+      </Box>
+      <Divider />
+      <List>
         {orderedItems.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`${styles.navItem} ${activeModule === item.id ? styles.active : ""}`}
-            onClick={() => setActiveModule(item.id)}
-          >
-            <span>{item.label}</span>
-            <small>{item.description}</small>
-          </button>
+          <ListItem key={item.id} disablePadding>
+            <ListItemButton
+              selected={activeModule === item.id}
+              onClick={() => setActiveModule(item.id)}
+            >
+              <ListItemIcon>
+                <item.icon />
+              </ListItemIcon>
+              <ListItemText
+                primary={item.label}
+                secondary={item.description}
+              />
+            </ListItemButton>
+          </ListItem>
         ))}
-      </nav>
-
-      <div className={styles.controls}>
-        <button type="button" className={styles.themeToggle} onClick={toggleTheme}>
-          Theme: {theme === "dark" ? "Dark" : "Light"}
-        </button>
-      </div>
-    </div>
+      </List>
+      <Box sx={{ mt: 'auto', p: 2 }}>
+        <ListItem disablePadding>
+          <ListItemButton onClick={toggleTheme}>
+            <ListItemIcon>
+              {theme === "dark" ? <Brightness7Icon /> : <Brightness4Icon />} 
+            </ListItemIcon>
+            <ListItemText primary={`Theme: ${theme === "dark" ? "Dark" : "Light"}`} />
+          </ListItemButton>
+        </ListItem>
+      </Box>
+    </Box>
   );
 }

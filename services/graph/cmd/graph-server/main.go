@@ -22,12 +22,17 @@ import (
 	postgresv1 "github.com/plturrell/aModels/services/postgres/pkg/gen/v1"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/plturrell/aModels/services/graph"
+	"github.com/langchain-ai/langgraph-go/pkg/config"
 	"google.golang.org/protobuf/encoding/protojson"
 	proto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func main() {
+	// Validate required environment variables
+	if err := config.ValidateGraphService(); err != nil {
+		log.Fatalf("Configuration validation failed: %v", err)
+	}
 	searchServiceURL := strings.TrimSpace(os.Getenv("SEARCH_SERVICE_URL"))
 	extractHTTPURL := strings.TrimSpace(os.Getenv("EXTRACT_SERVICE_URL"))
 	if extractHTTPURL == "" {

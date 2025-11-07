@@ -1,0 +1,1405 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+PUBLIC
+2025-09-23
+
+
+
+SAP Signavio Process Intelligence APIs
+
+
+
+
+
+
+
+
+
+
+
+
+
+THE BEST RUN
+Content
+
+
+SAP Signavio Process Intelligence APIs	3
+Data Upload API	3
+Endpoints	4
+Deprecated Endpoints	6
+Ingestion API	7
+Upload Data Using the Ingestion API	7
+Ingestion API Authentication	9
+Ingestion Request	10
+Ingestion Status Request	14
+Supported Data Types	16
+Troubleshooting the Ingestion API	18
+IP Addresses	18
+Restrictions and Limits	21
+SIGNAL OData API	22
+Prerequisites	23
+Creating OData Views	23
+User Access	25
+Generating API Access Tokens	26
+Requests and Responses	28
+Restrictions and Limits	32
+Troubleshooting	33
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+PUBLIC
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+SAP Signavio Process Intelligence APIs
+Content
+SAP Signavio Process Intelligence APIs
+
+
+With the SAP Signavio Process Intelligence APIs you can integrate your data with SAP Signavio Process Intelligence. The following APIs are available:
+Data upload API [page 3]: Manage data uploads SAP Signavio Process Intelligence once or on a regular basis.
+Ingestion API [page 7]: Ingest data to SAP Signavio Process Intelligence from any connection.
+SIGNAL OData API [page 22]: Get access to your analytical results in SAP Signavio Process Intelligence via third-party systems.
+
+
+
+
+Data Upload API
+
+With the data upload API you can manage data uploads SAP Signavio Process Intelligence once or on a regular basis
+For the upload, you need to provide data as XES files. Read more on the supported file formats in section Data file types.
+
+
+
+Authentication
+
+Authentication is done with OAUTH 2 tokens.
+You need to include the token in the authorization header.
+To create an access token, read more in section Manage API access to a process.
+
+
+
+Environments
+
+We recommend using our production environment to test your API integration. Simply delete any data you upload to our server after the fact.
+The URLs for our production environment are:
+https://app-au.signavio.com (region: Australia)
+https://app-ca.signavio.com (region: Canada)
+https://editor.signavio.com (region: Europe)
+https://app-jp.signavio.com (region: Japan)
+https://app-kr.signavio.com (region: Korea)
+https://app-sgp.signavio.com (region: Singapore)
+https://app-us.signavio.com (region: US)
+
+
+
+
+Limits on API calls
+
+Data upload API calls are limited as follows:
+1 million rows per upload of each data set into the software
+100 million rows per data set
+100 API calls per day
+The maximum number of queries allowed for all users in total is limited by 8,000 queries per day.
+
+
+
+
+Endpoints
+
+API endpoints for uploading process data in CSV or XES format to SAP Signavio Process Intelligence To find the endpoint of your process, follow these steps:
+Open your process.
+The investigation overview opens.
+Click Process settings > API. Find the following:
+Process ID: ID of your process
+Tenant ID: ID of your workspace
+Upload Endpoint: endpoint to upload files using API requests
+
+
+
+
+POST /uploads
+
+POST {environment-url}/g/api/pidata/v2/subjects/{subject-slug}/uploads
+This endpoint uploads a file to the subject.
+Supported file types: XES and compressed XES files in the format GZ or ZIP. Sample request:
+
+Status code	Description
+
+200	OK - Your file was successfully uploaded and processed.
+
+400	File Missing - You haven't attached a file.
+
+500	Application Error - Something went wrong.
+
+
+
+GET /uploads
+
+GET {environment-url}/g/api/pidata/v2/subjects/{subject-slug}/uploads
+This endpoint returns all upload data of the specified subject. Sample response:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+DELETE  /uploads/{upload-id}
+
+DELETE {environment-url}/g/api/pidata/v2/subjects/{subject-slug}/uploads/{upload-id}
+This endpoint deletes the specified upload from the subject.
+
+
+
+DELETE /uploads
+
+DELETE {environment-url}/g/api/pidata/v2/subjects/{subject-slug}/uploads
+This endpoint deletes all deletable upload data of the specified subject.
+
+Deletable upload data is upload data with status READY or UPLOADED. Upload data with status ANALYZING can't be deleted.
+The endpoint only considers the upload status at the time when the request is made. New uploads after the request won't be deleted. Uploads with status ANALYZING won't be deleted even if they reach the status READY after the request was made.
+It can't be guaranteed that upload data will be completely deleted. After deletion, you can check with the GET /uploads request whether deletion was successful. If not, then repeat the DELETE /uploads request.
+
+
+Deprecated Endpoints
+
+
+
+POST /upload/xes
+
+POST {environment-url}/g/api/pidata/subjects/{subject-slug}/upload/xes
+
+Status code	Description
+
+204	OK - Your file was successfully uploaded and processed.
+
+400	File Missing - You haven't attached a file.
+
+500	Application Error - Something went wrong.
+
+
+This endpoint uploads files to SAP Signavio Process Intelligence. The object passes the file parameter (must be an XES file).
+Ingestion API
+
+With the Ingestion API you can upload data to SAP Signavio Process Intelligence from any connection, and then get the status of the data upload request.
+You can upload data to SAP Signavio Process Intelligence using CSV and TSV files. First, you need to create a source data with Ingestion API source system or a process data pipeline. Next, you can upload data and get the status of the upload request. Read more in section Upload data using the Ingestion API [page 7].
+
+
+
+Authentication
+
+To use the Ingestion API, you need an API access token. This is necessary for authenticating the API with your third-party connection. Read more in section Ingestion API authentication [page 9].
+
+
+
+Using a Postman Collection
+
+If you wish to send requests to the Ingestion API using Postman, we provide ready-to-use collections and environments for you to download and reuse. You can find them at the SAP Samples GitHub repository along with instructions on how to use them.
+
+
+
+Upload Data Using the Ingestion API
+
+Learn how to configure an Ingestion API connection and source data in SAP Signavio Process Intelligence.
+Uploading data to SAP Signavio Process Intelligence with the Ingestion API is different to the standard way
+of uploading and transforming data. There is no extraction step after uploading data to SAP Signavio Process Intelligence, only transformation and load.
+You can set up data ingestion by either creating a source data or a process data pipeline.
+
+
+
+Prerequisites
+
+Before uploading, make the following checks and preparations in your data to avoid encountering errors.
+Verify dates and times:
+Ensure dates and times use supported data types. These include:
+Date
+Timestamp (millisecond precision)
+Time (millisecond precision)
+Convert date and timestamp formats in files to milliseconds before upload. For example:
+Fri Jun 24 2022 10:58:41 GMT+0200 becomes 1656061121670 milliseconds
+Ensure the data includes no invalid characters:
+Replace NULL values with an empty string in files. Not all NULL value types are detected.
+Column names must not contain special characters. Only characters from the character class [A-Za-z_] are valid for column names. For example, column names must not contain spaces.
+Avoid spaces in the names of uploaded files.
+Avoid spaces in the specified table name in the schema.
+Pseudonymize the data on your source system before uploading.
+SAP Signavio Process Intelligence doesn't support pseudonymizing the uploaded data.
+
+
+
+Uploading Data
+
+Once you're ready to upload, follow these steps:
+Set up data ingestion by creating an ingestion connection, source data, or process data pipeline in SAP Signavio Process Intelligence. Read more in section Setting Up Source Data.
+Call the API using the API credentials and upload the data. Read more in the sections Ingestion Request [page 10] and Ingestion Status Request [page 14]. For more information on the restrictions and limits of the ingestion API, see Restrictions and Limits | SAP Help Portal.
+
+Run the initial transformation and load. Pipeline logs are generated to provide transformation and load information. Read more in section Running the Transformation and Load.
+Once uploaded, the data is ready for investigation. Read how to define and grant access to process data in section Preparing a Process and how to analyze data in section Process Mining.
+Uploading to an Existing Dataset
+
+If you upload to an existing dataset, consider the following:
+Your data must conform to the existing data ingestion schema. The Ingestion API can't be used to modify the schema.
+The primary key of your new data must be the same as that of the existing data. The primary key of an existing ingestion table cannot be modified.
+If you upload data for existing records which were added in earlier requests, it is assumed you're performing an update. Pushing data to the same table with the same primary keys overwrites existing data. Note that this doesn't apply to duplicate records uploaded in the same request. It is expected that all records in a single upload request are unique.
+
+
+
+Ingestion API Authentication
+
+Discover how authentication with the Ingestion API in SAP Signavio Process Intelligence works.
+An access token is used to authenticate calls to the Ingestion API. The token is created when you set up an ingestion connection, as described in Setting Up Source Data.
+
+
+
+Getting an Access Token
+
+After creating an ingestion connection, a new access token is generated automatically. If the access token for a specific connection becomes compromised, you must rotate it to get a new token.
+
+
+Rotating Your Access Token
+
+In the SAP Signavio Process Intelligence user interface, under  Connections  Ingestion API , you have the option to rotate your access token. When selected, a new token is created and the previous token becomes immediately invalid. For more information, see Upload Data Using the Ingestion API.
+Ingestion Request
+
+Dispatch an ingestion request to begin uploading your data via the Ingestion API.
+
+
+
+Base URL
+
+All API endpoints are relative to the base URL. The endpoint URL is generated when you create an Ingestion API connection. Read more in section Connector - Ingestion API.
+The URL format is as follows:
+
+To obtain the URL, substitute the <<REGION-CODE>> according to your region.
+
+Region	Region Code
+
+Australia	au
+
+Canada	ca
+
+European Union	eu
+
+Japan	jp
+
+Singapore	sgp
+
+South Korea	kr
+
+USA	us
+
+
+
+Request
+
+Request Type	POST
+
+Header	Accept: application/json
+Content-Type: multipart/form-data Authorization: Bearer <<ACCESS_TOKEN>>
+
+
+Form-data
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Response
+
+
+
+
+<<ACCESS_TOKEN>>: The API token from the connection.
+<<files>>: The data to be pushed.
+schema : The JSON (Avro) schema for which this data is pushed.
+primaryKeys: The comma-separated list of primary keys, example primaryKeys="key1,key2,key3"
+(values must exist in the provided Schema).
+
+delimiter: (optional) The delimiter character separating the data in the files. Any character can be used, but if no value is provided the delimiter defaults to a comma (“,”).
+Learn more about the data types available when using the Ingestion API in Supported Data Types [page 16].
+Response Codes
+
+Code	Description
+
+200	OK
+
+400	Bad Request
+
+401	Unauthorized
+
+
+
+Ingestion API Schema Definition
+
+A Schema is represented in JSON following the Apache Avro Specification of type record to define the table structure. No other type can be used for this field.
+For information about supported data types, see Supported data types [page 16]. Example:
+
+
+
+
+
+
+
+
+CSV Example
+
+The following example shows the contents of a CSV file using a comma as the delimiter:
+
+
+
+cURL Example
+
+The following example shows a cURL script that you can use to upload data using the Ingestion API:
+
+
+
+
+
+Python Example
+
+The following example shows a Python script that you can use to upload data using the Ingestion API:
+
+
+
+
+Ingestion Status Request
+
+Dispatch an ingestion status request to query the status of an ongoing upload
+You can view the status of data upload calls in the logs section of an Ingestion API integration. Read more in section Monitoring Data Pipelines.
+
+
+
+Base URL
+
+All API endpoints are relative to the base URL. The endpoint URL is generated when you create an Ingestion API connection. Read more in section Connector - Ingestion API.
+The URL format is as follows:
+
+To obtain the URL, substitute the <<REGION-CODE>> according to your region.
+
+Region	Region Code
+
+Australia	au
+
+Canada	ca
+
+European Union	eu
+
+Japan	jp
+
+Singapore	sgp
+
+South Korea	kr
+
+
+Region	Region Code
+
+USA	us
+
+
+
+Request
+
+Request Type	GET
+
+Header	Accept: application/json
+Content-Type: application/json Authorization: Bearer <<ACCESS_TOKEN>>
+
+Response
+
+
+
+
+
+
+
+<<ACCESS_TOKEN>>: The API token from the connection.
+<<REQUEST-UUID>>: The ingestion request id received from the response of an Ingestion API call. Read more in section Request [page 10].
+
+
+
+Response Codes
+
+Code	Description
+
+200	OK
+
+400	Bad Request
+
+401	Unauthorized
+
+
+
+Request Statuses
+
+The following statuses can be returned when executing an Ingestion status API call:
+
+Status	Description
+
+REQUEST_VALIDATING	The ingestion request is being validated. The inputs, schema, and file headers are checked for matching.
+
+
+Status	Description
+
+REQUEST_VALIDATED	The ingestion request is valid and ready for the next step.
+
+REQUEST_VALIDATION_FAILED	The ingestion request is invalid. See the 'message' field in the response for more details.
+
+FILE_CONVERTING	The request is converting and parsing the data files.
+
+FILE_CONVERTED	The request has converted the data files and ready for the next step.
+
+FILE_CONVERSION_FAILED	The conversion of the data files has failed. See the 'message' field in the response for more details.
+FILE_UPLOADING	The data files are uploading to SAP Signavio Process Intelligence.
+
+FILE_UPLOADED	The data files are uploaded to SAP Signavio Process Intelligence and ready for the next step.
+FILE_UPLOAD_FAILED	The uploading of the data files to SAP Signavio Process Intelligence has failed. See the 'message' field in the re-sponse for more details.
+
+INTERNAL_SYNCHRONISING	The internal system is synchronizing and preparing the in-gested data for transformation and load (T&L).
+INTERNAL_SYNCHRONISING_FAILED	The synchronization of the internal systems has failed. See
+the 'message' field in the response for more details.
+
+COMPLETED	The ingestion request has completed successfully and is ready for transformation and load (T&L).
+
+
+
+cURL Example
+
+
+
+Supported Data Types
+This section explains the supported data types for use in Ingestion API calls. Available data types:
+boolean: a binary value
+int: 32-bit signed integer
+long: 64-bit signed integer
+double: double precision (64-bit) IEEE 754 floating-point number
+string: unicode character sequence
+
+
+
+Date and Time Data Types
+
+Date: A date logical type annotates an Avro int, where the int stores the number of days from the unix epoch, 1 January 1970 (ISO calendar).
+
+Time: A time-millis logical type annotates an Avro int, where the int stores the number of milliseconds after midnight, 00:00:00.000.
+
+Timestamp: A timestamp-millis logical type annotates an Avro long, where the long stores the number of milliseconds from the unix epoch, 1 January 1970 00:00:00.000 UTC.
+
+
+
+Nullability
+
+Unions are used to represent nullable fields, for example, ["null", "string"] declares a field which may be either a null or string.
+Example:
+
+Troubleshooting the Ingestion API
+
+Possible solutions to problems you might encounter when using the Ingestion API.
+
+Problem	Possible Solutions
+
+Access is denied. The access token for your connection might be invalid.
+The schema is invalid. The format of the JSON code might be invalid, or the JSON code might not conform to the Apache Avro standard.
+
+Obtain a new access token. For more information on obtain-ing a new token, see Ingestion API Authentication [page 9].
+
+
+Check that the schema code is valid JSON.
+
+Verify that your schema aligns with the Apache Avro stand-ard.
+
+
+
+Your data files are rejected as an unsupported type.	The supported file extensions are CSV and TSV. Check your
+file extensions.
+An invalid character exists between the encapsulated token and the delimiter.
+The relevant line number is provided in the error trace. Find that line in your data and amend the invalid character.
+
+
+A name in the header is missing or duplicated.	Check that the header line of the CSV or TSV is present,
+complete and has no repeated names.
+
+A field is rejected as not accepting NULL values.	In the schema, set the relevant field as nullable.
+An error is encountered for a specific input string when con-verting the CSV/TSV file.
+You receive the message: The initial request for table <Table Name> is still in progress. Please wait for it to finish before starting a new request.
+Ensure that the type in the schema matches the correspond-ing data in the files.
+
+Wait for the first table ingestion request to be concluded before starting a second one. After this, other requests can be started, but there should be at least 30 seconds between them. Otherwise, you may get a timeout error.
+
+
+
+
+IP Addresses
+
+The following table lists the inbound static IP addresses used by the Ingestion API in each region.
+
+Region	Inbound Static IP Addresses
+Australia (AU)	54.206.132.140
+
+54.252.25.32
+
+54.253.234.12
+
+3.104.153.169
+
+3.105.8.225
+
+54.66.91.245
+
+3.104.28.93
+
+54.79.116.252
+
+
+Region
+Inbound Static IP Addresses
+
+54.79.24.44
+
+13.211.70.197
+
+3.105.13.168
+
+54.252.99.221
+Canada (CA)
+3.96.75.199
+
+3.98.100.88
+
+35.182.184.107
+
+15.222.215.55
+
+3.97.164.139
+
+3.98.48.74
+
+15.156.129.170
+
+15.156.178.7
+
+15.222.227.127
+
+3.97.146.62
+
+3.97.241.146
+
+3.98.156.54
+European Union (EU)	18.184.66.118
+
+3.125.96.178
+
+3.76.55.68
+
+18.184.101.77
+
+18.196.219.185
+
+3.69.69.190
+
+18.193.62.153
+
+3.70.41.31
+
+35.157.217.51
+
+18.193.148.161
+
+3.127.4.99
+
+3.75.37.200
+
+Japan (JP)	13.114.254.143
+
+35.74.101.16
+
+35.77.176.198
+
+
+Region
+Inbound Static IP Addresses
+
+18.176.11.111
+
+3.115.77.7
+
+35.75.62.95
+
+3.113.69.192
+
+46.51.230.15
+
+54.65.203.188
+
+13.230.67.110
+
+3.112.137.148
+
+43.207.16.23
+Singapore (SGP)	13.250.154.18
+
+18.141.18.124
+
+18.141.67.210
+
+3.0.162.136
+
+52.220.198.100
+
+54.255.125.238
+
+13.215.128.140
+
+46.51.221.118
+
+54.169.88.127
+
+18.141.75.151
+
+52.76.162.136
+
+54.254.236.188
+
+South Korea (KR)	13.124.169.166
+
+15.164.130.123
+
+3.38.231.28
+
+13.124.149.149
+
+52.79.60.19
+
+54.180.46.41
+
+13.209.176.100
+
+52.78.229.80
+
+54.180.65.153
+
+43.200.229.155
+
+43.201.181.130
+
+
+Region	Inbound Static IP Addresses
+
+43.201.186.96
+
+United States (US)	23.23.194.0
+
+54.174.48.131
+
+54.83.132.4
+
+3.221.237.124
+
+44.212.185.173
+
+54.172.200.20
+
+3.210.191.195
+
+44.209.233.213
+
+52.20.72.154
+
+107.22.231.143
+
+34.233.215.5
+
+44.212.136.166
+
+
+
+Restrictions and Limits
+
+Usage of the Ingestion API is monitored to ensure that our services are available fairly and reliably.
+To ensure a consistent level of service and prevent any service disruptions, clients may access the API according to the following policy:
+Aspect	Limits
+
+Request rate	Maximum of 100 requests per tenant per minute
+
+
+Data upload	• Duration between API calls updating the same source must be minimum 30 seconds
+Additional Recommendations:
+Maximum file size of 150 MB.
+Maximum of 1000 tables:
+When you upload a file, the system creates a new table if the file schema differs from existing ones. If the file schema matches an existing table, the system appends the data.
+
+Aspect	Limits
+
+Maximum of 100,000 characters for table rows.
+
+
+
+SIGNAL OData API
+
+The SIGNAL OData API provides SAP Signavio Process Intelligence users access to their analytical results via third-party systems, for example SAP Analytics Cloud, in a secure and easy-to-use way using the Open Data (OData) Protocol.
+An analytical result is any form of outcome derived using a SIGNAL query inside process analysis, for example a KPI or metric of business value. The query definition behind an analytical result can be stored as an OData view, which makes it accessible to external systems. Such a curated result set allows data to be exported without exposing the underlying data model.
+
+
+
+Use Cases
+
+For analytical results derived in process analysis, this feature enables their secure and timely distribution outside of SAP Signavio Process Intelligence. Users can develop dashboards in third-party systems based on the underlying analytical results from process analysis. Depending on the third-party system used, the data behind these dashboards could be configured to update on a regular basis, such as daily or weekly.
+Again depending on the third-party system used, access rights to the dashboard could be managed to configure roles. For example, the author might be allowed to edit or perform manual data refreshes, whereas a viewer could be restricted to reading a static version of the dashboard based on the last refresh.
+
+
+
+Getting Started
+
+Before you send any requests, make sure all prerequisites are satisfied. Find out more in Prerequisites [page 23].
+Once all prerequisites are satisfied, you can dispatch requests to the API. Learn how in Requests and Responses [page 28].
+If you encounter any problems using this API, seek solutions in Troubleshooting [page 33].
+
+
+
+Using a Postman Collection
+
+If you wish to send requests to this API using Postman, we provide ready-to-use collections and environments for you to download and reuse. You can find them at the SAP Samples GitHub repository along with instructions on how to use them.
+Related Information
+
+The Official OData Website
+SIGNAL OData API on SAP Business Accelerator Hub
+Report on SAP Signavio Process Intelligence data using the new OData API and SAP Analytics Cloud
+
+
+Prerequisites
+
+Before sending requests to the SIGNAL OData API, make sure the following requirements are met.
+
+
+
+
+Create an OData View
+
+The OData view you want to request must have been configured and made available. For information on setting up an OData view, refer to Creating OData Views [page 23].
+
+
+
+Configure User Access
+
+Access to OData views is controlled by both the user's role in the process and whether they are authorised to access the SIGNAL OData API functionality. Find out more in User Access [page 25].
+
+
+
+Authenticate
+
+Before making a request, a client must be authenticated by generating a user-scoped OData token. Learn how to do this in Generating API Access Tokens [page 26].
+
+
+
+Creating OData Views
+
+Learn how to create OData views in SAP Signavio Process Intelligence.
+
+
+
+
+Prerequisites
+
+You have the analyst or manager role for the process, see Roles and User Management.
+Context
+
+With an OData view, you save the result of a SIGNAL query. The result can be accessed by external applications via the SIGNAL OData API.
+
+
+
+
+Procedure
+
+Open your process and select  (Settings).
+On the Process Settings page, go to the OData Views tab and select Create OData View.
+Enter a name and a description, considering these aspects:
+The name must be unique across all processes in the workspace.
+You can't change the name afterwards.
+The name is displayed in the application that consumes the query result.
+Enter your SIGNAL query in the code editor and confirm with Create.
+
+
+
+
+Results
+
+The OData view is created.
+
+
+
+
+Related Information
+
+Aliases
+The SIGNAL code editor
+Editing and Deleting OData Views
+User Access
+
+Access to the SIGNAL OData API is managed by using both a feature set and role-level permissions at the process level.
+
+
+
+Feature Set Access Rights
+
+For a user to be able to create, manage, and authenticate using an OData token, a tenant administrator must activate the feature set "SAP Signavio Process Intelligence – Signal OData API". This action is done inside SAP Signavio Process Manager for a specific user group. You can then assign the authorized users to that group.
+The SAP Signavio Process Manager Workspace Admin Guide contains instructions on Activating Feature Sets.
+
+
+
+OData View Access in SAP Signavio Process Intelligence
+
+OData views are managed in the OData Views tab of Process Settings within SAP Signavio Process Intelligence. Access to OData Views is available to all users assigned as either an analyst or a manager of the specific process. Such users can also create, edit and delete an OData view.
+An OData view resembles a dashboard widget in the sense that it stores a name, a description, and a SIGNAL query. However, unlike a dashboard widget, an OData view doesn't display the result of the query inside SAP Signavio Process Intelligence. The result is only available to the user via the OData API.
+The OData views visible in the OData Views tab don't consider whether a user has access to the underlying process view. This fact is irrelevant if only default process views are used, or if the user is a manager. However, if an analyst user is authorized to access a process view that restricts their access to the event log (based on either row-level or column-level restrictions), then that user would still see OData views created for all process views within the specified process. The visible information includes the OData view name, description, and associated SIGNAL query.
+
+
+
+OData View Access from Third Party Systems
+
+To access OData views via the OData API, a user must authenticate themselves using their OData token. This process is described in Generating API Access Tokens [page 26].
+Which OData views are accessible to a user depends on the user roles they've been assigned at the process level in SAP Signavio Process Intelligence. This is because an OData view stores a SIGNAL query, which specifies the process view serving as its basis. If a user doesn't have access to the underlying process view, then the OData view doesn't appear in the list of available OData views.
+
+Managers of a process can access all OData views available for that process, since by default the manager has access to all process views.
+Analysts of a process can access the OData views for which they have appropriate permissions on the underlying process view.
+
+When a user 'selects' an OData view from a third-party system, this action dispatches a request to the SIGNAL Engine asking it to process the OData view's underlying query. If the user is permitted to access the data (as determined by the user's access to the underlying process view), then the SIGNAL Engine returns the result of the query.
+
+
+
+Generating API Access Tokens
+
+Learn how to create OData tokens, user-scoped authentication tokens possessing the same permissions as the users who create the tokens. These tokens are needed to access OData views using the SIGNAL OData API.
+
+
+
+
+Prerequisites
+
+The feature set SAP Signavio Process Intelligence - SIGNAL OData API is activated for you. This is explained further in User Access [page 25].
+You have the analyst or manager role for the process, see Roles and User Management.
+
+
+
+
+Context
+
+To expose your OData views to any third-party tool, you need to create an OData token.
+
+
+OData tokens are user-based, but not specific to processes. The tokens you create in one process are available in any other processes where you have the analyst or manager role.
+Each token is set up with an expiration time, ranging from one day up to a year.
+
+
+
+
+Procedure
+
+
+Open your process and select  (Settings).
+On the Process Settings page, go to the OData Views tab and select Create API Access Token.
+Enter a name, considering these aspects:
+Names can only include these characters: numbers, letters, underscores, and hyphens.
+You can't change the name afterwards.
+Choose an expiration time. By default, tokens expire after 90 days.
+Confirm with Create.
+
+
+
+
+Results
+
+The token is generated.
+
+
+
+
+Related Information
+
+Creating OData Views [page 23]
+Requests and Responses
+
+Learn about the details of sending a request to the SIGNAL OData API and interpreting responses.
+
+
+
+
+Prerequisites
+
+Before sending a request:
+The SIGNAL OData API feature set should have been activated.
+You should have the appropriate access rights to both the feature set and the OData view you wish to request.
+You should have generated an authentication token.
+
+
+
+
+Request Syntax
+
+The API makes process data available via endpoints following this basic syntax:
+
+
+Parameter	Description
+
+baseUrl	The consistent root part of the server address. Refer to the section Base URL for more information.
+
+version	The API version label, for example 'v1'.
+
+resource	The resource or resources requested. Accepts the following types of values:
+Root
+Entity Set Name
+Metadata
+Find out more about these in the Resources section.
+
+queryOption	Optional parameter controlling the amount and order of data returned.
+Learn more in the Query Options section.
+
+For a comprehensive list of available query options, check this API's reference information in the SAP Business Accelerator Hub.
+Base URL
+
+API endpoints are relative to the base URL, which is specific to your region. The available base URLs are:
+
+Region	Base URL
+
+Australia	api.au.signavio.cloud.sap
+
+Canada	api.ca.signavio.cloud.sap
+
+EU	api.eu.signavio.cloud.sap
+
+Japan	api.jp.signavio.cloud.sap
+
+Singapore	api.sgp.signavio.cloud.sap
+
+South Korea	api.kr.signavio.cloud.sap
+
+USA	api.us.signavio.cloud.sap
+
+
+
+
+
+Resources
+
+The following table explains more about requesting each type of resource and the nature of a successful response.
+
+Resource Type	Request Information	Response Information
+
+Root	Requests a list of all data views to which the client has access. To request the root resource, leave the resource part of the endpoint empty.
+Entity Set Name	Requests specific data views. Set the resource part of the endpoint to the identifier of the desired view.
+You can include query options to con-trol the amount and order of data re-turned.
+Metadata	Requests metadata for all data views to which the client has access. To request the metadata, set the resource part of the endpoint to '$metadata'.
+
+Returns a JSON list in the response body's value attribute. Each entry is an available entity.
+
+
+Returns a JSON list in the response body's value attribute. Each entry is a row in the data view.
+
+
+
+
+
+The response body is an XML schema following the OData Metadata specifica-tion.
+
+
+For a comprehensive listing of all available request parameters and response attributes, refer to this API's reference information in the SAP Business Accelerator Hub.
+Query Options
+
+Requests can include query options, which are used to filter, order, or paginate response data.
+This API supports query options according to the OData standard. They're appended to the endpoint following a question mark ('?') and multiple options are separated with an ampersand ('&'). Each option name is prefixed with a dollar sign ('$') and its corresponding value follows an equals sign ('=').
+
+For a comprehensive listing of all query options, refer to this API's reference information in the SAP Business Accelerator Hub.
+
+
+
+
+Authentication
+
+Include the following authentication information in your request:
+Method: Basic
+Password: The value of your OData token
+Your client may require you to provide a username and a connection name. These values are arbitrary and not required for the SIGNAL OData API.
+
+
+
+
+Response Codes
+
+Each response includes a code informing you about the result of a request. This table describes the common response codes that you might encounter.
+
+Code	Description
+
+200	Request successful.
+
+400	Bad request. Causes of this response include:
+The specified URL is invalid.
+The request isn't formatted correctly.
+The request is missing a required field.
+
+401	Unauthorized. The authentication token couldn't be verified.
+
+403	Forbidden. The client doesn't have the access rights to exe-cute this operation.
+
+Code	Description
+
+404	Resource not found. This problem could be caused, for ex-ample, when the data view attempts to access underlying resources (like tables) that don't exist.
+
+406	Not acceptable. This error can occur if the $format query option was requested using an unsupported format.
+
+422	Unprocessable request. The user has exceeded the limit of 100 API tokens.
+
+429	Request is blocked because the API rate limit has been reached within the specified timeframe. See Restrictions and Limits [page 32] for more information.
+500	Internal server error. No other information is available.
+
+503	Unavailable. The server isn't ready to handle the request.
+
+504	Timeout. The server couldn't prepare the response in time.
+
+
+
+Example: Requesting an Entity Set - Specific Data Views
+
+The following cURL command requests specific data views for accessing the actual data:
+
+Example response body:
+
+
+
+Example: Requesting Metadata
+
+The following cURL command requests the metadata for all data views the user can access:
+
+Example response body:
+
+
+
+
+
+Example: Requesting the Root Resource
+
+The following cURL command requests all data views the user can access:
+
+Example response body:
+
+
+
+Related Information
+
+SIGNAL OData API on SAP Business Accelerator Hub
+
+
+Restrictions and Limits
+
+Usage of the SIGNAL OData API is monitored to ensure that our services are available fairly and reliably.
+To ensure a consistent level of service and prevent any service disruptions, clients may access the API according to the following policy:
+Aspect	Limits
+
+Request rate	• Maximum of 100 requests per workspace per minute.
+Maximum of 5000 requests per workspace per day.
+
+Parallelization	Maximum of 4 active queries per workspace.
+
+Column and row count	•  Maximum of 100 fields per workspace request.
+
+Aspect	Limits
+
+Maximum of 1B (1,000,000,000) rows per workspace per request.
+
+Data volume	Maximum document size of 100 MB (summing all pages in the result set) per workspace per query.
+
+Page Size	Fixed size of 10,000 rows per page per request.
+
+
+
+
+Troubleshooting
+
+Problems you might encounter when using the SIGNAL OData API, along with suggested workarounds.
+
+
+
+Duration Data Type Returned as a String
+
+When using SAP Analytics Cloud as an OData client, attributes of type Duration are converted to a String.
+If you're affected by this issue, we recommend converting each Duration attribute into a numeric type in the OData view definition. For example:
+Use a conversion function such as DURATION_TO_DAYS.
+Instead of using DURATION_BETWEEN or date arithmetic, use the DATE_DIFF function, which returns a time span as a number of time units.
+Since this is an issue specific to SAP Analytics Cloud, another solution would be to use an alternative client. For example, PowerBI and Excel are known to be unaffected by this issue.
+
+
+
+Missing Event-Level Data
+
+OData views cannot contain event-level information. Consequently, nested attributes in a query are ignored and not included in returned data.
+The following solutions and workarounds are available:
+In the underlying query, use the FLATTEN operator to convert event-level attributes to case-level.
+
+In the underlying query, use an aggregation function to convert event-level data to a scalar value
+
+Important Disclaimers and Legal Information
+
+
+
+Hyperlinks
+Some links are classified by an icon and/or a mouseover text. These links provide additional information. About the icons:
+Links with the icon : You are entering a Web site that is not hosted by SAP. By using such links, you agree (unless expressly stated otherwise in your agreements with SAP) to this:
+The content of the linked-to site is not SAP documentation. You may not infer any product claims against SAP based on this information.
+SAP does not agree or disagree with the content on the linked-to site, nor does SAP warrant the availability and correctness. SAP shall not be liable for any
+damages caused by the use of such content unless damages have been caused by SAP's gross negligence or willful misconduct.
+Links with the icon : You are leaving the documentation for that particular SAP product or service and are entering an SAP-hosted Web site. By using
+such links, you agree that (unless expressly stated otherwise in your agreements with SAP) you may not infer any product claims against SAP based on this information.
+
+
+Videos Hosted on External Platforms
+Some videos may point to third-party video hosting platforms. SAP cannot guarantee the future availability of videos stored on these platforms. Furthermore, any advertisements or other content hosted on these platforms (for example, suggested videos or by navigating to other videos hosted on the same site), are not within the control or responsibility of SAP.
+
+
+Beta and Other Experimental Features
+Experimental features are not part of the officially delivered scope that SAP guarantees for future releases. This means that experimental features may be changed by SAP at any time for any reason without notice. Experimental features are not for productive use. You may not demonstrate, test, examine, evaluate or otherwise use the experimental features in a live operating environment or with data that has not been sufficiently backed up.
+The purpose of experimental features is to get feedback early on, allowing customers and partners to influence the future product accordingly. By providing your feedback (e.g. in the SAP Community), you accept that intellectual property rights of the contributions or derivative works shall remain the exclusive property of SAP.
+
+
+Example Code
+Any software coding and/or code snippets are examples. They are not for productive use. The example code is only intended to better explain and visualize the syntax and phrasing rules. SAP does not warrant the correctness and completeness of the example code. SAP shall not be liable for errors or damages caused by the use of example code unless damages have been caused by SAP's gross negligence or willful misconduct.
+
+
+Bias-Free Language
+SAP supports a culture of diversity and inclusion. Whenever possible, we use unbiased language in our documentation to refer to people of all cultures, ethnicities, genders, and abilities.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+SAP Signavio Process Intelligence APIs
+Important Disclaimers and Legal Information	PUBLIC	35
+www.sap.com/contactsap
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+© 2025 SAP SE or an SAP affiliate company. All rights reserved.
+
+No part of this publication may be reproduced or transmitted in any form or for any purpose without the express permission of SAP SE or an SAP affiliate company. The information contained herein may be changed without prior notice.
+Some software products marketed by SAP SE and its distributors contain proprietary software components of other software vendors. National product specifications may vary.
+These materials are provided by SAP SE or an SAP affiliate company for informational purposes only, without representation or warranty of any kind, and SAP or its affiliated companies shall not be liable for errors or omissions with respect to the materials. The only warranties for SAP or SAP affiliate company products and services are those that are set forth in the express warranty statements accompanying such products and services, if any. Nothing herein should be construed as constituting an additional warranty.
+SAP and other SAP products and services mentioned herein as well as their respective logos are trademarks or registered trademarks of SAP SE (or an SAP affiliate company) in Germany and other countries. All other product and service names mentioned are the trademarks of their respective companies.
+Please see https://www.sap.com/about/legal/trademark.html for additional trademark information and notices.
+
+
+
+
+
+
+
+
+
+
+
+
+THE BEST RUN

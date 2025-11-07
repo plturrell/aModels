@@ -69,6 +69,7 @@ require (
 replace github.com/plturrell/aModels/services/graph => .
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres => ../postgres
 replace github.com/SAP/go-hdb => ../../infrastructure/third_party/go-hdb
+replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration => ../../infrastructure/third_party/orchestration
 
 // Removed agenticAiETH replace directives - these packages don't exist
 // replace github.com/plturrell/agenticAiETH/agenticAiETH_layer1_Blockchain => ../agenticAiETH_layer1_Blockchain

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/langchain-ai/langgraph-go/pkg/stategraph"
+	"github.com/langchain-ai/langgraph-go/pkg/integration"
 )
 
 // AgentFlowProcessorOptions configures the AgentFlow processing workflow.
@@ -41,6 +42,26 @@ var agentflowHTTPClient = &http.Client{
 }
 
 // RunAgentFlowFlowNode returns a node that runs an AgentFlow flow.
+//
+// This node:
+// - Extracts flow request from state
+// - Calls AgentFlow service HTTP API
+// - Passes knowledge graph and orchestration results as inputs (if available)
+// - Uses retry logic for resilience
+// - Logs operation with correlation ID and duration
+//
+// State Input:
+//   - agentflow_request.flow_id: Flow identifier (e.g., "processes/sgmi_controlm_pipeline")
+//   - agentflow_request.input_value: Primary input value
+//   - agentflow_request.inputs: Additional input parameters
+//   - agentflow_request.ensure: Whether to ensure flow exists before running
+//   - knowledge_graph: Optional KG context to pass to flow
+//   - orchestration_result: Optional orchestration results to pass to flow
+//
+// State Output:
+//   - agentflow_result: Flow execution results
+//   - agentflow_local_id: Local flow ID
+//   - agentflow_remote_id: Remote flow ID
 func RunAgentFlowFlowNode(agentflowServiceURL string) stategraph.NodeFunc {
 	return wrapStateFunc(func(ctx context.Context, state map[string]any) (map[string]any, error) {
 		// Extract flow request from state
@@ -88,40 +109,71 @@ func RunAgentFlowFlowNode(agentflowServiceURL string) stategraph.NodeFunc {
 			}
 		}
 
-		log.Printf("Running AgentFlow flow: %s (ensure=%v)", flowRequest.FlowID, flowRequest.Ensure)
+		// Start logged operation with correlation ID
+		op := integration.StartOperation(ctx, log.Default(), fmt.Sprintf("agentflow.flow.%s", flowRequest.FlowID))
+		defer op.End(nil)
 
-		// Call AgentFlow service to run flow
+		op.Log("Running AgentFlow flow: %s (ensure=%v)", flowRequest.FlowID, flowRequest.Ensure)
+
+		// Call AgentFlow service to run flow with retry logic
 		endpoint := strings.TrimRight(agentflowServiceURL, "/") + "/flows/" + flowRequest.FlowID + "/run"
-		body, err := json.Marshal(map[string]any{
-			"input_value": flowRequest.InputValue,
-			"inputs":      flowRequest.Inputs,
-			"ensure":      flowRequest.Ensure,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("marshal AgentFlow request: %w", err)
-		}
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
-		if err != nil {
-			return nil, fmt.Errorf("build AgentFlow request: %w", err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := agentflowHTTPClient.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("request AgentFlow execution: %w", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-			return nil, fmt.Errorf("AgentFlow execution failed with status %s: %s",
-				resp.Status, strings.TrimSpace(string(bodyBytes)))
-		}
-
+		
 		var flowResp AgentFlowRunResponse
-		if err := json.NewDecoder(resp.Body).Decode(&flowResp); err != nil {
-			return nil, fmt.Errorf("decode AgentFlow response: %w", err)
+		err := integration.RetryWithBackoffResult(
+			ctx,
+			integration.DefaultRetryConfig(),
+			log.Default(),
+			fmt.Sprintf("agentflow.flow.%s.execute", flowRequest.FlowID),
+			func() (AgentFlowRunResponse, error) {
+				body, err := json.Marshal(map[string]any{
+					"input_value": flowRequest.InputValue,
+					"inputs":      flowRequest.Inputs,
+					"ensure":      flowRequest.Ensure,
+				})
+				if err != nil {
+					return flowResp, fmt.Errorf("marshal AgentFlow request: %w", err)
+				}
+
+				req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+				if err != nil {
+					return flowResp, fmt.Errorf("build AgentFlow request: %w", err)
+				}
+				req.Header.Set("Content-Type", "application/json")
+
+				startTime := time.Now()
+				resp, err := agentflowHTTPClient.Do(req)
+				duration := time.Since(startTime)
+				
+				if err != nil {
+					integration.LogHTTPRequest(ctx, log.Default(), "POST", endpoint, 0, duration, err)
+					return flowResp, fmt.Errorf("request AgentFlow execution: %w", err)
+				}
+				defer resp.Body.Close()
+
+				integration.LogHTTPRequest(ctx, log.Default(), "POST", endpoint, resp.StatusCode, duration, nil)
+
+				if resp.StatusCode != http.StatusOK {
+					bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+					err := fmt.Errorf("AgentFlow execution failed with status %s: %s",
+						resp.Status, strings.TrimSpace(string(bodyBytes)))
+					// Check if retryable
+					if integration.IsRetryableHTTPStatus(resp.StatusCode) {
+						return flowResp, err
+					}
+					// Non-retryable error
+					return flowResp, fmt.Errorf("%w (non-retryable)", err)
+				}
+
+				var response AgentFlowRunResponse
+				if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+					return flowResp, fmt.Errorf("decode AgentFlow response: %w", err)
+				}
+				return response, nil
+			},
+		)
+		if err != nil {
+			op.End(err)
+			return nil, fmt.Errorf("execute AgentFlow flow %s: %w", flowRequest.FlowID, err)
 		}
 
 		// Store results in state
@@ -133,8 +185,9 @@ func RunAgentFlowFlowNode(agentflowServiceURL string) stategraph.NodeFunc {
 		newState["agentflow_local_id"] = flowResp.LocalID
 		newState["agentflow_remote_id"] = flowResp.RemoteID
 
-		log.Printf("AgentFlow flow executed: local_id=%s, remote_id=%s",
+		op.Log("AgentFlow flow executed: local_id=%s, remote_id=%s",
 			flowResp.LocalID, flowResp.RemoteID)
+		op.End(nil)
 
 		return newState, nil
 	})
