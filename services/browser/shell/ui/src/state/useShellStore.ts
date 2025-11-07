@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 export type ShellTheme = "dark" | "light";
 
-export type ShellModuleId = "home" | "localai" | "dms" | "flows" | "telemetry";
+export type ShellModuleId = "home" | "localai" | "dms" | "flows" | "telemetry" | "search";
 
 interface ShellState {
   theme: ShellTheme;

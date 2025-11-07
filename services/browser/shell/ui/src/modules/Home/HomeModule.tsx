@@ -22,6 +22,11 @@ const quickLinks = [
     label: "Telemetry dashboard",
     description: "Track response latency and token usage",
     targetModule: "telemetry" as const
+  },
+  {
+    label: "Semantic search",
+    description: "Search across documents and knowledge graphs",
+    targetModule: "search" as const
   }
 ];
 

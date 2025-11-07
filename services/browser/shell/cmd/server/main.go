@@ -89,6 +89,25 @@ func main() {
 	mux.Handle("/agentflow/", flowProxy)
 	mux.Handle("/agentflow", flowProxy)
 
+	// Proxy search requests to search-inference service
+	searchEndpoint := strings.TrimSpace(os.Getenv("SHELL_SEARCH_ENDPOINT"))
+	if searchEndpoint == "" {
+		gatewayURL := strings.TrimSpace(os.Getenv("SHELL_GATEWAY_URL"))
+		if gatewayURL == "" {
+			gatewayURL = strings.TrimSpace(os.Getenv("GATEWAY_URL"))
+		}
+		if gatewayURL != "" {
+			searchEndpoint = gatewayURL + "/search"
+		} else {
+			searchEndpoint = "http://localhost:8090"
+		}
+	}
+	if searchEndpoint != "" {
+		searchProxy := app.proxyHandler(strings.TrimSuffix(searchEndpoint, "/"), "/search")
+		mux.Handle("/search/", searchProxy)
+		mux.Handle("/search", searchProxy)
+	}
+
 	mux.Handle("/assets/", http.StripPrefix("/assets/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		fileServer.ServeHTTP(w, r)

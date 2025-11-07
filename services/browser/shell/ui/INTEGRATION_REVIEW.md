@@ -174,11 +174,72 @@ interface FlowInfo {
 3. UI displays real-time metrics from state
 4. Metrics reset when user clears history
 
+## Search Integration
+
+### Endpoint Configuration
+- **UI Endpoint**: `/search/v1/search`
+- **Shell Proxy**: Routes `/search/*` to search-inference service (strips `/search` prefix)
+- **Backend Service**: Search-inference service on port 8090
+
+### Data Flow
+1. UI calls `/search/v1/search` (POST)
+2. Shell server proxies to `SHELL_SEARCH_ENDPOINT/v1/search` (defaults to `http://localhost:8090`)
+3. Search service returns `SearchResponse` with ranked results
+4. UI displays results with similarity scores
+
+### Schema Mapping
+**Backend (`SearchResult`)**:
+```go
+type SearchResult struct {
+    ID         string  `json:"id"`
+    Content    string  `json:"content"`
+    Similarity float64 `json:"similarity"`
+}
+```
+
+**Frontend (`SearchResult`)**:
+```typescript
+interface SearchResult {
+  id: string;
+  content: string;
+  similarity: number;  // 0.0 to 1.0
+}
+```
+
+### Request/Response Format
+**Request**:
+```json
+{
+  "query": "search text",
+  "top_k": 10
+}
+```
+
+**Response**:
+```json
+{
+  "results": [
+    {
+      "id": "doc-123",
+      "content": "Document content...",
+      "similarity": 0.85
+    }
+  ]
+}
+```
+
+### Improvements Made
+1. **Added Search Module** - New Material UI search interface
+2. **Added Search Proxy** - Shell server proxies `/search/*` requests
+3. **Enhanced Error Handling** - Consistent error handling with other modules
+4. **Material UI Integration** - Full Material UI components with search results display
+
 ### Next Steps
 
 1. ✅ ~~Review LocalAI integration~~ - **COMPLETED**
 2. ✅ ~~Review AgentFlow/Flows integration~~ - **COMPLETED**
 3. ✅ ~~Review Telemetry integration~~ - **COMPLETED** (client-side only)
-4. Add integration tests
-5. Document all API endpoints and their usage
+4. ✅ ~~Add Search module~~ - **COMPLETED**
+5. Add integration tests
+6. Document all API endpoints and their usage
 
