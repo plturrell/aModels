@@ -1,6 +1,12 @@
 import type { PropsWithChildren, ReactNode } from "react";
-
-import styles from "./Panel.module.css";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  Typography,
+  Box,
+  useTheme
+} from '@mui/material';
 
 interface PanelProps {
   title: string;
@@ -10,16 +16,40 @@ interface PanelProps {
 }
 
 export function Panel({ title, subtitle, actions, dense, children }: PropsWithChildren<PanelProps>) {
+  const theme = useTheme();
+  
   return (
-    <section className={`${styles.panel} ${dense ? styles.dense : ""}`}>
-      <header className={styles.header}>
-        <div>
-          <h2>{title}</h2>
-          {subtitle ? <p>{subtitle}</p> : null}
-        </div>
-        {actions ? <div className={styles.actions}>{actions}</div> : null}
-      </header>
-      <div className={styles.body}>{children}</div>
-    </section>
+    <Card 
+      sx={{ 
+        mb: dense ? 2 : 3,
+        boxShadow: theme.shadows[2]
+      }}
+    >
+      <CardHeader
+        title={
+          <Typography variant="h6" component="h2">
+            {title}
+          </Typography>
+        }
+        subheader={
+          subtitle ? (
+            <Typography variant="body2" color="text.secondary" component="div">
+              {subtitle}
+            </Typography>
+          ) : undefined
+        }
+        action={actions ? <Box sx={{ display: 'flex', alignItems: 'center' }}>{actions}</Box> : undefined}
+        sx={{
+          pb: dense ? 1 : 2,
+          '& .MuiCardHeader-action': {
+            margin: 0,
+            alignSelf: 'center'
+          }
+        }}
+      />
+      <CardContent sx={{ pt: dense ? 1 : 2 }}>
+        {children}
+      </CardContent>
+    </Card>
   );
 }
