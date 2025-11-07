@@ -652,6 +652,10 @@ export function SearchModule() {
               </Stack>
             </Paper>
           )}
+          
+          {selectedTab === 6 && (
+            <ServiceHealthPanel autoRefresh={true} refreshInterval={30000} showDetails={true} />
+          )}
         </Panel>
       )}
 
