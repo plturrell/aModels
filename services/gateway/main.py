@@ -1494,9 +1494,20 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
                     })
             else:
                 raise Exception(f"HTTP {r.status_code}: {r.text[:200]}")
+        except httpx.ConnectError as e:
+            error_msg = f"Connection refused: {SEARCH_INFERENCE_URL} - Service may not be running"
+            logger.warning(f"Search inference service connection error: {error_msg}")
+            results["sources"]["inference"] = {"error": error_msg, "url": SEARCH_INFERENCE_URL, "type": "connection_error"}
+            results["metadata"]["sources_failed"] += 1
+        except httpx.TimeoutException as e:
+            error_msg = f"Request timeout: {SEARCH_INFERENCE_URL} - Service may be overloaded"
+            logger.warning(f"Search inference service timeout: {error_msg}")
+            results["sources"]["inference"] = {"error": error_msg, "url": SEARCH_INFERENCE_URL, "type": "timeout"}
+            results["metadata"]["sources_failed"] += 1
         except Exception as e:
-            logger.warning(f"Search inference service error: {e}")
-            results["sources"]["inference"] = {"error": str(e)}
+            error_msg = str(e)
+            logger.warning(f"Search inference service error: {error_msg}")
+            results["sources"]["inference"] = {"error": error_msg, "url": SEARCH_INFERENCE_URL, "type": "unknown_error"}
             results["metadata"]["sources_failed"] += 1
     
     # 2. Knowledge Graph Search (Extract Service)
@@ -1524,9 +1535,20 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
                     })
             else:
                 raise Exception(f"HTTP {r.status_code}: {r.text[:200]}")
+        except httpx.ConnectError as e:
+            error_msg = f"Connection refused: {EXTRACT_URL} - Service may not be running"
+            logger.warning(f"Knowledge graph search connection error: {error_msg}")
+            results["sources"]["knowledge_graph"] = {"error": error_msg, "url": EXTRACT_URL, "type": "connection_error"}
+            results["metadata"]["sources_failed"] += 1
+        except httpx.TimeoutException as e:
+            error_msg = f"Request timeout: {EXTRACT_URL} - Service may be overloaded"
+            logger.warning(f"Knowledge graph search timeout: {error_msg}")
+            results["sources"]["knowledge_graph"] = {"error": error_msg, "url": EXTRACT_URL, "type": "timeout"}
+            results["metadata"]["sources_failed"] += 1
         except Exception as e:
-            logger.warning(f"Knowledge graph search error: {e}")
-            results["sources"]["knowledge_graph"] = {"error": str(e)}
+            error_msg = str(e)
+            logger.warning(f"Knowledge graph search error: {error_msg}")
+            results["sources"]["knowledge_graph"] = {"error": error_msg, "url": EXTRACT_URL, "type": "unknown_error"}
             results["metadata"]["sources_failed"] += 1
     
     # 3. Catalog Semantic Search
@@ -1549,9 +1571,20 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
                     })
             else:
                 raise Exception(f"HTTP {r.status_code}: {r.text[:200]}")
+        except httpx.ConnectError as e:
+            error_msg = f"Connection refused: {CATALOG_URL} - Service may not be running"
+            logger.warning(f"Catalog search connection error: {error_msg}")
+            results["sources"]["catalog"] = {"error": error_msg, "url": CATALOG_URL, "type": "connection_error"}
+            results["metadata"]["sources_failed"] += 1
+        except httpx.TimeoutException as e:
+            error_msg = f"Request timeout: {CATALOG_URL} - Service may be overloaded"
+            logger.warning(f"Catalog search timeout: {error_msg}")
+            results["sources"]["catalog"] = {"error": error_msg, "url": CATALOG_URL, "type": "timeout"}
+            results["metadata"]["sources_failed"] += 1
         except Exception as e:
-            logger.warning(f"Catalog search error: {e}")
-            results["sources"]["catalog"] = {"error": str(e)}
+            error_msg = str(e)
+            logger.warning(f"Catalog search error: {error_msg}")
+            results["sources"]["catalog"] = {"error": error_msg, "url": CATALOG_URL, "type": "unknown_error"}
             results["metadata"]["sources_failed"] += 1
     
     # 4. Perplexity AI (web search)
