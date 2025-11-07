@@ -203,6 +203,8 @@ export function SearchModule() {
             <Tabs value={selectedTab} onChange={(_, newValue) => setSelectedTab(newValue)}>
               <Tab label="All Results" />
               <Tab label="By Source" />
+              {searchResponse?.visualization && <Tab label="Visualization" />}
+              {searchResponse?.result_enrichment && <Tab label="AI Insights" />}
             </Tabs>
           </Box>
           
