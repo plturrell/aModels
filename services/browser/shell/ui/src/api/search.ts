@@ -18,6 +18,10 @@ export interface SearchResponse {
 export interface UnifiedSearchRequest extends SearchRequest {
   sources?: string[];
   use_perplexity?: boolean;
+  enable_framework?: boolean;  // Query understanding and result enrichment
+  enable_plot?: boolean;  // Visualization data
+  enable_stdlib?: boolean;  // Result processing (default: true)
+  stdlib_operations?: string[];  // Operations: deduplicate, sort_by_score, truncate_content
 }
 
 export interface UnifiedSearchResult extends SearchResult {
@@ -27,11 +31,50 @@ export interface UnifiedSearchResult extends SearchResult {
   citations?: string[];
 }
 
+export interface QueryEnrichment {
+  original_query: string;
+  enriched_query: string;
+  intent_summary?: string;
+  entities?: string[];
+  enriched: boolean;
+}
+
+export interface ResultEnrichment {
+  summary?: string;
+  insights?: string[];
+  enriched: boolean;
+}
+
+export interface VisualizationData {
+  source_distribution: Record<string, number>;
+  score_statistics: {
+    average: number;
+    min: number;
+    max: number;
+    count: number;
+  };
+  timeline?: Array<{
+    timestamp: string;
+    score: number;
+    source: string;
+  }>;
+  total_results: number;
+}
+
 export interface UnifiedSearchResponse {
   query: string;
   sources: Record<string, unknown>;
   combined_results: UnifiedSearchResult[];
   total_count: number;
+  query_enrichment?: QueryEnrichment;
+  result_enrichment?: ResultEnrichment;
+  visualization?: VisualizationData;
+  metadata: {
+    sources_queried: number;
+    sources_successful: number;
+    sources_failed: number;
+    execution_time_ms: number;
+  };
 }
 
 export async function searchDocuments(request: SearchRequest): Promise<SearchResponse> {
@@ -103,7 +146,11 @@ export async function unifiedSearch(request: UnifiedSearchRequest): Promise<Unif
         query: request.query,
         top_k: request.top_k ?? 20,
         sources: request.sources ?? ["inference", "knowledge_graph", "catalog"],
-        use_perplexity: request.use_perplexity ?? false
+        use_perplexity: request.use_perplexity ?? false,
+        enable_framework: request.enable_framework ?? false,
+        enable_plot: request.enable_plot ?? false,
+        enable_stdlib: request.enable_stdlib ?? true,
+        stdlib_operations: request.stdlib_operations ?? ["deduplicate", "sort_by_score"]
       })
     });
 

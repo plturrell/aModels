@@ -37,10 +37,13 @@ export function SearchModule() {
   const [query, setQuery] = useState<string>("");
   const [results, setResults] = useState<UnifiedSearchResult[]>([]);
   const [sources, setSources] = useState<Record<string, unknown>>({});
+  const [searchResponse, setSearchResponse] = useState<UnifiedSearchResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
   const [hasSearched, setHasSearched] = useState<boolean>(false);
   const [usePerplexity, setUsePerplexity] = useState<boolean>(false);
+  const [enableFramework, setEnableFramework] = useState<boolean>(false);
+  const [enablePlot, setEnablePlot] = useState<boolean>(false);
   const [selectedTab, setSelectedTab] = useState<number>(0);
 
   const handleSearch = async () => {
@@ -56,10 +59,14 @@ export function SearchModule() {
         query: trimmedQuery,
         top_k: 20,
         sources: ["inference", "knowledge_graph", "catalog"],
-        use_perplexity: usePerplexity
+        use_perplexity: usePerplexity,
+        enable_framework: enableFramework,
+        enable_plot: enablePlot,
+        enable_stdlib: true
       });
       setResults(response.combined_results || []);
       setSources(response.sources || {});
+      setSearchResponse(response);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
       setResults([]);
@@ -125,16 +132,38 @@ export function SearchModule() {
                 {loading ? "Searching…" : "Search"}
               </Button>
             </Box>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={usePerplexity}
-                  onChange={(e) => setUsePerplexity(e.target.checked)}
-                  disabled={loading}
-                />
-              }
-              label="Include Perplexity web search (requires API key)"
-            />
+            <Stack spacing={1}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={usePerplexity}
+                    onChange={(e) => setUsePerplexity(e.target.checked)}
+                    disabled={loading}
+                  />
+                }
+                label="Include Perplexity web search (requires API key)"
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={enableFramework}
+                    onChange={(e) => setEnableFramework(e.target.checked)}
+                    disabled={loading}
+                  />
+                }
+                label="Enable AI enrichment (query understanding & result summarization)"
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={enablePlot}
+                    onChange={(e) => setEnablePlot(e.target.checked)}
+                    disabled={loading}
+                  />
+                }
+                label="Generate visualization data"
+              />
+            </Stack>
           </Stack>
 
           {error ? (
@@ -255,6 +284,49 @@ export function SearchModule() {
                 </Paper>
               ))}
             </Stack>
+          )}
+          
+          {selectedTab === 2 && searchResponse?.visualization && (
+            <Stack spacing={2}>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Source Distribution
+                </Typography>
+                <Stack spacing={1}>
+                  {Object.entries(searchResponse.visualization.source_distribution).map(([source, count]) => (
+                    <Box key={source} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body2">{source}</Typography>
+                      <Chip label={count} size="small" />
+                    </Box>
+                  ))}
+                </Stack>
+              </Paper>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Score Statistics
+                </Typography>
+                <Typography variant="body2">
+                  Average: {(searchResponse.visualization.score_statistics.average * 100).toFixed(1)}%
+                </Typography>
+                <Typography variant="body2">
+                  Range: {(searchResponse.visualization.score_statistics.min * 100).toFixed(1)}% - {(searchResponse.visualization.score_statistics.max * 100).toFixed(1)}%
+                </Typography>
+                <Typography variant="body2">
+                  Total Results: {searchResponse.visualization.score_statistics.count}
+                </Typography>
+              </Paper>
+            </Stack>
+          )}
+          
+          {selectedTab === 3 && searchResponse?.result_enrichment && (
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                AI-Generated Summary
+              </Typography>
+              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                {searchResponse.result_enrichment.summary || "No summary available"}
+              </Typography>
+            </Paper>
           )}
         </Panel>
       )}

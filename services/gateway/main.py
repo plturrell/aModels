@@ -416,6 +416,154 @@ async def opensearch_search(payload: Dict[str, Any]) -> Any:
         raise HTTPException(status_code=502, detail=f"OpenSearch error: {e}")
 
 
+def _process_results_with_stdlib(results: list, operations: list = None) -> list:
+    """
+    Stdlib utilities for result processing.
+    Operations: deduplicate, sort_by_score, filter_by_source, truncate_content
+    """
+    if not operations:
+        operations = ["deduplicate", "sort_by_score"]
+    
+    processed = list(results)
+    
+    # Deduplicate by id
+    if "deduplicate" in operations:
+        seen_ids = set()
+        unique_results = []
+        for result in processed:
+            result_id = result.get("id", "") + result.get("source", "")
+            if result_id not in seen_ids:
+                seen_ids.add(result_id)
+                unique_results.append(result)
+        processed = unique_results
+    
+    # Sort by score (already done, but ensure it's correct)
+    if "sort_by_score" in operations:
+        processed.sort(key=lambda x: x.get("score", 0.0), reverse=True)
+    
+    # Filter by source
+    if "filter_by_source" in operations:
+        # This would be applied if source filter is provided
+        pass
+    
+    # Truncate content
+    if "truncate_content" in operations:
+        max_length = 500
+        for result in processed:
+            content = result.get("content", "")
+            if len(content) > max_length:
+                result["content"] = content[:max_length] + "..."
+                result["content_truncated"] = True
+    
+    return processed
+
+
+async def _enrich_query_with_framework(query: str) -> Dict[str, Any]:
+    """
+    Use framework (via graph service orchestration) to understand query intent.
+    """
+    try:
+        # Use summarization chain to understand query intent
+        orchestration_payload = {
+            "orchestration_request": {
+                "chain_name": "summarization",
+                "inputs": {
+                    "text": f"Analyze this search query and extract key entities and intent: {query}"
+                }
+            }
+        }
+        r = await client.post(f"{GRAPH_SERVICE_URL}/orchestration/process", json=orchestration_payload, timeout=5.0)
+        if r.status_code == 200:
+            result = r.json()
+            summary = result.get("orchestration_text", "")
+            return {
+                "original_query": query,
+                "enriched_query": query,  # Could be expanded based on summary
+                "intent_summary": summary,
+                "entities": [],  # Could extract entities from summary
+                "enriched": True
+            }
+    except Exception as e:
+        logger.warning(f"Framework query enrichment error: {e}")
+    
+    return {
+        "original_query": query,
+        "enriched_query": query,
+        "enriched": False
+    }
+
+
+async def _enrich_results_with_framework(results: list, query: str) -> Dict[str, Any]:
+    """
+    Use framework to enrich search results with summaries and insights.
+    """
+    try:
+        # Combine top results for summarization
+        top_results = results[:5]
+        combined_content = "\n\n".join([r.get("content", "")[:200] for r in top_results])
+        
+        orchestration_payload = {
+            "orchestration_request": {
+                "chain_name": "summarization",
+                "inputs": {
+                    "text": f"Query: {query}\n\nResults:\n{combined_content}\n\nProvide a brief summary of these search results:"
+                }
+            }
+        }
+        r = await client.post(f"{GRAPH_SERVICE_URL}/orchestration/process", json=orchestration_payload, timeout=10.0)
+        if r.status_code == 200:
+            result = r.json()
+            summary = result.get("orchestration_text", "")
+            return {
+                "summary": summary,
+                "insights": [],  # Could extract insights
+                "enriched": True
+            }
+    except Exception as e:
+        logger.warning(f"Framework result enrichment error: {e}")
+    
+    return {"enriched": False}
+
+
+async def _generate_visualization_data(results: list) -> Dict[str, Any]:
+    """
+    Generate data for visualization (plot service).
+    Returns structured data that can be used to create charts.
+    """
+    # Source distribution
+    source_counts = {}
+    for result in results:
+        source = result.get("source", "unknown")
+        source_counts[source] = source_counts.get(source, 0) + 1
+    
+    # Score distribution
+    scores = [r.get("score", 0.0) for r in results]
+    avg_score = sum(scores) / len(scores) if scores else 0.0
+    
+    # Timeline (if metadata has timestamps)
+    timeline = []
+    for result in results:
+        metadata = result.get("metadata", {})
+        if "timestamp" in metadata:
+            timeline.append({
+                "timestamp": metadata["timestamp"],
+                "score": result.get("score", 0.0),
+                "source": result.get("source", "")
+            })
+    
+    return {
+        "source_distribution": source_counts,
+        "score_statistics": {
+            "average": round(avg_score, 3),
+            "min": round(min(scores), 3) if scores else 0.0,
+            "max": round(max(scores), 3) if scores else 0.0,
+            "count": len(scores)
+        },
+        "timeline": timeline,
+        "total_results": len(results)
+    }
+
+
 @app.post("/search/unified")
 async def unified_search(payload: Dict[str, Any]) -> Any:
     """
@@ -442,6 +590,12 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
     sources = payload.get("sources", ["inference", "knowledge_graph", "catalog"])
     use_perplexity = payload.get("use_perplexity", False) and PERPLEXITY_API_KEY != ""
     
+    # Enhanced features (framework, plot, stdlib, runtime)
+    enable_framework = payload.get("enable_framework", False)  # Query understanding and result enrichment
+    enable_plot = payload.get("enable_plot", False)  # Visualization data
+    enable_stdlib = payload.get("enable_stdlib", True)  # Result processing (default enabled)
+    stdlib_operations = payload.get("stdlib_operations", ["deduplicate", "sort_by_score"])
+    
     # Validate query
     if not query:
         raise HTTPException(status_code=400, detail="query is required")
@@ -462,6 +616,15 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
     if not sources:
         sources = ["inference", "knowledge_graph", "catalog"]
     
+    # Framework: Query understanding (optional)
+    query_enrichment = {}
+    if enable_framework:
+        query_enrichment = await _enrich_query_with_framework(query)
+        # Use enriched query if available
+        if query_enrichment.get("enriched_query") and query_enrichment.get("enriched"):
+            # Could use enriched query, but for now keep original
+            pass
+    
     results = {
         "query": query,
         "sources": {},
@@ -473,6 +636,10 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
             "sources_failed": 0
         }
     }
+    
+    # Add query enrichment if enabled
+    if enable_framework and query_enrichment:
+        results["query_enrichment"] = query_enrichment
     
     # 1. Search Inference Service
     if "inference" in sources:
@@ -592,10 +759,33 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
             results["sources"]["perplexity"] = {"error": str(e)}
             results["metadata"]["sources_failed"] += 1
     
-    # Sort combined results by score (descending)
-    results["combined_results"].sort(key=lambda x: x.get("score", 0.0), reverse=True)
+    # Stdlib: Process results (deduplicate, sort, truncate)
+    if enable_stdlib:
+        results["combined_results"] = _process_results_with_stdlib(
+            results["combined_results"],
+            operations=stdlib_operations
+        )
+    else:
+        # Just sort if stdlib is disabled
+        results["combined_results"].sort(key=lambda x: x.get("score", 0.0), reverse=True)
+    
+    # Limit to top_k
     results["combined_results"] = results["combined_results"][:top_k]
     results["total_count"] = len(results["combined_results"])
+    
+    # Framework: Result enrichment (optional)
+    if enable_framework and results["combined_results"]:
+        result_enrichment = await _enrich_results_with_framework(
+            results["combined_results"],
+            query
+        )
+        if result_enrichment.get("enriched"):
+            results["result_enrichment"] = result_enrichment
+    
+    # Plot: Generate visualization data (optional)
+    if enable_plot and results["combined_results"]:
+        visualization_data = await _generate_visualization_data(results["combined_results"])
+        results["visualization"] = visualization_data
     
     # Add execution time to metadata
     execution_time = (time.time() - start_time) * 1000  # Convert to milliseconds
