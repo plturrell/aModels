@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -28,6 +29,7 @@ type PerplexityPipeline struct {
 	searchURL          string
 	extractURL         string
 	learningOrchestrator *LearningOrchestrator
+	requestTracker     *RequestTracker
 	logger             *log.Logger
 	httpClient         *http.Client
 }
@@ -87,6 +89,9 @@ func NewPerplexityPipeline(config PerplexityPipelineConfig) (*PerplexityPipeline
 	// Create learning orchestrator
 	pipeline.learningOrchestrator = NewLearningOrchestrator(pipeline, config.Logger)
 
+	// Create request tracker
+	pipeline.requestTracker = NewRequestTracker(config.Logger)
+
 	return pipeline, nil
 }
 
@@ -111,6 +116,542 @@ func (pp *PerplexityPipeline) GetLearningReport() *LearningReport {
 		return pp.learningOrchestrator.GetLearningReport()
 	}
 	return nil
+}
+
+// GetRequestTracker returns the request tracker.
+func (pp *PerplexityPipeline) GetRequestTracker() *RequestTracker {
+	return pp.requestTracker
+}
+
+// ProcessDocumentsWithTracking processes documents with full request tracking.
+// Returns the request ID and processing request for status tracking.
+func (pp *PerplexityPipeline) ProcessDocumentsWithTracking(ctx context.Context, requestID string, query map[string]interface{}) (*ProcessingRequest, error) {
+	queryStr, _ := query["query"].(string)
+	if queryStr == "" {
+		queryStr = "Perplexity query"
+	}
+
+	// Create request tracking
+	request := pp.requestTracker.CreateRequest(requestID, queryStr)
+	pp.requestTracker.UpdateStatus(requestID, RequestStatusProcessing)
+	pp.requestTracker.UpdateStep(requestID, "connecting")
+
+	// Apply learned improvements before processing
+	if pp.learningOrchestrator != nil {
+		if err := pp.learningOrchestrator.ApplyImprovements(ctx, query); err != nil {
+			if pp.logger != nil {
+				pp.logger.Printf("Failed to apply improvements (non-fatal): %v", err)
+			}
+		}
+	}
+
+	// Step 1: Connect to Perplexity
+	pp.requestTracker.UpdateStep(requestID, "connecting")
+	if err := pp.perplexityConnector.Connect(ctx, query); err != nil {
+		pp.requestTracker.UpdateStatus(requestID, RequestStatusFailed)
+		errorCode := "CONNECTION_ERROR"
+		if strings.Contains(err.Error(), "timeout") {
+			errorCode = "TIMEOUT_ERROR"
+		} else if strings.Contains(err.Error(), "unauthorized") {
+			errorCode = "AUTH_ERROR"
+		}
+		pp.requestTracker.AddErrorWithDetails(requestID, "connect", err.Error(), "", errorCode, nil, false)
+		return request, fmt.Errorf("failed to connect to Perplexity: %w", err)
+	}
+	defer pp.perplexityConnector.Close()
+
+	// Step 2: Extract documents
+	pp.requestTracker.UpdateStep(requestID, "extracting")
+	documents, err := pp.perplexityConnector.ExtractData(ctx, query)
+	if err != nil {
+		pp.requestTracker.UpdateStatus(requestID, RequestStatusFailed)
+		errorCode := "EXTRACTION_ERROR"
+		if strings.Contains(err.Error(), "rate limit") {
+			errorCode = "RATE_LIMIT_ERROR"
+		}
+		pp.requestTracker.AddErrorWithDetails(requestID, "extract", err.Error(), "", errorCode, nil, false)
+		return request, fmt.Errorf("failed to extract documents: %w", err)
+	}
+
+	if pp.logger != nil {
+		pp.logger.Printf("Extracted %d documents from Perplexity", len(documents))
+	}
+
+	// Process each document
+	var processedDocs []ProcessedDocument
+	var hasErrors bool
+
+	for i, doc := range documents {
+		docID, _ := doc["id"].(string)
+		title, _ := doc["title"].(string)
+
+		pp.requestTracker.UpdateStep(requestID, fmt.Sprintf("processing_document_%d", i+1))
+
+		// Process document
+		docResult := ProcessedDocument{
+			ID:          docID,
+			Title:       title,
+			Status:      "success",
+			ProcessedAt: time.Now(),
+			Metadata:    make(map[string]interface{}),
+		}
+
+		if err := pp.processDocumentWithTracking(ctx, requestID, doc, &docResult); err != nil {
+			docResult.Status = "failed"
+			docResult.Error = err.Error()
+			hasErrors = true
+			errorCode := "PROCESSING_ERROR"
+			if strings.Contains(err.Error(), "catalog") {
+				errorCode = "CATALOG_ERROR"
+			} else if strings.Contains(err.Error(), "training") {
+				errorCode = "TRAINING_ERROR"
+			} else if strings.Contains(err.Error(), "localai") {
+				errorCode = "LOCALAI_ERROR"
+			} else if strings.Contains(err.Error(), "search") {
+				errorCode = "SEARCH_ERROR"
+			}
+			pp.requestTracker.AddErrorWithDetails(requestID, "process_document", err.Error(), docID, errorCode, nil, false)
+		}
+
+		processedDocs = append(processedDocs, docResult)
+		pp.requestTracker.AddDocument(requestID, docResult)
+	}
+
+	// Set results links
+	results := &ProcessingResults{
+		CatalogURL:  fmt.Sprintf("/api/catalog/documents?source=perplexity&request_id=%s", requestID),
+		SearchURL:   fmt.Sprintf("/api/search?query=%s", queryStr),
+		ExportURL:   fmt.Sprintf("/api/perplexity/results/%s/export", requestID),
+	}
+	pp.requestTracker.SetResults(requestID, results)
+
+	// Update final status
+	pp.requestTracker.UpdateStep(requestID, "completed")
+	if hasErrors && len(processedDocs) > 0 {
+		pp.requestTracker.UpdateStatus(requestID, RequestStatusPartial)
+	} else if hasErrors {
+		pp.requestTracker.UpdateStatus(requestID, RequestStatusFailed)
+	} else {
+		pp.requestTracker.UpdateStatus(requestID, RequestStatusCompleted)
+	}
+
+	return request, nil
+}
+
+// processDocumentWithTracking processes a single document and updates the document result.
+func (pp *PerplexityPipeline) processDocumentWithTracking(ctx context.Context, requestID string, doc map[string]interface{}, docResult *ProcessedDocument) error {
+	docID := docResult.ID
+	
+	// Track steps
+	pp.requestTracker.UpdateStep(requestID, fmt.Sprintf("processing_%s_unified_workflow", docID))
+	
+	// Process document and capture intelligence
+	intelligence, err := pp.processDocumentWithIntelligence(ctx, doc)
+	if err != nil {
+		return err
+	}
+
+	// Extract IDs from document processing
+	// The document ID is used as the primary identifier
+	docResult.CatalogID = docID
+	docResult.LocalAIID = docID
+	docResult.SearchID = docID
+	
+	// Add metadata
+	docResult.Metadata = map[string]interface{}{
+		"source": "perplexity",
+		"processed_at": docResult.ProcessedAt,
+	}
+	
+	// Store intelligence data
+	if intelligence != nil {
+		docResult.Intelligence = intelligence
+		pp.requestTracker.SetDocumentIntelligence(requestID, docID, intelligence)
+	}
+
+	return nil
+}
+
+// processDocumentWithIntelligence processes a document and returns intelligence data.
+func (pp *PerplexityPipeline) processDocumentWithIntelligence(ctx context.Context, doc map[string]interface{}) (*DocumentIntelligence, error) {
+	docID, _ := doc["id"].(string)
+	title, _ := doc["title"].(string)
+	content, _ := doc["content"].(string)
+	
+	// Initialize intelligence structure
+	intelligence := &DocumentIntelligence{
+		CatalogPatterns:    make(map[string]interface{}),
+		TrainingPatterns:   make(map[string]interface{}),
+		DomainPatterns:     make(map[string]interface{}),
+		SearchPatterns:     make(map[string]interface{}),
+		MetadataEnrichment: make(map[string]interface{}),
+		Relationships:      make([]Relationship, 0),
+		LearnedPatterns:    make([]Pattern, 0),
+	}
+	
+	// Process document and capture intelligence at each step
+	// This is a wrapper around processDocument that captures intelligence data
+	
+	// Step 0a: Unified Workflow
+	var unifiedWorkflowResult map[string]interface{}
+	if pp.unifiedWorkflowURL != "" {
+		result, err := pp.processViaUnifiedWorkflow(ctx, docID, title, content)
+		if err == nil {
+			unifiedWorkflowResult = result
+			intelligence.WorkflowResults = result
+			
+			// Extract knowledge graph from workflow results
+			if kg, ok := result["knowledge_graph"].(map[string]interface{}); ok {
+				intelligence.KnowledgeGraph = kg
+			}
+		}
+	}
+	
+	// Step 4: Domain Detection (before Local AI storage)
+	domain := pp.detectDomain(title + " " + content)
+	intelligence.Domain = domain
+	intelligence.DomainConfidence = 0.8 // Simple detection, could be improved
+	
+	// Process document normally (this will call all the services)
+	if err := pp.processDocument(ctx, doc); err != nil {
+		return nil, err
+	}
+	
+	// Now collect intelligence from learning endpoints
+	// We'll make async calls to get the intelligence data
+	
+	// Collect catalog patterns and relationships
+	if pp.catalogURL != "" {
+		pp.collectCatalogIntelligence(ctx, docID, title, content, intelligence)
+	}
+	
+	// Collect training patterns
+	if pp.trainingURL != "" {
+		pp.collectTrainingIntelligence(ctx, docID, intelligence)
+	}
+	
+	// Collect domain patterns
+	if pp.localAIURL != "" && domain != "" {
+		pp.collectDomainIntelligence(ctx, docID, domain, intelligence)
+	}
+	
+	// Collect search patterns
+	if pp.searchURL != "" {
+		pp.collectSearchIntelligence(ctx, docID, intelligence)
+	}
+	
+	return intelligence, nil
+}
+
+// collectCatalogIntelligence collects intelligence from catalog service.
+func (pp *PerplexityPipeline) collectCatalogIntelligence(ctx context.Context, docID, title, content string, intelligence *DocumentIntelligence) {
+	// Get patterns
+	patternsURL := strings.TrimRight(pp.catalogURL, "/") + "/catalog/patterns/extract"
+	patternsPayload := map[string]interface{}{
+		"source_id": docID,
+		"source":    "perplexity",
+		"action":    "extract_patterns",
+		"document": map[string]interface{}{
+			"id":      docID,
+			"title":   title,
+			"content": content,
+		},
+	}
+	var patternsResult map[string]interface{}
+	if err := pp.postJSON(ctx, patternsURL, patternsPayload, &patternsResult); err == nil {
+		intelligence.CatalogPatterns = patternsResult
+		if patterns, ok := patternsResult["patterns"].(map[string]interface{}); ok {
+			// Convert to Pattern structs
+			if columnPatterns, ok := patterns["column_patterns"].(map[string]interface{}); ok {
+				for k, v := range columnPatterns {
+					intelligence.LearnedPatterns = append(intelligence.LearnedPatterns, Pattern{
+						Type:        "column",
+						Description: k,
+						Metadata:    map[string]interface{}{"value": v},
+					})
+				}
+			}
+		}
+	}
+	
+	// Get relationships
+	relationshipsURL := strings.TrimRight(pp.catalogURL, "/") + "/catalog/relationships/discover"
+	relationshipsPayload := map[string]interface{}{
+		"source_id": docID,
+		"source":    "perplexity",
+		"action":    "discover_relationships",
+		"document": map[string]interface{}{
+			"id":      docID,
+			"title":   title,
+			"content": content,
+		},
+	}
+	var relationshipsResult map[string]interface{}
+	if err := pp.postJSON(ctx, relationshipsURL, relationshipsPayload, &relationshipsResult); err == nil {
+		if relationships, ok := relationshipsResult["relationships"].([]interface{}); ok {
+			for _, rel := range relationships {
+				if relMap, ok := rel.(map[string]interface{}); ok {
+					relationship := Relationship{
+						Type:     getString(relMap["type"]),
+						TargetID: getString(relMap["target_id"]),
+						Strength: getFloat64(relMap["strength"]),
+					}
+					if title, ok := relMap["target_title"].(string); ok {
+						relationship.TargetTitle = title
+					}
+					if metadata, ok := relMap["metadata"].(map[string]interface{}); ok {
+						relationship.Metadata = metadata
+					}
+					intelligence.Relationships = append(intelligence.Relationships, relationship)
+				}
+			}
+		}
+	}
+	
+	// Get metadata enrichment
+	enrichURL := strings.TrimRight(pp.catalogURL, "/") + "/catalog/metadata/enrich"
+	enrichPayload := map[string]interface{}{
+		"source_id": docID,
+		"source":    "perplexity",
+		"action":    "enrich_metadata",
+		"document": map[string]interface{}{
+			"id":      docID,
+			"title":   title,
+			"content": content,
+		},
+	}
+	var enrichResult map[string]interface{}
+	if err := pp.postJSON(ctx, enrichURL, enrichPayload, &enrichResult); err == nil {
+		intelligence.MetadataEnrichment = enrichResult
+	}
+}
+
+// collectTrainingIntelligence collects intelligence from training service.
+func (pp *PerplexityPipeline) collectTrainingIntelligence(ctx context.Context, docID string, intelligence *DocumentIntelligence) {
+	// Try to get patterns from training service
+	// Note: This requires the task ID, which we'd need to store
+	// For now, we'll skip this or use a generic endpoint
+}
+
+// collectDomainIntelligence collects intelligence from Local AI domain service.
+func (pp *PerplexityPipeline) collectDomainIntelligence(ctx context.Context, docID, domain string, intelligence *DocumentIntelligence) {
+	// Get domain patterns
+	patternURL := strings.TrimRight(pp.localAIURL, "/") + "/v1/domains/" + domain + "/patterns"
+	patternPayload := map[string]interface{}{
+		"document_id": docID,
+		"action":      "get_patterns",
+	}
+	var patternResult map[string]interface{}
+	if err := pp.postJSON(ctx, patternURL, patternPayload, &patternResult); err == nil {
+		intelligence.DomainPatterns = patternResult
+	}
+}
+
+// collectSearchIntelligence collects intelligence from search service.
+func (pp *PerplexityPipeline) collectSearchIntelligence(ctx context.Context, docID string, intelligence *DocumentIntelligence) {
+	// Get search patterns
+	patternURL := strings.TrimRight(pp.searchURL, "/") + "/patterns/learn"
+	patternPayload := map[string]interface{}{
+		"document_id": docID,
+		"action":      "get_patterns",
+	}
+	var patternResult map[string]interface{}
+	if err := pp.postJSON(ctx, patternURL, patternPayload, &patternResult); err == nil {
+		intelligence.SearchPatterns = patternResult
+	}
+}
+
+// Helper functions for type conversion
+func getString(v interface{}) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
+func getFloat64(v interface{}) float64 {
+	if f, ok := v.(float64); ok {
+		return f
+	}
+	return 0.0
+}
+
+// QuerySearch queries the search service for indexed documents.
+func (pp *PerplexityPipeline) QuerySearch(ctx context.Context, query, requestID string, topK int, filters map[string]interface{}) ([]map[string]interface{}, error) {
+	if pp.searchURL == "" {
+		return nil, fmt.Errorf("search service not configured")
+	}
+
+	// Build search request
+	searchPayload := map[string]interface{}{
+		"query": query,
+		"top_k": topK,
+	}
+	if filters != nil {
+		searchPayload["filters"] = filters
+	}
+	if requestID != "" {
+		// Add filter for specific request if provided
+		if searchPayload["filters"] == nil {
+			searchPayload["filters"] = make(map[string]interface{})
+		}
+		if filtersMap, ok := searchPayload["filters"].(map[string]interface{}); ok {
+			filtersMap["request_id"] = requestID
+		}
+	}
+
+	// Try Python search service first (POST /v1/search)
+	url := strings.TrimRight(pp.searchURL, "/") + "/v1/search"
+	var searchResult map[string]interface{}
+	if err := pp.postJSON(ctx, url, searchPayload, &searchResult); err == nil {
+		// Extract results
+		if results, ok := searchResult["results"].([]interface{}); ok {
+			documents := make([]map[string]interface{}, 0, len(results))
+			for _, r := range results {
+				if doc, ok := r.(map[string]interface{}); ok {
+					documents = append(documents, doc)
+				}
+			}
+			return documents, nil
+		}
+	}
+
+	// Fallback to Go search service (POST /v1/search)
+	// The Go service might have a different format
+	var goResult struct {
+		Results []map[string]interface{} `json:"results"`
+	}
+	if err := pp.postJSON(ctx, url, searchPayload, &goResult); err == nil {
+		return goResult.Results, nil
+	}
+
+	return nil, fmt.Errorf("search query failed")
+}
+
+// QueryKnowledgeGraph queries the knowledge graph for a specific request.
+func (pp *PerplexityPipeline) QueryKnowledgeGraph(ctx context.Context, requestID, cypherQuery string, params map[string]interface{}) (map[string]interface{}, error) {
+	// First, get the request to find related documents
+	tracker := pp.GetRequestTracker()
+	request, exists := tracker.GetRequest(requestID)
+	if !exists {
+		return nil, fmt.Errorf("request not found: %s", requestID)
+	}
+
+	// Try unified workflow GraphRAG query first
+	if pp.unifiedWorkflowURL != "" {
+		graphRAGRequest := map[string]interface{}{
+			"graphrag_request": map[string]interface{}{
+				"query":      cypherQuery,
+				"strategy":   "bfs",
+				"max_depth":  3,
+				"max_results": 10,
+				"params":     params,
+				"enrich":     true,
+			},
+		}
+
+		url := strings.TrimRight(pp.unifiedWorkflowURL, "/") + "/graphrag/query"
+		var result map[string]interface{}
+		if err := pp.postJSON(ctx, url, graphRAGRequest, &result); err == nil {
+			return result, nil
+		}
+	}
+
+	// Fallback to extract service knowledge graph query
+	// Extract service URL would need to be configured
+	extractURL := os.Getenv("EXTRACT_URL")
+	if extractURL == "" {
+		extractURL = "http://extract:8081"
+	}
+
+	kgQueryPayload := map[string]interface{}{
+		"query":  cypherQuery,
+		"params": params,
+	}
+
+	url := strings.TrimRight(extractURL, "/") + "/knowledge-graph/query"
+	var result map[string]interface{}
+	if err := pp.postJSON(ctx, url, kgQueryPayload, &result); err != nil {
+		return nil, fmt.Errorf("knowledge graph query failed: %w", err)
+	}
+
+	// Enhance results with request context
+	if result != nil {
+		result["request_id"] = requestID
+		result["document_ids"] = request.DocumentIDs
+	}
+
+	return result, nil
+}
+
+// QueryDomainDocuments queries documents by domain from Local AI.
+func (pp *PerplexityPipeline) QueryDomainDocuments(ctx context.Context, domain string, limit, offset int) ([]map[string]interface{}, error) {
+	if pp.localAIURL == "" {
+		return nil, fmt.Errorf("local AI service not configured")
+	}
+
+	// Query domain-specific documents
+	url := fmt.Sprintf("%s/v1/domains/%s/documents?limit=%d&offset=%d",
+		strings.TrimRight(pp.localAIURL, "/"), domain, limit, offset)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := pp.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query domain documents: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("domain query failed with status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		Documents []map[string]interface{} `json:"documents"`
+		Count     int                      `json:"count"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result.Documents, nil
+}
+
+// QueryCatalogSemantic queries the catalog using semantic search.
+func (pp *PerplexityPipeline) QueryCatalogSemantic(ctx context.Context, query, objectClass, property, source string, filters map[string]interface{}) (map[string]interface{}, error) {
+	if pp.catalogURL == "" {
+		return nil, fmt.Errorf("catalog service not configured")
+	}
+
+	// Build semantic search request
+	searchPayload := map[string]interface{}{
+		"query": query,
+	}
+	if objectClass != "" {
+		searchPayload["object_class"] = objectClass
+	}
+	if property != "" {
+		searchPayload["property"] = property
+	}
+	if source != "" {
+		searchPayload["source"] = source
+	} else {
+		searchPayload["source"] = "perplexity"
+	}
+	if filters != nil {
+		searchPayload["filters"] = filters
+	}
+
+	url := strings.TrimRight(pp.catalogURL, "/") + "/catalog/semantic-search"
+	var result map[string]interface{}
+	if err := pp.postJSON(ctx, url, searchPayload, &result); err != nil {
+		return nil, fmt.Errorf("catalog semantic search failed: %w", err)
+	}
+
+	return result, nil
 }
 
 // ProcessDocumentsWithCallback processes documents with an optional callback for each document.
