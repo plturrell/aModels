@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"ai_benchmarks/internal/learn"
-	"ai_benchmarks/internal/methods"
-	"ai_benchmarks/internal/models"
-	"ai_benchmarks/internal/registry"
-	"ai_benchmarks/internal/rng"
-	"ai_benchmarks/internal/textnorm"
+	"ai_benchmarks/pkg/learn"
+	"ai_benchmarks/pkg/methods"
+	"ai_benchmarks/pkg/models"
+	"ai_benchmarks/pkg/registry"
+	"ai_benchmarks/pkg/rng"
+	"ai_benchmarks/pkg/textnorm"
 )
 
 type Example struct {

@@ -1,7 +1,3 @@
-//go:build ignore
-// +build ignore
-
-// Package disabled: depends on missing ai_benchmarks packages
 package main
 
 import (
@@ -14,8 +10,8 @@ import (
 	"os"
 	"time"
 
-	"ai_benchmarks/internal/lnn"
-	"ai_benchmarks/internal/registry"
+	"ai_benchmarks/pkg/lnn"
+	"ai_benchmarks/pkg/registry"
 )
 
 type nashTask struct {

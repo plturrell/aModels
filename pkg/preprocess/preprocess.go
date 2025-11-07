@@ -1,5 +1,3 @@
-//go:build ignore
-// +build ignore
 
 // Package disabled: depends on missing ai_benchmarks packages
 package preprocess
@@ -11,9 +9,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"ai_benchmarks/benchmarks/arc"
-	"ai_benchmarks/internal/lnn"
-	"ai_benchmarks/internal/methods"
+	"ai_benchmarks/testing/benchmarks/arc"
+	"ai_benchmarks/pkg/lnn"
+	"ai_benchmarks/pkg/methods"
 )
 
 // EnrichedTask holds the original task and the discovered transformation sequence.

@@ -1,6 +1,6 @@
 package arc
 
-import "ai_benchmarks/internal/lnn"
+import "ai_benchmarks/pkg/lnn"
 
 // GemmaVaultCalibrator learns optimal parameters for the GemmaVault model
 // The LNN will discover the best configuration through training

@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"ai_benchmarks/internal/methods"
-	"ai_benchmarks/internal/registry"
+	"ai_benchmarks/pkg/methods"
+	"ai_benchmarks/pkg/registry"
 )
 
 type Pair struct {

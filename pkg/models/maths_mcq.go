@@ -1,5 +1,3 @@
-//go:build ignore
-// +build ignore
 
 // Package disabled: depends on missing ai_benchmarks package
 package models
@@ -7,7 +5,7 @@ package models
 import (
 	"strings"
 
-	"ai_benchmarks/internal/mathvec"
+	"ai_benchmarks/pkg/mathvec"
 )
 
 // MathsMCQ selects the option with the highest cosine similarity to the prompt.

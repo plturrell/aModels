@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"ai_benchmarks/internal/registry"
+	"ai_benchmarks/pkg/registry"
 )
 
 // GSM-Symbolic: Understanding the Limitations of Mathematical Reasoning in LLMs

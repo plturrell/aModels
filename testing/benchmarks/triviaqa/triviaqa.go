@@ -11,11 +11,11 @@ import (
 	"time"
 	"unicode"
 
-	"ai_benchmarks/internal/learn"
-	"ai_benchmarks/internal/mathvec"
-	"ai_benchmarks/internal/methods"
-	"ai_benchmarks/internal/registry"
-	"ai_benchmarks/internal/textnorm"
+	"ai_benchmarks/pkg/learn"
+	"ai_benchmarks/pkg/mathvec"
+	"ai_benchmarks/pkg/methods"
+	"ai_benchmarks/pkg/registry"
+	"ai_benchmarks/pkg/textnorm"
 	"math"
 )
 

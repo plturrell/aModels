@@ -1,5 +1,3 @@
-//go:build ignore
-// +build ignore
 
 // Package disabled: depends on missing ai_benchmarks and AgentSDK packages
 package localai
@@ -11,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"ai_benchmarks/internal/catalog/flightcatalog"
+	"ai_benchmarks/pkg/catalog/flightcatalog"
 	catalogprompt "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightcatalog/prompt"
 )
 

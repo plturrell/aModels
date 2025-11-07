@@ -1,6 +1,6 @@
 package hellaswag
 
-import "ai_benchmarks/internal/lnn"
+import "ai_benchmarks/pkg/lnn"
 
 // PhiMiniCalibrator learns optimal parameters for Phi-Mini-3.5 on HellaSwag
 type PhiMiniCalibrator struct {

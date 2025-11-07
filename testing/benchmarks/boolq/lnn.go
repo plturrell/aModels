@@ -1,6 +1,6 @@
 package boolq
 
-import "ai_benchmarks/internal/lnn"
+import "ai_benchmarks/pkg/lnn"
 
 func init() {
 	lnn.RegisterCalibrator("boolq", func(cfg lnn.Config) (lnn.Calibrator, error) {

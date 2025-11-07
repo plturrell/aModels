@@ -1,6 +1,6 @@
 package gsmsymbolic
 
-import "ai_benchmarks/internal/lnn"
+import "ai_benchmarks/pkg/lnn"
 
 // PhiMiniCalibrator learns optimal parameters for the Phi-Mini-3.5 model
 type PhiMiniCalibrator struct {

@@ -1,7 +1,7 @@
 package piqa
 
 import (
-	"ai_benchmarks/internal/lnn"
+	"ai_benchmarks/pkg/lnn"
 	"strings"
 )
 

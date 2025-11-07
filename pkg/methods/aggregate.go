@@ -1,11 +1,9 @@
-//go:build ignore
-// +build ignore
 
 // Package disabled: depends on missing ai_benchmarks package
 package methods
 
 import (
-	"ai_benchmarks/internal/mathvec"
+	"ai_benchmarks/pkg/mathvec"
 )
 
 // CombinedScores computes weighted sum of available methods.

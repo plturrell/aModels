@@ -1,7 +1,3 @@
-//go:build ignore
-// +build ignore
-
-// Package disabled: Arrow version conflicts (v16 vs v18) and missing AgentSDK package
 package flightcatalog_test
 
 import (
@@ -17,7 +13,12 @@ import (
 	"github.com/apache/arrow/go/v16/arrow/ipc"
 	"github.com/apache/arrow/go/v16/arrow/memory"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentFlow/internal/catalog/flightcatalog"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK/pkg/flightdefs"
+)
+
+// Flight catalog path constants (replacing missing AgentSDK package)
+const (
+	agentToolsPath  = "agent/tools"
+	serviceSuitesPath = "service/suites"
 )
 
 func TestFetchCatalog(t *testing.T) {
@@ -116,10 +117,10 @@ func (s *stubFlightService) Close() {
 }
 
 func (s *stubFlightService) ListFlights(_ *flight.Criteria, stream flight.FlightService_ListFlightsServer) error {
-	if err := stream.Send(s.buildFlightInfo(flightdefs.AgentToolsPath, s.toolsRecord.NumRows())); err != nil {
+	if err := stream.Send(s.buildFlightInfo(agentToolsPath, s.toolsRecord.NumRows())); err != nil {
 		return err
 	}
-	return stream.Send(s.buildFlightInfo(flightdefs.ServiceSuitesPath, s.suitesRecord.NumRows()))
+	return stream.Send(s.buildFlightInfo(serviceSuitesPath, s.suitesRecord.NumRows()))
 }
 
 func (s *stubFlightService) GetFlightInfo(_ context.Context, descriptor *flight.FlightDescriptor) (*flight.FlightInfo, error) {
@@ -128,9 +129,9 @@ func (s *stubFlightService) GetFlightInfo(_ context.Context, descriptor *flight.
 	}
 	path := strings.Join(descriptor.Path, "/")
 	switch path {
-	case flightdefs.AgentToolsPath:
+	case agentToolsPath:
 		return s.buildFlightInfo(path, s.toolsRecord.NumRows()), nil
-	case flightdefs.ServiceSuitesPath:
+	case serviceSuitesPath:
 		return s.buildFlightInfo(path, s.suitesRecord.NumRows()), nil
 	default:
 		return nil, fmt.Errorf("unknown descriptor")
@@ -139,9 +140,9 @@ func (s *stubFlightService) GetFlightInfo(_ context.Context, descriptor *flight.
 
 func (s *stubFlightService) DoGet(ticket *flight.Ticket, stream flight.FlightService_DoGetServer) error {
 	switch string(ticket.GetTicket()) {
-	case flightdefs.AgentToolsPath:
+	case agentToolsPath:
 		return s.writeRecord(stream, s.toolsRecord)
-	case flightdefs.ServiceSuitesPath:
+	case serviceSuitesPath:
 		return s.writeRecord(stream, s.suitesRecord)
 	default:
 		return fmt.Errorf("unknown ticket")

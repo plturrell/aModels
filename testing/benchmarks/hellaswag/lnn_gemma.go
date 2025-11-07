@@ -1,6 +1,6 @@
 package hellaswag
 
-import "ai_benchmarks/internal/lnn"
+import "ai_benchmarks/pkg/lnn"
 
 // GemmaVaultCalibrator learns optimal parameters for GemmaVault on HellaSwag
 type GemmaVaultCalibrator struct {

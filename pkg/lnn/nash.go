@@ -1,5 +1,3 @@
-//go:build ignore
-// +build ignore
 
 // Package disabled: depends on missing ai_benchmarks package
 // internal/lnn/nash.go - LNN-enhanced Nash calibration
@@ -10,7 +8,7 @@ import (
 	"fmt"
 	"log"
 
-	"ai_benchmarks/internal/registry"
+	"ai_benchmarks/pkg/registry"
 )
 
 // LNNNashCalibrator handles LNN-based multi-task calibration

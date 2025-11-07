@@ -1,13 +1,10 @@
-//go:build ignore
-// +build ignore
 
-// Package disabled: depends on missing ai_benchmarks packages
 package main
 
 import (
-	"ai_benchmarks/scripts/factory"
-	"ai_benchmarks/scripts/factory/connectors"
-	"ai_benchmarks/scripts/factory/mappers"
+	"ai_benchmarks/tools/scripts/factory"
+	"ai_benchmarks/tools/scripts/factory/connectors"
+	"ai_benchmarks/tools/scripts/factory/mappers"
 	"encoding/json"
 	"flag"
 	"fmt"

@@ -1,7 +1,3 @@
-//go:build ignore
-// +build ignore
-
-// Package disabled: depends on missing ai_benchmarks packages and functions from disabled main.go
 package main
 
 import (
@@ -13,8 +9,8 @@ import (
 	"os"
 	"time"
 
-	"ai_benchmarks/internal/lnn"
-	"ai_benchmarks/internal/registry"
+	"ai_benchmarks/pkg/lnn"
+	"ai_benchmarks/pkg/registry"
 	"gonum.org/v1/gonum/optimize"
 )
 

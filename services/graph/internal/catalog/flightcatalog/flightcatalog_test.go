@@ -1,7 +1,3 @@
-//go:build ignore
-// +build ignore
-
-// Package disabled: Arrow version conflicts (v16 vs v18)
 package flightcatalog_test
 
 import (
@@ -116,10 +112,10 @@ func (s *stubFlightService) Close() {
 }
 
 func (s *stubFlightService) ListFlights(_ *flight.Criteria, stream flight.FlightService_ListFlightsServer) error {
-	if err := stream.Send(s.buildFlightInfo(flightdefs.AgentToolsPath, s.toolsRecord.NumRows())); err != nil {
+	if err := stream.Send(s.buildFlightInfo(stubs.AgentToolsPath, s.toolsRecord.NumRows())); err != nil {
 		return err
 	}
-	return stream.Send(s.buildFlightInfo(flightdefs.ServiceSuitesPath, s.suitesRecord.NumRows()))
+	return stream.Send(s.buildFlightInfo(stubs.ServiceSuitesPath, s.suitesRecord.NumRows()))
 }
 
 func (s *stubFlightService) GetFlightInfo(_ context.Context, descriptor *flight.FlightDescriptor) (*flight.FlightInfo, error) {
@@ -128,9 +124,9 @@ func (s *stubFlightService) GetFlightInfo(_ context.Context, descriptor *flight.
 	}
 	path := strings.Join(descriptor.Path, "/")
 	switch path {
-	case flightdefs.AgentToolsPath:
+	case stubs.AgentToolsPath:
 		return s.buildFlightInfo(path, s.toolsRecord.NumRows()), nil
-	case flightdefs.ServiceSuitesPath:
+	case stubs.ServiceSuitesPath:
 		return s.buildFlightInfo(path, s.suitesRecord.NumRows()), nil
 	default:
 		return nil, fmt.Errorf("unknown descriptor")
@@ -139,9 +135,9 @@ func (s *stubFlightService) GetFlightInfo(_ context.Context, descriptor *flight.
 
 func (s *stubFlightService) DoGet(ticket *flight.Ticket, stream flight.FlightService_DoGetServer) error {
 	switch string(ticket.GetTicket()) {
-	case flightdefs.AgentToolsPath:
+	case stubs.AgentToolsPath:
 		return s.writeRecord(stream, s.toolsRecord)
-	case flightdefs.ServiceSuitesPath:
+	case stubs.ServiceSuitesPath:
 		return s.writeRecord(stream, s.suitesRecord)
 	default:
 		return fmt.Errorf("unknown ticket")

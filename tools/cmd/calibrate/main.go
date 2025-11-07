@@ -1,5 +1,3 @@
-//go:build ignore
-// +build ignore
 
 // Package disabled: depends on missing ai_benchmarks package
 package main
@@ -11,7 +9,7 @@ import (
 	"log"
 	"os"
 
-	"ai_benchmarks/internal/localai"
+	"ai_benchmarks/pkg/localai"
 )
 
 func main() {

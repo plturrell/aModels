@@ -1,7 +1,3 @@
-//go:build ignore
-// +build ignore
-
-// Package disabled: depends on missing ai_benchmarks packages
 package main
 
 import (
@@ -16,17 +12,17 @@ import (
 	"strings"
 	"time"
 
-	"ai_benchmarks/internal/preprocess"
-	"ai_benchmarks/internal/registry"
+	"ai_benchmarks/pkg/preprocess"
+	"ai_benchmarks/pkg/registry"
 
 	// Register all benchmarks via side-effect imports
-	_ "ai_benchmarks/benchmarks/arc"
-	_ "ai_benchmarks/benchmarks/boolq"
-	_ "ai_benchmarks/benchmarks/deepseekocr"
-	_ "ai_benchmarks/benchmarks/hellaswag"
-	_ "ai_benchmarks/benchmarks/piqa"
-	_ "ai_benchmarks/benchmarks/socialiq"
-	_ "ai_benchmarks/benchmarks/triviaqa"
+	_ "ai_benchmarks/testing/benchmarks/arc"
+	_ "ai_benchmarks/testing/benchmarks/boolq"
+	_ "ai_benchmarks/testing/benchmarks/deepseekocr"
+	_ "ai_benchmarks/testing/benchmarks/hellaswag"
+	_ "ai_benchmarks/testing/benchmarks/piqa"
+	_ "ai_benchmarks/testing/benchmarks/socialiq"
+	_ "ai_benchmarks/testing/benchmarks/triviaqa"
 )
 
 type runFlags struct {

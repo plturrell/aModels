@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"ai_benchmarks/internal/registry"
+	"ai_benchmarks/pkg/registry"
 )
 
 // Phrase-Indexed Question Answering (PIQA) - Seo et al. 2018, EMNLP

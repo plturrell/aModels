@@ -1,6 +1,6 @@
 package boolq
 
-import "ai_benchmarks/internal/lnn"
+import "ai_benchmarks/pkg/lnn"
 
 // GemmaVaultCalibrator learns optimal parameters for GemmaVault on BoolQ
 type GemmaVaultCalibrator struct {

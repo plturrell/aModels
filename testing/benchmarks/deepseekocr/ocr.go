@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"ai_benchmarks/internal/ds"
-	"ai_benchmarks/internal/registry"
-	"ai_benchmarks/internal/vision"
+	"ai_benchmarks/pkg/ds"
+	"ai_benchmarks/pkg/registry"
+	"ai_benchmarks/pkg/vision"
 )
 
 type example struct {

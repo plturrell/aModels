@@ -1,6 +1,4 @@
 // internal/lnn/tune.go - LNN-enhanced tuning
-//go:build ignore
-// +build ignore
 
 // Package disabled: depends on missing ai_benchmarks package
 package lnn
@@ -10,7 +8,7 @@ import (
 	"fmt"
 	"log"
 
-	"ai_benchmarks/internal/registry"
+	"ai_benchmarks/pkg/registry"
 )
 
 // LNNTuner handles LNN-based recursive tuning

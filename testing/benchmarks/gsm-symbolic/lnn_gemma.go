@@ -1,6 +1,6 @@
 package gsmsymbolic
 
-import "ai_benchmarks/internal/lnn"
+import "ai_benchmarks/pkg/lnn"
 
 // GemmaVaultCalibrator learns optimal parameters for the GemmaVault model
 type GemmaVaultCalibrator struct {
