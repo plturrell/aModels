@@ -383,20 +383,28 @@ func main() {
 	// Initialize authentication middleware
 	// Priority: XSUAA (SAP BTP) > JWT (standalone)
 	var authMiddleware func(http.Handler) http.Handler
+	var xsuaaMiddleware *security.XSUAAMiddleware
+	var privacyDomainIntegration *security.PrivacyDomainIntegration
 	useXSUAA := os.Getenv("VCAP_SERVICES") != "" || os.Getenv("XSUAA_CLIENT_ID") != ""
 	
 	if useXSUAA {
 		// Use XSUAA authentication for SAP BTP deployment
-		xsuaaMiddleware, err := security.NewXSUAAMiddleware(legacyLogger)
+		var err error
+		xsuaaMiddleware, err = security.NewXSUAAMiddleware(legacyLogger)
 		if err != nil {
 			structLogger.Error("Failed to initialize XSUAA auth middleware", err, nil)
 			os.Exit(1)
 		}
 		authMiddleware = xsuaaMiddleware.Middleware
+		
+		// Initialize privacy-domain integration for XSUAA
+		privacyDomainIntegration = security.NewPrivacyDomainIntegration(xsuaaMiddleware, legacyLogger)
+		
 		structLogger.Info("XSUAA authentication middleware initialized", map[string]interface{}{
 			"xsappname": os.Getenv("XS_APP_NAME"),
 			"client_id": os.Getenv("XSUAA_CLIENT_ID"),
 		})
+		structLogger.Info("Privacy-domain integration initialized for XSUAA", nil)
 	} else {
 		// Use JWT authentication for standalone deployment
 		jwtAuthMiddleware, err := security.NewJWTAuthMiddleware(legacyLogger)

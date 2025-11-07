@@ -42,6 +42,26 @@
     {
       "name": "$XSAPPNAME.Analytics.Read",
       "description": "Read analytics and dashboard data"
+    },
+    {
+      "name": "$XSAPPNAME.Domain.Read",
+      "description": "Read access to domain intelligence data"
+    },
+    {
+      "name": "$XSAPPNAME.Domain.Write",
+      "description": "Write access to domain intelligence data"
+    },
+    {
+      "name": "$XSAPPNAME.Privacy.Low",
+      "description": "Access to low-privacy data (higher epsilon, less noise)"
+    },
+    {
+      "name": "$XSAPPNAME.Privacy.Medium",
+      "description": "Access to medium-privacy data (standard epsilon)"
+    },
+    {
+      "name": "$XSAPPNAME.Privacy.High",
+      "description": "Access to high-privacy data (lower epsilon, more noise)"
     }
   ],
   "role-templates": [
@@ -80,7 +100,10 @@
         "$XSAPPNAME.DataProduct.Delete",
         "$XSAPPNAME.BreakDetection.Read",
         "$XSAPPNAME.BreakDetection.Admin",
-        "$XSAPPNAME.Analytics.Read"
+        "$XSAPPNAME.Analytics.Read",
+        "$XSAPPNAME.Domain.Read",
+        "$XSAPPNAME.Privacy.Low",
+        "$XSAPPNAME.Privacy.Medium"
       ]
     }
   ],
