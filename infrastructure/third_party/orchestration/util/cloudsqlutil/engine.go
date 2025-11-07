@@ -1,7 +1,3 @@
-//go:build ignore
-// +build ignore
-
-// Package disabled: depends on missing cloud.google.com/go/cloudsqlconn package
 package cloudsqlutil
 
 import (
