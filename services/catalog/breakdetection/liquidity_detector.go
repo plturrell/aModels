@@ -372,7 +372,7 @@ func (ld *LiquidityDetector) detectLCRViolations(baseline, current *RCOLCR) []*B
 	if current == nil {
 		// Missing LCR
 		if baseline != nil {
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-missing-lcr-%d", time.Now().Unix()),
 				SystemName:      SystemRCO,
 				DetectionType:   DetectionTypeLiquidity,
@@ -387,14 +387,14 @@ func (ld *LiquidityDetector) detectLCRViolations(baseline, current *RCOLCR) []*B
 				CreatedAt:       time.Now(),
 				UpdatedAt:       time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 		}
 		return breaks
 	}
 
 	// Check if LCR is below minimum
 	if current.LCRValue < current.MinimumRequired {
-		break := &Break{
+		br := &Break{
 			BreakID:        fmt.Sprintf("break-lcr-violation-%d", time.Now().Unix()),
 			SystemName:      SystemRCO,
 			DetectionType:   DetectionTypeLiquidity,
@@ -413,7 +413,7 @@ func (ld *LiquidityDetector) detectLCRViolations(baseline, current *RCOLCR) []*B
 			CreatedAt:        time.Now(),
 			UpdatedAt:        time.Now(),
 		}
-		breaks = append(breaks, break)
+		breaks = append(breaks, br)
 	}
 
 	// Check for significant LCR changes
@@ -424,7 +424,7 @@ func (ld *LiquidityDetector) detectLCRViolations(baseline, current *RCOLCR) []*B
 		}
 		// Significant change threshold: 5% (0.05)
 		if lcrChange > 0.05 {
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-lcr-change-%d", time.Now().Unix()),
 				SystemName:      SystemRCO,
 				DetectionType:   DetectionTypeLiquidity,
@@ -443,7 +443,7 @@ func (ld *LiquidityDetector) detectLCRViolations(baseline, current *RCOLCR) []*B
 				CreatedAt:        time.Now(),
 				UpdatedAt:        time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 		}
 	}
 
@@ -467,7 +467,7 @@ func (ld *LiquidityDetector) detectLiquidityMismatches(baseline, current map[str
 			requirementDiff = -requirementDiff
 		}
 		if requirementDiff > tolerance {
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-liquidity-requirement-mismatch-%s", positionID),
 				SystemName:      SystemRCO,
 				DetectionType:   DetectionTypeLiquidity,
@@ -487,7 +487,7 @@ func (ld *LiquidityDetector) detectLiquidityMismatches(baseline, current map[str
 				CreatedAt:        time.Now(),
 				UpdatedAt:        time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 		}
 	}
 
@@ -503,7 +503,7 @@ func (ld *LiquidityDetector) detectPositionMismatches(baseline, current map[stri
 		currentPosition, exists := current[positionID]
 		if !exists {
 			// Missing position
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-missing-position-%s", positionID),
 				SystemName:      SystemRCO,
 				DetectionType:   DetectionTypeLiquidity,
@@ -518,7 +518,7 @@ func (ld *LiquidityDetector) detectPositionMismatches(baseline, current map[stri
 				CreatedAt:       time.Now(),
 				UpdatedAt:       time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 			continue
 		}
 
@@ -528,7 +528,7 @@ func (ld *LiquidityDetector) detectPositionMismatches(baseline, current map[stri
 			amountDiff = -amountDiff
 		}
 		if amountDiff > tolerance {
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-position-amount-mismatch-%s", positionID),
 				SystemName:      SystemRCO,
 				DetectionType:   DetectionTypeLiquidity,
@@ -548,7 +548,7 @@ func (ld *LiquidityDetector) detectPositionMismatches(baseline, current map[stri
 				CreatedAt:        time.Now(),
 				UpdatedAt:        time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 		}
 	}
 

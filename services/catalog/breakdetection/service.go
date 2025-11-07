@@ -63,7 +63,7 @@ func (s *BreakDetectionService) DetectBreaks(ctx context.Context, req *Detection
 	runID := fmt.Sprintf("run-%s-%s-%d", req.SystemName, req.DetectionType, time.Now().Unix())
 	
 	// Create detection run record
-	run, err := s.createDetectionRun(ctx, req, runID)
+	_, err := s.createDetectionRun(ctx, req, runID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create detection run: %w", err)
 	}
@@ -418,7 +418,8 @@ func (s *BreakDetectionService) GetDetectionRun(ctx context.Context, runID strin
 
 // ListBreaks lists breaks for a system
 func (s *BreakDetectionService) ListBreaks(ctx context.Context, systemName SystemName, limit int, status BreakStatus) ([]*Break, error) {
-	query := `
+	// SQL query for listing breaks (not yet implemented)
+	_ = `
 		SELECT break_id, run_id, system_name, detection_type, break_type,
 		       severity, status, current_value, baseline_value, difference,
 		       affected_entities, root_cause_analysis, semantic_enrichment,

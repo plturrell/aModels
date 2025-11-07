@@ -15,7 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"github.com/langchain-ai/langgraph-go/pkg/stubs"
+	stubs "github.com/langchain-ai/langgraph-go/pkg/stubs"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -46,7 +46,7 @@ type manager struct {
 
 	neo4jDriver neo4j.DriverWithContext
 
-	hanaPool *hanapool.Pool
+	hanaPool *stubs.Pool
 
 	initOnce sync.Once
 	initErr  error
@@ -221,7 +221,7 @@ func (m *manager) initNeo4j() error {
 }
 
 func (m *manager) initHANA() error {
-	pool, err := hanapool.NewPoolFromEnv()
+	pool, err := stubs.NewPoolFromEnv()
 	if err != nil {
 		return err
 	}
@@ -338,9 +338,9 @@ MERGE (f)-[:HAS_ENTITY]->(e)
 }
 
 func (m *manager) persistHANA(ctx context.Context, records []Record) error {
-	db := m.hanaPool.GetDB()
-	if db == nil {
-		return fmt.Errorf("hana db unavailable")
+	db, err := m.hanaPool.GetDB(ctx)
+	if err != nil || db == nil {
+		return fmt.Errorf("hana db unavailable: %w", err)
 	}
 
 	schema := os.Getenv("HANA_SCHEMA")

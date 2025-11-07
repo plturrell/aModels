@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -129,13 +128,12 @@ func (bme *BaselineManagerEnhanced) GetBaselineEnhanced(ctx context.Context, bas
 // CompareBaselinesEnhanced compares baselines with enhanced features
 func (bme *BaselineManagerEnhanced) CompareBaselinesEnhanced(ctx context.Context, 
 	baseline1ID, baseline2ID string) (*BreakComparison, error) {
-	baseline1, err := bme.GetBaselineEnhanced(ctx, baseline1ID)
-	if err != nil {
+	// Verify baselines exist
+	if _, err := bme.GetBaselineEnhanced(ctx, baseline1ID); err != nil {
 		return nil, fmt.Errorf("failed to get baseline 1: %w", err)
 	}
 
-	baseline2, err := bme.GetBaselineEnhanced(ctx, baseline2ID)
-	if err != nil {
+	if _, err := bme.GetBaselineEnhanced(ctx, baseline2ID); err != nil {
 		return nil, fmt.Errorf("failed to get baseline 2: %w", err)
 	}
 
@@ -168,7 +166,7 @@ func (bme *BaselineManagerEnhanced) VerifySnapshotIntegrity(ctx context.Context,
 
 // Helper methods
 func (bme *BaselineManagerEnhanced) compressData(data []byte) ([]byte, error) {
-	var buf []byte
+	var buf bytes.Buffer
 	writer := io.Writer(&buf)
 	
 	gzipWriter, err := gzip.NewWriterLevel(writer, bme.compressionLevel)

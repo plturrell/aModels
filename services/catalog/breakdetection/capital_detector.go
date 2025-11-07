@@ -403,7 +403,7 @@ func (cd *CapitalDetector) detectCapitalRatioViolations(baseline, current map[st
 		currentRatio, exists := current[ratioType]
 		if !exists {
 			// Missing ratio
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-missing-ratio-%s", ratioType),
 				SystemName:      SystemBCRS,
 				DetectionType:   DetectionTypeCapital,
@@ -418,13 +418,13 @@ func (cd *CapitalDetector) detectCapitalRatioViolations(baseline, current map[st
 				CreatedAt:       time.Now(),
 				UpdatedAt:       time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 			continue
 		}
 
 		// Check if ratio is below minimum
 		if currentRatio.RatioValue < currentRatio.MinimumRequired {
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-ratio-violation-%s", ratioType),
 				SystemName:      SystemBCRS,
 				DetectionType:   DetectionTypeCapital,
@@ -443,7 +443,7 @@ func (cd *CapitalDetector) detectCapitalRatioViolations(baseline, current map[st
 				CreatedAt:        time.Now(),
 				UpdatedAt:        time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 		}
 
 		// Check for significant ratio changes
@@ -453,7 +453,7 @@ func (cd *CapitalDetector) detectCapitalRatioViolations(baseline, current map[st
 		}
 		// Significant change threshold: 0.5% (0.005)
 		if ratioChange > 0.005 {
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-ratio-change-%s", ratioType),
 				SystemName:      SystemBCRS,
 				DetectionType:   DetectionTypeCapital,
@@ -472,7 +472,7 @@ func (cd *CapitalDetector) detectCapitalRatioViolations(baseline, current map[st
 				CreatedAt:        time.Now(),
 				UpdatedAt:        time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 		}
 	}
 
@@ -500,7 +500,7 @@ func (cd *CapitalDetector) detectRWAErrors(baseline, current map[string]*BCRSCre
 		}
 
 		if diff > tolerance {
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-rwa-error-%s", exposureID),
 				SystemName:      SystemBCRS,
 				DetectionType:   DetectionTypeCapital,
@@ -519,7 +519,7 @@ func (cd *CapitalDetector) detectRWAErrors(baseline, current map[string]*BCRSCre
 				CreatedAt:        time.Now(),
 				UpdatedAt:        time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 		}
 	}
 
@@ -535,7 +535,7 @@ func (cd *CapitalDetector) detectExposureMismatches(baseline, current map[string
 		currentExposure, exists := current[exposureID]
 		if !exists {
 			// Missing exposure
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-missing-exposure-%s", exposureID),
 				SystemName:      SystemBCRS,
 				DetectionType:   DetectionTypeCapital,
@@ -550,7 +550,7 @@ func (cd *CapitalDetector) detectExposureMismatches(baseline, current map[string
 				CreatedAt:       time.Now(),
 				UpdatedAt:       time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 			continue
 		}
 
@@ -560,7 +560,7 @@ func (cd *CapitalDetector) detectExposureMismatches(baseline, current map[string
 			amountDiff = -amountDiff
 		}
 		if amountDiff > tolerance {
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-exposure-amount-mismatch-%s", exposureID),
 				SystemName:      SystemBCRS,
 				DetectionType:   DetectionTypeCapital,
@@ -580,7 +580,7 @@ func (cd *CapitalDetector) detectExposureMismatches(baseline, current map[string
 				CreatedAt:        time.Now(),
 				UpdatedAt:        time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 		}
 
 		// Check risk weight mismatch
@@ -589,7 +589,7 @@ func (cd *CapitalDetector) detectExposureMismatches(baseline, current map[string
 			weightDiff = -weightDiff
 		}
 		if weightDiff > 0.001 { // 0.1% tolerance for risk weights
-			break := &Break{
+			br := &Break{
 				BreakID:        fmt.Sprintf("break-risk-weight-mismatch-%s", exposureID),
 				SystemName:      SystemBCRS,
 				DetectionType:   DetectionTypeCapital,
@@ -609,7 +609,7 @@ func (cd *CapitalDetector) detectExposureMismatches(baseline, current map[string
 				CreatedAt:        time.Now(),
 				UpdatedAt:        time.Now(),
 			}
-			breaks = append(breaks, break)
+			breaks = append(breaks, br)
 		}
 	}
 
