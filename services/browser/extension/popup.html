@@ -4,169 +4,46 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>aModels</title>
+    <!-- SAP Horizon: local design system CSS (MV3 disallows remote CSS) -->
+    <link rel="stylesheet" href="design-system-sap.css" />
+    <link rel="stylesheet" href="fonts/fonts.css" />
     <style>
       * {
         box-sizing: border-box;
       }
       
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: '72', '72full', Arial, Helvetica, sans-serif;
         margin: 0;
         padding: 0;
         width: 360px;
         min-height: 240px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: var(--sap-background);
+        color: var(--sap-text);
       }
       
       .minimal-container {
-        padding: 32px 24px;
+        padding: 24px 16px;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 24px;
-      }
-      
-      
-      .connection-status {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 13px;
-        padding: 8px 16px;
-        border-radius: 20px;
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-      }
-      
-      .connection-status.connected {
-        color: #047857;
-      }
-      
-      .connection-status.disconnected {
-        color: #991b1b;
-      }
-      
-      .connection-status.checking {
-        color: #1e40af;
-      }
-      
-      .status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        flex-shrink: 0;
-      }
-      
-      .status-dot.connected {
-        background: #10b981;
-        box-shadow: 0 0 0 2px #d1fae5;
-      }
-      
-      .status-dot.disconnected {
-        background: #ef4444;
-        box-shadow: 0 0 0 2px #fee2e2;
-      }
-      
-      .status-dot.checking {
-        background: #3b82f6;
-        animation: pulse 2s ease-in-out infinite;
-      }
-      
-      @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-      }
-      
-      /* Command Hint Styles */
-      .command-hint {
-        display: flex;
-        align-items: center;
         gap: 16px;
-        padding: 20px 24px;
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        border-radius: 16px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-        cursor: pointer;
-        transition: all 0.2s ease;
-      }
-      
-      .command-hint:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
-      }
-      
-      .hint-icon {
-        width: 48px;
-        height: 48px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 12px;
-        color: white;
-        font-size: 20px;
-        font-weight: 600;
-        flex-shrink: 0;
-      }
-      
-      .hint-text {
-        flex: 1;
-      }
-      
-      .hint-title {
-        font-size: 16px;
-        font-weight: 600;
-        color: #1a202c;
-        margin-bottom: 2px;
-      }
-      
-      .hint-subtitle {
-        font-size: 13px;
-        color: #64748b;
       }
       
       #status {
         width: 100%;
         max-width: 320px;
-        padding: 16px;
-        border-radius: 12px;
-        font-size: 13px;
-        line-height: 1.6;
-        white-space: pre-wrap;
-        word-wrap: break-word;
         display: none;
-        backdrop-filter: blur(10px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
       }
       
       #status.visible {
         display: block;
       }
       
-      #status.success {
-        background: rgba(209, 250, 229, 0.95);
-        color: #047857;
-      }
-      
-      #status.error {
-        background: rgba(254, 226, 226, 0.95);
-        color: #991b1b;
-      }
-      
-      #status.loading {
-        background: rgba(219, 234, 254, 0.95);
-        color: #1e40af;
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
-      }
-      
       .spinner {
         width: 16px;
         height: 16px;
-        border: 2px solid #3b82f6;
+        border: 2px solid var(--sap-primary);
         border-top-color: transparent;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
@@ -181,24 +58,24 @@
   </head>
   <body>
     <div class="minimal-container">
-      <div class="connection-status checking" id="connection-status" role="status" aria-live="polite">
-        <div class="status-dot checking"></div>
-        <span>Checking connection...</span>
+      <div id="connection-status" class="sap-message sap-message-info" role="status" aria-live="polite">
+        Checking connection...
       </div>
       
-      <div class="command-hint">
-        <div class="hint-icon">⌘K</div>
-        <div class="hint-text">
-          <div class="hint-title">Press Cmd+K to begin</div>
-          <div class="hint-subtitle">Search for any action</div>
+      <div class="sap-card" role="button" tabindex="0" aria-label="Open command palette">
+        <div class="sap-card-content" style="display:flex; gap:12px; align-items:center;">
+          <div class="command-palette-icon" aria-hidden="true">⌘K</div>
+          <div style="flex:1; min-width:0;">
+            <div class="sap-text-primary" style="font-weight:600;">Press Cmd+K to begin</div>
+            <div class="sap-text-secondary" style="font-size:12px;">Search for any action</div>
+          </div>
         </div>
       </div>
       
-      <div id="status" role="alert" aria-live="assertive"></div>
+      <div id="status" class="sap-message sap-message-info" role="alert" aria-live="assertive"></div>
     </div>
     
     <!-- Phase 2: Design System & Enhanced Features -->
-    <link rel="stylesheet" href="design-system.css">
     <link rel="stylesheet" href="command-palette.css">
     <link rel="stylesheet" href="tooltips.css">
     

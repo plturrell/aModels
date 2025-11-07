@@ -5,7 +5,8 @@ import { SessionsPanel } from "./components/SessionsPanel";
 import { AgentLogPanel } from "./components/AgentLogPanel";
 import { Canvas } from "./components/Canvas";
 import { CommandPalette } from "./components/CommandPalette";
-import theme from "./theme";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import theme from "./theme-sap";
 
 function App() {
   const [sessions, setSessions] = useState<any[]>([]);
@@ -17,16 +18,33 @@ function App() {
     setActiveSession(newSession);
   };
 
+  const handleError = (error: Error) => {
+    console.error('Application error:', error);
+    // TODO: Send to error tracking service
+  };
+
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <CommandPalette onCommand={handleCommand} />
-      <WorkbenchLayout
-        sessions={<SessionsPanel sessions={sessions} onSelect={setActiveSession} />}
-        canvas={<Canvas session={activeSession} />}
-        agentLog={<AgentLogPanel session={activeSession} />}
-      />
-    </ThemeProvider>
+    <ErrorBoundary onError={handleError}>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <CommandPalette onCommand={handleCommand} />
+        <ErrorBoundary>
+          <WorkbenchLayout
+            sessions={<SessionsPanel sessions={sessions} onSelect={setActiveSession} />}
+            canvas={
+              <ErrorBoundary>
+                <Canvas session={activeSession} />
+              </ErrorBoundary>
+            }
+            agentLog={
+              <ErrorBoundary>
+                <AgentLogPanel session={activeSession} />
+              </ErrorBoundary>
+            }
+          />
+        </ErrorBoundary>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 

@@ -1,4 +1,5 @@
 import { API_BASE } from "./client";
+import { validateRequestId, validateQuery, validateTableName } from "../utils/validation";
 
 export interface RelationalTable {
   id: string;
@@ -105,6 +106,12 @@ export interface RelationalSearchResults {
  * Get relational processing status for a request
  */
 export async function getRelationalProcessingStatus(requestId: string): Promise<RelationalProcessingRequest> {
+  // Validate input
+  const validation = validateRequestId(requestId);
+  if (!validation.isValid) {
+    throw new Error(`Invalid request ID: ${validation.error}`);
+  }
+
   const url = `${API_BASE}/api/relational/status/${requestId}`;
   const response = await fetch(url, {
     headers: { Accept: "application/json" }
@@ -190,6 +197,20 @@ export async function getRelationalRequestHistory(params?: {
  * Search relational indexed tables
  */
 export async function searchRelationalTables(query: RelationalSearchQuery): Promise<RelationalSearchResults> {
+  // Validate query
+  const queryValidation = validateQuery(query.query);
+  if (!queryValidation.isValid) {
+    throw new Error(`Invalid search query: ${queryValidation.error}`);
+  }
+
+  // Validate request_id if provided
+  if (query.request_id) {
+    const idValidation = validateRequestId(query.request_id);
+    if (!idValidation.isValid) {
+      throw new Error(`Invalid request ID: ${idValidation.error}`);
+    }
+  }
+
   const url = `${API_BASE}/api/relational/search`;
   const response = await fetch(url, {
     method: "POST",

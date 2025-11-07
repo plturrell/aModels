@@ -267,7 +267,6 @@ class ConnectionStatusUI {
   constructor(connectionManager) {
     this.connectionManager = connectionManager;
     this.statusElement = null;
-    this.dotElement = null;
     this.textElement = null;
     
     this.init();
@@ -279,9 +278,8 @@ class ConnectionStatusUI {
       console.warn('Connection status element not found');
       return;
     }
-    
-    this.dotElement = this.statusElement.querySelector('.status-dot');
-    this.textElement = this.statusElement.querySelector('span');
+    // Using SAP message block; text is directly inside element
+    this.textElement = this.statusElement;
     
     // Listen to connection events
     this.connectionManager.on('connected', () => this.updateUI('connected'));
@@ -304,28 +302,24 @@ class ConnectionStatusUI {
     
     switch (state) {
       case 'connected':
-        this.statusElement.className = 'connection-status connected';
-        this.dotElement.className = 'status-dot connected';
+        this.statusElement.className = 'sap-message sap-message-success';
         this.textElement.textContent = '✓ Connected to gateway';
         this.enableButtons();
         break;
         
       case 'disconnected':
-        this.statusElement.className = 'connection-status disconnected';
-        this.dotElement.className = 'status-dot disconnected';
+        this.statusElement.className = 'sap-message sap-message-error';
         this.textElement.textContent = '✗ Gateway offline - Click to retry';
         this.disableButtons();
         break;
         
       case 'reconnecting':
-        this.statusElement.className = 'connection-status checking';
-        this.dotElement.className = 'status-dot checking';
+        this.statusElement.className = 'sap-message sap-message-info';
         this.textElement.textContent = `🔄 Reconnecting (attempt ${data.attempt}/${data.maxAttempts})...`;
         break;
         
       case 'error':
-        this.statusElement.className = 'connection-status disconnected';
-        this.dotElement.className = 'status-dot disconnected';
+        this.statusElement.className = 'sap-message sap-message-error';
         this.textElement.textContent = '⚠️ Connection failed - Check settings';
         break;
     }

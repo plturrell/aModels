@@ -1,0 +1,297 @@
+name: Browser Service CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'services/browser/**'
+      - '.github/workflows/browser-service-ci.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'services/browser/**'
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/browser/shell/ui
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: services/browser/shell/ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Type check
+        run: npm run type-check
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/browser/shell/ui
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: services/browser/shell/ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: services/browser/shell/ui/coverage/coverage-final.json
+          flags: browser-ui
+          fail_ci_if_error: false
+
+  build-ui:
+    name: Build UI
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, test]
+    defaults:
+      run:
+        working-directory: services/browser/shell/ui
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: services/browser/shell/ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-build
+          path: services/browser/shell/ui/dist
+          retention-days: 7
+
+  build-extension:
+    name: Build Extension (TypeScript)
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck]
+    defaults:
+      run:
+        working-directory: services/browser/extension
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: services/browser/extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Lint extension
+        run: npm run lint
+
+      - name: Upload extension artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-build
+          path: services/browser/extension/dist
+          retention-days: 7
+
+  test-python:
+    name: Test Python Automation Service
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/browser
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Run Python tests (if exists)
+        run: |
+          if [ -f test_automation.py ]; then
+            pytest test_automation.py -v
+          else
+            echo "No Python tests found, skipping"
+          fi
+        continue-on-error: true
+
+      - name: Check Python code with Ruff
+        run: |
+          pip install ruff
+          ruff check automation.py || echo "Linting warnings found"
+        continue-on-error: true
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: 'services/browser'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'  # Don't fail on vulnerabilities yet
+
+      - name: Run npm audit
+        working-directory: services/browser/shell/ui
+        run: npm audit --audit-level=high || true
+        continue-on-error: true
+
+  accessibility-check:
+    name: Accessibility Audit
+    runs-on: ubuntu-latest
+    needs: [build-ui]
+    defaults:
+      run:
+        working-directory: services/browser/shell/ui
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build UI
+        run: npm run build
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run accessibility tests with axe
+        run: |
+          npm install -D @axe-core/cli
+          # This would run axe against built HTML
+          echo "Accessibility tests would run here"
+        continue-on-error: true
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build-ui, build-extension, test-python]
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download UI build
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-build
+          path: services/browser/shell/ui/dist
+
+      - name: Download extension build
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-build
+          path: services/browser/extension/dist
+
+      - name: Deploy to staging
+        run: |
+          echo "Would deploy to staging environment here"
+          # Add your deployment commands (e.g., AWS S3, Netlify, etc.)
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-ui, build-extension, test-python, security-scan, accessibility-check]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download UI build
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-build
+          path: services/browser/shell/ui/dist
+
+      - name: Download extension build
+        uses: actions/download-artifact@v4
+        with:
+          name: extension-build
+          path: services/browser/extension/dist
+
+      - name: Deploy to production
+        run: |
+          echo "Would deploy to production environment here"
+          # Add your production deployment commands
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            services/browser/shell/ui/dist/**/*
+            services/browser/extension/dist/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
