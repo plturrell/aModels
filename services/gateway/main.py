@@ -13,6 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response
 from redis import asyncio as aioredis
 
+from retry_utils import retry_http_request
+
 
 GATEWAY_PORT = int(os.getenv("GATEWAY_PORT", "8000"))
 
@@ -1479,7 +1481,16 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
     if "inference" in sources:
         try:
             search_payload = {"query": query, "top_k": top_k}
-            r = await client.post(f"{SEARCH_INFERENCE_URL}/v1/search", json=search_payload, timeout=10.0)
+            # Use retry logic for transient connection errors
+            r = await retry_http_request(
+                client,
+                "POST",
+                f"{SEARCH_INFERENCE_URL}/v1/search",
+                max_retries=2,  # 2 retries = 3 total attempts
+                initial_delay=0.5,
+                json=search_payload,
+                timeout=10.0
+            )
             if r.status_code == 200:
                 inference_results = r.json()
                 results["sources"]["inference"] = inference_results.get("results", [])
@@ -1495,12 +1506,12 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
             else:
                 raise Exception(f"HTTP {r.status_code}: {r.text[:200]}")
         except httpx.ConnectError as e:
-            error_msg = f"Connection refused: {SEARCH_INFERENCE_URL} - Service may not be running"
+            error_msg = f"Connection refused: {SEARCH_INFERENCE_URL} - Service may not be running (after retries)"
             logger.warning(f"Search inference service connection error: {error_msg}")
             results["sources"]["inference"] = {"error": error_msg, "url": SEARCH_INFERENCE_URL, "type": "connection_error"}
             results["metadata"]["sources_failed"] += 1
         except httpx.TimeoutException as e:
-            error_msg = f"Request timeout: {SEARCH_INFERENCE_URL} - Service may be overloaded"
+            error_msg = f"Request timeout: {SEARCH_INFERENCE_URL} - Service may be overloaded (after retries)"
             logger.warning(f"Search inference service timeout: {error_msg}")
             results["sources"]["inference"] = {"error": error_msg, "url": SEARCH_INFERENCE_URL, "type": "timeout"}
             results["metadata"]["sources_failed"] += 1
@@ -1519,7 +1530,16 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
                 "use_semantic": True,
                 "use_hybrid_search": True
             }
-            r = await client.post(f"{EXTRACT_URL}/knowledge-graph/search", json=kg_payload, timeout=10.0)
+            # Use retry logic for transient connection errors
+            r = await retry_http_request(
+                client,
+                "POST",
+                f"{EXTRACT_URL}/knowledge-graph/search",
+                max_retries=2,
+                initial_delay=0.5,
+                json=kg_payload,
+                timeout=10.0
+            )
             if r.status_code == 200:
                 kg_results = r.json()
                 results["sources"]["knowledge_graph"] = kg_results.get("results", [])
@@ -1536,12 +1556,12 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
             else:
                 raise Exception(f"HTTP {r.status_code}: {r.text[:200]}")
         except httpx.ConnectError as e:
-            error_msg = f"Connection refused: {EXTRACT_URL} - Service may not be running"
+            error_msg = f"Connection refused: {EXTRACT_URL} - Service may not be running (after retries)"
             logger.warning(f"Knowledge graph search connection error: {error_msg}")
             results["sources"]["knowledge_graph"] = {"error": error_msg, "url": EXTRACT_URL, "type": "connection_error"}
             results["metadata"]["sources_failed"] += 1
         except httpx.TimeoutException as e:
-            error_msg = f"Request timeout: {EXTRACT_URL} - Service may be overloaded"
+            error_msg = f"Request timeout: {EXTRACT_URL} - Service may be overloaded (after retries)"
             logger.warning(f"Knowledge graph search timeout: {error_msg}")
             results["sources"]["knowledge_graph"] = {"error": error_msg, "url": EXTRACT_URL, "type": "timeout"}
             results["metadata"]["sources_failed"] += 1
@@ -1555,7 +1575,16 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
     if "catalog" in sources:
         try:
             catalog_payload = {"query": query, "limit": top_k}
-            r = await client.post(f"{CATALOG_URL}/catalog/semantic-search", json=catalog_payload, timeout=10.0)
+            # Use retry logic for transient connection errors
+            r = await retry_http_request(
+                client,
+                "POST",
+                f"{CATALOG_URL}/catalog/semantic-search",
+                max_retries=2,
+                initial_delay=0.5,
+                json=catalog_payload,
+                timeout=10.0
+            )
             if r.status_code == 200:
                 catalog_results = r.json()
                 results["sources"]["catalog"] = catalog_results.get("results", [])
@@ -1572,12 +1601,12 @@ async def unified_search(payload: Dict[str, Any]) -> Any:
             else:
                 raise Exception(f"HTTP {r.status_code}: {r.text[:200]}")
         except httpx.ConnectError as e:
-            error_msg = f"Connection refused: {CATALOG_URL} - Service may not be running"
+            error_msg = f"Connection refused: {CATALOG_URL} - Service may not be running (after retries)"
             logger.warning(f"Catalog search connection error: {error_msg}")
             results["sources"]["catalog"] = {"error": error_msg, "url": CATALOG_URL, "type": "connection_error"}
             results["metadata"]["sources_failed"] += 1
         except httpx.TimeoutException as e:
-            error_msg = f"Request timeout: {CATALOG_URL} - Service may be overloaded"
+            error_msg = f"Request timeout: {CATALOG_URL} - Service may be overloaded (after retries)"
             logger.warning(f"Catalog search timeout: {error_msg}")
             results["sources"]["catalog"] = {"error": error_msg, "url": CATALOG_URL, "type": "timeout"}
             results["metadata"]["sources_failed"] += 1

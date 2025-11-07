@@ -24,6 +24,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 
 import { Panel } from "../../components/Panel";
 import { DashboardRenderer } from "../../components/DashboardRenderer";
+import { ServiceHealthPanel } from "../../components/ServiceHealthPanel";
 import { 
   unifiedSearch, 
   generateNarrative, 
@@ -414,6 +415,7 @@ export function SearchModule() {
               {searchResponse?.result_enrichment && <Tab label="AI Insights" />}
               {narrative && <Tab label="Narrative" />}
               {dashboard && <Tab label="Dashboard" />}
+              <Tab label="Health" />
             </Tabs>
           </Box>
           
