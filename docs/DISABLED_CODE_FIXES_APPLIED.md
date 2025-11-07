@@ -219,9 +219,34 @@ Still needs decisions on:
 1. **HANA packages** - 4 files disabled
    - Need to determine if HANA integration is needed
 
+## Phase 5: Performance Profiler Cleanup - COMPLETED ✅
+
+### File Cleaned
+
+**File:** `infrastructure/third_party/orchestration/performance_profiler.go`
+
+**Changes:**
+- ✅ Removed ~299 lines of commented-out code (44% reduction)
+- ✅ Reduced file from 673 lines to 374 lines
+- ✅ Kept all function signatures and error returns
+- ✅ Preserved type definitions and helper functions
+- ✅ All disabled functions now have clean, minimal implementations
+
+**Functions Cleaned:**
+- `RunPrivacyBenchmarks()` - Removed 80 lines of commented code
+- `RunVectorBenchmarks()` - Removed 50 lines
+- `RunGraphBenchmarks()` - Removed 60 lines
+- `RunAgentBenchmarks()` - Removed 50 lines
+- `RunDatabaseBenchmarks()` - Removed 60 lines
+
+**Total Removed:** ~299 lines of commented code
+
+**Result:** File is now much more maintainable and readable. All commented code blocks have been removed while preserving the API structure.
+
+---
+
 ### Phase 3: Optional Fixes (LOW PRIORITY)
 
-- Performance profiler
 - Package name conflicts
 
 ---
