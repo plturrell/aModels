@@ -48,6 +48,8 @@ func (af *AgentFactory) CreateDataIngestionAgent(sourceType string, config map[s
 		connector = connectors.NewRCOConnector(config, af.logger)
 	case "axiom":
 		connector = connectors.NewAxiomConnector(config, af.logger)
+	case "perplexity":
+		connector = connectors.NewPerplexityConnector(config, af.logger)
 	default:
 		return nil, fmt.Errorf("unknown source type: %s", sourceType)
 	}
