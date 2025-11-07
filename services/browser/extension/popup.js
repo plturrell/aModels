@@ -23,14 +23,30 @@ window.checkConnection = function() {
 
 function showStatus(type, message) {
   const statusEl = document.getElementById('status');
-  statusEl.className = `${type} visible`;
-  
+  // Map to SAP message classes
+  const base = 'sap-message ';
+  let cls = '';
+  switch (type) {
+    case 'success':
+      cls = 'sap-message-success';
+      break;
+    case 'error':
+      cls = 'sap-message-error';
+      break;
+    case 'loading':
+    default:
+      cls = 'sap-message-info';
+      break;
+  }
+
+  statusEl.className = `${base}${cls} visible`;
+
   if (type === 'loading') {
     statusEl.innerHTML = `<div class="spinner"></div><span>${message}</span>`;
   } else {
     statusEl.textContent = message;
   }
-  
+
   // Auto-hide success messages after 5 seconds
   if (type === 'success') {
     setTimeout(() => {
@@ -284,11 +300,44 @@ function openHelp() {
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Apply SAP theme (auto/dark/high-contrast)
+  function applySapTheme(theme) {
+    const root = document.documentElement;
+    root.classList.remove('sap-theme-dark', 'sap-theme-hc');
+    if (theme === 'dark') {
+      root.classList.add('sap-theme-dark');
+    } else if (theme === 'hc') {
+      root.classList.add('sap-theme-hc');
+    } else if (theme === 'auto') {
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        root.classList.add('sap-theme-dark');
+      }
+    }
+  }
+
+  try {
+    const { sapTheme } = await chrome.storage.sync.get(['sapTheme']);
+    applySapTheme(sapTheme || 'auto');
+
+    // React to OS dark mode changes when in auto mode
+    if (!sapTheme || sapTheme === 'auto') {
+      if (window.matchMedia) {
+        const mq = window.matchMedia('(prefers-color-scheme: dark)');
+        mq.addEventListener?.('change', (e) => {
+          applySapTheme(e.matches ? 'dark' : 'auto');
+        });
+      }
+    }
+  } catch (e) {
+    // Fallback to auto
+    applySapTheme('auto');
+  }
+
   // Check if first run
   await checkFirstRun();
   
   // Make command hint clickable to open palette
-  const commandHint = document.querySelector('.command-hint');
+  const commandHint = document.querySelector('.sap-card');
   if (commandHint) {
     commandHint.addEventListener('click', () => {
       if (window.commandPalette) {

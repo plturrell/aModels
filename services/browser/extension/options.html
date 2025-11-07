@@ -178,6 +178,17 @@
         />
         <div class="hint">Default: http://localhost:8000</div>
       </div>
+
+      <div style="margin-top:16px;">
+        <label for="sap-theme-select">SAP Theme</label>
+        <select id="sap-theme-select" aria-label="SAP Theme selection" style="width:100%; padding:10px; border:2px solid #e2e8f0; border-radius:12px;">
+          <option value="auto">Auto (follow system)</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+          <option value="hc">High Contrast</option>
+        </select>
+        <div class="hint">Controls popup theme. Auto follows system dark mode.</div>
+      </div>
       
       <div class="buttons">
         <button class="btn-secondary" id="test" aria-label="Test gateway connection">

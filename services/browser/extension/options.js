@@ -1,22 +1,36 @@
 function showStatus(type, message) {
   const status = document.getElementById('status');
-  status.className = `status ${type} visible`;
-  
+  // Map to SAP message classes
+  const base = 'sap-message ';
+  let cls = '';
+  switch (type) {
+    case 'success':
+      cls = 'sap-message-success';
+      break;
+    case 'error':
+      cls = 'sap-message-error';
+      break;
+    case 'loading':
+    default:
+      cls = 'sap-message-info';
+      break;
+  }
+  status.className = `${base}${cls} visible`;
   if (type === 'loading') {
     status.innerHTML = `<div class="spinner"></div><span>${message}</span>`;
   } else {
     status.textContent = message;
   }
-  
   if (type === 'success') {
     setTimeout(() => {
-      status.className = 'status';
+      status.className = '';
     }, 3000);
   }
 }
 
 async function testConnection() {
   const input = document.getElementById('gateway-url');
+  const themeSelect = document.getElementById('sap-theme-select');
   const testBtn = document.getElementById('test');
   const saveBtn = document.getElementById('save');
   
@@ -50,15 +64,17 @@ async function testConnection() {
 
 function saveSettings() {
   const input = document.getElementById('gateway-url');
+  const themeSelect = document.getElementById('sap-theme-select');
   const saveBtn = document.getElementById('save');
   
   const url = input.value.trim() || 'http://localhost:8000';
+  const sapTheme = (themeSelect.value || 'auto');
   
   saveBtn.disabled = true;
   showStatus('loading', 'Saving...');
   
   chrome.storage.sync.set(
-    { gatewayBaseUrl: url },
+    { gatewayBaseUrl: url, sapTheme },
     () => {
       saveBtn.disabled = false;
       showStatus('success', '✓ Saved');
@@ -72,10 +88,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const saveBtn = document.getElementById('save');
 
   // Load saved URL
-  chrome.storage.sync.get(['gatewayBaseUrl'], (res) => {
+  chrome.storage.sync.get(['gatewayBaseUrl', 'sapTheme'], (res) => {
     if (res.gatewayBaseUrl) {
       input.value = res.gatewayBaseUrl;
     }
+    themeSelect.value = res.sapTheme || 'auto';
   });
 
   // Event listeners
