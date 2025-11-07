@@ -33,8 +33,33 @@ const requestId = typeof Inputs !== "undefined" && !urlRequestId
   ? await Inputs.text({label: "Request ID", value: urlRequestId, placeholder: "Enter request ID or use ?request_id=xxx in URL"})
   : urlRequestId;
 
-const results = requestId ? await resultsData(requestId) : null;
-const intelligence = requestId ? await intelligenceData(requestId) : null;
+// Load data with error handling
+let results = null;
+let intelligence = null;
+let resultsError = null;
+let intelligenceError = null;
+
+if (requestId) {
+  try {
+    results = await resultsData(requestId);
+    if (results && results.error) {
+      resultsError = results;
+      results = null;
+    }
+  } catch (error) {
+    resultsError = { error: true, message: error.message || "Failed to load results" };
+  }
+  
+  try {
+    intelligence = await intelligenceData(requestId);
+    if (intelligence && intelligence.error) {
+      intelligenceError = intelligence;
+      intelligence = null;
+    }
+  } catch (error) {
+    intelligenceError = { error: true, message: error.message || "Failed to load intelligence" };
+  }
+}
 ```
 
 ```js

@@ -26,25 +26,48 @@ const requestId = typeof Inputs !== "undefined"
   ? await Inputs.text({label: "Request ID", value: ""})
   : new URLSearchParams(window.location.search).get("request_id") || "";
 
-// Auto-refresh status every 2 seconds if processing
-async function* autoRefreshStatus(requestId) {
-  if (!requestId) return null;
-  
-  while (true) {
-    const status = await processingStatus(requestId);
-    yield status;
-    
-    // Stop refreshing if completed or failed
-    if (status?.status === "completed" || status?.status === "failed") {
-      return status;
+// Load status with error handling
+let status = null;
+let statusError = null;
+
+if (requestId) {
+  try {
+    // Auto-refresh status every 2 seconds if processing
+    async function* autoRefreshStatus(requestId) {
+      if (!requestId) return null;
+      
+      while (true) {
+        const statusData = await processingStatus(requestId);
+        
+        // Check if status is an error object
+        if (statusData && statusData.error) {
+          yield statusData;
+          return;
+        }
+        
+        yield statusData;
+        
+        // Stop refreshing if completed, failed, or no data
+        if (!statusData || statusData.status === "completed" || statusData.status === "failed") {
+          return statusData;
+        }
+        
+        // Wait 2 seconds before next refresh
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
     }
     
-    // Wait 2 seconds before next refresh
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    status = await autoRefreshStatus(requestId).next().then(r => r.value);
+    
+    // Check if status is an error object
+    if (status && status.error) {
+      statusError = status;
+      status = null;
+    }
+  } catch (error) {
+    statusError = { error: true, message: error.message || "Failed to load status" };
   }
 }
-
-const status = requestId ? await autoRefreshStatus(requestId).next().then(r => r.value) : null;
 ```
 
 ```js
