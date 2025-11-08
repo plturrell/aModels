@@ -1,9 +1,8 @@
-
 // Package disabled: depends on missing ai_benchmarks package
 package mappers
 
 import (
-	"ai_benchmarks/scripts/factory"
+	"ai_benchmarks/tools/scripts/factory"
 	"fmt"
 )
 

@@ -201,3 +201,32 @@ if HAS_GNN_PRIORITY3:
     if GNNActiveLearner is not None:
         __all__.append("GNNActiveLearner")
 
+# GNN Priority 4: Performance Optimization
+try:
+    from .gnn_batch_processing import EmbeddingCache, GraphBatchProcessor, MemoryOptimizer
+    from .gnn_model_optimization import (
+        GNNModelQuantizer, GNNModelPruner, GNNInferenceOptimizer, GNNModelOptimizer
+    )
+    HAS_GNN_PRIORITY4 = True
+except ImportError:
+    HAS_GNN_PRIORITY4 = False
+    EmbeddingCache = None
+    GraphBatchProcessor = None
+    MemoryOptimizer = None
+    GNNModelQuantizer = None
+    GNNModelPruner = None
+    GNNInferenceOptimizer = None
+    GNNModelOptimizer = None
+
+# Add Priority 4 modules if available
+if HAS_GNN_PRIORITY4:
+    if EmbeddingCache is not None:
+        __all__.append("EmbeddingCache")
+        __all__.append("GraphBatchProcessor")
+        __all__.append("MemoryOptimizer")
+    if GNNModelQuantizer is not None:
+        __all__.append("GNNModelQuantizer")
+        __all__.append("GNNModelPruner")
+        __all__.append("GNNInferenceOptimizer")
+        __all__.append("GNNModelOptimizer")
+

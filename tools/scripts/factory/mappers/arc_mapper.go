@@ -1,11 +1,10 @@
-
 // Package disabled: depends on missing ai_benchmarks packages
 package mappers
 
 import (
 	"ai_benchmarks/testing/benchmarks/arc"
-	"ai_benchmarks/scripts/datagen"
-	"ai_benchmarks/scripts/factory"
+	"ai_benchmarks/tools/scripts/datagen"
+	"ai_benchmarks/tools/scripts/factory"
 	"fmt"
 	"strconv"
 )

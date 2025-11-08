@@ -42,6 +42,35 @@ try:
 except ImportError:
     HAS_GNN = False
 
+# Import GNN modules (Priority 1-4)
+try:
+    from training.gnn_embeddings import GNNEmbedder
+    from training.gnn_node_classifier import GNNNodeClassifier
+    from training.gnn_link_predictor import GNNLinkPredictor
+    from training.gnn_anomaly_detector import GNNAnomalyDetector
+    from training.gnn_schema_matcher import GNNSchemaMatcher
+    HAS_GNN_MODULES = True
+except ImportError:
+    HAS_GNN_MODULES = False
+    GNNEmbedder = None
+    GNNNodeClassifier = None
+    GNNLinkPredictor = None
+    GNNAnomalyDetector = None
+    GNNSchemaMatcher = None
+
+# Import GNN API models
+try:
+    from training.api.gnn_models import (
+        GNNEmbeddingsRequest,
+        GNNClassifyRequest,
+        GNNPredictLinksRequest,
+        GNNStructuralInsightsRequest,
+        GNNDomainQueryRequest
+    )
+    HAS_GNN_API_MODELS = True
+except ImportError:
+    HAS_GNN_API_MODELS = False
+
 try:
     from training.meta_pattern_learner import MetaPatternLearner
     HAS_META_PATTERNS = True
@@ -72,6 +101,41 @@ try:
 except ImportError:
     HAS_AUTO_TUNER = False
 
+# Priority 6: Domain-aware routing
+try:
+    from training.gnn_domain_registry import GNNDomainRegistry, DomainModelInfo
+    from training.gnn_domain_router import GNNDomainRouter
+    HAS_GNN_DOMAIN_ROUTING = True
+except ImportError:
+    HAS_GNN_DOMAIN_ROUTING = False
+    GNNDomainRegistry = None
+    DomainModelInfo = None
+    GNNDomainRouter = None
+
+# Priority 6: Registry API models
+try:
+    from training.api.gnn_registry_models import (
+        RegisterModelRequest,
+        ModelInfoResponse,
+        DomainModelInfoResponse,
+        ListDomainsResponse,
+    )
+    HAS_REGISTRY_MODELS = True
+except ImportError:
+    HAS_REGISTRY_MODELS = False
+    RegisterModelRequest = None
+    ModelInfoResponse = None
+    DomainModelInfoResponse = None
+    ListDomainsResponse = None
+
+# Priority 7: GNN Cache Manager
+try:
+    from training.gnn_cache_manager import GNNCacheManager
+    HAS_GNN_CACHE = True
+except ImportError:
+    HAS_GNN_CACHE = False
+    GNNCacheManager = None
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -97,12 +161,28 @@ routing_optimizer = None
 domain_optimizer = None
 domain_filter = None
 
+# GNN components
+gnn_embedder = None
+gnn_classifier = None
+gnn_link_predictor = None
+gnn_anomaly_detector = None
+gnn_schema_matcher = None
+
+# Priority 6: GNN domain registry and router
+gnn_domain_registry = None
+gnn_domain_router = None
+
+# Priority 7: GNN cache manager
+gnn_cache_manager = None
+
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize service components on startup."""
     global pipeline, pattern_engine, domain_trainer, metrics_collector
     global ab_test_manager, rollback_manager, routing_optimizer, domain_optimizer, domain_filter
+    global gnn_embedder, gnn_classifier, gnn_link_predictor, gnn_anomaly_detector, gnn_schema_matcher
+    global gnn_domain_registry, gnn_domain_router, gnn_cache_manager
     
     logger.info("Initializing Training Service components...")
     
@@ -160,6 +240,81 @@ async def startup_event():
             localai_url=os.getenv("LOCALAI_URL", "http://localai-compat:8080"),
             privacy_config=privacy_config
         )
+        
+        # Priority 6: Initialize GNN domain registry and router
+        if HAS_GNN_DOMAIN_ROUTING:
+            try:
+                registry_dir = os.getenv("GNN_REGISTRY_DIR", "./models/gnn_registry")
+                gnn_domain_registry = GNNDomainRegistry(registry_dir=registry_dir)
+                gnn_domain_router = GNNDomainRouter(registry=gnn_domain_registry)
+                logger.info("✅ GNN domain registry and router initialized")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to initialize GNN domain registry: {e}")
+                gnn_domain_registry = None
+                gnn_domain_router = None
+        
+        # Priority 7: Initialize GNN cache manager
+        if HAS_GNN_CACHE:
+            try:
+                redis_url = os.getenv("REDIS_URL")
+                default_ttl = int(os.getenv("GNN_CACHE_TTL", "3600"))
+                cache_dir = os.getenv("GNN_CACHE_DIR", "./gnn_cache")
+                max_memory_size = int(os.getenv("GNN_CACHE_MAX_SIZE", "1000"))
+                
+                gnn_cache_manager = GNNCacheManager(
+                    redis_url=redis_url,
+                    default_ttl=default_ttl,
+                    cache_dir=cache_dir,
+                    max_memory_size=max_memory_size,
+                    enable_persistent_cache=True
+                )
+                logger.info("✅ GNN cache manager initialized")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to initialize GNN cache manager: {e}")
+                gnn_cache_manager = None
+        
+        # Initialize GNN modules if available
+        if HAS_GNN_MODULES and os.getenv("ENABLE_GNN_API", "true").lower() == "true":
+            try:
+                gnn_device = os.getenv("GNN_DEVICE", "auto")
+                if gnn_device == "auto":
+                    gnn_device = None
+                
+                if GNNEmbedder is not None:
+                    gnn_embedder = GNNEmbedder(
+                        embedding_dim=int(os.getenv("GNN_EMBEDDING_DIM", "128")),
+                        hidden_dim=int(os.getenv("GNN_HIDDEN_DIM", "64")),
+                        num_layers=int(os.getenv("GNN_NUM_LAYERS", "3")),
+                        device=gnn_device
+                    )
+                    logger.info("✅ GNN Embedder initialized for API")
+                
+                if GNNNodeClassifier is not None:
+                    gnn_classifier = GNNNodeClassifier(
+                        hidden_dim=int(os.getenv("GNN_HIDDEN_DIM", "64")),
+                        num_layers=int(os.getenv("GNN_NUM_LAYERS", "2")),
+                        device=gnn_device
+                    )
+                    logger.info("✅ GNN Node Classifier initialized for API")
+                
+                if GNNLinkPredictor is not None:
+                    gnn_link_predictor = GNNLinkPredictor(
+                        hidden_dim=int(os.getenv("GNN_HIDDEN_DIM", "64")),
+                        num_layers=int(os.getenv("GNN_NUM_LAYERS", "2")),
+                        device=gnn_device
+                    )
+                    logger.info("✅ GNN Link Predictor initialized for API")
+                
+                if GNNAnomalyDetector is not None and os.getenv("ENABLE_GNN_ANOMALY_DETECTION", "false").lower() == "true":
+                    gnn_anomaly_detector = GNNAnomalyDetector(device=gnn_device)
+                    logger.info("✅ GNN Anomaly Detector initialized for API")
+                
+                if GNNSchemaMatcher is not None and os.getenv("ENABLE_GNN_SCHEMA_MATCHING", "false").lower() == "true":
+                    gnn_schema_matcher = GNNSchemaMatcher(device=gnn_device)
+                    logger.info("✅ GNN Schema Matcher initialized for API")
+                
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to initialize GNN modules for API: {e}")
         
         logger.info("✅ Training Service initialized successfully")
         
@@ -235,6 +390,10 @@ async def health_check():
             "metrics_collector": metrics_collector is not None,
             "ab_test_manager": ab_test_manager is not None,
             "gnn_available": HAS_GNN,
+            "gnn_modules_available": HAS_GNN_MODULES,
+            "gnn_api_enabled": gnn_embedder is not None,
+            "gnn_classifier_available": gnn_classifier is not None,
+            "gnn_link_predictor_available": gnn_link_predictor is not None,
             "meta_patterns_available": HAS_META_PATTERNS,
             "transformer_available": HAS_TRANSFORMER,
             "active_learning_available": HAS_ACTIVE_LEARNING,
@@ -509,9 +668,650 @@ async def root():
             },
             "metrics": {
                 "domain": "/metrics/domain/{domain_id}"
+            },
+            "gnn": {
+                "embeddings": "/gnn/embeddings",
+                "classify": "/gnn/classify",
+                "predict-links": "/gnn/predict-links",
+                "structural-insights": "/gnn/structural-insights",
+                "domain-model": "/gnn/domains/{domain_id}/model",
+                "domain-query": "/gnn/domains/{domain_id}/query"
             }
         }
     }
+
+
+# ============================================================================
+# GNN API Endpoints (Priority 1: GNN Service API)
+# ============================================================================
+
+@app.post("/gnn/embeddings")
+async def gnn_embeddings(request: GNNEmbeddingsRequest):
+    """Generate GNN embeddings for nodes/graphs.
+    
+    This endpoint generates graph-level and/or node-level embeddings
+    using the GNN embedder. Automatically detects domain if domain-specific
+    models are available (Priority 6).
+    """
+    if not gnn_embedder:
+        raise HTTPException(
+            status_code=503,
+            detail="GNN embedder not available. Ensure ENABLE_GNN_API=true and GNN modules are installed."
+        )
+    
+    try:
+        # Priority 6: Auto-detect domain and route if available
+        domain_id = None
+        if gnn_domain_router and request.nodes:
+            domain_id = gnn_domain_router.detect_domain_from_nodes(request.nodes)
+            if domain_id:
+                logger.info(f"Auto-detected domain '{domain_id}' for embeddings request")
+                # Route to domain-specific model if available
+                _, domain_model_path = gnn_domain_router.route_to_domain_model(
+                    domain_id,
+                    "embeddings",
+                    fallback_to_generic=True,
+                )
+                if domain_model_path:
+                    logger.info(f"Using domain-specific embeddings model: {domain_model_path}")
+                    # TODO: Load and use domain-specific model
+        
+        # Priority 7: Check cache first
+        if gnn_cache_manager:
+            cached_result = gnn_cache_manager.get(
+                cache_type="embedding",
+                nodes=request.nodes,
+                edges=request.edges,
+                domain_id=domain_id,
+                config={"graph_level": request.graph_level}
+            )
+            if cached_result:
+                logger.debug("Returning cached embeddings")
+                return {
+                    "status": "success",
+                    "embeddings": cached_result,
+                    "cached": True,
+                    "timestamp": datetime.now().isoformat()
+                }
+        
+        result = gnn_embedder.generate_embeddings(
+            nodes=request.nodes,
+            edges=request.edges,
+            graph_level=request.graph_level
+        )
+        
+        # Priority 7: Cache the result
+        if gnn_cache_manager and "error" not in result:
+            gnn_cache_manager.set(
+                cache_type="embedding",
+                data=result,
+                nodes=request.nodes,
+                edges=request.edges,
+                domain_id=domain_id,
+                config={"graph_level": request.graph_level},
+                tags=["embedding", "gnn"]
+            )
+        
+        if "error" in result:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return {
+            "status": "success",
+            "embeddings": result,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"GNN embeddings generation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/gnn/classify")
+async def gnn_classify(request: GNNClassifyRequest):
+    """Classify nodes using GNN.
+    
+    This endpoint classifies graph nodes by type, domain, or quality
+    using the GNN node classifier.
+    """
+    if not gnn_classifier:
+        raise HTTPException(
+            status_code=503,
+            detail="GNN classifier not available. Ensure ENABLE_GNN_API=true and GNN modules are installed."
+        )
+    
+    try:
+        result = gnn_classifier.classify_nodes(
+            nodes=request.nodes,
+            edges=request.edges,
+            top_k=request.top_k
+        )
+        
+        if "error" in result:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return {
+            "status": "success",
+            "classifications": result,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"GNN node classification failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/gnn/predict-links")
+async def gnn_predict_links(request: GNNPredictLinksRequest):
+    """Predict missing relationships using GNN.
+    
+    This endpoint predicts missing links or suggests new relationships
+    between nodes using the GNN link predictor.
+    """
+    if not gnn_link_predictor:
+        raise HTTPException(
+            status_code=503,
+            detail="GNN link predictor not available. Ensure ENABLE_GNN_API=true and GNN modules are installed."
+        )
+    
+    try:
+        # Convert candidate_pairs from list of lists to list of tuples
+        candidate_pairs_tuples = None
+        if request.candidate_pairs:
+            candidate_pairs_tuples = [
+                (pair[0], pair[1]) if len(pair) >= 2 else (pair[0], "")
+                for pair in request.candidate_pairs
+            ]
+        
+        result = gnn_link_predictor.predict_links(
+            nodes=request.nodes,
+            edges=request.edges,
+            candidate_pairs=candidate_pairs_tuples,
+            top_k=request.top_k
+        )
+        
+        if "error" in result:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return {
+            "status": "success",
+            "predictions": result,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"GNN link prediction failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/gnn/structural-insights")
+async def gnn_structural_insights(request: GNNStructuralInsightsRequest):
+    """Get structural insights from graph using GNN.
+    
+    This endpoint provides structural insights including:
+    - Anomaly detection
+    - Pattern recognition
+    - Structural analysis
+    
+    Results are cached for performance (Priority 7).
+    """
+    insights = {}
+    
+    try:
+        # Priority 7: Check cache first
+        if gnn_cache_manager:
+            cached_result = gnn_cache_manager.get(
+                cache_type="insight",
+                nodes=request.nodes,
+                edges=request.edges,
+                config={
+                    "insight_type": request.insight_type,
+                    "threshold": request.threshold
+                }
+            )
+            if cached_result:
+                logger.debug("Returning cached structural insights")
+                return {
+                    "status": "success",
+                    "insights": cached_result,
+                    "cached": True,
+                    "insight_type": request.insight_type,
+                    "timestamp": datetime.now().isoformat()
+                }
+        # Anomaly detection
+        if request.insight_type in ["anomalies", "all"] and gnn_anomaly_detector:
+            try:
+                anomaly_result = gnn_anomaly_detector.detect_anomalies(
+                    nodes=request.nodes,
+                    edges=request.edges,
+                    threshold=request.threshold
+                )
+                if "error" not in anomaly_result:
+                    insights["anomalies"] = anomaly_result
+            except Exception as e:
+                logger.warning(f"Anomaly detection failed: {e}")
+                insights["anomalies"] = {"error": str(e)}
+        
+        # Pattern insights from embeddings
+        if request.insight_type in ["patterns", "all"] and gnn_embedder:
+            try:
+                # Generate embeddings for pattern analysis
+                embedding_result = gnn_embedder.generate_embeddings(
+                    nodes=request.nodes,
+                    edges=request.edges,
+                    graph_level=False  # Get node-level embeddings for pattern analysis
+                )
+                if "error" not in embedding_result:
+                    insights["patterns"] = {
+                        "graph_embedding_dim": len(embedding_result.get("graph_embedding", [])),
+                        "num_node_embeddings": len(embedding_result.get("node_embeddings", {})),
+                        "embedding_available": True
+                    }
+            except Exception as e:
+                logger.warning(f"Pattern analysis failed: {e}")
+                insights["patterns"] = {"error": str(e)}
+        
+        # Classification insights
+        if request.insight_type in ["patterns", "all"] and gnn_classifier:
+            try:
+                classify_result = gnn_classifier.classify_nodes(
+                    nodes=request.nodes,
+                    edges=request.edges
+                )
+                if "error" not in classify_result:
+                    insights["node_types"] = {
+                        "num_classified": len(classify_result.get("classifications", [])),
+                        "num_classes": classify_result.get("num_classes", 0)
+                    }
+            except Exception as e:
+                logger.warning(f"Classification insights failed: {e}")
+        
+        if not insights:
+            raise HTTPException(
+                status_code=503,
+                detail="No GNN modules available for structural insights. Enable GNN modules and try again."
+            )
+        
+        # Priority 7: Cache the result
+        if gnn_cache_manager:
+            gnn_cache_manager.set(
+                cache_type="insight",
+                data=insights,
+                nodes=request.nodes,
+                edges=request.edges,
+                config={
+                    "insight_type": request.insight_type,
+                    "threshold": request.threshold
+                },
+                tags=["insight", "structural", "gnn"]
+            )
+        
+        return {
+            "status": "success",
+            "insights": insights,
+            "insight_type": request.insight_type,
+            "cached": False,
+            "timestamp": datetime.now().isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"GNN structural insights failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/gnn/domains/{domain_id}/model")
+async def get_domain_model(domain_id: str):
+    """Get domain-specific GNN model information.
+    
+    Returns information about the domain-specific GNN model,
+    including availability, model type, and capabilities.
+    """
+    try:
+        # Priority 6: Use domain registry if available
+        if gnn_domain_router:
+            model_info = gnn_domain_router.get_domain_model_info(domain_id)
+            return {
+                "status": "success",
+                "model": model_info,
+                "timestamp": datetime.now().isoformat()
+            }
+        
+        # Fallback to generic model info
+        model_info = {
+            "domain_id": domain_id,
+            "models_available": False,
+            "model_available": gnn_embedder is not None,
+            "classifier_available": gnn_classifier is not None,
+            "link_predictor_available": gnn_link_predictor is not None,
+            "anomaly_detector_available": gnn_anomaly_detector is not None,
+            "schema_matcher_available": gnn_schema_matcher is not None,
+            "note": "Domain registry not available. Using generic models."
+        }
+        
+        return {
+            "status": "success",
+            "model": model_info,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get domain model info: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/gnn/domains/{domain_id}/query")
+async def query_domain_gnn(domain_id: str, request: GNNDomainQueryRequest):
+    """Query domain-specific GNN model.
+    
+    This endpoint routes queries to domain-specific GNN models
+    based on the domain_id and query_type. If domain_id is "auto",
+    domain is automatically detected from the query/nodes.
+    """
+    try:
+        # Priority 6: Auto-detect domain if requested
+        actual_domain_id = domain_id
+        if domain_id == "auto" and gnn_domain_router:
+            # Try to detect domain from nodes or query
+            detected_domain = None
+            if request.nodes:
+                detected_domain = gnn_domain_router.detect_domain_from_nodes(request.nodes)
+            
+            if detected_domain:
+                actual_domain_id = detected_domain
+                logger.info(f"Auto-detected domain: {actual_domain_id}")
+            else:
+                logger.warning("Could not auto-detect domain, using generic models")
+                actual_domain_id = None
+        
+        query_type = request.query_type
+        
+        # Priority 6: Route to domain-specific model if available
+        model_type_map = {
+            "embeddings": "embeddings",
+            "classify": "classifier",
+            "predict-links": "link_predictor",
+            "insights": "anomaly_detector",
+        }
+        
+        domain_model_path = None
+        if actual_domain_id and gnn_domain_router:
+            model_type = model_type_map.get(query_type, query_type)
+            _, domain_model_path = gnn_domain_router.route_to_domain_model(
+                actual_domain_id,
+                model_type,
+                fallback_to_generic=True,
+            )
+        
+        # Use domain-specific model if available, otherwise use generic
+        if domain_model_path:
+            logger.info(f"Using domain-specific model: {actual_domain_id}/{query_type}")
+            # TODO: Load and use domain-specific model from domain_model_path
+            # For now, fall through to generic model
+        
+        if query_type == "embeddings":
+            if not gnn_embedder:
+                raise HTTPException(status_code=503, detail="GNN embedder not available")
+            result = gnn_embedder.generate_embeddings(
+                nodes=request.nodes,
+                edges=request.edges,
+                graph_level=request.query_params.get("graph_level", True) if request.query_params else True
+            )
+        
+        elif query_type == "classify":
+            if not gnn_classifier:
+                raise HTTPException(status_code=503, detail="GNN classifier not available")
+            result = gnn_classifier.classify_nodes(
+                nodes=request.nodes,
+                edges=request.edges,
+                top_k=request.query_params.get("top_k") if request.query_params else None
+            )
+        
+        elif query_type == "predict-links":
+            if not gnn_link_predictor:
+                raise HTTPException(status_code=503, detail="GNN link predictor not available")
+            # Convert candidate_pairs if provided
+            candidate_pairs = None
+            if request.query_params and "candidate_pairs" in request.query_params:
+                pairs = request.query_params["candidate_pairs"]
+                if isinstance(pairs, list):
+                    candidate_pairs = [
+                        (pair[0], pair[1]) if isinstance(pair, list) and len(pair) >= 2 else (pair[0], "")
+                        for pair in pairs
+                    ]
+            
+            result = gnn_link_predictor.predict_links(
+                nodes=request.nodes,
+                edges=request.edges,
+                candidate_pairs=candidate_pairs,
+                top_k=request.query_params.get("top_k", 10) if request.query_params else 10
+            )
+        
+        elif query_type == "insights":
+            # Use structural insights endpoint logic
+            threshold = request.query_params.get("threshold", 0.5) if request.query_params else 0.5
+            insight_type = request.query_params.get("insight_type", "all") if request.query_params else "all"
+            
+            insights = {}
+            if insight_type in ["anomalies", "all"] and gnn_anomaly_detector:
+                anomaly_result = gnn_anomaly_detector.detect_anomalies(
+                    nodes=request.nodes,
+                    edges=request.edges,
+                    threshold=threshold
+                )
+                if "error" not in anomaly_result:
+                    insights["anomalies"] = anomaly_result
+            
+            if insight_type in ["patterns", "all"] and gnn_embedder:
+                embedding_result = gnn_embedder.generate_embeddings(
+                    nodes=request.nodes,
+                    edges=request.edges,
+                    graph_level=True
+                )
+                if "error" not in embedding_result:
+                    insights["patterns"] = {
+                        "graph_embedding_dim": len(embedding_result.get("graph_embedding", [])),
+                        "embedding_available": True
+                    }
+            
+            result = {"insights": insights}
+        
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown query type: {query_type}. Supported: embeddings, classify, predict-links, insights"
+            )
+        
+        if isinstance(result, dict) and "error" in result:
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        return {
+            "status": "success",
+            "domain_id": actual_domain_id if actual_domain_id else domain_id,
+            "query_type": query_type,
+            "result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Domain GNN query failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Priority 6: GNN Domain Registry API Endpoints
+
+@app.post("/gnn/registry/register")
+async def register_domain_model(request: RegisterModelRequest):
+    """Register a domain-specific GNN model.
+    
+    This endpoint registers a trained domain-specific GNN model
+    in the registry for domain-aware routing.
+    """
+    if not gnn_domain_registry:
+        raise HTTPException(
+            status_code=503,
+            detail="GNN domain registry not available. Ensure GNN domain routing is enabled."
+        )
+    
+    try:
+        model_info = gnn_domain_registry.register_model(
+            domain_id=request.domain_id,
+            model_type=request.model_type,
+            model_path=request.model_path,
+            version=request.version,
+            training_metrics=request.training_metrics,
+            model_config=request.model_config,
+            description=request.description,
+            is_active=request.is_active,
+        )
+        
+        return {
+            "status": "success",
+            "model": {
+                "domain_id": model_info.domain_id,
+                "model_type": model_info.model_type,
+                "version": model_info.version,
+                "model_path": model_info.model_path,
+                "created_at": model_info.created_at,
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to register domain model: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/gnn/registry/domains")
+async def list_domains():
+    """List all domains with registered GNN models."""
+    if not gnn_domain_registry:
+        raise HTTPException(
+            status_code=503,
+            detail="GNN domain registry not available."
+        )
+    
+    try:
+        domains = gnn_domain_registry.list_domains()
+        return {
+            "status": "success",
+            "domains": domains,
+            "count": len(domains),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to list domains: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/gnn/registry/domains/{domain_id}/models")
+async def list_domain_models(domain_id: str):
+    """List all models for a specific domain."""
+    if not gnn_domain_registry:
+        raise HTTPException(
+            status_code=503,
+            detail="GNN domain registry not available."
+        )
+    
+    try:
+        models = gnn_domain_registry.list_models_for_domain(domain_id, active_only=True)
+        models_info = {}
+        for model_type, model_info in models.items():
+            models_info[model_type] = {
+                "version": model_info.version,
+                "model_path": model_info.model_path,
+                "created_at": model_info.created_at,
+                "updated_at": model_info.updated_at,
+                "description": model_info.description,
+                "is_active": model_info.is_active,
+            }
+        
+        return {
+            "status": "success",
+            "domain_id": domain_id,
+            "models": models_info,
+            "count": len(models_info),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to list domain models: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Priority 7: GNN Cache Management API Endpoints
+
+@app.get("/gnn/cache/stats")
+async def get_cache_stats():
+    """Get cache statistics."""
+    if not gnn_cache_manager:
+        raise HTTPException(
+            status_code=503,
+            detail="GNN cache manager not available."
+        )
+    
+    try:
+        stats = gnn_cache_manager.get_stats()
+        return {
+            "status": "success",
+            "stats": stats,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get cache stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/gnn/cache/invalidate")
+async def invalidate_cache(
+    cache_type: Optional[str] = None,
+    domain_id: Optional[str] = None,
+    tags: Optional[str] = None
+):
+    """Invalidate cache entries.
+    
+    Query parameters:
+    - cache_type: Invalidate entries of specific type (embedding, insight, etc.)
+    - domain_id: Invalidate entries for specific domain
+    - tags: Comma-separated list of tags to invalidate
+    """
+    if not gnn_cache_manager:
+        raise HTTPException(
+            status_code=503,
+            detail="GNN cache manager not available."
+        )
+    
+    try:
+        tag_list = tags.split(",") if isinstance(tags, str) else tags
+        invalidated = gnn_cache_manager.invalidate(
+            cache_type=cache_type,
+            domain_id=domain_id,
+            tags=tag_list
+        )
+        
+        return {
+            "status": "success",
+            "invalidated": invalidated,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to invalidate cache: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/gnn/cache/clear")
+async def clear_cache():
+    """Clear all cache entries."""
+    if not gnn_cache_manager:
+        raise HTTPException(
+            status_code=503,
+            detail="GNN cache manager not available."
+        )
+    
+    try:
+        gnn_cache_manager.clear()
+        return {
+            "status": "success",
+            "message": "Cache cleared",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to clear cache: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

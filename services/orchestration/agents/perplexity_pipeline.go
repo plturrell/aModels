@@ -28,6 +28,7 @@ type PerplexityPipeline struct {
 	localAIURL         string
 	searchURL          string
 	extractURL         string
+	graphServiceURL    string // Priority 5: Graph service URL for GNN queries
 	learningOrchestrator *LearningOrchestrator
 	requestTracker     *RequestTracker
 	logger             *log.Logger
@@ -72,6 +73,12 @@ func NewPerplexityPipeline(config PerplexityPipelineConfig) (*PerplexityPipeline
 		deepResearchClient = research.NewDeepResearchClient(config.DeepResearchURL, config.Logger)
 	}
 
+	// Get graph service URL for GNN queries (Priority 5)
+	graphServiceURL := os.Getenv("GRAPH_SERVICE_URL")
+	if graphServiceURL == "" {
+		graphServiceURL = "http://graph-service:8081"
+	}
+
 	pipeline := &PerplexityPipeline{
 		perplexityConnector: perplexityConnector,
 		ocrClient:          ocrClient,
@@ -82,6 +89,7 @@ func NewPerplexityPipeline(config PerplexityPipelineConfig) (*PerplexityPipeline
 		localAIURL:         config.LocalAIURL,
 		searchURL:          config.SearchURL,
 		extractURL:         config.ExtractURL,
+		graphServiceURL:    graphServiceURL,
 		logger:             config.Logger,
 		httpClient:         &http.Client{Timeout: 120 * time.Second},
 	}
@@ -652,6 +660,189 @@ func (pp *PerplexityPipeline) QueryCatalogSemantic(ctx context.Context, query, o
 	}
 
 	return result, nil
+}
+
+// QueryGNNEmbeddings queries GNN service for graph/node embeddings (Priority 5).
+func (pp *PerplexityPipeline) QueryGNNEmbeddings(ctx context.Context, nodes []map[string]interface{}, edges []map[string]interface{}, graphLevel bool) (map[string]interface{}, error) {
+	// Try graph service hybrid query endpoint first
+	if pp.graphServiceURL != "" {
+		hybridPayload := map[string]interface{}{
+			"hybrid_query_request": map[string]interface{}{
+				"query":      "Generate embeddings",
+				"query_kg":   false,
+				"query_gnn":  true,
+				"gnn_type":   "embeddings",
+				"combine":    false,
+			},
+		}
+		// Add nodes/edges if provided
+		if len(nodes) > 0 || len(edges) > 0 {
+			gnnRequest := map[string]interface{}{
+				"query_type": "embeddings",
+				"nodes":      nodes,
+				"edges":      edges,
+				"params": map[string]interface{}{
+					"graph_level": graphLevel,
+				},
+			}
+			hybridPayload["gnn_query_request"] = gnnRequest
+		}
+
+		url := strings.TrimRight(pp.graphServiceURL, "/") + "/gnn/query"
+		var result map[string]interface{}
+		if err := pp.postJSON(ctx, url, hybridPayload, &result); err == nil {
+			return result, nil
+		}
+	}
+
+	// Fallback to training service directly
+	if pp.trainingURL == "" {
+		return nil, fmt.Errorf("training service not configured")
+	}
+
+	payload := map[string]interface{}{
+		"nodes":      nodes,
+		"edges":      edges,
+		"graph_level": graphLevel,
+	}
+
+	url := strings.TrimRight(pp.trainingURL, "/") + "/gnn/embeddings"
+	var result map[string]interface{}
+	if err := pp.postJSON(ctx, url, payload, &result); err != nil {
+		return nil, fmt.Errorf("GNN embeddings query failed: %w", err)
+	}
+
+	return result, nil
+}
+
+// QueryGNNStructuralInsights queries GNN service for structural insights (Priority 5).
+func (pp *PerplexityPipeline) QueryGNNStructuralInsights(ctx context.Context, nodes []map[string]interface{}, edges []map[string]interface{}, insightType string, threshold float64) (map[string]interface{}, error) {
+	// Try graph service hybrid query endpoint first
+	if pp.graphServiceURL != "" {
+		hybridPayload := map[string]interface{}{
+			"hybrid_query_request": map[string]interface{}{
+				"query":      "Get structural insights",
+				"query_kg":   false,
+				"query_gnn":  true,
+				"gnn_type":   "structural-insights",
+				"combine":    false,
+			},
+		}
+		// Add nodes/edges if provided
+		if len(nodes) > 0 || len(edges) > 0 {
+			gnnRequest := map[string]interface{}{
+				"query_type": "structural-insights",
+				"nodes":      nodes,
+				"edges":      edges,
+				"params": map[string]interface{}{
+					"insight_type": insightType,
+					"threshold":   threshold,
+				},
+			}
+			hybridPayload["gnn_query_request"] = gnnRequest
+		}
+
+		url := strings.TrimRight(pp.graphServiceURL, "/") + "/gnn/query"
+		var result map[string]interface{}
+		if err := pp.postJSON(ctx, url, hybridPayload, &result); err == nil {
+			return result, nil
+		}
+	}
+
+	// Fallback to training service directly
+	if pp.trainingURL == "" {
+		return nil, fmt.Errorf("training service not configured")
+	}
+
+	payload := map[string]interface{}{
+		"nodes":        nodes,
+		"edges":        edges,
+		"insight_type": insightType,
+		"threshold":    threshold,
+	}
+
+	url := strings.TrimRight(pp.trainingURL, "/") + "/gnn/structural-insights"
+	var result map[string]interface{}
+	if err := pp.postJSON(ctx, url, payload, &result); err != nil {
+		return nil, fmt.Errorf("GNN structural insights query failed: %w", err)
+	}
+
+	return result, nil
+}
+
+// QueryGNNPredictLinks queries GNN service for link predictions (Priority 5).
+func (pp *PerplexityPipeline) QueryGNNPredictLinks(ctx context.Context, nodes []map[string]interface{}, edges []map[string]interface{}, candidatePairs [][]string, topK int) (map[string]interface{}, error) {
+	if pp.trainingURL == "" {
+		return nil, fmt.Errorf("training service not configured")
+	}
+
+	payload := map[string]interface{}{
+		"nodes": nodes,
+		"edges": edges,
+		"top_k": topK,
+	}
+	if candidatePairs != nil {
+		payload["candidate_pairs"] = candidatePairs
+	}
+
+	url := strings.TrimRight(pp.trainingURL, "/") + "/gnn/predict-links"
+	var result map[string]interface{}
+	if err := pp.postJSON(ctx, url, payload, &result); err != nil {
+		return nil, fmt.Errorf("GNN link prediction query failed: %w", err)
+	}
+
+	return result, nil
+}
+
+// QueryGNNClassifyNodes queries GNN service for node classification (Priority 5).
+func (pp *PerplexityPipeline) QueryGNNClassifyNodes(ctx context.Context, nodes []map[string]interface{}, edges []map[string]interface{}, topK *int) (map[string]interface{}, error) {
+	if pp.trainingURL == "" {
+		return nil, fmt.Errorf("training service not configured")
+	}
+
+	payload := map[string]interface{}{
+		"nodes": nodes,
+		"edges": edges,
+	}
+	if topK != nil {
+		payload["top_k"] = *topK
+	}
+
+	url := strings.TrimRight(pp.trainingURL, "/") + "/gnn/classify"
+	var result map[string]interface{}
+	if err := pp.postJSON(ctx, url, payload, &result); err != nil {
+		return nil, fmt.Errorf("GNN node classification query failed: %w", err)
+	}
+
+	return result, nil
+}
+
+// QueryGNNHybrid queries both KG and GNN and combines results (Priority 5).
+func (pp *PerplexityPipeline) QueryGNNHybrid(ctx context.Context, query string, projectID, systemID string, queryKG, queryGNN bool, gnnType string, combine bool) (map[string]interface{}, error) {
+	// Use graph service hybrid query endpoint
+	if pp.graphServiceURL != "" {
+		hybridPayload := map[string]interface{}{
+			"hybrid_query_request": map[string]interface{}{
+				"query":      query,
+				"project_id": projectID,
+				"system_id":  systemID,
+				"query_kg":   queryKG,
+				"query_gnn":  queryGNN,
+				"gnn_type":   gnnType,
+				"combine":    combine,
+			},
+		}
+
+		url := strings.TrimRight(pp.graphServiceURL, "/") + "/gnn/hybrid-query"
+		var result map[string]interface{}
+		if err := pp.postJSON(ctx, url, hybridPayload, &result); err != nil {
+			return nil, fmt.Errorf("hybrid query failed: %w", err)
+		}
+
+		return result, nil
+	}
+
+	return nil, fmt.Errorf("graph service not configured")
 }
 
 // ProcessDocumentsWithCallback processes documents with an optional callback for each document.

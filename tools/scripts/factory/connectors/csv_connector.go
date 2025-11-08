@@ -1,9 +1,8 @@
-
 // Package disabled: depends on missing ai_benchmarks package
 package connectors
 
 import (
-	"ai_benchmarks/scripts/factory"
+	"ai_benchmarks/tools/scripts/factory"
 	"encoding/csv"
 	"os"
 )

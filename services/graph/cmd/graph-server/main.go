@@ -328,6 +328,78 @@ func main() {
 			json.NewEncoder(w).Encode(result)
 		})
 
+		// GNN query endpoint (Priority 4: GNN processor for StateGraph workflows)
+		http.HandleFunc("/gnn/query", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+
+			var req map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, fmt.Sprintf("invalid request: %v", err), http.StatusBadRequest)
+				return
+			}
+
+			trainingServiceURL := os.Getenv("TRAINING_SERVICE_URL")
+			if trainingServiceURL == "" {
+				trainingServiceURL = "http://training-service:8080"
+			}
+
+			// Create GNN processor workflow node
+			gnnOpts := workflows.GNNProcessorOptions{
+				TrainingServiceURL: trainingServiceURL,
+				ExtractServiceURL:  extractHTTPURL,
+			}
+			gnnNode := workflows.QueryGNNNode(gnnOpts)
+
+			// Execute GNN query
+			result, err := gnnNode(context.Background(), req)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("GNN query failed: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(result)
+		})
+
+		// Hybrid query endpoint (Priority 4: KG + GNN)
+		http.HandleFunc("/gnn/hybrid-query", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+
+			var req map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, fmt.Sprintf("invalid request: %v", err), http.StatusBadRequest)
+				return
+			}
+
+			trainingServiceURL := os.Getenv("TRAINING_SERVICE_URL")
+			if trainingServiceURL == "" {
+				trainingServiceURL = "http://training-service:8080"
+			}
+
+			// Create hybrid query processor workflow node
+			gnnOpts := workflows.GNNProcessorOptions{
+				TrainingServiceURL: trainingServiceURL,
+				ExtractServiceURL:  extractHTTPURL,
+			}
+			hybridNode := workflows.HybridQueryNode(gnnOpts)
+
+			// Execute hybrid query
+			result, err := hybridNode(context.Background(), req)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("hybrid query failed: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(result)
+		})
+
 		// Unified workflow endpoint (combines knowledge graphs, orchestration, and AgentFlow)
 		http.HandleFunc("/unified/process", func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodPost {
@@ -350,10 +422,15 @@ func main() {
 			if agentflowServiceURL == "" {
 				agentflowServiceURL = "http://agentflow-service:9001"
 			}
+			trainingServiceURL := os.Getenv("TRAINING_SERVICE_URL")
+			if trainingServiceURL == "" {
+				trainingServiceURL = "http://training-service:8080"
+			}
 			workflow, err := workflows.NewUnifiedProcessorWorkflow(workflows.UnifiedProcessorOptions{
 				ExtractServiceURL:   extractHTTPURL,
 				AgentFlowServiceURL: agentflowServiceURL,
 				LocalAIURL:          localAIURL,
+				TrainingServiceURL:  trainingServiceURL,
 			})
 			if err != nil {
 				http.Error(w, fmt.Sprintf("create workflow: %v", err), http.StatusInternalServerError)

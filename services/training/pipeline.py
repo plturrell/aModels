@@ -79,6 +79,23 @@ except ImportError:
     GNNTransferLearner = None
     GNNActiveLearner = None
 
+# GNN Priority 4: Performance Optimization
+try:
+    from .gnn_batch_processing import EmbeddingCache, GraphBatchProcessor, MemoryOptimizer
+    from .gnn_model_optimization import (
+        GNNModelQuantizer, GNNModelPruner, GNNInferenceOptimizer, GNNModelOptimizer
+    )
+    HAS_GNN_PRIORITY4 = True
+except ImportError:
+    HAS_GNN_PRIORITY4 = False
+    EmbeddingCache = None
+    GraphBatchProcessor = None
+    MemoryOptimizer = None
+    GNNModelQuantizer = None
+    GNNModelPruner = None
+    GNNInferenceOptimizer = None
+    GNNModelOptimizer = None
+
 logger = logging.getLogger(__name__)
 
 

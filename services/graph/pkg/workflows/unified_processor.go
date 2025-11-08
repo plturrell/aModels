@@ -19,6 +19,7 @@ type UnifiedProcessorOptions struct {
 	AgentFlowServiceURL string
 	LocalAIURL          string
 	GPUOrchestratorURL  string // URL to GPU orchestrator service (optional)
+	TrainingServiceURL  string // URL to training service for GNN (optional)
 }
 
 // UnifiedWorkflowRequest represents a request that can use all three systems.
@@ -34,6 +35,12 @@ type UnifiedWorkflowRequest struct {
 
 	// AgentFlow flow execution
 	AgentFlowRequest *AgentFlowRunRequest `json:"agentflow_request,omitempty"`
+
+	// GNN query (Priority 4)
+	GNNQueryRequest *GNNQueryRequest `json:"gnn_query_request,omitempty"`
+
+	// Hybrid query (KG + GNN)
+	HybridQueryRequest *HybridQueryRequest `json:"hybrid_query_request,omitempty"`
 
 	// Workflow configuration
 	WorkflowMode string `json:"workflow_mode,omitempty"` // "sequential", "parallel", "conditional"
@@ -212,6 +219,73 @@ func ProcessUnifiedWorkflowNode(opts UnifiedProcessorOptions) stategraph.NodeFun
 			}
 		}
 
+		// Step 1.6: Process GNN query if requested (Priority 4)
+		if unifiedReq.GNNQueryRequest != nil {
+			trainingServiceURL := opts.TrainingServiceURL
+			if trainingServiceURL == "" {
+				trainingServiceURL = os.Getenv("TRAINING_SERVICE_URL")
+				if trainingServiceURL == "" {
+					trainingServiceURL = "http://training-service:8080"
+				}
+			}
+			gnnState := map[string]any{
+				"gnn_query_request": map[string]any{
+					"query_type": unifiedReq.GNNQueryRequest.QueryType,
+					"nodes":      unifiedReq.GNNQueryRequest.Nodes,
+					"edges":      unifiedReq.GNNQueryRequest.Edges,
+					"params":     unifiedReq.GNNQueryRequest.Params,
+				},
+			}
+			gnnOpts := GNNProcessorOptions{
+				TrainingServiceURL: trainingServiceURL,
+				ExtractServiceURL:  opts.ExtractServiceURL,
+			}
+			gnnNode := QueryGNNNode(gnnOpts)
+			gnnResult, err := gnnNode(ctx, gnnState)
+			if err != nil {
+				return nil, fmt.Errorf("process GNN query: %w", err)
+			}
+			// Merge GNN results into state
+			for k, v := range gnnResult.(map[string]any) {
+				newState[k] = v
+			}
+		}
+
+		// Step 1.7: Process hybrid query if requested (Priority 4)
+		if unifiedReq.HybridQueryRequest != nil {
+			trainingServiceURL := opts.TrainingServiceURL
+			if trainingServiceURL == "" {
+				trainingServiceURL = os.Getenv("TRAINING_SERVICE_URL")
+				if trainingServiceURL == "" {
+					trainingServiceURL = "http://training-service:8080"
+				}
+			}
+			hybridState := map[string]any{
+				"hybrid_query_request": map[string]any{
+					"query":      unifiedReq.HybridQueryRequest.Query,
+					"project_id":  unifiedReq.HybridQueryRequest.ProjectID,
+					"system_id":   unifiedReq.HybridQueryRequest.SystemID,
+					"query_kg":    unifiedReq.HybridQueryRequest.QueryKG,
+					"query_gnn":   unifiedReq.HybridQueryRequest.QueryGNN,
+					"gnn_type":    unifiedReq.HybridQueryRequest.GNNType,
+					"combine":      unifiedReq.HybridQueryRequest.Combine,
+				},
+			}
+			gnnOpts := GNNProcessorOptions{
+				TrainingServiceURL: trainingServiceURL,
+				ExtractServiceURL:  opts.ExtractServiceURL,
+			}
+			hybridNode := HybridQueryNode(gnnOpts)
+			hybridResult, err := hybridNode(ctx, hybridState)
+			if err != nil {
+				return nil, fmt.Errorf("process hybrid query: %w", err)
+			}
+			// Merge hybrid results into state
+			for k, v := range hybridResult.(map[string]any) {
+				newState[k] = v
+			}
+		}
+
 		// Step 2: Process orchestration chain if requested
 		if unifiedReq.OrchestrationRequest != nil {
 			orchState := map[string]any{
@@ -278,8 +352,11 @@ func ProcessUnifiedWorkflowNode(opts UnifiedProcessorOptions) stategraph.NodeFun
 		newState["unified_workflow_complete"] = true
 		newState["unified_workflow_summary"] = map[string]any{
 			"knowledge_graph_processed": unifiedReq.KnowledgeGraphRequest != nil,
+			"graphrag_processed":         unifiedReq.GraphRAGRequest != nil,
+			"gnn_query_processed":         unifiedReq.GNNQueryRequest != nil,
+			"hybrid_query_processed":      unifiedReq.HybridQueryRequest != nil,
 			"orchestration_processed":    unifiedReq.OrchestrationRequest != nil,
-			"agentflow_processed":       unifiedReq.AgentFlowRequest != nil,
+			"agentflow_processed":        unifiedReq.AgentFlowRequest != nil,
 			"workflow_mode":              unifiedReq.WorkflowMode,
 		}
 
@@ -587,12 +664,26 @@ func NewUnifiedProcessorWorkflow(opts UnifiedProcessorOptions) (*stategraph.Comp
 		ExtractServiceURL: extractServiceURL,
 	}
 
+	// Get training service URL for GNN
+	trainingServiceURL := os.Getenv("TRAINING_SERVICE_URL")
+	if trainingServiceURL == "" {
+		trainingServiceURL = "http://training-service:8080"
+	}
+
+	// GNN processor options
+	gnnOpts := GNNProcessorOptions{
+		TrainingServiceURL: trainingServiceURL,
+		ExtractServiceURL:  extractServiceURL,
+	}
+
 	// Nodes for both sequential and parallel modes
 	nodes := map[string]stategraph.NodeFunc{
 		"determine_mode":  DetermineWorkflowModeNode(),
 		"split_parallel":  ParallelSplitNode(),
 		"process_kg":      ProcessKnowledgeGraphWorkflowNode(extractServiceURL),
 		"process_graphrag": ProcessGraphRAGNode(graphragOpts),
+		"process_gnn":     QueryGNNNode(gnnOpts),           // Priority 4: GNN query node
+		"process_hybrid":  HybridQueryNode(gnnOpts),        // Priority 4: Hybrid query node
 		"process_orch":    ProcessOrchestrationWorkflowNode(localAIURL),
 		"process_agentflow": ProcessAgentFlowWorkflowNode(agentflowServiceURL),
 		"process_deepagents": RunDeepAgentNode(deepagentsServiceURL),
@@ -600,6 +691,7 @@ func NewUnifiedProcessorWorkflow(opts UnifiedProcessorOptions) (*stategraph.Comp
 			ExtractServiceURL:   extractServiceURL,
 			AgentFlowServiceURL: agentflowServiceURL,
 			LocalAIURL:          localAIURL,
+			TrainingServiceURL:  trainingServiceURL,
 		}),
 	}
 

@@ -1,7 +1,7 @@
 package boolq
 
 import (
-	"ai_benchmarks/scripts/factory"
+	"ai_benchmarks/tools/scripts/factory"
 	"fmt"
 	"strings"
 )
