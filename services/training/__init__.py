@@ -147,3 +147,57 @@ if HAS_GNN_MODULES:
     if GNNSchemaMatcher is not None:
         __all__.append("GNNSchemaMatcher")
 
+# GNN Training and Evaluation (Priority 2)
+try:
+    from .gnn_training import GNNTrainer
+    from .gnn_evaluation import GNNEvaluator
+    HAS_GNN_TRAINING = True
+except ImportError:
+    HAS_GNN_TRAINING = False
+    GNNTrainer = None
+    GNNEvaluator = None
+
+# Add GNN training modules if available
+if HAS_GNN_TRAINING:
+    if GNNTrainer is not None:
+        __all__.append("GNNTrainer")
+    if GNNEvaluator is not None:
+        __all__.append("GNNEvaluator")
+
+# GNN Priority 3: Advanced Features
+try:
+    from .gnn_multimodal import MultiModalGNN, MultiModalFusion
+    from .gnn_hyperparameter_tuning import GNNHyperparameterTuner
+    from .gnn_cross_validation import GNNCrossValidator
+    from .gnn_ensembling import GNNEnsemble, GNNEnsembleBuilder
+    from .gnn_transfer_learning import GNNTransferLearner
+    from .gnn_active_learning import GNNActiveLearner
+    HAS_GNN_PRIORITY3 = True
+except ImportError:
+    HAS_GNN_PRIORITY3 = False
+    MultiModalGNN = None
+    MultiModalFusion = None
+    GNNHyperparameterTuner = None
+    GNNCrossValidator = None
+    GNNEnsemble = None
+    GNNEnsembleBuilder = None
+    GNNTransferLearner = None
+    GNNActiveLearner = None
+
+# Add Priority 3 modules if available
+if HAS_GNN_PRIORITY3:
+    if MultiModalGNN is not None:
+        __all__.append("MultiModalGNN")
+        __all__.append("MultiModalFusion")
+    if GNNHyperparameterTuner is not None:
+        __all__.append("GNNHyperparameterTuner")
+    if GNNCrossValidator is not None:
+        __all__.append("GNNCrossValidator")
+    if GNNEnsemble is not None:
+        __all__.append("GNNEnsemble")
+        __all__.append("GNNEnsembleBuilder")
+    if GNNTransferLearner is not None:
+        __all__.append("GNNTransferLearner")
+    if GNNActiveLearner is not None:
+        __all__.append("GNNActiveLearner")
+

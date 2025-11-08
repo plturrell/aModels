@@ -34,6 +34,51 @@ except ImportError:
     HAS_AUTO_TUNER = False
     AutoTuner = None
 
+# GNN modules (Priority 1: Integration)
+try:
+    from .gnn_embeddings import GNNEmbedder
+    from .gnn_node_classifier import GNNNodeClassifier
+    from .gnn_link_predictor import GNNLinkPredictor
+    from .gnn_anomaly_detector import GNNAnomalyDetector
+    from .gnn_schema_matcher import GNNSchemaMatcher
+    HAS_GNN_MODULES = True
+except ImportError:
+    HAS_GNN_MODULES = False
+    GNNEmbedder = None
+    GNNNodeClassifier = None
+    GNNLinkPredictor = None
+    GNNAnomalyDetector = None
+    GNNSchemaMatcher = None
+
+# GNN Training and Evaluation (Priority 2)
+try:
+    from .gnn_training import GNNTrainer
+    from .gnn_evaluation import GNNEvaluator
+    HAS_GNN_TRAINING = True
+except ImportError:
+    HAS_GNN_TRAINING = False
+    GNNTrainer = None
+    GNNEvaluator = None
+
+# GNN Priority 3: Advanced Features
+try:
+    from .gnn_multimodal import MultiModalGNN
+    from .gnn_hyperparameter_tuning import GNNHyperparameterTuner
+    from .gnn_cross_validation import GNNCrossValidator
+    from .gnn_ensembling import GNNEnsemble, GNNEnsembleBuilder
+    from .gnn_transfer_learning import GNNTransferLearner
+    from .gnn_active_learning import GNNActiveLearner
+    HAS_GNN_PRIORITY3 = True
+except ImportError:
+    HAS_GNN_PRIORITY3 = False
+    MultiModalGNN = None
+    GNNHyperparameterTuner = None
+    GNNCrossValidator = None
+    GNNEnsemble = None
+    GNNEnsembleBuilder = None
+    GNNTransferLearner = None
+    GNNActiveLearner = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,7 +91,14 @@ class TrainingPipeline:
         glean_db_name: Optional[str] = None,
         output_dir: Optional[str] = None,
         enable_domain_filtering: bool = True,
-        privacy_level: str = "medium"
+        privacy_level: str = "medium",
+        enable_gnn: Optional[bool] = None,
+        enable_gnn_embeddings: Optional[bool] = None,
+        enable_gnn_classification: Optional[bool] = None,
+        enable_gnn_link_prediction: Optional[bool] = None,
+        enable_gnn_device: Optional[str] = None,
+        enable_gnn_training: Optional[bool] = None,
+        gnn_models_dir: Optional[str] = None
     ):
         self.extract_service_url = extract_service_url or os.getenv("EXTRACT_SERVICE_URL", "http://localhost:19080")
         self.glean_client = GleanTrainingClient(db_name=glean_db_name)
@@ -114,6 +166,84 @@ class TrainingPipeline:
             except Exception as e:
                 logger.warning(f"Failed to initialize auto-tuner: {e}")
                 self.auto_tuner = None
+        
+        # Priority 1: Initialize GNN modules if enabled
+        self.enable_gnn = enable_gnn if enable_gnn is not None else os.getenv("ENABLE_GNN", "false").lower() == "true"
+        self.enable_gnn_embeddings = enable_gnn_embeddings if enable_gnn_embeddings is not None else os.getenv("ENABLE_GNN_EMBEDDINGS", "true").lower() == "true"
+        self.enable_gnn_classification = enable_gnn_classification if enable_gnn_classification is not None else os.getenv("ENABLE_GNN_CLASSIFICATION", "true").lower() == "true"
+        self.enable_gnn_link_prediction = enable_gnn_link_prediction if enable_gnn_link_prediction is not None else os.getenv("ENABLE_GNN_LINK_PREDICTION", "true").lower() == "true"
+        
+        self.gnn_embedder = None
+        self.gnn_classifier = None
+        self.gnn_link_predictor = None
+        self.gnn_anomaly_detector = None
+        self.gnn_schema_matcher = None
+        
+        if self.enable_gnn and HAS_GNN_MODULES:
+            try:
+                gnn_device = enable_gnn_device or os.getenv("GNN_DEVICE", "auto")
+                if gnn_device == "auto":
+                    gnn_device = None  # Let modules auto-detect
+                
+                if self.enable_gnn_embeddings and GNNEmbedder is not None:
+                    self.gnn_embedder = GNNEmbedder(
+                        embedding_dim=int(os.getenv("GNN_EMBEDDING_DIM", "128")),
+                        hidden_dim=int(os.getenv("GNN_HIDDEN_DIM", "64")),
+                        num_layers=int(os.getenv("GNN_NUM_LAYERS", "3")),
+                        device=gnn_device
+                    )
+                    logger.info("GNN Embedder initialized")
+                
+                if self.enable_gnn_classification and GNNNodeClassifier is not None:
+                    self.gnn_classifier = GNNNodeClassifier(
+                        hidden_dim=int(os.getenv("GNN_HIDDEN_DIM", "64")),
+                        num_layers=int(os.getenv("GNN_NUM_LAYERS", "2")),
+                        device=gnn_device
+                    )
+                    logger.info("GNN Node Classifier initialized")
+                
+                if self.enable_gnn_link_prediction and GNNLinkPredictor is not None:
+                    self.gnn_link_predictor = GNNLinkPredictor(
+                        hidden_dim=int(os.getenv("GNN_HIDDEN_DIM", "64")),
+                        num_layers=int(os.getenv("GNN_NUM_LAYERS", "2")),
+                        device=gnn_device
+                    )
+                    logger.info("GNN Link Predictor initialized")
+                
+                # Optional: Anomaly detector and schema matcher
+                if os.getenv("ENABLE_GNN_ANOMALY_DETECTION", "false").lower() == "true" and GNNAnomalyDetector is not None:
+                    self.gnn_anomaly_detector = GNNAnomalyDetector(device=gnn_device)
+                    logger.info("GNN Anomaly Detector initialized")
+                
+                if os.getenv("ENABLE_GNN_SCHEMA_MATCHING", "false").lower() == "true" and GNNSchemaMatcher is not None:
+                    self.gnn_schema_matcher = GNNSchemaMatcher(device=gnn_device)
+                    logger.info("GNN Schema Matcher initialized")
+                
+                logger.info("GNN modules initialized (Priority 1: Integration)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize GNN modules: {e}")
+                self.enable_gnn = False
+        else:
+            if not HAS_GNN_MODULES:
+                logger.info("GNN modules not available (PyTorch Geometric not installed)")
+            else:
+                logger.info("GNN modules disabled")
+        
+        # Priority 2: Initialize GNN trainer if enabled
+        self.enable_gnn_training = enable_gnn_training if enable_gnn_training is not None else os.getenv("ENABLE_GNN_TRAINING", "false").lower() == "true"
+        self.gnn_trainer = None
+        
+        if self.enable_gnn_training and HAS_GNN_TRAINING and GNNTrainer is not None:
+            try:
+                gnn_models_dir = gnn_models_dir or os.getenv("GNN_MODELS_DIR", os.path.join(self.output_dir, "gnn_models"))
+                self.gnn_trainer = GNNTrainer(
+                    output_dir=gnn_models_dir,
+                    device=enable_gnn_device or os.getenv("GNN_DEVICE", "auto")
+                )
+                logger.info("GNN Trainer initialized (Priority 2: Training)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize GNN trainer: {e}")
+                self.enable_gnn_training = False
     
     def run_full_pipeline(
         self,
@@ -127,6 +257,8 @@ class TrainingPipeline:
         enable_glean: bool = True,
         enable_temporal_analysis: bool = True,
         enable_digital_twin: bool = True,
+        train_gnn_models: bool = False,
+        gnn_training_epochs: int = 100,
     ) -> Dict[str, Any]:
         """Run the complete training pipeline.
         
@@ -161,6 +293,64 @@ class TrainingPipeline:
         }
 
         results["steps"]["signavio_ingest"] = {"status": "skipped"}
+        
+        # Priority 2: Train GNN models if requested (before extraction to use for inference)
+        if train_gnn_models and self.enable_gnn_training and self.gnn_trainer:
+            logger.info("Priority 2: Training GNN models before pipeline execution...")
+            try:
+                # Extract initial graph for training
+                initial_graph = self._extract_knowledge_graph(
+                    project_id=project_id,
+                    system_id=system_id,
+                    json_tables=json_tables or [],
+                    hive_ddls=hive_ddls or [],
+                    control_m_files=control_m_files or [],
+                    signavio_files=signavio_files or [],
+                )
+                
+                training_nodes = initial_graph.get("nodes", [])
+                training_edges = initial_graph.get("edges", [])
+                
+                if training_nodes and training_edges:
+                    training_results = self.train_gnn_models(
+                        training_nodes,
+                        training_edges,
+                        train_classifier=True,
+                        train_link_predictor=True,
+                        epochs=gnn_training_epochs
+                    )
+                    results["steps"]["gnn_training"] = training_results
+                    
+                    # Load trained models into GNN modules
+                    if training_results.get("status") == "success":
+                        model_paths = {}
+                        if "classifier" in training_results.get("training_results", {}):
+                            classifier_path = training_results["training_results"]["classifier"].get("model_path")
+                            if classifier_path and self.gnn_classifier:
+                                try:
+                                    self.gnn_classifier.load_model(classifier_path)
+                                    logger.info("✅ Loaded trained classifier into pipeline")
+                                except Exception as e:
+                                    logger.warning(f"Failed to load classifier: {e}")
+                        
+                        if "link_predictor" in training_results.get("training_results", {}):
+                            predictor_path = training_results["training_results"]["link_predictor"].get("model_path")
+                            if predictor_path and self.gnn_link_predictor:
+                                try:
+                                    self.gnn_link_predictor.load_model(predictor_path)
+                                    logger.info("✅ Loaded trained link predictor into pipeline")
+                                except Exception as e:
+                                    logger.warning(f"Failed to load link predictor: {e}")
+                else:
+                    results["steps"]["gnn_training"] = {
+                        "status": "skipped",
+                        "reason": "No graph data available for training"
+                    }
+            except Exception as e:
+                logger.warning(f"⚠️  GNN training failed (continuing): {e}")
+                results["steps"]["gnn_training"] = {"status": "failed", "error": str(e)}
+        else:
+            results["steps"]["gnn_training"] = {"status": "skipped", "reason": "not requested or not available"}
         
         # Step 1: Extract knowledge graph from source data
         logger.info("Step 1: Extracting knowledge graph from source data...")
@@ -386,10 +576,123 @@ Wait we introduced typo. Need to patch carefully. Let's reapply patch carefully.
         else:
             results["steps"]["temporal_analysis"] = {"status": "skipped"}
         
-        # Step 3b: Get semantic embeddings for training features
+        # Step 3c: Generate GNN embeddings (Priority 1: Integration)
+        gnn_embeddings = None
+        gnn_classifications = None
+        gnn_link_predictions = None
+        if self.enable_gnn and self.gnn_embedder:
+            logger.info("Step 3c: Generating GNN embeddings...")
+            try:
+                graph_nodes = graph_data.get("nodes", [])
+                graph_edges = graph_data.get("edges", [])
+                
+                # Generate graph-level and node-level embeddings
+                gnn_embeddings = self.gnn_embedder.generate_embeddings(
+                    graph_nodes,
+                    graph_edges,
+                    graph_level=True
+                )
+                
+                # Also get node-level embeddings for classification
+                node_embeddings = self.gnn_embedder.generate_embeddings(
+                    graph_nodes,
+                    graph_edges,
+                    graph_level=False
+                )
+                
+                # Merge node embeddings into main embeddings dict
+                if "error" not in gnn_embeddings and "error" not in node_embeddings:
+                    gnn_embeddings["node_embeddings"] = node_embeddings.get("node_embeddings", {})
+                
+                # Node classification if enabled
+                if self.enable_gnn_classification and self.gnn_classifier:
+                    try:
+                        # Try to classify nodes (may need training first)
+                        gnn_classifications = self.gnn_classifier.classify_nodes(
+                            graph_nodes,
+                            graph_edges
+                        )
+                        if "error" not in gnn_classifications:
+                            results["steps"]["gnn_classification"] = {
+                                "status": "success",
+                                "num_classified": len(gnn_classifications.get("classifications", [])),
+                                "num_classes": len(gnn_classifications.get("class_mapping", {}))
+                            }
+                            logger.info(f"✅ Classified {len(gnn_classifications.get('classifications', []))} nodes")
+                        else:
+                            results["steps"]["gnn_classification"] = {
+                                "status": "skipped",
+                                "reason": gnn_classifications.get("error", "model not trained")
+                            }
+                            logger.info("⚠️  Node classification skipped (model not trained)")
+                            gnn_classifications = None
+                    except Exception as e:
+                        logger.warning(f"⚠️  Node classification failed: {e}")
+                        results["steps"]["gnn_classification"] = {"status": "failed", "error": str(e)}
+                        gnn_classifications = None
+                else:
+                    results["steps"]["gnn_classification"] = {"status": "skipped", "reason": "disabled"}
+                
+                # Link prediction if enabled
+                if self.enable_gnn_link_prediction and self.gnn_link_predictor:
+                    try:
+                        # Predict missing links (may need training first)
+                        gnn_link_predictions = self.gnn_link_predictor.predict_links(
+                            graph_nodes,
+                            graph_edges,
+                            top_k=int(os.getenv("GNN_LINK_PREDICTION_TOP_K", "10"))
+                        )
+                        if "error" not in gnn_link_predictions:
+                            results["steps"]["gnn_link_prediction"] = {
+                                "status": "success",
+                                "num_predictions": len(gnn_link_predictions.get("predictions", [])),
+                                "num_candidates": gnn_link_predictions.get("num_candidates", 0)
+                            }
+                            logger.info(f"✅ Predicted {len(gnn_link_predictions.get('predictions', []))} potential links")
+                        else:
+                            results["steps"]["gnn_link_prediction"] = {
+                                "status": "skipped",
+                                "reason": gnn_link_predictions.get("error", "model not trained")
+                            }
+                            logger.info("⚠️  Link prediction skipped (model not trained)")
+                            gnn_link_predictions = None
+                    except Exception as e:
+                        logger.warning(f"⚠️  Link prediction failed: {e}")
+                        results["steps"]["gnn_link_prediction"] = {"status": "failed", "error": str(e)}
+                        gnn_link_predictions = None
+                else:
+                    results["steps"]["gnn_link_prediction"] = {"status": "skipped", "reason": "disabled"}
+                
+                if "error" not in gnn_embeddings:
+                    results["steps"]["gnn_embeddings"] = {
+                        "status": "success",
+                        "embedding_dim": gnn_embeddings.get("embedding_dim", 128),
+                        "num_nodes": gnn_embeddings.get("num_nodes", 0),
+                        "num_edges": gnn_embeddings.get("num_edges", 0)
+                    }
+                    logger.info(f"✅ Generated GNN embeddings (dim: {gnn_embeddings.get('embedding_dim', 'unknown')})")
+                else:
+                    results["steps"]["gnn_embeddings"] = {
+                        "status": "failed",
+                        "error": gnn_embeddings.get("error", "unknown error")
+                    }
+                    logger.warning(f"⚠️  GNN embedding generation failed: {gnn_embeddings.get('error')}")
+                    gnn_embeddings = None
+            except Exception as e:
+                logger.warning(f"⚠️  GNN processing failed (continuing without GNN features): {e}")
+                results["steps"]["gnn_embeddings"] = {"status": "failed", "error": str(e)}
+                gnn_embeddings = None
+        else:
+            results["steps"]["gnn_embeddings"] = {"status": "skipped", "reason": "disabled or not available"}
+            if "gnn_classification" not in results["steps"]:
+                results["steps"]["gnn_classification"] = {"status": "skipped", "reason": "disabled or not available"}
+            if "gnn_link_prediction" not in results["steps"]:
+                results["steps"]["gnn_link_prediction"] = {"status": "skipped", "reason": "disabled or not available"}
+        
+        # Step 3d: Get semantic embeddings for training features
         semantic_embeddings = None
         if os.getenv("USE_SAP_RPT_EMBEDDINGS", "false").lower() == "true":
-            logger.info("Step 3b: Retrieving semantic embeddings...")
+            logger.info("Step 3d: Retrieving semantic embeddings...")
             try:
                 semantic_embeddings = self._get_semantic_embeddings_for_training(
                     graph_data=graph_data,
@@ -404,7 +707,10 @@ Wait we introduced typo. Need to patch carefully. Let's reapply patch carefully.
         logger.info("Step 4: Generating training features...")
         try:
             features = self._generate_training_features(
-                graph_data, glean_data, learned_patterns, temporal_patterns, semantic_embeddings
+                graph_data, glean_data, learned_patterns, temporal_patterns, semantic_embeddings,
+                gnn_embeddings=gnn_embeddings,
+                gnn_classifications=gnn_classifications,
+                gnn_link_predictions=gnn_link_predictions
             )
             # Apply domain-specific filtering with differential privacy
             if self.domain_filter and self.enable_domain_filtering:
@@ -467,6 +773,19 @@ Wait we introduced typo. Need to patch carefully. Let's reapply patch carefully.
                     )
                 except Exception as e:
                     logger.warning(f"⚠️  Data quality assessment failed: {e}")
+            
+            # Priority 2: Evaluate GNN models if available
+            gnn_evaluation_results = None
+            if self.enable_gnn and HAS_GNN_TRAINING and GNNEvaluator is not None:
+                try:
+                    gnn_evaluation_results = self._evaluate_gnn_models(
+                    graph_data, gnn_embeddings, gnn_classifications, gnn_link_predictions
+                )
+                    if gnn_evaluation_results:
+                        results["steps"]["gnn_evaluation"] = gnn_evaluation_results
+                        logger.info("✅ GNN model evaluation completed")
+                except Exception as e:
+                    logger.warning(f"⚠️  GNN evaluation failed: {e}")
             
             results["steps"]["features"] = {
                 "status": "success",
@@ -748,43 +1067,93 @@ Wait we introduced typo. Need to patch carefully. Let's reapply patch carefully.
         glean_data: Optional[Dict[str, Any]],
         learned_patterns: Optional[Dict[str, Any]] = None,
         temporal_patterns: Optional[Dict[str, Any]] = None,
-        semantic_embeddings: Optional[Dict[str, Any]] = None
+        semantic_embeddings: Optional[Dict[str, Any]] = None,
+        gnn_embeddings: Optional[Dict[str, Any]] = None,
+        gnn_classifications: Optional[Dict[str, Any]] = None,
+        gnn_link_predictions: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Generate training features from graph data and Glean patterns."""
+        """Generate training features from graph data and Glean patterns.
+        
+        Priority 1: Now includes GNN embeddings to replace/enhance manual features.
+        """
         features = []
         
-        # Extract features from current knowledge graph
-        nodes = graph_data.get("nodes", [])
-        edges = graph_data.get("edges", [])
-        
-        # Feature: Node type distribution
-        node_types = {}
-        for node in nodes:
-            node_type = node.get("type", "unknown")
-            node_types[node_type] = node_types.get(node_type, 0) + 1
-        
-        # Feature: Edge label distribution
-        edge_labels = {}
-        for edge in edges:
-            label = edge.get("label", "unknown")
-            edge_labels[label] = edge_labels.get(label, 0) + 1
-        
-        # Feature: Information theory metrics (if available)
-        metrics = graph_data.get("metrics", {})
-        
-        features.append({
-            "type": "node_type_distribution",
-            "data": node_types,
-        })
-        features.append({
-            "type": "edge_label_distribution",
-            "data": edge_labels,
-        })
-        
-        if metrics:
+        # Priority 1: Add GNN embeddings as primary features (replace manual features if available)
+        if gnn_embeddings and "error" not in gnn_embeddings:
+            # Graph-level embedding
+            if "graph_embedding" in gnn_embeddings:
+                features.append({
+                    "type": "gnn_graph_embedding",
+                    "data": gnn_embeddings["graph_embedding"],
+                    "embedding_dim": gnn_embeddings.get("embedding_dim", 128),
+                    "source": "gnn_embedder"
+                })
+            
+            # Node-level embeddings
+            if "node_embeddings" in gnn_embeddings:
+                features.append({
+                    "type": "gnn_node_embeddings",
+                    "data": gnn_embeddings["node_embeddings"],
+                    "embedding_dim": gnn_embeddings.get("embedding_dim", 128),
+                    "num_nodes": gnn_embeddings.get("num_nodes", 0),
+                    "source": "gnn_embedder"
+                })
+            
+            logger.info("✅ Using GNN embeddings as primary features")
+        else:
+            # Fallback to manual features if GNN not available
+            logger.info("Using manual feature engineering (GNN embeddings not available)")
+            
+            # Extract features from current knowledge graph (fallback)
+            nodes = graph_data.get("nodes", [])
+            edges = graph_data.get("edges", [])
+            
+            # Feature: Node type distribution
+            node_types = {}
+            for node in nodes:
+                node_type = node.get("type", "unknown")
+                node_types[node_type] = node_types.get(node_type, 0) + 1
+            
+            # Feature: Edge label distribution
+            edge_labels = {}
+            for edge in edges:
+                label = edge.get("label", "unknown")
+                edge_labels[label] = edge_labels.get(label, 0) + 1
+            
+            # Feature: Information theory metrics (if available)
+            metrics = graph_data.get("metrics", {})
+            
             features.append({
-                "type": "information_theory_metrics",
-                "data": metrics,
+                "type": "node_type_distribution",
+                "data": node_types,
+            })
+            features.append({
+                "type": "edge_label_distribution",
+                "data": edge_labels,
+            })
+            
+            if metrics:
+                features.append({
+                    "type": "information_theory_metrics",
+                    "data": metrics,
+                })
+        
+        # Add GNN classifications if available
+        if gnn_classifications and "error" not in gnn_classifications:
+            features.append({
+                "type": "gnn_node_classifications",
+                "data": gnn_classifications.get("classifications", []),
+                "class_mapping": gnn_classifications.get("class_mapping", {}),
+                "source": "gnn_classifier"
+            })
+        
+        # Add GNN link predictions if available
+        if gnn_link_predictions and "error" not in gnn_link_predictions:
+            features.append({
+                "type": "gnn_link_predictions",
+                "data": gnn_link_predictions.get("predictions", []),
+                "num_candidates": gnn_link_predictions.get("num_candidates", 0),
+                "source": "gnn_link_predictor"
             })
         
         # Add historical patterns from Glean if available
@@ -833,6 +1202,10 @@ Wait we introduced typo. Need to patch carefully. Let's reapply patch carefully.
                 "data": temporal_patterns.get("combined_insights", {}),
             })
         
+        # Get node/edge counts
+        nodes = graph_data.get("nodes", [])
+        edges = graph_data.get("edges", [])
+        
         return {
             "features": features,
             "node_count": len(nodes),
@@ -840,7 +1213,209 @@ Wait we introduced typo. Need to patch carefully. Let's reapply patch carefully.
             "has_historical_data": glean_data is not None,
             "has_learned_patterns": learned_patterns is not None,
             "has_temporal_patterns": temporal_patterns is not None,
+            "has_gnn_embeddings": gnn_embeddings is not None and "error" not in (gnn_embeddings or {}),
+            "has_gnn_classifications": gnn_classifications is not None and "error" not in (gnn_classifications or {}),
+            "has_gnn_link_predictions": gnn_link_predictions is not None and "error" not in (gnn_link_predictions or {}),
         }
+    
+    def _evaluate_gnn_models(
+        self,
+        graph_data: Dict[str, Any],
+        gnn_embeddings: Optional[Dict[str, Any]],
+        gnn_classifications: Optional[Dict[str, Any]],
+        gnn_link_predictions: Optional[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """Evaluate GNN models (Priority 2).
+        
+        Args:
+            graph_data: Graph data
+            gnn_embeddings: GNN embeddings results
+            gnn_classifications: GNN classification results
+            gnn_link_predictions: GNN link prediction results
+        
+        Returns:
+            Dictionary with evaluation results
+        """
+        if not HAS_GNN_TRAINING or GNNEvaluator is None:
+            return None
+        
+        evaluator = GNNEvaluator()
+        evaluation_results = {}
+        
+        # Evaluate embeddings
+        if gnn_embeddings and "error" not in gnn_embeddings:
+            try:
+                if "node_embeddings" in gnn_embeddings:
+                    # Extract embeddings as numpy array
+                    node_embeddings_dict = gnn_embeddings["node_embeddings"]
+                    if isinstance(node_embeddings_dict, dict):
+                        embeddings_list = list(node_embeddings_dict.values())
+                        if embeddings_list:
+                            import numpy as np
+                            embeddings_array = np.array(embeddings_list)
+                            
+                            # Extract labels from nodes for evaluation
+                            nodes = graph_data.get("nodes", [])
+                            labels = [node.get("type", "unknown") for node in nodes[:len(embeddings_array)]]
+                            
+                            if len(labels) == len(embeddings_array):
+                                embedding_metrics = evaluator.evaluate_embeddings(
+                                    embeddings_array,
+                                    labels=labels
+                                )
+                                evaluation_results["embedding_quality"] = embedding_metrics
+            except Exception as e:
+                logger.warning(f"Failed to evaluate embeddings: {e}")
+        
+        # Evaluate classifications
+        if gnn_classifications and "error" not in gnn_classifications:
+            try:
+                # Extract true labels from nodes
+                nodes = graph_data.get("nodes", [])
+                classifications = gnn_classifications.get("classifications", [])
+                
+                if classifications:
+                    y_true = []
+                    y_pred = []
+                    for classification in classifications:
+                        node_id = classification["node_id"]
+                        # Find corresponding node
+                        for node in nodes:
+                            if node.get("id", "") == node_id:
+                                y_true.append(node.get("type", "unknown"))
+                                y_pred.append(classification["predicted_class"])
+                                break
+                    
+                    if y_true and y_pred:
+                        class_mapping = gnn_classifications.get("class_mapping", {})
+                        class_names = [class_mapping.get(str(i), f"class_{i}") for i in range(len(class_mapping))]
+                        classification_metrics = evaluator.evaluate_classification(
+                            y_true, y_pred, class_names=class_names
+                        )
+                        evaluation_results["classification"] = classification_metrics
+            except Exception as e:
+                logger.warning(f"Failed to evaluate classifications: {e}")
+        
+        # Evaluate link predictions (limited - need ground truth)
+        if gnn_link_predictions and "error" not in gnn_link_predictions:
+            try:
+                predictions = gnn_link_predictions.get("predictions", [])
+                if predictions:
+                    # Note: Full evaluation requires ground truth links
+                    # For now, just report statistics
+                    probabilities = [p.get("probability", 0.0) for p in predictions]
+                    evaluation_results["link_prediction"] = {
+                        "num_predictions": len(predictions),
+                        "mean_probability": float(sum(probabilities) / len(probabilities)) if probabilities else 0.0,
+                        "max_probability": float(max(probabilities)) if probabilities else 0.0,
+                        "min_probability": float(min(probabilities)) if probabilities else 0.0,
+                        "note": "Full evaluation requires ground truth links"
+                    }
+            except Exception as e:
+                logger.warning(f"Failed to evaluate link predictions: {e}")
+        
+        return evaluation_results if evaluation_results else None
+    
+    def train_gnn_models(
+        self,
+        nodes: List[Dict[str, Any]],
+        edges: List[Dict[str, Any]],
+        train_classifier: bool = True,
+        train_link_predictor: bool = True,
+        train_anomaly_detector: bool = False,
+        epochs: int = 100,
+        lr: float = 0.01
+    ) -> Dict[str, Any]:
+        """Train GNN models (Priority 2).
+        
+        Args:
+            nodes: Training nodes
+            edges: Training edges
+            train_classifier: Whether to train node classifier
+            train_link_predictor: Whether to train link predictor
+            train_anomaly_detector: Whether to train anomaly detector
+            epochs: Number of training epochs
+            lr: Learning rate
+        
+        Returns:
+            Dictionary with training results
+        """
+        if not self.enable_gnn_training or self.gnn_trainer is None:
+            return {"error": "GNN training not enabled or trainer not initialized"}
+        
+        logger.info("Training GNN models...")
+        
+        results = {
+            "status": "success",
+            "models_trained": [],
+            "training_results": {}
+        }
+        
+        # Train node classifier
+        if train_classifier:
+            try:
+                classifier_result = self.gnn_trainer.train_node_classifier(
+                    nodes, edges,
+                    epochs=epochs,
+                    lr=lr
+                )
+                results["training_results"]["classifier"] = classifier_result
+                results["models_trained"].append("classifier")
+                logger.info(f"✅ Node classifier trained: accuracy={classifier_result.get('training_accuracy', 0.0):.4f}")
+            except Exception as e:
+                logger.error(f"❌ Node classifier training failed: {e}")
+                results["training_results"]["classifier"] = {"error": str(e)}
+        
+        # Train link predictor
+        if train_link_predictor:
+            try:
+                predictor_result = self.gnn_trainer.train_link_predictor(
+                    nodes, edges,
+                    epochs=epochs,
+                    lr=lr
+                )
+                results["training_results"]["link_predictor"] = predictor_result
+                results["models_trained"].append("link_predictor")
+                logger.info(f"✅ Link predictor trained: accuracy={predictor_result.get('training_accuracy', 0.0):.4f}")
+            except Exception as e:
+                logger.error(f"❌ Link predictor training failed: {e}")
+                results["training_results"]["link_predictor"] = {"error": str(e)}
+        
+        # Train anomaly detector
+        if train_anomaly_detector:
+            try:
+                detector_result = self.gnn_trainer.train_anomaly_detector(
+                    nodes, edges,
+                    epochs=epochs,
+                    lr=lr
+                )
+                results["training_results"]["anomaly_detector"] = detector_result
+                results["models_trained"].append("anomaly_detector")
+                logger.info(f"✅ Anomaly detector trained: loss={detector_result.get('final_loss', 0.0):.4f}")
+            except Exception as e:
+                logger.error(f"❌ Anomaly detector training failed: {e}")
+                results["training_results"]["anomaly_detector"] = {"error": str(e)}
+        
+        logger.info(f"✅ GNN training complete: {len(results['models_trained'])} models trained")
+        
+        return results
+    
+    def load_trained_gnn_models(
+        self,
+        model_paths: Dict[str, str]
+    ) -> Dict[str, Any]:
+        """Load trained GNN models.
+        
+        Args:
+            model_paths: Dictionary mapping model type to path
+        
+        Returns:
+            Dictionary with loaded models
+        """
+        if not self.enable_gnn_training or self.gnn_trainer is None:
+            return {"error": "GNN training not enabled or trainer not initialized"}
+        
+        return self.gnn_trainer.load_trained_models(model_paths)
     
     def _prepare_training_dataset(
         self,
