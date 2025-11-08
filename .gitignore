@@ -33,3 +33,10 @@ models/open_deep_research
 # Embedded git repositories
 models/glove/
 models/granite-4.0-h-micro-transformers/
+
+# Large model files (keep configs, exclude weights)
+models/*/model*.safetensors
+models/*/model*.safetensors.index.json
+models/*/rank*.engine
+models/*/.git/
+models/*/model-*.safetensors
