@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/langchain-ai/langgraph-go/pkg/stategraph"
+	"github.com/plturrell/aModels/services/graph/pkg/models"
 )
 
 // GNNProcessorOptions configures the GNN query processor.
@@ -110,16 +111,38 @@ func QueryGNNNode(opts GNNProcessorOptions) stategraph.NodeFunc {
 		
 		// Extract GNN query request from state
 		var gnnRequest GNNQueryRequest
+		var graphData *models.GraphData
+		
+		// Try to get unified GraphData first
+		if gd, ok := state["graph_data"].(*models.GraphData); ok {
+			graphData = gd
+		} else if gdMap, ok := state["graph_data"].(map[string]any); ok {
+			// Try to reconstruct from map
+			var err error
+			graphData, err = models.FromNeo4j(gdMap)
+			if err != nil {
+				log.Printf("WARNING: Failed to parse graph_data from state: %v", err)
+			}
+		}
+		
 		if req, ok := state["gnn_query_request"].(map[string]any); ok {
 			if queryType, ok := req["query_type"].(string); ok {
 				gnnRequest.QueryType = queryType
 			}
-			if nodes, ok := req["nodes"].([]any); ok {
-				gnnRequest.Nodes = convertToNodes(nodes)
+			
+			// Use GraphData if available, otherwise fall back to direct nodes/edges
+			if graphData != nil {
+				gnnRequest.Nodes = convertGraphDataNodes(graphData.Nodes)
+				gnnRequest.Edges = convertGraphDataEdges(graphData.Edges)
+			} else {
+				if nodes, ok := req["nodes"].([]any); ok {
+					gnnRequest.Nodes = convertToNodes(nodes)
+				}
+				if edges, ok := req["edges"].([]any); ok {
+					gnnRequest.Edges = convertToEdges(edges)
+				}
 			}
-			if edges, ok := req["edges"].([]any); ok {
-				gnnRequest.Edges = convertToEdges(edges)
-			}
+			
 			if params, ok := req["params"].(map[string]any); ok {
 				gnnRequest.Params = params
 			}
@@ -191,12 +214,21 @@ func QueryGNNNode(opts GNNProcessorOptions) stategraph.NodeFunc {
 			return nil, fmt.Errorf("decode GNN response: %w", err)
 		}
 		
+		// Convert GNN response to unified GraphData format if possible
+		gnnGraphData, err := models.FromGNN(result)
+		if err != nil {
+			log.Printf("WARNING: Failed to convert GNN response to GraphData: %v", err)
+		}
+		
 		// Add GNN results to state
 		newState := make(map[string]any)
 		for k, v := range state {
 			newState[k] = v
 		}
 		newState["gnn_result"] = result
+		if gnnGraphData != nil {
+			newState["graph_data"] = gnnGraphData
+		}
 		
 		return newState, nil
 	})
@@ -299,21 +331,29 @@ func HybridQueryNode(opts GNNProcessorOptions) stategraph.NodeFunc {
 		
 		// Query GNN (need graph data first)
 		if hybridReq.QueryGNN {
-			// Try to extract nodes/edges from KG result
-			nodes := []Node{}
-			edges := []Edge{}
+			// Try to extract nodes/edges from KG result using unified format
+			var graphData *models.GraphData
 			
 			if kgResult != nil {
-				if nodesData, ok := kgResult["nodes"].([]any); ok {
-					nodes = convertToNodes(nodesData)
-				}
-				if edgesData, ok := kgResult["edges"].([]any); ok {
-					edges = convertToEdges(edgesData)
+				// Try to convert KG result to GraphData
+				var err error
+				graphData, err = models.FromNeo4j(kgResult)
+				if err != nil {
+					log.Printf("WARNING: Failed to convert KG result to GraphData: %v", err)
+					// Fallback to direct extraction
+					if nodesData, ok := kgResult["nodes"].([]any); ok {
+						if edgesData, ok := kgResult["edges"].([]any); ok {
+							graphData = &models.GraphData{
+								Nodes: convertNodesFromAny(nodesData),
+								Edges: convertEdgesFromAny(edgesData),
+							}
+						}
+					}
 				}
 			}
 			
 			// If no graph data, try to get it via simple KG query
-			if len(nodes) == 0 && len(edges) == 0 {
+			if graphData == nil || (len(graphData.Nodes) == 0 && len(graphData.Edges) == 0) {
 				simpleQuery := "MATCH (n) RETURN n LIMIT 100"
 				if hybridReq.ProjectID != "" {
 					simpleQuery = fmt.Sprintf("MATCH (n) WHERE n.project_id = '%s' RETURN n LIMIT 100", hybridReq.ProjectID)
@@ -330,11 +370,17 @@ func HybridQueryNode(opts GNNProcessorOptions) stategraph.NodeFunc {
 					if simpleResp.StatusCode == http.StatusOK {
 						var simpleResult map[string]any
 						json.NewDecoder(simpleResp.Body).Decode(&simpleResult)
-						if nodesData, ok := simpleResult["nodes"].([]any); ok {
-							nodes = convertToNodes(nodesData)
-						}
+						graphData, _ = models.FromNeo4j(simpleResult)
 					}
 				}
+			}
+			
+			// Convert GraphData to GNN format
+			nodes := []Node{}
+			edges := []Edge{}
+			if graphData != nil {
+				nodes = convertGraphDataNodes(graphData.Nodes)
+				edges = convertGraphDataEdges(graphData.Edges)
 			}
 			
 			// Query GNN if we have graph data
@@ -456,5 +502,123 @@ func getString(m map[string]any, key string) string {
 		}
 	}
 	return ""
+}
+
+// convertGraphDataNodes converts unified models.Node to workflow Node format.
+func convertGraphDataNodes(graphNodes []models.Node) []Node {
+	nodes := make([]Node, 0, len(graphNodes))
+	for _, gn := range graphNodes {
+		nodes = append(nodes, Node{
+			ID:    gn.ID,
+			Type:  gn.Type,
+			Label: gn.Label,
+			Props: gn.Properties,
+		})
+	}
+	return nodes
+}
+
+// convertGraphDataEdges converts unified models.Edge to workflow Edge format.
+func convertGraphDataEdges(graphEdges []models.Edge) []Edge {
+	edges := make([]Edge, 0, len(graphEdges))
+	for _, ge := range graphEdges {
+		edges = append(edges, Edge{
+			SourceID: ge.SourceID,
+			TargetID: ge.TargetID,
+			Label:    ge.Label,
+			Props:    ge.Properties,
+		})
+	}
+	return edges
+}
+
+// convertNodesFromAny converts []any to unified models.Node format.
+func convertNodesFromAny(nodesData []any) []models.Node {
+	nodes := make([]models.Node, 0, len(nodesData))
+	for _, nodeData := range nodesData {
+		if nodeMap, ok := nodeData.(map[string]any); ok {
+			node := models.Node{
+				Properties: make(map[string]any),
+			}
+			
+			if id, ok := nodeMap["id"].(string); ok {
+				node.ID = id
+			} else if id, ok := nodeMap["node_id"].(string); ok {
+				node.ID = id
+			}
+			
+			if nodeType, ok := nodeMap["type"].(string); ok {
+				node.Type = nodeType
+			} else if nodeType, ok := nodeMap["node_type"].(string); ok {
+				node.Type = nodeType
+			}
+			
+			if label, ok := nodeMap["label"].(string); ok {
+				node.Label = label
+			}
+			
+			if props, ok := nodeMap["properties"].(map[string]any); ok {
+				node.Properties = props
+			} else {
+				// Copy all non-standard fields to properties
+				for k, v := range nodeMap {
+					if k != "id" && k != "node_id" && k != "type" && k != "node_type" && k != "label" {
+						node.Properties[k] = v
+					}
+				}
+			}
+			
+			if node.ID != "" {
+				nodes = append(nodes, node)
+			}
+		}
+	}
+	return nodes
+}
+
+// convertEdgesFromAny converts []any to unified models.Edge format.
+func convertEdgesFromAny(edgesData []any) []models.Edge {
+	edges := make([]models.Edge, 0, len(edgesData))
+	for _, edgeData := range edgesData {
+		if edgeMap, ok := edgeData.(map[string]any); ok {
+			edge := models.Edge{
+				Properties: make(map[string]any),
+			}
+			
+			if source, ok := edgeMap["source"].(string); ok {
+				edge.SourceID = source
+			} else if source, ok := edgeMap["source_id"].(string); ok {
+				edge.SourceID = source
+			}
+			
+			if target, ok := edgeMap["target"].(string); ok {
+				edge.TargetID = target
+			} else if target, ok := edgeMap["target_id"].(string); ok {
+				edge.TargetID = target
+			}
+			
+			if label, ok := edgeMap["label"].(string); ok {
+				edge.Label = label
+			} else if relType, ok := edgeMap["relation_type"].(string); ok {
+				edge.Label = relType
+			}
+			
+			if props, ok := edgeMap["properties"].(map[string]any); ok {
+				edge.Properties = props
+			} else {
+				// Copy all non-standard fields to properties
+				for k, v := range edgeMap {
+					if k != "source" && k != "source_id" && k != "target" && k != "target_id" && k != "label" && k != "relation_type" {
+						edge.Properties[k] = v
+					}
+				}
+			}
+			
+			if edge.SourceID != "" && edge.TargetID != "" {
+				edges = append(edges, edge)
+			}
+		}
+	}
+	return edges
 }
 

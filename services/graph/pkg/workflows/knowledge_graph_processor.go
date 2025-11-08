@@ -14,6 +14,7 @@ import (
 
 	"github.com/langchain-ai/langgraph-go/pkg/graph"
 	"github.com/langchain-ai/langgraph-go/pkg/stategraph"
+	"github.com/plturrell/aModels/services/graph/pkg/models"
 )
 
 // KnowledgeGraphProcessorOptions configures the knowledge graph processing workflow.
@@ -193,14 +194,35 @@ func ProcessKnowledgeGraphNode(extractServiceURL string) stategraph.NodeFunc {
 		for k, v := range state {
 			newState[k] = v
 		}
-		newState["knowledge_graph"] = map[string]any{
-			"nodes":            kgResp.Nodes,
-			"edges":            kgResp.Edges,
-			"metadata_entropy": kgResp.MetadataEntropy,
-			"kl_divergence":    kgResp.KLDivergence,
-			"quality":          kgResp.Quality,
-			"root_node_id":     kgResp.RootNodeID,
+		// Convert to unified GraphData format
+		graphData := &models.GraphData{
+			Nodes: convertKGResponseNodes(kgResp.Nodes),
+			Edges: convertKGResponseEdges(kgResp.Edges),
+			Metadata: models.Metadata{
+				ProjectID:       kgRequest.ProjectID,
+				SystemID:        kgRequest.SystemID,
+				RootNodeID:      kgResp.RootNodeID,
+				MetadataEntropy: kgResp.MetadataEntropy,
+				KLDivergence:    kgResp.KLDivergence,
+				Warnings:        kgResp.Warnings,
+			},
+			Quality: &models.Quality{
+				Score:             kgResp.Quality.Score,
+				Level:             kgResp.Quality.Level,
+				Issues:            kgResp.Quality.Issues,
+				Recommendations:   kgResp.Quality.Recommendations,
+				ProcessingStrategy: kgResp.Quality.ProcessingStrategy,
+			},
 		}
+
+		// Validate graph data
+		if err := graphData.Validate(); err != nil {
+			log.Printf("WARNING: Graph data validation failed: %v", err)
+		}
+
+		// Store in unified format
+		newState["knowledge_graph"] = graphData.ToNeo4j() // For backward compatibility
+		newState["graph_data"] = graphData                 // New unified format
 		newState["knowledge_graph_quality"] = kgResp.Quality
 		newState["knowledge_graph_nodes"] = kgResp.Nodes
 		newState["knowledge_graph_edges"] = kgResp.Edges
@@ -349,25 +371,42 @@ func QueryKnowledgeGraphNode(extractServiceURL string) stategraph.NodeFunc {
 				resp.Status, strings.TrimSpace(string(bodyBytes)))
 		}
 
-		var queryResult struct {
-			Columns []string         `json:"columns"`
-			Data    []map[string]any `json:"data"`
-		}
-
+		var queryResult map[string]any
 		if err := json.NewDecoder(resp.Body).Decode(&queryResult); err != nil {
 			return nil, fmt.Errorf("decode query response: %w", err)
 		}
 
+		// Convert to unified GraphData format
+		graphData, err := models.FromNeo4j(queryResult)
+		if err != nil {
+			log.Printf("WARNING: Failed to convert Neo4j result to GraphData: %v", err)
+			// Fallback to storing raw result
+			graphData = nil
+		}
+
 		// Store results in state
-		newState := make(map[string]any, len(state)+2)
+		newState := make(map[string]any, len(state)+4)
 		for k, v := range state {
 			newState[k] = v
 		}
-		newState["knowledge_graph_query_results"] = queryResult.Data
-		newState["knowledge_graph_query_columns"] = queryResult.Columns
-
-		log.Printf("Knowledge graph query returned %d results with %d columns",
-			len(queryResult.Data), len(queryResult.Columns))
+		
+		// Store in both formats for compatibility
+		newState["knowledge_graph_query_results"] = queryResult
+		if graphData != nil {
+			newState["graph_data"] = graphData
+			newState["knowledge_graph_query_results"] = graphData.ToNeo4j()
+			log.Printf("Knowledge graph query returned %d nodes, %d edges (converted to GraphData)",
+				len(graphData.Nodes), len(graphData.Edges))
+		} else {
+			// Fallback: extract columns and data if present
+			if columns, ok := queryResult["columns"].([]any); ok {
+				newState["knowledge_graph_query_columns"] = columns
+			}
+			if data, ok := queryResult["data"].([]any); ok {
+				newState["knowledge_graph_query_results"] = data
+				log.Printf("Knowledge graph query returned %d results", len(data))
+			}
+		}
 
 		return newState, nil
 	})
@@ -564,5 +603,33 @@ func NewKnowledgeGraphProcessorWorkflow(opts KnowledgeGraphProcessorOptions) (*s
 	}
 
 	return BuildGraphWithOptions("process_kg", "query_kg", nodes, edges, conditionalEdges, nil)
+}
+
+// convertKGResponseNodes converts KnowledgeGraphResponse nodes to unified Node format.
+func convertKGResponseNodes(kgNodes []Node) []models.Node {
+	nodes := make([]models.Node, 0, len(kgNodes))
+	for _, kgNode := range kgNodes {
+		nodes = append(nodes, models.Node{
+			ID:         kgNode.ID,
+			Type:       kgNode.Type,
+			Label:      kgNode.Label,
+			Properties: kgNode.Props,
+		})
+	}
+	return nodes
+}
+
+// convertKGResponseEdges converts KnowledgeGraphResponse edges to unified Edge format.
+func convertKGResponseEdges(kgEdges []Edge) []models.Edge {
+	edges := make([]models.Edge, 0, len(kgEdges))
+	for _, kgEdge := range kgEdges {
+		edges = append(edges, models.Edge{
+			SourceID:   kgEdge.SourceID,
+			TargetID:   kgEdge.TargetID,
+			Label:      kgEdge.Label,
+			Properties: kgEdge.Props,
+		})
+	}
+	return edges
 }
 
