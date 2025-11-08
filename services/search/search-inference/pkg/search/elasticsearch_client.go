@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	elasticsearch "github.com/elastic/go-elasticsearch/v8"
+	elasticsearch "github.com/elastic/go-elasticsearch/v7"
 )
 
 // ElasticsearchConfig captures connection details for the upstream Elasticsearch cluster.

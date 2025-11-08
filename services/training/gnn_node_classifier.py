@@ -8,6 +8,7 @@ import logging
 import os
 from typing import Dict, List, Optional, Any, Tuple
 import numpy as np
+from .gnn_features import extract_node_features as _shared_extract_node_features
 
 try:
     import torch
@@ -20,7 +21,12 @@ try:
 except ImportError:
     HAS_PYG = False
     torch = None
-    nn = None
+    # Provide a minimal nn.Module stub so class definitions don't fail at import time
+    class _NNModuleStub:
+        pass
+    class _NNStub:
+        Module = _NNModuleStub
+    nn = _NNStub()
     Data = Any
     Batch = Any
 
@@ -164,45 +170,7 @@ class GNNNodeClassifier:
         node: Dict[str, Any],
         props: Dict[str, Any]
     ) -> List[float]:
-        """Extract feature vector from a node.
-        
-        Args:
-            node: Node dictionary
-            props: Node properties
-        
-        Returns:
-            Feature vector as list of floats
-        """
-        features = []
-        
-        # Node type encoding (one-hot-like)
-        node_type = node.get("type", node.get("label", "unknown"))
-        type_features = [0.0] * 10
-        type_map = {
-            "table": 0, "column": 1, "view": 2, "database": 3, "schema": 4,
-            "sql": 5, "control-m": 6, "project": 7, "system": 8, "information-system": 9
-        }
-        if node_type in type_map:
-            type_idx = type_map[node_type]
-            if type_idx < len(type_features):
-                type_features[type_idx] = 1.0
-        features.extend(type_features)
-        
-        # Property-based features
-        if isinstance(props, dict):
-            features.append(float(props.get("column_count", 0)))
-            features.append(float(props.get("row_count", 0)))
-            features.append(float(props.get("data_type_entropy", 0)))
-            features.append(float(props.get("nullable_ratio", 0)))
-            features.append(float(props.get("metadata_entropy", 0)))
-        else:
-            features.extend([0.0] * 5)
-        
-        # Pad to fixed size (40 features)
-        while len(features) < 40:
-            features.append(0.0)
-        
-        return features[:40]
+        return _shared_extract_node_features(node, props)
     
     def convert_graph_to_pyg_data(
         self,

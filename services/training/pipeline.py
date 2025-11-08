@@ -10,7 +10,7 @@ This module provides end-to-end training pipeline that integrates:
 import os
 import json
 import logging
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 from datetime import datetime
 
 from .glean_integration import GleanTrainingClient, ingest_glean_data_for_training
@@ -261,6 +261,37 @@ class TrainingPipeline:
             except Exception as e:
                 logger.warning(f"Failed to initialize GNN trainer: {e}")
                 self.enable_gnn_training = False
+        
+        # Priority 4: Initialize embedding cache
+        self.enable_gnn_cache = False
+        self.embedding_cache = None
+        if HAS_GNN_PRIORITY4:
+            try:
+                self.enable_gnn_cache = os.getenv("ENABLE_GNN_CACHE", "true").lower() == "true"
+                if self.enable_gnn_cache:
+                    cache_dir = os.getenv("GNN_CACHE_DIR", os.path.join(self.output_dir, "gnn_cache"))
+                    max_size = int(os.getenv("GNN_CACHE_MAX_SIZE", "1000"))
+                    self.embedding_cache = EmbeddingCache(cache_dir=cache_dir, max_size=max_size)
+                    logger.info("GNN EmbeddingCache initialized (Priority 4: Performance)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize EmbeddingCache: {e}")
+
+        # Priority 4: Initialize inference optimizer
+        self.enable_gnn_inference_opt = False
+        self.gnn_inference_optimizer = None
+        self._embedder_optimized = False
+        self._classifier_optimized = False
+        self._link_predictor_optimized = False
+        if HAS_GNN_PRIORITY4:
+            try:
+                self.enable_gnn_inference_opt = os.getenv("ENABLE_GNN_INFERENCE_OPT", "true").lower() == "true"
+                if self.enable_gnn_inference_opt:
+                    use_jit = os.getenv("GNN_INFERENCE_USE_JIT", "true").lower() == "true"
+                    use_compile = os.getenv("GNN_INFERENCE_USE_TORCH_COMPILE", "true").lower() == "true"
+                    self.gnn_inference_optimizer = GNNInferenceOptimizer(use_jit=use_jit, use_torch_compile=use_compile)
+                    logger.info("GNN Inference optimizer initialized (Priority 4: Performance)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize GNN inference optimizer: {e}")
     
     def run_full_pipeline(
         self,
@@ -413,7 +444,6 @@ class TrainingPipeline:
                     "error": message,
                 }
                 logger.warning("Signavio ingestion skipped: %s", message)
-Wait we introduced typo. Need to patch carefully. Let's reapply patch carefully. Go back. We'll revert snippet. Let's redo patch.
             logger.info(f"✅ Extracted {results['steps']['extract']['nodes']} nodes, {results['steps']['extract']['edges']} edges")
         except Exception as e:
             logger.error(f"❌ Extraction failed: {e}")
@@ -443,6 +473,9 @@ Wait we introduced typo. Need to patch carefully. Let's reapply patch carefully.
                 results["steps"]["glean"] = {"status": "failed", "error": str(e)}
         else:
             results["steps"]["glean"] = {"status": "skipped"}
+
+        # Initialize optional semantic embeddings variable used later
+        semantic_embeddings = None
         
         # Step 3: Learn patterns from graph and Glean data
         logger.info("Step 3: Learning patterns from knowledge graph and Glean data...")
@@ -603,27 +636,75 @@ Wait we introduced typo. Need to patch carefully. Let's reapply patch carefully.
                 graph_nodes = graph_data.get("nodes", [])
                 graph_edges = graph_data.get("edges", [])
                 
-                # Generate graph-level and node-level embeddings
-                gnn_embeddings = self.gnn_embedder.generate_embeddings(
-                    graph_nodes,
-                    graph_edges,
-                    graph_level=True
-                )
+                # Try cache first
+                gnn_embeddings = None
+                cache_config = {
+                    "embedding_dim": getattr(self.gnn_embedder, "embedding_dim", None),
+                    "hidden_dim": getattr(self.gnn_embedder, "hidden_dim", None),
+                    "num_layers": getattr(self.gnn_embedder, "num_layers", None)
+                }
+                if self.embedding_cache and self.enable_gnn_cache:
+                    cached = self.embedding_cache.get(graph_nodes, graph_edges, cache_config)
+                    if cached is not None:
+                        gnn_embeddings = cached
+                        logger.info("Using cached GNN embeddings")
                 
-                # Also get node-level embeddings for classification
-                node_embeddings = self.gnn_embedder.generate_embeddings(
-                    graph_nodes,
-                    graph_edges,
-                    graph_level=False
-                )
-                
-                # Merge node embeddings into main embeddings dict
-                if "error" not in gnn_embeddings and "error" not in node_embeddings:
-                    gnn_embeddings["node_embeddings"] = node_embeddings.get("node_embeddings", {})
+                if gnn_embeddings is None:
+                    # Generate graph-level and node-level embeddings
+                    gnn_embeddings = self.gnn_embedder.generate_embeddings(
+                        graph_nodes,
+                        graph_edges,
+                        graph_level=True
+                    )
+
+                    # Optimize embedder model for inference after first init
+                    if (
+                        self.enable_gnn_inference_opt
+                        and HAS_GNN_PRIORITY4
+                        and getattr(self.gnn_embedder, "model", None) is not None
+                        and not self._embedder_optimized
+                        and self.gnn_inference_optimizer is not None
+                    ):
+                        try:
+                            self.gnn_embedder.model = self.gnn_inference_optimizer.optimize_for_inference(
+                                self.gnn_embedder.model, None
+                            )
+                            self._embedder_optimized = True
+                            logger.info("Optimized GNN embedder model for inference")
+                        except Exception as e:
+                            logger.warning(f"Failed to optimize embedder model: {e}")
+                    
+                    node_embeddings = self.gnn_embedder.generate_embeddings(
+                        graph_nodes,
+                        graph_edges,
+                        graph_level=False
+                    )
+                    
+                    if "error" not in gnn_embeddings and "error" not in node_embeddings:
+                        gnn_embeddings["node_embeddings"] = node_embeddings.get("node_embeddings", {})
+                        if self.embedding_cache and self.enable_gnn_cache:
+                            self.embedding_cache.put(graph_nodes, graph_edges, gnn_embeddings, cache_config)
+                            logger.info("Cached GNN embeddings")
                 
                 # Node classification if enabled
                 if self.enable_gnn_classification and self.gnn_classifier:
                     try:
+                        # Optimize classifier model for inference (once)
+                        if (
+                            self.enable_gnn_inference_opt
+                            and HAS_GNN_PRIORITY4
+                            and getattr(self.gnn_classifier, "model", None) is not None
+                            and not self._classifier_optimized
+                            and self.gnn_inference_optimizer is not None
+                        ):
+                            try:
+                                self.gnn_classifier.model = self.gnn_inference_optimizer.optimize_for_inference(
+                                    self.gnn_classifier.model, None
+                                )
+                                self._classifier_optimized = True
+                                logger.info("Optimized GNN classifier model for inference")
+                            except Exception as e:
+                                logger.warning(f"Failed to optimize classifier model: {e}")
                         # Try to classify nodes (may need training first)
                         gnn_classifications = self.gnn_classifier.classify_nodes(
                             graph_nodes,
@@ -642,7 +723,48 @@ Wait we introduced typo. Need to patch carefully. Let's reapply patch carefully.
                                 "reason": gnn_classifications.get("error", "model not trained")
                             }
                             logger.info("⚠️  Node classification skipped (model not trained)")
-                            gnn_classifications = None
+                            # Auto-train fallback if enabled
+                            try:
+                                if (
+                                    self.enable_gnn_training
+                                    and self.gnn_trainer is not None
+                                    and os.getenv("GNN_AUTO_TRAIN_ON_MISSING_MODEL", "true").lower() == "true"
+                                ):
+                                    err_msg = str(gnn_classifications.get("error", "")).lower()
+                                    if "not trained" in err_msg:
+                                        logger.info("Auto-training node classifier (fallback)...")
+                                        at_epochs = int(os.getenv("GNN_AUTO_TRAIN_EPOCHS", "10"))
+                                        at_lr = float(os.getenv("GNN_AUTO_TRAIN_LR", "0.01"))
+                                        cls_train_result = self.gnn_trainer.train_node_classifier(
+                                            graph_nodes, graph_edges, epochs=at_epochs, lr=at_lr, save_model=True
+                                        )
+                                        # Load and retry classification
+                                        model_path = cls_train_result.get("model_path")
+                                        if model_path:
+                                            try:
+                                                self.gnn_classifier.load_model(model_path)
+                                            except Exception as e_load:
+                                                logger.warning(f"Failed to load auto-trained classifier: {e_load}")
+                                        retry_cls = self.gnn_classifier.classify_nodes(graph_nodes, graph_edges)
+                                        if "error" not in retry_cls:
+                                            gnn_classifications = retry_cls
+                                            results["steps"]["gnn_classification"] = {
+                                                "status": "success",
+                                                "num_classified": len(retry_cls.get("classifications", [])),
+                                                "num_classes": len(retry_cls.get("class_mapping", {})),
+                                                "auto_trained": True
+                                            }
+                                            results["steps"]["gnn_training_fallback"] = results["steps"].get("gnn_training_fallback", {})
+                                            results["steps"]["gnn_training_fallback"]["classifier"] = cls_train_result
+                                        else:
+                                            gnn_classifications = None
+                                    else:
+                                        gnn_classifications = None
+                                else:
+                                    gnn_classifications = None
+                            except Exception as e_fallback:
+                                logger.warning(f"Auto-train fallback for classifier failed: {e_fallback}")
+                                gnn_classifications = None
                     except Exception as e:
                         logger.warning(f"⚠️  Node classification failed: {e}")
                         results["steps"]["gnn_classification"] = {"status": "failed", "error": str(e)}
@@ -653,6 +775,22 @@ Wait we introduced typo. Need to patch carefully. Let's reapply patch carefully.
                 # Link prediction if enabled
                 if self.enable_gnn_link_prediction and self.gnn_link_predictor:
                     try:
+                        # Optimize link predictor model for inference (once)
+                        if (
+                            self.enable_gnn_inference_opt
+                            and HAS_GNN_PRIORITY4
+                            and getattr(self.gnn_link_predictor, "model", None) is not None
+                            and not self._link_predictor_optimized
+                            and self.gnn_inference_optimizer is not None
+                        ):
+                            try:
+                                self.gnn_link_predictor.model = self.gnn_inference_optimizer.optimize_for_inference(
+                                    self.gnn_link_predictor.model, None
+                                )
+                                self._link_predictor_optimized = True
+                                logger.info("Optimized GNN link predictor model for inference")
+                            except Exception as e:
+                                logger.warning(f"Failed to optimize link predictor model: {e}")
                         # Predict missing links (may need training first)
                         gnn_link_predictions = self.gnn_link_predictor.predict_links(
                             graph_nodes,
@@ -672,7 +810,52 @@ Wait we introduced typo. Need to patch carefully. Let's reapply patch carefully.
                                 "reason": gnn_link_predictions.get("error", "model not trained")
                             }
                             logger.info("⚠️  Link prediction skipped (model not trained)")
-                            gnn_link_predictions = None
+                            # Auto-train fallback if enabled
+                            try:
+                                if (
+                                    self.enable_gnn_training
+                                    and self.gnn_trainer is not None
+                                    and os.getenv("GNN_AUTO_TRAIN_ON_MISSING_MODEL", "true").lower() == "true"
+                                ):
+                                    err_msg = str(gnn_link_predictions.get("error", "")).lower()
+                                    if "not trained" in err_msg:
+                                        logger.info("Auto-training link predictor (fallback)...")
+                                        at_epochs = int(os.getenv("GNN_AUTO_TRAIN_EPOCHS", "10"))
+                                        at_lr = float(os.getenv("GNN_AUTO_TRAIN_LR", "0.01"))
+                                        at_neg = int(os.getenv("GNN_AUTO_TRAIN_NEG_SAMPLES", "1"))
+                                        pred_train_result = self.gnn_trainer.train_link_predictor(
+                                            graph_nodes, graph_edges, epochs=at_epochs, lr=at_lr
+                                        )
+                                        # Load and retry prediction
+                                        model_path = pred_train_result.get("model_path")
+                                        if model_path:
+                                            try:
+                                                self.gnn_link_predictor.load_model(model_path)
+                                            except Exception as e_load:
+                                                logger.warning(f"Failed to load auto-trained link predictor: {e_load}")
+                                        retry_pred = self.gnn_link_predictor.predict_links(
+                                            graph_nodes, graph_edges,
+                                            top_k=int(os.getenv("GNN_LINK_PREDICTION_TOP_K", "10"))
+                                        )
+                                        if "error" not in retry_pred:
+                                            gnn_link_predictions = retry_pred
+                                            results["steps"]["gnn_link_prediction"] = {
+                                                "status": "success",
+                                                "num_predictions": len(retry_pred.get("predictions", [])),
+                                                "num_candidates": retry_pred.get("num_candidates", 0),
+                                                "auto_trained": True
+                                            }
+                                            results["steps"]["gnn_training_fallback"] = results["steps"].get("gnn_training_fallback", {})
+                                            results["steps"]["gnn_training_fallback"]["link_predictor"] = pred_train_result
+                                        else:
+                                            gnn_link_predictions = None
+                                    else:
+                                        gnn_link_predictions = None
+                                else:
+                                    gnn_link_predictions = None
+                            except Exception as e_fallback:
+                                logger.warning(f"Auto-train fallback for link predictor failed: {e_fallback}")
+                                gnn_link_predictions = None
                     except Exception as e:
                         logger.warning(f"⚠️  Link prediction failed: {e}")
                         results["steps"]["gnn_link_prediction"] = {"status": "failed", "error": str(e)}
@@ -791,16 +974,42 @@ Wait we introduced typo. Need to patch carefully. Let's reapply patch carefully.
                 except Exception as e:
                     logger.warning(f"⚠️  Data quality assessment failed: {e}")
             
-            # Priority 2: Evaluate GNN models if available
+            # Priority 2: Evaluate GNN models if available and persist results (Phase 3)
             gnn_evaluation_results = None
             if self.enable_gnn and HAS_GNN_TRAINING and GNNEvaluator is not None:
                 try:
                     gnn_evaluation_results = self._evaluate_gnn_models(
-                    graph_data, gnn_embeddings, gnn_classifications, gnn_link_predictions
-                )
+                        graph_data, gnn_embeddings, gnn_classifications, gnn_link_predictions
+                    )
                     if gnn_evaluation_results:
                         results["steps"]["gnn_evaluation"] = gnn_evaluation_results
                         logger.info("✅ GNN model evaluation completed")
+                        # Phase 3: persist evaluation results to disk
+                        try:
+                            eval_dir = os.path.join(self.output_dir, "gnn_eval")
+                            os.makedirs(eval_dir, exist_ok=True)
+                            eval_file = os.path.join(eval_dir, f"eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+                            with open(eval_file, "w") as f:
+                                json.dump(gnn_evaluation_results, f, indent=2)
+                            # Also add a latest symlink or copy
+                            latest_file = os.path.join(eval_dir, "latest.json")
+                            try:
+                                # On systems without symlink permissions, fall back to copy
+                                if os.path.islink(latest_file) or os.path.exists(latest_file):
+                                    try:
+                                        os.remove(latest_file)
+                                    except Exception:
+                                        pass
+                                os.symlink(os.path.basename(eval_file), latest_file)
+                            except Exception:
+                                try:
+                                    with open(latest_file, "w") as f2:
+                                        json.dump(gnn_evaluation_results, f2, indent=2)
+                                except Exception:
+                                    pass
+                            results["steps"]["gnn_evaluation"]["persisted_to"] = eval_file
+                        except Exception as e_persist:
+                            logger.warning(f"Failed to persist GNN eval results: {e_persist}")
                 except Exception as e:
                     logger.warning(f"⚠️  GNN evaluation failed: {e}")
             

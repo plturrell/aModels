@@ -53,9 +53,18 @@ MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
     },
 }
 
-app = FastAPI(title="Transformers CPU Service", version="0.1.0")
+app = FastAPI(title="Transformers GPU Service", version="0.1.0")
 torch.set_grad_enabled(False)
-torch.set_num_threads(max(1, os.cpu_count() or 1))
+
+# Detect device (GPU if available, otherwise CPU)
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+if DEVICE == "cuda":
+    print(f"✅ Using GPU: {torch.cuda.get_device_name(0)}")
+    print(f"   CUDA Version: {torch.version.cuda}")
+    print(f"   GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
+else:
+    print("⚠️  CUDA not available, using CPU")
+    torch.set_num_threads(max(1, os.cpu_count() or 1))
 
 
 class GenerateRequest(BaseModel):
@@ -127,8 +136,10 @@ def _run_generation(req: GenerateRequest) -> GenerateResponse:
 
     print(f"[DEBUG] Tokenizing prompt: {req.prompt[:50]}...")
     inputs = tokenizer(req.prompt, return_tensors="pt")
+    # Move inputs to the same device as the model
+    inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
     input_ids = inputs["input_ids"]
-    print(f"[DEBUG] Input shape: {input_ids.shape}")
+    print(f"[DEBUG] Input shape: {input_ids.shape}, Device: {DEVICE}")
 
     max_new_tokens = max(1, min(req.max_tokens, 512))
     temperature = req.temperature if req.temperature > 0 else 0.7

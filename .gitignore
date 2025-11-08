@@ -38,5 +38,8 @@ models/granite-4.0-h-micro-transformers/
 models/*/model*.safetensors
 models/*/model*.safetensors.index.json
 models/*/rank*.engine
+models/*-tensorrt/
 models/*/.git/
 models/*/model-*.safetensors
+
+services/search/search-inference/bin/

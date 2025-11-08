@@ -208,6 +208,7 @@ func main() {
 	http.HandleFunc("/v1/chat/completions/stream", server.EnableCORS(vgServer.RateLimitMiddleware(vgServer.HandleStreamingChat)))
 	http.HandleFunc("/v1/chat/completions/function-calling", server.EnableCORS(vgServer.RateLimitMiddleware(vgServer.HandleFunctionCalling)))
 	http.HandleFunc("/v1/models", server.EnableCORS(vgServer.HandleModels))
+	http.HandleFunc("/v1/embeddings", server.EnableCORS(vgServer.RateLimitMiddleware(vgServer.HandleEmbeddings)))
 	http.HandleFunc("/v1/domains", server.EnableCORS(vgServer.HandleListDomains))
 
 	// Phase 3: Domain lifecycle management API

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/domain"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/gpu"
@@ -252,10 +253,10 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Auto-detected domain: %s", domain)
 	}
 
-    // Retrieve domain configuration before model resolution
-    domainConfig, _ := s.domainManager.GetDomainConfig(domain)
-    // Determine preferred backend based on environment/GPU when not set in config
-    preferredBackend := pickPreferredBackend()
+	// Retrieve domain configuration before model resolution
+	domainConfig, _ := s.domainManager.GetDomainConfig(domain)
+	// Determine preferred backend based on environment/GPU when not set in config
+	preferredBackend := pickPreferredBackend()
 	requireModel := true
 	if domainConfig != nil {
 		if strings.EqualFold(domainConfig.BackendType, "hf-transformers") {
@@ -345,15 +346,15 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 
 	handledExternally := false
 
-    backendType := ""
-    if domainConfig != nil {
-        backendType = strings.TrimSpace(domainConfig.BackendType)
-    }
-    if backendType == "" {
-        backendType = preferredBackend
-    }
+	backendType := ""
+	if domainConfig != nil {
+		backendType = strings.TrimSpace(domainConfig.BackendType)
+	}
+	if backendType == "" {
+		backendType = preferredBackend
+	}
 
-    if strings.EqualFold(backendType, "deepseek-ocr") {
+	if strings.EqualFold(backendType, "deepseek-ocr") {
 		service := s.ocrServices[domain]
 		if service == nil {
 			http.Error(w, fmt.Sprintf("OCR service not configured for domain: %s", domain), http.StatusBadGateway)
@@ -392,7 +393,7 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-    if !handledExternally && strings.EqualFold(backendType, "hf-transformers") {
+	if !handledExternally && strings.EqualFold(backendType, "hf-transformers") {
 		client := s.transformerClients[domain]
 		if client == nil {
 			http.Error(w, fmt.Sprintf("transformers service not configured for domain: %s", domain), http.StatusBadGateway)
@@ -671,14 +672,14 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 // 2) gguf if GGUF_ENABLE=1
 // 3) vaultgemma as a safe pure-Go fallback
 func pickPreferredBackend() string {
-    base := strings.TrimSpace(os.Getenv("TRANSFORMERS_BASE_URL"))
-    if base != "" {
-        return "hf-transformers"
-    }
-    if strings.EqualFold(strings.TrimSpace(os.Getenv("GGUF_ENABLE")), "1") {
-        return "gguf"
-    }
-    return "vaultgemma"
+	base := strings.TrimSpace(os.Getenv("TRANSFORMERS_BASE_URL"))
+	if base != "" {
+		return "hf-transformers"
+	}
+	if strings.EqualFold(strings.TrimSpace(os.Getenv("GGUF_ENABLE")), "1") {
+		return "gguf"
+	}
+	return "vaultgemma"
 }
 
 func (s *VaultGemmaServer) HandleModels(w http.ResponseWriter, r *http.Request) {
@@ -691,6 +692,122 @@ func (s *VaultGemmaServer) HandleModels(w http.ResponseWriter, r *http.Request) 
 				"created":  time.Now().Unix(),
 				"owned_by": "google",
 			},
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+// HandleEmbeddings handles OpenAI-compatible embeddings requests
+func (s *VaultGemmaServer) HandleEmbeddings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if r.Header.Get("Content-Type") != "application/json" {
+		http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+
+	var req struct {
+		Model string      `json:"model"`
+		Input interface{} `json:"input"` // Can be string or []string
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Get model (use vaultgemma as default)
+	model := s.getModelForDomain("vaultgemma")
+	if model == nil {
+		http.Error(w, "Model not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Convert input to []string
+	var inputs []string
+	switch v := req.Input.(type) {
+	case string:
+		inputs = []string{v}
+	case []interface{}:
+		inputs = make([]string, len(v))
+		for i, item := range v {
+			if str, ok := item.(string); ok {
+				inputs[i] = str
+			} else {
+				http.Error(w, "Input must be string or array of strings", http.StatusBadRequest)
+				return
+			}
+		}
+	case []string:
+		inputs = v
+	default:
+		http.Error(w, "Input must be string or array of strings", http.StatusBadRequest)
+		return
+	}
+
+	// Generate embeddings for each input
+	type EmbeddingItem struct {
+		Object    string    `json:"object"`
+		Embedding []float64 `json:"embedding"`
+		Index     int       `json:"index"`
+	}
+
+	items := make([]EmbeddingItem, 0, len(inputs))
+	for idx, text := range inputs {
+		// Simple tokenization (same as inference engine)
+		tokens := make([]int, 0, len(text)/4)
+		words := s.splitIntoWords(text)
+		for _, word := range words {
+			token := s.hashString(word) % model.Config.VocabSize
+			if token < 0 {
+				token = -token
+			}
+			tokens = append(tokens, token)
+		}
+		if len(tokens) == 0 {
+			tokens = []int{model.Config.BOSTokenID}
+		} else {
+			tokens = append([]int{model.Config.BOSTokenID}, tokens...)
+		}
+
+		// Get embeddings through model forward pass
+		hidden := model.embedTokens(tokens)
+
+		// Mean pool the hidden states to get sentence embedding
+		hiddenSize := model.Config.HiddenSize
+		embedding := make([]float64, hiddenSize)
+		if hidden.Rows > 0 {
+			for j := 0; j < hiddenSize; j++ {
+				sum := 0.0
+				for i := 0; i < hidden.Rows; i++ {
+					sum += hidden.Data[i*hiddenSize+j]
+				}
+				embedding[j] = sum / float64(hidden.Rows)
+			}
+		}
+
+		items = append(items, EmbeddingItem{
+			Object:    "embedding",
+			Embedding: embedding,
+			Index:     idx,
+		})
+	}
+
+	resp := map[string]interface{}{
+		"object": "list",
+		"data":   items,
+		"model":  req.Model,
+		"usage": map[string]int{
+			"prompt_tokens": 0, // Could calculate actual tokens
+			"total_tokens":  0,
 		},
 	}
 
@@ -872,7 +989,7 @@ func (s *VaultGemmaServer) HandleListDomains(w http.ResponseWriter, r *http.Requ
 	for domainID, config := range allDomains {
 		domainInfo := map[string]interface{}{
 			"id":     domainID,
-			"loaded":  false,
+			"loaded": false,
 		}
 
 		if config != nil {
@@ -884,7 +1001,7 @@ func (s *VaultGemmaServer) HandleListDomains(w http.ResponseWriter, r *http.Requ
 			domainInfo["team"] = config.Team
 			domainInfo["max_tokens"] = config.MaxTokens
 			domainInfo["fallback_model"] = config.FallbackModel
-			
+
 			// Include full config for domain detection
 			domainInfo["config"] = map[string]interface{}{
 				"agent_id": config.AgentID,
@@ -1102,4 +1219,36 @@ func (s *VaultGemmaServer) GetModels() map[string]*ai.VaultGemma {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.models
+}
+
+// splitIntoWords splits text into words (simple whitespace-based)
+func (s *VaultGemmaServer) splitIntoWords(text string) []string {
+	words := make([]string, 0)
+	current := strings.Builder{}
+	for _, r := range text {
+		if unicode.IsSpace(r) {
+			if current.Len() > 0 {
+				words = append(words, current.String())
+				current.Reset()
+			}
+		} else {
+			current.WriteRune(r)
+		}
+	}
+	if current.Len() > 0 {
+		words = append(words, current.String())
+	}
+	return words
+}
+
+// hashString generates a simple hash for tokenization
+func (s *VaultGemmaServer) hashString(str string) int {
+	hash := 0
+	for _, r := range str {
+		hash = hash*31 + int(r)
+	}
+	if hash < 0 {
+		hash = -hash
+	}
+	return hash
 }

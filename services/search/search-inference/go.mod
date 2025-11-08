@@ -3,7 +3,7 @@ module github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Search/search-infer
 go 1.18
 
 require (
-	github.com/elastic/go-elasticsearch/v8 v8.11.0
+	github.com/elastic/go-elasticsearch/v7 v7.17.10
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/redis/go-redis/v9 v9.0.0
 )
@@ -11,12 +11,7 @@ require (
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
-	github.com/elastic/elastic-transport-go/v8 v8.7.0 // indirect
-	github.com/go-logr/logr v1.4.2 // indirect
-	github.com/go-logr/stdr v1.2.2 // indirect
-	go.opentelemetry.io/otel v1.28.0 // indirect
-	go.opentelemetry.io/otel/metric v1.28.0 // indirect
-	go.opentelemetry.io/otel/trace v1.28.0 // indirect
+	github.com/stretchr/testify v1.9.0 // indirect
 )
 
 // Removed replace directives for unavailable agenticAiETH dependencies
@@ -31,12 +26,13 @@ exclude github.com/SAP/go-hdb v1.14.9
 
 replace github.com/SAP/go-hdb => ../../infrastructure/third_party/go-hdb
 
-// Pin OTEL to versions compatible with Go 1.18
-replace go.opentelemetry.io/otel => go.opentelemetry.io/otel v1.20.0
+// Exclude OTEL - not compatible with Go 1.18 (requires atomic.Pointer from Go 1.19+)
+// Elasticsearch will work without OTEL instrumentation
+exclude go.opentelemetry.io/otel v1.20.0
 
-replace go.opentelemetry.io/otel/metric => go.opentelemetry.io/otel/metric v1.20.0
+exclude go.opentelemetry.io/otel/metric v1.20.0
 
-replace go.opentelemetry.io/otel/trace => go.opentelemetry.io/otel/trace v1.20.0
+exclude go.opentelemetry.io/otel/trace v1.20.0
 
-// Use older elasticsearch version compatible with Go 1.18
-replace github.com/elastic/go-elasticsearch/v8 => github.com/elastic/go-elasticsearch/v8 v8.11.0
+// Use elasticsearch v7 which doesn't require OTEL (compatible with Go 1.18)
+replace github.com/elastic/go-elasticsearch/v7 => github.com/elastic/go-elasticsearch/v7 v7.17.10
