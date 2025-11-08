@@ -29,21 +29,26 @@
 ### 2. ETL Pipeline Definitions ✅
 **Location**: `config/pipelines/`
 
+**Status**: ✅ **Configuration files created** | ❌ **Runtime execution engine not implemented**
+
 **Created**:
 - ✅ `murex-to-sap-etl.yaml` - Murex → SAP ETL pipeline template
+- ✅ `murex-to-bcrs-etl.yaml` - Murex → BCRS ETL pipeline
+- ✅ `murex-to-rco-etl.yaml` - Murex → RCO ETL pipeline
+- ✅ `sap-to-finance-etl.yaml` - SAP → Finance ETL pipeline
+- ✅ `bcrs-to-capital-etl.yaml` - BCRS → Capital ETL pipeline
+- ✅ `bcrs-to-regulatory-etl.yaml` - BCRS → Regulatory ETL pipeline
 
-**To Create**:
-- [ ] `murex-to-bcrs-etl.yaml`
-- [ ] `murex-to-rco-etl.yaml`
-- [ ] `sap-to-finance-etl.yaml`
-- [ ] `bcrs-to-capital-etl.yaml`
-- [ ] `bcrs-to-regulatory-etl.yaml`
+**What's Defined**:
+- ✅ Source and target systems
+- ✅ Transformation steps
+- ✅ Quality gates
+- ✅ Error handling
 
-**What to Define**:
-- Source and target systems
-- Transformation steps
-- Quality gates
-- Error handling
+**What's Missing**:
+- ❌ Runtime engine to execute these pipeline definitions
+- ❌ Agent to orchestrate ETL jobs based on these configs
+- ❌ Service to read YAML files and create actual ETL jobs
 
 ---
 
@@ -65,34 +70,54 @@
 ### 4. Schema Mappings ✅
 **Location**: `config/mappings/`
 
+**Status**: ✅ **Configuration files created** | ❌ **Automatic lineage graph creation not implemented**
+
 **Created**:
 - ✅ `murex-to-sap-mapping.yaml` - Murex → SAP mapping template
+- ✅ `murex-to-etl-data-factory-mapping.yaml` - Murex → ETL Data Factory
+- ✅ `etl-data-factory-to-sap-fioneer-mapping.yaml` - ETL Data Factory → SAP Fioneer
+- ✅ `sap-fioneer-to-etl-warehouse-mapping.yaml` - SAP Fioneer → ETL Warehouse
+- ✅ `etl-warehouse-to-bcrs-mapping.yaml` - ETL Warehouse → BCRS
+- ✅ `etl-warehouse-to-rco-mapping.yaml` - ETL Warehouse → RCO
+- ✅ `etl-warehouse-to-axiomsl-mapping.yaml` - ETL Warehouse → AxiomSL
+- ✅ `murex-to-bcrs-mapping.yaml` - Murex → BCRS mapping
+- ✅ `murex-to-rco-mapping.yaml` - Murex → RCO mapping
 
-**To Create**:
-- [ ] `murex-to-bcrs-mapping.yaml`
-- [ ] `murex-to-rco-mapping.yaml`
-- [ ] `sap-to-finance-mapping.yaml`
-- [ ] `bcrs-to-capital-mapping.yaml`
-- [ ] `bcrs-to-regulatory-mapping.yaml`
+**What's Defined**:
+- ✅ Field-level mappings (source field → target field)
+- ✅ Transformations (identity, format, lookup, calculated)
+- ✅ Validation rules
+- ✅ Error handling
 
-**What to Define**:
-- Field-level mappings
-- Transformations
-- Validation rules
-- Error handling
+**What's Missing**:
+- ❌ Service to read mapping configs and create lineage edges in knowledge graph
+- ❌ Automatic field-level lineage tracking across systems
+- ❌ Integration with extract service to store lineage in Neo4j
 
 ---
 
-### 5. Lineage Mappings
+### 5. Lineage Mappings ✅
 **Location**: `config/lineage-mappings.yaml`
 
-**To Create**:
-- [ ] Map Murex → SAP flow
-- [ ] Map Murex → BCRS flow
-- [ ] Map Murex → RCO flow
-- [ ] Map SAP → Finance flow
-- [ ] Map BCRS → Capital flow
-- [ ] Map BCRS → Regulatory flow
+**Status**: ✅ **Configuration file created** | ❌ **Automatic lineage graph creation not implemented**
+
+**Created**:
+- ✅ `lineage-mappings.yaml` - Complete lineage for actual data flow
+
+**What's Defined**:
+- ✅ Complete lineage graph path: Murex → ETL Data Factory → SAP Fioneer Subledger → ETL Warehouse → (parallel) BCRS/RCO/AxiomSL
+- ✅ Stage-by-stage mappings with dependencies
+- ✅ Entity-level mappings (system + entity pairs)
+- ✅ Sequential dependencies and parallel execution groups
+- ✅ Quality gates per stage
+
+**What's Missing**:
+- ❌ Field-level lineage edges in knowledge graph (entity-level mappings exist, but field-level lineage tracking not automated)
+- ❌ Service to read lineage mappings and create graph edges
+- ❌ Agent to discover and track field-level data flow
+- ❌ Integration with extract service to store lineage in Neo4j
+
+**Note**: Field-level schema mappings exist in `config/mappings/` files, but these don't automatically create lineage edges in the knowledge graph.
 
 ---
 
@@ -167,6 +192,8 @@
 - Real lineage verification
 - Performance testing
 - Load testing
+- **Runtime execution of ETL pipelines** (configs exist, but no execution engine)
+- **Automatic lineage graph creation** (mappings exist, but don't automatically create graph edges)
 
 ✅ **Can**:
 - Define everything declaratively
@@ -174,6 +201,21 @@
 - Create templates
 - Document workflows
 - Plan testing scenarios
+
+## Implementation Status Summary
+
+### Configuration Files (✅ Created)
+- ✅ ETL pipeline definitions (`config/pipelines/*.yaml`)
+- ✅ Schema mappings with field-level mappings (`config/mappings/*.yaml`)
+- ✅ Lineage mappings (`config/lineage-mappings.yaml`)
+- ✅ Quality SLOs (`config/quality-slos.yaml`)
+
+### Runtime Execution (❌ Not Implemented)
+- ❌ ETL pipeline execution engine
+- ❌ ETL orchestration agent
+- ❌ Automatic lineage graph creation from mappings
+- ❌ Field-level lineage tracking service
+- ❌ Integration between configs and runtime services
 
 ---
 

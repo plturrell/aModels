@@ -28,6 +28,22 @@ except ImportError:
     GNNRelationshipPatternLearner = None
     SequencePatternTransformer = None
 
+# GNN modules (5 core implementations)
+try:
+    from .gnn_node_classifier import GNNNodeClassifier
+    from .gnn_link_predictor import GNNLinkPredictor
+    from .gnn_embeddings import GNNEmbedder
+    from .gnn_anomaly_detector import GNNAnomalyDetector
+    from .gnn_schema_matcher import GNNSchemaMatcher
+    HAS_GNN_MODULES = True
+except ImportError:
+    HAS_GNN_MODULES = False
+    GNNNodeClassifier = None
+    GNNLinkPredictor = None
+    GNNEmbedder = None
+    GNNAnomalyDetector = None
+    GNNSchemaMatcher = None
+
 # Meta-pattern learner (Phase 7.2)
 try:
     from .meta_pattern_learner import MetaPatternLearner
@@ -117,4 +133,17 @@ except ImportError:
 if HAS_AUTO_TUNER:
     if AutoTuner is not None:
         __all__.append("AutoTuner")
+
+# Add GNN modules if available
+if HAS_GNN_MODULES:
+    if GNNNodeClassifier is not None:
+        __all__.append("GNNNodeClassifier")
+    if GNNLinkPredictor is not None:
+        __all__.append("GNNLinkPredictor")
+    if GNNEmbedder is not None:
+        __all__.append("GNNEmbedder")
+    if GNNAnomalyDetector is not None:
+        __all__.append("GNNAnomalyDetector")
+    if GNNSchemaMatcher is not None:
+        __all__.append("GNNSchemaMatcher")
 
