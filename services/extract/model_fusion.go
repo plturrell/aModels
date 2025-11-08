@@ -16,6 +16,9 @@ type ModelFusionFramework struct {
 	useRelationalTransformer bool
 	useSAPRPT                bool
 	useGlove                 bool
+	useLocalAI                bool
+	localaiClient            *LocalAIClient
+	localaiURL               string
 	weights                  ModelWeights
 	domainDetector           *DomainDetector         // Phase 8.2: Domain detector for domain-aware weights
 	domainWeights            map[string]ModelWeights // Phase 8.2: domain_id -> optimized weights
@@ -26,14 +29,16 @@ type ModelWeights struct {
 	RelationalTransformer float64 `json:"relational_transformer"`
 	SAPRPT                float64 `json:"sap_rpt"`
 	Glove                 float64 `json:"glove"`
+	LocalAI               float64 `json:"localai,omitempty"`
 }
 
 // DefaultModelWeights returns default weights for models.
 func DefaultModelWeights() ModelWeights {
 	return ModelWeights{
-		RelationalTransformer: 0.4,
-		SAPRPT:                0.4,
-		Glove:                 0.2,
+		RelationalTransformer: 0.3,
+		SAPRPT:                0.3,
+		Glove:                 0.15,
+		LocalAI:               0.25,
 	}
 }
 
@@ -41,8 +46,15 @@ func DefaultModelWeights() ModelWeights {
 func NewModelFusionFramework(logger *log.Logger) *ModelFusionFramework {
 	localaiURL := os.Getenv("LOCALAI_URL")
 	var domainDetector *DomainDetector
+	var localaiClient *LocalAIClient
+	useLocalAI := false
+	
 	if localaiURL != "" {
 		domainDetector = NewDomainDetector(localaiURL, logger)
+		// Initialize LocalAI client if URL is provided
+		localaiClient = NewLocalAIClient(localaiURL)
+		useLocalAI = true
+		logger.Printf("LocalAI integration enabled: %s", localaiURL)
 	}
 
 	return &ModelFusionFramework{
@@ -50,6 +62,9 @@ func NewModelFusionFramework(logger *log.Logger) *ModelFusionFramework {
 		useRelationalTransformer: true,
 		useSAPRPT:                os.Getenv("USE_SAP_RPT_EMBEDDINGS") == "true",
 		useGlove:                 os.Getenv("USE_GLOVE_EMBEDDINGS") == "true",
+		useLocalAI:                useLocalAI,
+		localaiClient:             localaiClient,
+		localaiURL:                localaiURL,
 		weights:                  DefaultModelWeights(),
 		domainDetector:           domainDetector,                // Phase 8.2: Domain detector
 		domainWeights:            make(map[string]ModelWeights), // Phase 8.2: Domain-specific weights

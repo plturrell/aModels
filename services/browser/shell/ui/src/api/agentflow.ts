@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-const AGENTFLOW_BASE = import.meta.env.VITE_AGENTFLOW_API ?? "/agentflow";
+const AGENTFLOW_BASE = import.meta.env.VITE_AGENTFLOW_API ?? "http://localhost:9001";
 
 async function fetchAgentflow<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${AGENTFLOW_BASE}${path}`;

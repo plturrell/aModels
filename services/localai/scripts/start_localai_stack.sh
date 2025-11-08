@@ -13,13 +13,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
-LLAMA_ROOT="${ROOT_DIR}/../third_party/llama.cpp"
+LLAMA_ROOT="${ROOT_DIR}/../../infrastructure/third_party/go-llama.cpp/llama.cpp"
 BIN_DIR="${ROOT_DIR}/bin"
 LOG_DIR="${ROOT_DIR}/logs"
 PID_FILE="${LOG_DIR}/localai_stack.pids"
 
-PHI_MODEL_QUANT_DEFAULT="${ROOT_DIR}/../agenticAiETH_layer4_Models/phi/phi-3-pytorch-phi-3.5-mini-instruct-v2-q4_0.gguf"
-PHI_MODEL_F32_DEFAULT="${ROOT_DIR}/../agenticAiETH_layer4_Models/phi/phi-3.5-mini.gguf"
+PHI_MODEL_QUANT_DEFAULT="${ROOT_DIR}/../../models/phi/phi-3-pytorch-phi-3.5-mini-instruct-v2-q4_0.gguf"
+PHI_MODEL_F32_DEFAULT="${ROOT_DIR}/../../models/phi/phi-3.5-mini.gguf"
 if [[ -n "${PHI_MODEL_PATH:-}" ]]; then
   PHI_MODEL="${PHI_MODEL_PATH}"
 elif [[ -f "${PHI_MODEL_QUANT_DEFAULT}" ]]; then
@@ -27,8 +27,8 @@ elif [[ -f "${PHI_MODEL_QUANT_DEFAULT}" ]]; then
 else
   PHI_MODEL="${PHI_MODEL_F32_DEFAULT}"
 fi
-GRANITE_MODEL_QUANT_DEFAULT="${ROOT_DIR}/../agenticAiETH_layer4_Models/granite/granite-4.0-q4_k_m.gguf"
-GRANITE_MODEL_F32_DEFAULT="${ROOT_DIR}/../agenticAiETH_layer4_Models/granite/granite-4.0.gguf"
+GRANITE_MODEL_QUANT_DEFAULT="${ROOT_DIR}/../../models/granite/granite-4.0-q4_k_m.gguf"
+GRANITE_MODEL_F32_DEFAULT="${ROOT_DIR}/../../models/granite/granite-4.0.gguf"
 if [[ -n "${GRANITE_MODEL_PATH:-}" ]]; then
   GRANITE_MODEL="${GRANITE_MODEL_PATH}"
 elif [[ -f "${GRANITE_MODEL_QUANT_DEFAULT}" ]]; then
@@ -46,8 +46,8 @@ PHI_THREADS="${PHI_THREADS:-8}"
 GRANITE_THREADS="${GRANITE_THREADS:-8}"
 PHI_N_GPU_LAYERS="${PHI_N_GPU_LAYERS:-}"
 GRANITE_N_GPU_LAYERS="${GRANITE_N_GPU_LAYERS:-24}"
-GEMMA2B_MODEL_QUANT_DEFAULT="${ROOT_DIR}/../agenticAiETH_layer4_Models/gemma-2b-q4_k_m.gguf"
-GEMMA2B_MODEL_PATH_DEFAULT="${ROOT_DIR}/../agenticAiETH_layer4_Models/gemma-2b.gguf"
+GEMMA2B_MODEL_QUANT_DEFAULT="${ROOT_DIR}/../../models/gemma-2b-q4_k_m.gguf"
+GEMMA2B_MODEL_PATH_DEFAULT="${ROOT_DIR}/../../models/gemma-2b.gguf"
 if [[ -n "${GEMMA_MODEL_PATH:-}" ]]; then
   GEMMA2B_MODEL="${GEMMA_MODEL_PATH}"
 elif [[ -f "${GEMMA2B_MODEL_QUANT_DEFAULT}" ]]; then
@@ -59,7 +59,7 @@ fi
 GEMMA_PORT="${GEMMA_PORT:-8083}"
 GEMMA_THREADS="${GEMMA_THREADS:-8}"
 GEMMA_N_GPU_LAYERS="${GEMMA_N_GPU_LAYERS:--1}"
-GEMMA7B_MODEL_PATH_DEFAULT="${ROOT_DIR}/../agenticAiETH_layer4_Models/gemma-7b.gguf"
+GEMMA7B_MODEL_PATH_DEFAULT="${ROOT_DIR}/../../models/gemma-7b.gguf"
 GEMMA7B_MODEL="${GEMMA7B_MODEL_PATH:-${GEMMA7B_MODEL_PATH_DEFAULT}}"
 GEMMA7B_PORT="${GEMMA7B_PORT:-8084}"
 GEMMA7B_THREADS="${GEMMA7B_THREADS:-8}"
@@ -77,19 +77,24 @@ fi
 
 LLAMA_BIN="${LLAMA_ROOT}/build/bin/llama-server"
 if [[ ! -x "${LLAMA_BIN}" ]]; then
-  echo "llama-server binary not found. Building with Metal backend..." >&2
-  cmake -B "${LLAMA_ROOT}/build" -S "${LLAMA_ROOT}" -DGGML_METAL=ON -DLLAMA_BUILD_SERVER=ON
-  cmake --build "${LLAMA_ROOT}/build" --target llama-server --config Release
+  echo "llama-server binary not found. Building for Linux..." >&2
+  mkdir -p "${LLAMA_ROOT}/build"
+  cd "${LLAMA_ROOT}/build"
+  cmake .. -DLLAMA_BUILD_SERVER=ON -DCMAKE_BUILD_TYPE=Release
+  cmake --build . --target server -j$(nproc)
+  cd - > /dev/null
 fi
 
 if [[ ! -f "${PHI_MODEL}" ]]; then
-  echo "Phi GGUF model missing at ${PHI_MODEL}" >&2
-  exit 1
+  echo "Warning: Phi GGUF model missing at ${PHI_MODEL}" >&2
+  echo "LocalAI will start but Phi model will not be available" >&2
+  PHI_MODEL=""  # Clear model path so service can start without it
 fi
 
 if [[ ! -f "${GRANITE_MODEL}" ]]; then
-  echo "Granite GGUF model missing at ${GRANITE_MODEL}" >&2
-  exit 1
+  echo "Warning: Granite GGUF model missing at ${GRANITE_MODEL}" >&2
+  echo "LocalAI will start but Granite model will not be available" >&2
+  GRANITE_MODEL=""  # Clear model path so service can start without it
 fi
 
 mkdir -p "${BIN_DIR}"

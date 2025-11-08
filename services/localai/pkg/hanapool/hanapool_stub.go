@@ -2,7 +2,12 @@
 
 package hanapool
 
-import "database/sql"
+import (
+    "context"
+    "database/sql"
+    "errors"
+)
+
 
 type Config struct{}
 
@@ -17,3 +22,7 @@ func (p *Pool) Execute(_ interface{}, _ string, _ ...any) (sql.Result, error) {
 }
 
 
+
+func (p *Pool) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+    return nil, errors.New("hana integration disabled")
+}

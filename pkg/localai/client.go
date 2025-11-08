@@ -2,6 +2,7 @@ package localai
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,178 +10,70 @@ import (
 	"time"
 )
 
-// Client provides interface to LocalAI model serving
+// Client provides a simple HTTP client for LocalAI (OpenAI-compatible API)
 type Client struct {
-	BaseURL    string
-	HTTPClient *http.Client
-	APIKey     string
+	baseURL    string
+	httpClient *http.Client
 }
 
 // NewClient creates a new LocalAI client
-func NewClient(baseURL string, apiKey string) *Client {
+func NewClient(baseURL string) *Client {
+	if baseURL == "" {
+		baseURL = "http://localhost:8080"
+	}
 	return &Client{
-		BaseURL: baseURL,
-		HTTPClient: &http.Client{
-			Timeout: 300 * time.Second, // 5 minutes for model inference
+		baseURL: baseURL,
+		httpClient: &http.Client{
+			Timeout: 60 * time.Second,
 		},
-		APIKey: apiKey,
 	}
 }
 
-// CompletionRequest represents a completion request to LocalAI
-type CompletionRequest struct {
-	Model       string   `json:"model"`
-	Prompt      string   `json:"prompt"`
-	Temperature float64  `json:"temperature,omitempty"`
-	MaxTokens   int      `json:"max_tokens,omitempty"`
-	TopP        float64  `json:"top_p,omitempty"`
-	Stop        []string `json:"stop,omitempty"`
+// ChatRequest represents a chat completion request
+type ChatRequest struct {
+	Model       string    `json:"model"`
+	Messages    []Message `json:"messages"`
+	MaxTokens   int       `json:"max_tokens,omitempty"`
+	Temperature float64   `json:"temperature,omitempty"`
+	Stream      bool      `json:"stream,omitempty"`
 }
 
-type chatMessage struct {
+// Message represents a chat message
+type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-type chatCompletionRequest struct {
-	Model       string        `json:"model"`
-	Messages    []chatMessage `json:"messages"`
-	Temperature float64       `json:"temperature,omitempty"`
-	MaxTokens   int           `json:"max_tokens,omitempty"`
-	TopP        float64       `json:"top_p,omitempty"`
-	Stop        []string      `json:"stop,omitempty"`
+// ChatResponse represents a chat completion response
+type ChatResponse struct {
+	ID      string   `json:"id"`
+	Object  string   `json:"object"`
+	Created int64    `json:"created"`
+	Model   string   `json:"model"`
+	Choices []Choice `json:"choices"`
+	Usage   Usage    `json:"usage"`
 }
 
-type CompletionChoice struct {
-	Text         string       `json:"text,omitempty"`
-	Index        int          `json:"index"`
-	FinishReason string       `json:"finish_reason"`
-	Message      *chatMessage `json:"message,omitempty"`
+// Choice represents a choice in the response
+type Choice struct {
+	Index        int     `json:"index"`
+	Message      Message `json:"message"`
+	FinishReason string  `json:"finish_reason"`
 }
 
-// CompletionResponse represents the response from LocalAI
-type CompletionResponse struct {
-	ID      string             `json:"id"`
-	Object  string             `json:"object"`
-	Created int64              `json:"created"`
-	Model   string             `json:"model"`
-	Choices []CompletionChoice `json:"choices"`
-	Usage   struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
+// Usage represents token usage
+type Usage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
 }
 
-// Complete sends a completion request to LocalAI
-func (c *Client) Complete(req CompletionRequest) (*CompletionResponse, error) {
-	chatReq := chatCompletionRequest{
-		Model:       req.Model,
-		Messages:    []chatMessage{{Role: "user", Content: req.Prompt}},
-		Temperature: req.Temperature,
-		MaxTokens:   req.MaxTokens,
-		TopP:        req.TopP,
-		Stop:        req.Stop,
-	}
-
-	jsonData, err := json.Marshal(chatReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	httpReq, err := http.NewRequest("POST", c.BaseURL+"/v1/chat/completions", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
-	}
-
-	resp, err := c.HTTPClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
-	}
-
-	var completionResp CompletionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&completionResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	for i := range completionResp.Choices {
-		if completionResp.Choices[i].Text == "" && completionResp.Choices[i].Message != nil {
-			completionResp.Choices[i].Text = completionResp.Choices[i].Message.Content
-		}
-	}
-
-	return &completionResp, nil
+// ModelsResponse represents the models list response
+type ModelsResponse struct {
+	Data []ModelInfo `json:"data"`
 }
 
-// EmbeddingRequest represents an embedding request
-type EmbeddingRequest struct {
-	Model string   `json:"model"`
-	Input []string `json:"input"`
-}
-
-// EmbeddingResponse represents the embedding response
-type EmbeddingResponse struct {
-	Object string `json:"object"`
-	Data   []struct {
-		Object    string    `json:"object"`
-		Embedding []float64 `json:"embedding"`
-		Index     int       `json:"index"`
-	} `json:"data"`
-	Model string `json:"model"`
-	Usage struct {
-		PromptTokens int `json:"prompt_tokens"`
-		TotalTokens  int `json:"total_tokens"`
-	} `json:"usage"`
-}
-
-// GetEmbeddings retrieves embeddings from LocalAI
-func (c *Client) GetEmbeddings(req EmbeddingRequest) (*EmbeddingResponse, error) {
-	jsonData, err := json.Marshal(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	httpReq, err := http.NewRequest("POST", c.BaseURL+"/v1/embeddings", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
-	if c.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
-	}
-
-	resp, err := c.HTTPClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
-	}
-
-	var embeddingResp EmbeddingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&embeddingResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	return &embeddingResp, nil
-}
-
-// ModelInfo represents information about a loaded model
+// ModelInfo represents information about a model
 type ModelInfo struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
@@ -188,38 +81,78 @@ type ModelInfo struct {
 	OwnedBy string `json:"owned_by"`
 }
 
-// ListModelsResponse represents the list of available models
-type ListModelsResponse struct {
-	Object string      `json:"object"`
-	Data   []ModelInfo `json:"data"`
-}
+// ChatCompletion performs a chat completion request
+func (c *Client) ChatCompletion(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
+	url := fmt.Sprintf("%s/v1/chat/completions", c.baseURL)
 
-// ListModels retrieves the list of available models
-func (c *Client) ListModels() (*ListModelsResponse, error) {
-	httpReq, err := http.NewRequest("GET", c.BaseURL+"/v1/models", nil)
+	body, err := json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	if c.APIKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
-	}
-
-	resp, err := c.HTTPClient.Do(httpReq)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("request failed: status=%d, body=%s", resp.StatusCode, string(bodyBytes))
 	}
 
-	var modelsResp ListModelsResponse
+	var chatResp ChatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return &chatResp, nil
+}
+
+// ListModels lists available models
+func (c *Client) ListModels(ctx context.Context) (*ModelsResponse, error) {
+	url := fmt.Sprintf("%s/v1/models", c.baseURL)
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("request failed: status=%d, body=%s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var modelsResp ModelsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
 	return &modelsResp, nil
+}
+
+// HealthCheck checks if LocalAI is available
+func (c *Client) HealthCheck(ctx context.Context) error {
+	_, err := c.ListModels(ctx)
+	return err
+}
+
+// GetContent extracts the content from a chat response
+func (r *ChatResponse) GetContent() string {
+	if len(r.Choices) > 0 && len(r.Choices[0].Message.Content) > 0 {
+		return r.Choices[0].Message.Content
+	}
+	return ""
 }

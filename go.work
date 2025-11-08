@@ -1,11 +1,7 @@
-go 1.25.3
+go 1.23
 
 use (
 	.
-	./infrastructure/third_party/orchestration
-	./models/glove
-	./models/sentencepiece
-	./services/extract
 )
 
 // Removed mono-repo dependencies - not available in standalone aModels repo

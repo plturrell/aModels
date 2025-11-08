@@ -1,4 +1,5 @@
 import { API_BASE } from "./client";
+const SEARCH_BASE = import.meta.env.VITE_SEARCH_BASE || "";
 
 export interface SearchRequest {
   query: string;
@@ -117,21 +118,25 @@ export interface UnifiedSearchResponse {
 }
 
 export async function searchDocuments(request: SearchRequest): Promise<SearchResponse> {
-  const url = `${API_BASE}/search/v1/search`;
-  
+  const direct = SEARCH_BASE ? `${SEARCH_BASE}/v1/search` : "";
+  const url = direct || `${API_BASE}/search/unified`;
   try {
+    const body = direct
+      ? { query: request.query, top_k: request.top_k ?? 10 }
+      : {
+          query: request.query,
+          top_k: request.top_k ?? 10,
+          sources: ["inference"],
+          use_perplexity: false,
+          enable_framework: false,
+          enable_plot: false,
+          enable_stdlib: false
+        };
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json"
-      },
-      body: JSON.stringify({
-        query: request.query,
-        top_k: request.top_k ?? 10
-      })
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(body)
     });
-
     if (!response.ok) {
       let errorMessage = `Search request failed (${response.status})`;
       try {
@@ -149,17 +154,35 @@ export async function searchDocuments(request: SearchRequest): Promise<SearchRes
       }
       throw new Error(errorMessage);
     }
-
     const contentType = response.headers.get("content-type");
     if (contentType && contentType.includes("application/json")) {
       const text = await response.text();
       if (!text.trim()) {
         return { results: [] };
       }
-      return JSON.parse(text) as SearchResponse;
+      const data = JSON.parse(text);
+      if (direct) {
+        return data as SearchResponse;
+      }
+      const combined = Array.isArray(data?.combined_results) ? data.combined_results : [];
+      const results = combined.map((r: any) => ({
+        id: r.id ?? "",
+        content: r.content ?? "",
+        similarity: typeof r.score === "number" ? r.score : r.similarity ?? 0
+      }));
+      return { results };
     }
-
-    return (await response.json()) as SearchResponse;
+    const data = await response.json();
+    if (direct) {
+      return data as SearchResponse;
+    }
+    const combined = Array.isArray(data?.combined_results) ? data.combined_results : [];
+    const results = combined.map((r: any) => ({
+      id: r.id ?? "",
+      content: r.content ?? "",
+      similarity: typeof r.score === "number" ? r.score : r.similarity ?? 0
+    }));
+    return { results };
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.includes("Failed to fetch") || error.message.includes("NetworkError")) {
@@ -172,7 +195,7 @@ export async function searchDocuments(request: SearchRequest): Promise<SearchRes
 }
 
 export async function unifiedSearch(request: UnifiedSearchRequest): Promise<UnifiedSearchResponse> {
-  const url = `${API_BASE}/api/search/unified`;
+  const url = `${API_BASE}/search/unified`;
   
   try {
     const response = await fetch(url, {

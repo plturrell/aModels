@@ -27,3 +27,5 @@ localai/tmp/
 .gocache/
 # Node dependencies
 node_modules/
+models/TinyRecursiveModels
+models/open_deep_research

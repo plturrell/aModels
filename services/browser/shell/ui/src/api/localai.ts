@@ -52,7 +52,7 @@ export interface ChatResponse {
 }
 
 export async function sendLocalAIChat(request: ChatRequest): Promise<ChatResponse> {
-  const url = `${API_BASE}/localai/v1/chat/completions`;
+  const url = `${API_BASE}/localai/chat`;
   
   try {
     const response = await fetch(url, {

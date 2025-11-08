@@ -1,6 +1,6 @@
 module ai_benchmarks
 
-go 1.24.0
+go 1.18
 
 require (
 	github.com/SAP/go-hdb v1.14.9

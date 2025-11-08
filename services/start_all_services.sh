@@ -74,7 +74,7 @@ else
     SEARCH_PID=$!
     echo "   Search Inference started (PID: $SEARCH_PID)"
     cd "$BASE_DIR"
-    wait_for_service "http://localhost:8090/healthz" "Search Inference"
+    wait_for_service "http://localhost:8090/health" "Search Inference"
 fi
 
 # 3. Start LocalAI Service
@@ -116,7 +116,7 @@ check_service() {
 }
 
 check_service "Gateway" "http://localhost:8000/healthz"
-check_service "Search Inference" "http://localhost:8090/healthz"
+check_service "Search Inference" "http://localhost:8090/health"
 check_service "LocalAI" "http://localhost:8080/v1/models"
 
 echo ""
@@ -129,7 +129,7 @@ echo "LocalAI:        http://localhost:8080"
 echo ""
 echo "Health Checks:"
 echo "  Gateway:      http://localhost:8000/healthz"
-echo "  Search:       http://localhost:8090/healthz"
+echo "  Search:       http://localhost:8090/health"
 echo "  LocalAI:      http://localhost:8080/v1/models"
 echo ""
 

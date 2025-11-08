@@ -1,0 +1,190 @@
+{
+  "domains": {
+    "gemma-2b-it": {
+      "name": "Gemma 2B-it Assistant",
+      "layer": "general",
+      "team": "FoundationTeam",
+      "backend_type": "gguf",
+      "model_path": "../../models/gemma-2b-it-tensorrt/2b-it/model.gguf",
+      "agent_id": "gemma-2b-it",
+      "attention_weights": {
+        "general_reasoning": 0.9,
+        "conversation": 0.85,
+        "instruction_following": 0.9
+      },
+      "max_tokens": 1024,
+      "temperature": 0.7,
+      "top_p": 0.9,
+      "top_k": 40,
+      "tags": [
+        "gemma",
+        "2b",
+        "instruction",
+        "tensorrt"
+      ],
+      "keywords": [
+        "gemma",
+        "google",
+        "instruction",
+        "assistant"
+      ]
+    },
+    "phi-3.5-mini": {
+      "name": "Phi-3.5-mini Assistant",
+      "layer": "general",
+      "team": "FoundationTeam",
+      "backend_type": "safetensors",
+      "model_path": "../../models/phi-3.5-mini-instruct-pytorch",
+      "agent_id": "phi-3.5-mini",
+      "attention_weights": {
+        "instruction_following": 0.95,
+        "reasoning": 0.9,
+        "code": 0.85
+      },
+      "max_tokens": 2048,
+      "temperature": 0.7,
+      "top_p": 0.9,
+      "top_k": 40,
+      "tags": [
+        "phi",
+        "microsoft",
+        "mini",
+        "instruction"
+      ],
+      "keywords": [
+        "phi",
+        "microsoft",
+        "instruction",
+        "reasoning"
+      ]
+    },
+    "granite-4.0": {
+      "name": "IBM Granite 4.0 Assistant",
+      "layer": "general",
+      "team": "FoundationTeam",
+      "backend_type": "hf-transformers",
+      "model_path": "../../models/granite-4.0-h-micro-transformers",
+      "model_name": "granite-4.0-h-micro",
+      "agent_id": "granite-4.0",
+      "transformers_config": {
+        "endpoint": "http://localhost:9090/v1/chat/completions",
+        "model_name": "granite-4.0-h-micro",
+        "timeout_seconds": 120
+      },
+      "attention_weights": {
+        "enterprise_reasoning": 0.95,
+        "code_generation": 0.9,
+        "analysis": 0.85
+      },
+      "max_tokens": 2048,
+      "temperature": 0.7,
+      "top_p": 0.9,
+      "top_k": 40,
+      "tags": [
+        "granite",
+        "ibm",
+        "enterprise",
+        "code"
+      ],
+      "keywords": [
+        "granite",
+        "ibm",
+        "enterprise",
+        "code",
+        "reasoning"
+      ]
+    },
+    "gemma-7b-it": {
+      "name": "Gemma 7B-it Assistant",
+      "layer": "general",
+      "team": "FoundationTeam",
+      "backend_type": "gguf",
+      "model_path": "../../models/gemma-7b-it-tensorrt/7b-it/model.gguf",
+      "agent_id": "gemma-7b-it",
+      "attention_weights": {
+        "general_reasoning": 0.95,
+        "conversation": 0.9,
+        "instruction_following": 0.95
+      },
+      "max_tokens": 2048,
+      "temperature": 0.7,
+      "top_p": 0.9,
+      "top_k": 40,
+      "tags": [
+        "gemma",
+        "7b",
+        "instruction",
+        "tensorrt"
+      ],
+      "keywords": [
+        "gemma",
+        "google",
+        "instruction",
+        "assistant",
+        "7b"
+      ]
+    },
+    "vaultgemma": {
+      "name": "VaultGemma Assistant",
+      "layer": "general",
+      "team": "FoundationTeam",
+      "backend_type": "safetensors",
+      "model_path": "../../models/vaultgemma-1b-transformers",
+      "agent_id": "vaultgemma",
+      "attention_weights": {
+        "general_reasoning": 0.9,
+        "conversation": 0.85,
+        "summarization": 0.8
+      },
+      "max_tokens": 512,
+      "temperature": 0.7,
+      "top_p": 0.9,
+      "top_k": 40,
+      "tags": [
+        "vaultgemma",
+        "general",
+        "assistant"
+      ],
+      "keywords": [
+        "general",
+        "assistant",
+        "conversation",
+        "qa"
+      ]
+    },
+    "general": {
+      "name": "General Assistant",
+      "layer": "general",
+      "team": "General",
+      "backend_type": "safetensors",
+      "model_path": "../../models/vaultgemma-1b-transformers",
+      "agent_id": "general",
+      "attention_weights": {},
+      "max_tokens": 512,
+      "temperature": 0.7,
+      "top_p": 0.9,
+      "top_k": 40,
+      "tags": [
+        "general",
+        "conversation",
+        "qa"
+      ],
+      "keywords": []
+    }
+  },
+  "default_domain": "general",
+  "layer_mapping": {
+    "general": {
+      "FoundationTeam": [
+        "gemma-2b-it",
+        "phi-3.5-mini",
+        "granite-4.0",
+        "gemma-7b-it",
+        "vaultgemma"
+      ],
+      "General": [
+        "general"
+      ]
+    }
+  }
+}

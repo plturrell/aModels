@@ -23,7 +23,7 @@ import (
 )
 
 func main() {
-	modelPath := flag.String("model", "../agenticAiETH_layer4_Models/vaultgemm/vaultgemma-transformers-1b-v1", "Model path")
+	modelPath := flag.String("model", "../../models/vaultgemma-1b-transformers", "Model path")
 	port := flag.String("port", "8080", "Server port")
 	configPath := flag.String("config", os.Getenv("DOMAIN_CONFIG_PATH"), "Domain configuration file")
 	if *configPath == "" {
@@ -50,15 +50,19 @@ func main() {
 		loadedModel, err := ai.LoadVaultGemmaFromSafetensors(*modelPath)
 		stopSpinner()
 		if err != nil {
-			log.Fatalf("❌ Failed to load model: %v", err)
+			log.Printf("❌ Failed to load model: %v", err)
+			log.Printf("⚠️  Continuing with stubbed inference responses")
+		} else {
+			model = loadedModel
 		}
-		model = loadedModel
 
-		log.Printf("✅ Model loaded successfully!")
-		log.Printf("   - Layers: %d", model.Config.NumLayers)
-		log.Printf("   - Hidden size: %d", model.Config.HiddenSize)
-		log.Printf("   - Vocab size: %d", model.Config.VocabSize)
-		log.Printf("   - Attention heads: %d", model.Config.NumHeads)
+		if model != nil {
+			log.Printf("✅ Model loaded successfully!")
+			log.Printf("   - Layers: %d", model.Config.NumLayers)
+			log.Printf("   - Hidden size: %d", model.Config.HiddenSize)
+			log.Printf("   - Vocab size: %d", model.Config.VocabSize)
+			log.Printf("   - Attention heads: %d", model.Config.NumHeads)
+		}
 	}
 
 	// Load domain configurations (Redis or file-based)

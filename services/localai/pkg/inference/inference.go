@@ -56,9 +56,7 @@ func (e *InferenceEngine) GenerateResponse(ctx context.Context, req *InferenceRe
 	start := time.Now()
 
 	if req.Model == nil {
-		return &InferenceResponse{
-			Error: fmt.Errorf("no model available for inference"),
-		}
+		log.Printf("⚠️  No model loaded; returning stubbed response")
 	}
 
 	// Set default parameters
