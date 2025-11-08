@@ -1,11 +1,11 @@
 module github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Search/search-inference
 
-go 1.23
+go 1.18
 
 require (
-	github.com/elastic/go-elasticsearch/v8 v8.19.0
+	github.com/elastic/go-elasticsearch/v8 v8.11.0
 	github.com/mattn/go-sqlite3 v1.14.22
-	github.com/redis/go-redis/v9 v9.14.1
+	github.com/redis/go-redis/v9 v9.0.0
 )
 
 require (
@@ -30,3 +30,13 @@ require (
 exclude github.com/SAP/go-hdb v1.14.9
 
 replace github.com/SAP/go-hdb => ../../infrastructure/third_party/go-hdb
+
+// Pin OTEL to versions compatible with Go 1.18
+replace go.opentelemetry.io/otel => go.opentelemetry.io/otel v1.20.0
+
+replace go.opentelemetry.io/otel/metric => go.opentelemetry.io/otel/metric v1.20.0
+
+replace go.opentelemetry.io/otel/trace => go.opentelemetry.io/otel/trace v1.20.0
+
+// Use older elasticsearch version compatible with Go 1.18
+replace github.com/elastic/go-elasticsearch/v8 => github.com/elastic/go-elasticsearch/v8 v8.11.0

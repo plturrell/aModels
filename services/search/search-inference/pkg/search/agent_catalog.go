@@ -2,7 +2,6 @@ package search
 
 import (
 	"fmt"
-	"slices"
 	"sync"
 	"time"
 )
@@ -29,6 +28,26 @@ type AgentTool struct {
 	Description string `json:"description"`
 }
 
+// cloneStringSlice creates a copy of a string slice (Go 1.18 compatible replacement for slices.Clone)
+func cloneStringSlice(src []string) []string {
+	if src == nil {
+		return nil
+	}
+	dst := make([]string, len(src))
+	copy(dst, src)
+	return dst
+}
+
+// cloneAgentToolSlice creates a copy of an AgentTool slice (Go 1.18 compatible replacement for slices.Clone)
+func cloneAgentToolSlice(src []AgentTool) []AgentTool {
+	if src == nil {
+		return nil
+	}
+	dst := make([]AgentTool, len(src))
+	copy(dst, src)
+	return dst
+}
+
 // Clone returns a deep copy of the catalog.
 func (c *AgentCatalog) Clone() *AgentCatalog {
 	if c == nil {
@@ -40,7 +59,7 @@ func (c *AgentCatalog) Clone() *AgentCatalog {
 	}
 	for i, suite := range c.Suites {
 		out.Suites[i] = suite
-		out.Suites[i].ToolNames = slices.Clone(suite.ToolNames)
+		out.Suites[i].ToolNames = cloneStringSlice(suite.ToolNames)
 	}
 	copy(out.Tools, c.Tools)
 	return out
@@ -52,10 +71,10 @@ func (c *AgentCatalog) Normalize() {
 		return
 	}
 	for i := range c.Suites {
-		c.Suites[i].ToolNames = slices.Clone(c.Suites[i].ToolNames)
+		c.Suites[i].ToolNames = cloneStringSlice(c.Suites[i].ToolNames)
 		c.Suites[i].ToolCount = len(c.Suites[i].ToolNames)
 	}
-	c.Tools = slices.Clone(c.Tools)
+	c.Tools = cloneAgentToolSlice(c.Tools)
 }
 
 // catalogState manages shared catalog access inside a service.

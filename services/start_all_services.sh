@@ -33,7 +33,7 @@ check_port() {
 wait_for_service() {
     local url=$1
     local name=$2
-    local max_attempts=30
+    local max_attempts=90
     local attempt=0
     
     echo -n "Waiting for $name to be ready..."
@@ -70,11 +70,13 @@ if check_port 8090; then
     echo -e "   ${YELLOW}Search Inference already running on port 8090${NC}"
 else
     cd services/search/search-inference
-    nohup go run ./cmd/search-server/main.go -port 8090 > ../../search-inference.log 2>&1 &
+    # Ensure module graph is up to date for Go 1.18 toolchain
+    env GOWORK=off go mod tidy >> ../../search-inference.log 2>&1 || true
+    nohup env GOWORK=off go run ./cmd/search-server/main.go -port 8090 > ../../search-inference.log 2>&1 &
     SEARCH_PID=$!
     echo "   Search Inference started (PID: $SEARCH_PID)"
     cd "$BASE_DIR"
-    wait_for_service "http://localhost:8090/health" "Search Inference"
+    wait_for_service "http://localhost:8090/health" "Search Inference" || echo -e " ${YELLOW}(optional) continuing without Search Inference${NC}"
 fi
 
 # 3. Start LocalAI Service
@@ -116,7 +118,7 @@ check_service() {
 }
 
 check_service "Gateway" "http://localhost:8000/healthz"
-check_service "Search Inference" "http://localhost:8090/health"
+check_service "Search Inference" "http://localhost:8090/health" || true
 check_service "LocalAI" "http://localhost:8080/v1/models"
 
 echo ""

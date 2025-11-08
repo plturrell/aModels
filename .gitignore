@@ -29,3 +29,7 @@ localai/tmp/
 node_modules/
 models/TinyRecursiveModels
 models/open_deep_research
+
+# Embedded git repositories
+models/glove/
+models/granite-4.0-h-micro-transformers/

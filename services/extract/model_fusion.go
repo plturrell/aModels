@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"os/exec"
+
+	"github.com/plturrell/aModels/pkg/localai"
 )
 
 // ModelFusionFramework combines predictions from multiple models for better accuracy.
@@ -17,7 +19,7 @@ type ModelFusionFramework struct {
 	useSAPRPT                bool
 	useGlove                 bool
 	useLocalAI                bool
-	localaiClient            *LocalAIClient
+	localaiClient            *localai.Client
 	localaiURL               string
 	weights                  ModelWeights
 	domainDetector           *DomainDetector         // Phase 8.2: Domain detector for domain-aware weights
@@ -46,13 +48,13 @@ func DefaultModelWeights() ModelWeights {
 func NewModelFusionFramework(logger *log.Logger) *ModelFusionFramework {
 	localaiURL := os.Getenv("LOCALAI_URL")
 	var domainDetector *DomainDetector
-	var localaiClient *LocalAIClient
+	var localaiClient *localai.Client
 	useLocalAI := false
 	
 	if localaiURL != "" {
 		domainDetector = NewDomainDetector(localaiURL, logger)
 		// Initialize LocalAI client if URL is provided
-		localaiClient = NewLocalAIClient(localaiURL)
+		localaiClient = localai.NewClient(localaiURL)
 		useLocalAI = true
 		logger.Printf("LocalAI integration enabled: %s", localaiURL)
 	}
@@ -397,6 +399,32 @@ func (mff *ModelFusionFramework) PredictWithMultipleModels(
 		}
 	}
 
+	// Generate predictions from LocalAI models
+	if mff.useLocalAI && mff.localaiClient != nil {
+		// Try Phi-3.5-mini for general tasks
+		if pred, err := mff.predictWithLocalAI(ctx, artifactType, artifactData, "phi-3.5-mini"); err == nil {
+			predictions = append(predictions, *pred)
+		} else {
+			mff.logger.Printf("LocalAI (phi-3.5-mini) prediction failed: %v", err)
+		}
+
+		// Try Granite-4.0 for code/technical artifacts
+		if artifactType == "code" || artifactType == "sql" || artifactType == "ddl" {
+			if pred, err := mff.predictWithLocalAI(ctx, artifactType, artifactData, "granite-4.0"); err == nil {
+				predictions = append(predictions, *pred)
+			} else {
+				mff.logger.Printf("LocalAI (granite-4.0) prediction failed: %v", err)
+			}
+		}
+
+		// Try VaultGemma as fallback
+		if len(predictions) == 0 {
+			if pred, err := mff.predictWithLocalAI(ctx, artifactType, artifactData, "vaultgemma"); err == nil {
+				predictions = append(predictions, *pred)
+			}
+		}
+	}
+
 	if len(predictions) == 0 {
 		return nil, fmt.Errorf("no successful predictions")
 	}
@@ -493,6 +521,73 @@ func (mff *ModelFusionFramework) predictWithGlove(
 	}, nil
 }
 
+// predictWithLocalAI generates prediction using LocalAI models.
+func (mff *ModelFusionFramework) predictWithLocalAI(
+	ctx context.Context,
+	artifactType string,
+	artifactData map[string]any,
+	modelName string,
+) (*FusionModelPrediction, error) {
+	if mff.localaiClient == nil {
+		return nil, fmt.Errorf("LocalAI client not initialized")
+	}
+
+	// Build prompt from artifact data
+	prompt := fmt.Sprintf("Analyze this %s artifact and provide metadata extraction:\n\n", artifactType)
+	
+	// Add artifact data to prompt
+	artifactJSON, err := json.MarshalIndent(artifactData, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal artifact data: %w", err)
+	}
+	prompt += string(artifactJSON)
+	prompt += "\n\nProvide structured metadata extraction in JSON format."
+
+	// Call LocalAI
+	req := &localai.ChatRequest{
+		Model: modelName,
+		Messages: []localai.Message{
+			{
+				Role:    "system",
+				Content: "You are a metadata extraction assistant. Analyze artifacts and extract structured metadata.",
+			},
+			{
+				Role:    "user",
+				Content: prompt,
+			},
+		},
+		MaxTokens:   512,
+		Temperature: 0.3,
+	}
+
+	resp, err := mff.localaiClient.ChatCompletion(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("LocalAI chat completion: %w", err)
+	}
+
+	content := resp.GetContent()
+	if content == "" {
+		return nil, fmt.Errorf("empty response from LocalAI")
+	}
+
+	// Parse response as JSON if possible
+	var prediction any
+	if err := json.Unmarshal([]byte(content), &prediction); err != nil {
+		// If not JSON, use as string
+		prediction = content
+	}
+
+	return &FusionModelPrediction{
+		ModelName:  fmt.Sprintf("localai-%s", modelName),
+		Prediction: prediction,
+		Confidence: 0.85,
+		Metadata: map[string]any{
+			"model":      modelName,
+			"raw_output": content,
+		},
+	}, nil
+}
+
 // getModelWeight returns the weight for a model.
 func (mff *ModelFusionFramework) getModelWeight(modelName string) float64 {
 	switch modelName {
@@ -502,7 +597,12 @@ func (mff *ModelFusionFramework) getModelWeight(modelName string) float64 {
 		return mff.weights.SAPRPT
 	case "glove":
 		return mff.weights.Glove
+	case "localai-phi-3.5-mini", "localai-granite-4.0", "localai-vaultgemma":
+		return mff.weights.LocalAI
 	default:
+		if mff.useLocalAI {
+			return mff.weights.LocalAI
+		}
 		return 0.33 // Default equal weight
 	}
 }

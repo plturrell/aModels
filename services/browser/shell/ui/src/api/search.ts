@@ -121,26 +121,43 @@ export async function searchDocuments(request: SearchRequest): Promise<SearchRes
   const direct = SEARCH_BASE ? `${SEARCH_BASE}/v1/search` : "";
   const url = direct || `${API_BASE}/search/unified`;
   try {
-    const body = direct
-      ? { query: request.query, top_k: request.top_k ?? 10 }
-      : {
-          query: request.query,
-          top_k: request.top_k ?? 10,
-          sources: ["inference"],
-          use_perplexity: false,
-          enable_framework: false,
-          enable_plot: false,
-          enable_stdlib: false
-        };
-    const response = await fetch(url, {
+    // Attempt direct search first if configured
+    if (direct) {
+      try {
+        const directResp = await fetch(direct, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ query: request.query, top_k: request.top_k ?? 10 })
+        });
+        if (directResp.ok) {
+          const text = await directResp.text();
+          if (!text.trim()) return { results: [] };
+          return JSON.parse(text) as SearchResponse;
+        }
+        // Fall through to unified on non-OK
+      } catch (e) {
+        // Network failure -> fall back to unified
+      }
+    }
+
+    // Unified search via gateway (uses defaults for available sources)
+    const unifiedResp = await fetch(`${API_BASE}/search/unified`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify({
+        query: request.query,
+        top_k: request.top_k ?? 10,
+        // Do not force sources to allow Gateway defaults (inference, knowledge_graph, catalog)
+        use_perplexity: false,
+        enable_framework: false,
+        enable_plot: false,
+        enable_stdlib: false,
+      })
     });
-    if (!response.ok) {
-      let errorMessage = `Search request failed (${response.status})`;
+    if (!unifiedResp.ok) {
+      let errorMessage = `Search request failed (${unifiedResp.status})`;
       try {
-        const errorText = await response.text();
+        const errorText = await unifiedResp.text();
         if (errorText) {
           try {
             const errorJson = JSON.parse(errorText);
@@ -150,20 +167,17 @@ export async function searchDocuments(request: SearchRequest): Promise<SearchRes
           }
         }
       } catch {
-        errorMessage = `HTTP ${response.status} ${response.statusText}`;
+        errorMessage = `HTTP ${unifiedResp.status} ${unifiedResp.statusText}`;
       }
       throw new Error(errorMessage);
     }
-    const contentType = response.headers.get("content-type");
+    const contentType = unifiedResp.headers.get("content-type");
     if (contentType && contentType.includes("application/json")) {
-      const text = await response.text();
+      const text = await unifiedResp.text();
       if (!text.trim()) {
         return { results: [] };
       }
       const data = JSON.parse(text);
-      if (direct) {
-        return data as SearchResponse;
-      }
       const combined = Array.isArray(data?.combined_results) ? data.combined_results : [];
       const results = combined.map((r: any) => ({
         id: r.id ?? "",
@@ -172,10 +186,7 @@ export async function searchDocuments(request: SearchRequest): Promise<SearchRes
       }));
       return { results };
     }
-    const data = await response.json();
-    if (direct) {
-      return data as SearchResponse;
-    }
+    const data = await unifiedResp.json();
     const combined = Array.isArray(data?.combined_results) ? data.combined_results : [];
     const results = combined.map((r: any) => ({
       id: r.id ?? "",
