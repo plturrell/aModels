@@ -154,6 +154,7 @@ class GNNEmbedder:
         
         self.model = None
         self.num_node_features = None
+        self._is_warmed = False
         
         logger.info(f"Initialized GNN Embedder (device: {self.device}, embedding_dim: {embedding_dim})")
     
@@ -462,4 +463,54 @@ class GNNEmbedder:
         self.model.eval()
         
         logger.info(f"Loaded model from {path}")
-
+    
+    def warm_up(self, num_nodes: int = 100, num_edges: int = 300):
+        """Pre-warm the model with a dummy graph to avoid initialization delays.
+        
+        This should be called during service startup to initialize the model
+        and compile CUDA kernels if using GPU.
+        
+        Args:
+            num_nodes: Number of nodes in dummy graph
+            num_edges: Number of edges in dummy graph
+        """
+        if not hasattr(self, '_is_warmed') or not self._is_warmed:
+            logger.info(f"Warming up GNN model with dummy graph ({num_nodes} nodes, {num_edges} edges)...")
+            
+            try:
+                # Create dummy nodes
+                dummy_nodes = []
+                for i in range(num_nodes):
+                    dummy_nodes.append({
+                        "id": f"node_{i}",
+                        "type": "table" if i % 2 == 0 else "column",
+                        "properties": {
+                            "column_count": 10,
+                            "row_count": 1000
+                        }
+                    })
+                
+                # Create dummy edges
+                dummy_edges = []
+                for i in range(num_edges):
+                    source_idx = i % num_nodes
+                    target_idx = (i + 1) % num_nodes
+                    dummy_edges.append({
+                        "source_id": f"node_{source_idx}",
+                        "target_id": f"node_{target_idx}",
+                        "label": "HAS_COLUMN"
+                    })
+                
+                # Generate embeddings (this will initialize the model)
+                start_time = __import__('time').time()
+                result = self.generate_embeddings(dummy_nodes, dummy_edges, graph_level=True)
+                elapsed = __import__('time').time() - start_time
+                
+                if "error" not in result:
+                    self._is_warmed = True
+                    logger.info(f" Model warm-up completed in {elapsed:.2f}s")
+                else:
+                    logger.warning(f"Model warm-up failed: {result['error']}")
+            
+            except Exception as e:
+                logger.warning(f"Model warm-up failed: {e}")

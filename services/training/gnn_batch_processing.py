@@ -206,21 +206,59 @@ class GraphBatchProcessor:
         self,
         embedder=None,
         cache: Optional[EmbeddingCache] = None,
-        batch_size: int = 32,
-        device: Optional[str] = None
+        batch_size: Optional[int] = None,
+        device: Optional[str] = None,
+        auto_optimize_batch_size: bool = True
     ):
         """Initialize batch processor.
         
         Args:
             embedder: GNN embedder instance
             cache: Embedding cache (optional)
-            batch_size: Batch size for processing
+            batch_size: Batch size for processing (auto-detected if None)
             device: Device to use
+            auto_optimize_batch_size: Automatically optimize batch size based on GPU
         """
         self.embedder = embedder
         self.cache = cache
-        self.batch_size = batch_size
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        
+        # Auto-detect optimal batch size based on device
+        if batch_size is None:
+            if auto_optimize_batch_size:
+                self.batch_size = self._get_optimal_batch_size()
+            else:
+                self.batch_size = 128 if self.device == "cuda" else 32
+        else:
+            self.batch_size = batch_size
+        
+        logger.info(f"GraphBatchProcessor initialized (device={self.device}, batch_size={self.batch_size})")
+    
+    def _get_optimal_batch_size(self) -> int:
+        """Determine optimal batch size based on available GPU memory.
+        
+        Returns:
+            Optimal batch size
+        """
+        if not HAS_PYG or self.device == "cpu":
+            return 32
+        
+        try:
+            if torch.cuda.is_available():
+                # Get GPU memory
+                total_memory = torch.cuda.get_device_properties(0).total_memory
+                # Estimate based on GPU memory (rough heuristic)
+                # Small GPU (<8GB): 64, Medium (8-16GB): 128, Large (>16GB): 256
+                if total_memory < 8 * 1024**3:  # < 8GB
+                    return 64
+                elif total_memory < 16 * 1024**3:  # < 16GB
+                    return 128
+                else:  # >= 16GB
+                    return 256
+        except Exception as e:
+            logger.warning(f"Failed to detect GPU memory: {e}")
+        
+        return 128  # Default for CUDA
     
     def process_graphs_batch(
         self,
@@ -356,6 +394,37 @@ class MemoryOptimizer:
     """Memory optimization utilities for GNN processing."""
     
     @staticmethod
+    def get_recommended_batch_size(num_nodes: int, num_edges: int, device: str = "cuda") -> int:
+        """Get recommended batch size based on graph size and device.
+        
+        Args:
+            num_nodes: Number of nodes in graph
+            num_edges: Number of edges in graph
+            device: Device type ('cuda' or 'cpu')
+        
+        Returns:
+            Recommended batch size
+        """
+        if device == "cpu":
+            # CPU: smaller batches
+            if num_nodes < 100 and num_edges < 500:
+                return 16
+            elif num_nodes < 1000 and num_edges < 5000:
+                return 8
+            else:
+                return 4
+        else:
+            # GPU: larger batches
+            if num_nodes < 100 and num_edges < 500:
+                return 256
+            elif num_nodes < 1000 and num_edges < 5000:
+                return 128
+            elif num_nodes < 5000 and num_edges < 25000:
+                return 64
+            else:
+                return 32
+    
+    @staticmethod
     def optimize_graph_data(
         nodes: List[Dict[str, Any]],
         edges: List[Dict[str, Any]],
@@ -461,4 +530,32 @@ class MemoryOptimizer:
         if HAS_PYG and torch.cuda.is_available():
             torch.cuda.empty_cache()
             logger.info("GPU cache cleared")
+    
+    @staticmethod
+    def get_gpu_memory_stats() -> Dict[str, float]:
+        """Get GPU memory statistics.
+        
+        Returns:
+            Dictionary with memory stats in MB
+        """
+        if not HAS_PYG or not torch.cuda.is_available():
+            return {"available": False}
+        
+        try:
+            allocated = torch.cuda.memory_allocated(0) / (1024 * 1024)
+            reserved = torch.cuda.memory_reserved(0) / (1024 * 1024)
+            total = torch.cuda.get_device_properties(0).total_memory / (1024 * 1024)
+            
+            return {
+                "available": True,
+                "allocated_mb": allocated,
+                "reserved_mb": reserved,
+                "total_mb": total,
+                "free_mb": total - allocated,
+                "utilization_pct": (allocated / total) * 100 if total > 0 else 0
+            }
+        except Exception as e:
+            logger.warning(f"Failed to get GPU memory stats: {e}")
+            return {"available": True, "error": str(e)}
+
 

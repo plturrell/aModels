@@ -288,6 +288,13 @@ async def startup_event():
                         device=gnn_device
                     )
                     logger.info("✅ GNN Embedder initialized for API")
+                    
+                    # Pre-warm model to avoid first-request latency
+                    if os.getenv("GNN_PREWARM", "true").lower() == "true":
+                        try:
+                            gnn_embedder.warm_up()
+                        except Exception as e:
+                            logger.warning(f"Model pre-warming failed (non-critical): {e}")
                 
                 if GNNNodeClassifier is not None:
                     gnn_classifier = GNNNodeClassifier(
