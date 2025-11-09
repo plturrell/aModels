@@ -13,7 +13,8 @@ import (
 )
 
 // LocalAIClient provides a standardized client for LocalAI interactions
-// with explicit model selection, retry logic, model validation, metrics collection, caching, and batch operations.
+// with explicit model selection, retry logic, model validation, metrics collection, caching, batch operations,
+// adaptive selection, A/B testing, request queuing, and distributed tracing.
 type LocalAIClient struct {
 	baseURL        string
 	httpClient     *http.Client
@@ -24,6 +25,9 @@ type LocalAIClient struct {
 	timeout        time.Duration   // Phase 2: Configurable timeout
 	fallbackModels map[string][]string // Phase 2: Model fallback strategy
 	responseCache  *ResponseCache // Phase 3: Response caching
+	abTester       *ABTester // Phase 4: A/B testing
+	requestQueue   *RequestQueue // Phase 4: Request queuing
+	tracer         *Tracer // Phase 4: Distributed tracing
 }
 
 // CircuitBreaker implements circuit breaker pattern for LocalAI calls
@@ -113,12 +117,48 @@ func NewLocalAIClientWithConfig(config LocalAIClientConfig) *LocalAIClient {
 		timeout:        config.Timeout,
 		fallbackModels: fallbackModels, // Phase 2: Model fallback strategy
 		responseCache:  NewResponseCache(), // Phase 3: Response caching
+		abTester:       NewABTester(), // Phase 4: A/B testing
+		requestQueue:   NewRequestQueue(100), // Phase 4: Request queuing (max 100 concurrent)
+		tracer:         NewTracer(), // Phase 4: Distributed tracing
 	}
 }
 
-// StoreDocument stores a document in LocalAI with explicit model/domain selection, fallback, and caching (Phase 3)
+// StoreDocument stores a document in LocalAI with explicit model/domain selection, fallback, caching, queuing, and tracing (Phase 4)
 func (c *LocalAIClient) StoreDocument(ctx context.Context, domain, model string, payload map[string]interface{}) (map[string]interface{}, error) {
 	startTime := time.Now()
+	
+	// Phase 4: Start distributed tracing
+	traceID := fmt.Sprintf("trace-%d", time.Now().UnixNano())
+	spanID := c.tracer.StartSpan(traceID, "", "StoreDocument", domain, model)
+	defer func() {
+		c.tracer.EndSpan(spanID, "success", map[string]interface{}{
+			"domain": domain,
+			"model":  model,
+		})
+	}()
+	
+	// Phase 4: Check if request should be queued (high load scenario)
+	if c.requestQueue.Size() > 50 { // Queue if more than 50 requests pending
+		queuedReq, err := c.requestQueue.Enqueue(ctx, "StoreDocument", domain, model, payload)
+		if err == nil {
+			// Wait for result
+			select {
+			case result := <-queuedReq.Result:
+				if result.Error != nil {
+					c.tracer.EndSpan(spanID, "error", map[string]interface{}{
+						"error": result.Error.Error(),
+					})
+					return nil, result.Error
+				}
+				return result.Result, nil
+			case <-ctx.Done():
+				c.tracer.EndSpan(spanID, "cancelled", map[string]interface{}{
+					"error": ctx.Err().Error(),
+				})
+				return nil, ctx.Err()
+			}
+		}
+	}
 	
 	// Phase 3: Check cache first (for idempotent operations)
 	if cacheKey := c.getCacheKey("StoreDocument", domain, model, payload); cacheKey != "" {
@@ -128,6 +168,9 @@ func (c *LocalAIClient) StoreDocument(ctx context.Context, domain, model string,
 			}
 			// Record cache hit metrics
 			c.metrics.RecordCall("StoreDocument", domain, model, time.Since(startTime), true)
+			c.tracer.EndSpan(spanID, "success", map[string]interface{}{
+				"cached": true,
+			})
 			return cached, nil
 		}
 	}
@@ -188,6 +231,10 @@ func (c *LocalAIClient) StoreDocument(ctx context.Context, domain, model string,
 		if err == nil {
 			// Phase 2: Record metrics
 			c.metrics.RecordCall("StoreDocument", domain, tryModel, time.Since(startTime), true)
+			// Phase 4: Record A/B test result if enabled
+			if c.abTester != nil && c.abTester.IsEnabled() {
+				c.abTester.RecordResult(domain, tryModel, true, time.Since(startTime))
+			}
 			// Phase 3: Cache successful response
 			if cacheKey := c.getCacheKey("StoreDocument", domain, tryModel, payload); cacheKey != "" {
 				c.responseCache.Set(cacheKey, result, 5*time.Minute) // Cache for 5 minutes
@@ -195,6 +242,9 @@ func (c *LocalAIClient) StoreDocument(ctx context.Context, domain, model string,
 			if tryModel != model && c.logger != nil {
 				c.logger.Printf("Successfully used fallback model %s (original: %s) for domain %s", tryModel, model, domain)
 			}
+			c.tracer.EndSpan(spanID, "success", map[string]interface{}{
+				"model": tryModel,
+			})
 			return result, nil
 		}
 		lastErr = err
@@ -202,6 +252,13 @@ func (c *LocalAIClient) StoreDocument(ctx context.Context, domain, model string,
 
 	// Phase 2: Record metrics for failure
 	c.metrics.RecordCall("StoreDocument", domain, model, time.Since(startTime), false)
+	// Phase 4: Record A/B test result if enabled
+	if c.abTester != nil && c.abTester.IsEnabled() {
+		c.abTester.RecordResult(domain, model, false, time.Since(startTime))
+	}
+	c.tracer.EndSpan(spanID, "error", map[string]interface{}{
+		"error": lastErr.Error(),
+	})
 	
 	// Phase 2: Enhanced error message with context
 	return nil, fmt.Errorf("failed to store document after trying %d models (domain: %s, primary model: %s): %w", len(modelsToTry), domain, model, lastErr)
@@ -859,6 +916,467 @@ func (c *LocalAIClient) SelectOptimalModel(domain string) string {
 	}
 	
 	return bestModel
+}
+
+// WorkloadCharacteristics represents workload characteristics for adaptive model selection (Phase 4)
+type WorkloadCharacteristics struct {
+	ContentSize    int    // Size of content in bytes
+	Complexity     string // "simple", "medium", "complex"
+	Urgency        string // "low", "medium", "high"
+	ExpectedLatency time.Duration // Expected response time
+	Domain         string
+}
+
+// SelectAdaptiveModel selects the best model based on workload characteristics (Phase 4)
+func (c *LocalAIClient) SelectAdaptiveModel(workload WorkloadCharacteristics) string {
+	// Phase 4: Use A/B testing if enabled
+	if c.abTester != nil && c.abTester.IsEnabled() {
+		model := c.abTester.SelectModel(workload.Domain)
+		if model != "" {
+			return model
+		}
+	}
+	
+	// Phase 4: Adaptive selection based on workload
+	metrics := c.metrics.GetMetrics()
+	
+	// Get model usage and latency data
+	modelUsageRaw, ok := metrics["model_usage"]
+	if !ok {
+		return c.selectModelByWorkload(workload)
+	}
+	
+	modelUsage, ok := modelUsageRaw.(map[string]int64)
+	if !ok {
+		return c.selectModelByWorkload(workload)
+	}
+	
+	modelAvgLatencyRaw, ok := metrics["model_avg_latency"]
+	if !ok {
+		return c.selectModelByWorkload(workload)
+	}
+	
+	modelAvgLatency, ok := modelAvgLatencyRaw.(map[string]time.Duration)
+	if !ok {
+		return c.selectModelByWorkload(workload)
+	}
+	
+	bestModel := ""
+	bestScore := 0.0
+	
+	for model, count := range modelUsage {
+		if count < 5 {
+			continue // Need at least 5 samples
+		}
+		
+		avgLatency, exists := modelAvgLatency[model]
+		if !exists {
+			continue
+		}
+		
+		// Phase 4: Adaptive scoring based on workload characteristics
+		score := c.calculateAdaptiveScore(model, count, avgLatency, workload)
+		if score > bestScore {
+			bestScore = score
+			bestModel = model
+		}
+	}
+	
+	if bestModel == "" {
+		return c.selectModelByWorkload(workload)
+	}
+	
+	return bestModel
+}
+
+// calculateAdaptiveScore calculates a score based on workload characteristics (Phase 4)
+func (c *LocalAIClient) calculateAdaptiveScore(model string, usageCount int64, avgLatency time.Duration, workload WorkloadCharacteristics) float64 {
+	baseScore := float64(usageCount) / float64(avgLatency.Milliseconds())
+	
+	// Adjust for content size
+	if workload.ContentSize > 1000000 { // > 1MB
+		// Prefer larger models for large content
+		if strings.Contains(model, "7b") || strings.Contains(model, "granite") {
+			baseScore *= 1.2
+		}
+	} else if workload.ContentSize < 10000 { // < 10KB
+		// Prefer smaller models for small content
+		if strings.Contains(model, "2b") || strings.Contains(model, "mini") {
+			baseScore *= 1.2
+		}
+	}
+	
+	// Adjust for urgency
+	if workload.Urgency == "high" {
+		// Prefer faster models
+		latencyMS := float64(avgLatency.Milliseconds())
+		if latencyMS < 1000 { // < 1s
+			baseScore *= 1.3
+		}
+	}
+	
+	// Adjust for complexity
+	if workload.Complexity == "complex" {
+		// Prefer larger models for complex tasks
+		if strings.Contains(model, "7b") || strings.Contains(model, "granite") {
+			baseScore *= 1.15
+		}
+	}
+	
+	return baseScore
+}
+
+// selectModelByWorkload selects model based on workload characteristics (Phase 4)
+func (c *LocalAIClient) selectModelByWorkload(workload WorkloadCharacteristics) string {
+	// Large content or complex tasks -> larger models
+	if workload.ContentSize > 1000000 || workload.Complexity == "complex" {
+		switch workload.Domain {
+		case "browser", "web_analysis":
+			return "gemma-7b-q4_k_m.gguf"
+		default:
+			return "granite-4.0"
+		}
+	}
+	
+	// High urgency -> faster models
+	if workload.Urgency == "high" {
+		return "phi-3.5-mini"
+	}
+	
+	// Default domain-based selection
+	switch workload.Domain {
+	case "general", "":
+		return "phi-3.5-mini"
+	case "finance", "treasury", "subledger", "trade_recon":
+		return "gemma-2b-q4_k_m.gguf"
+	case "browser", "web_analysis":
+		return "gemma-7b-q4_k_m.gguf"
+	default:
+		return "gemma-2b-q4_k_m.gguf"
+	}
+}
+
+// ABTester implements A/B testing for model selection (Phase 4)
+type ABTester struct {
+	mu       sync.RWMutex
+	enabled  bool
+	variants map[string][]string // domain -> []models
+	weights  map[string]map[string]float64 // domain -> model -> weight
+	results  map[string]map[string]*ABTestResult // domain -> model -> results
+}
+
+// ABTestResult tracks A/B test results (Phase 4)
+type ABTestResult struct {
+	Requests    int64
+	Successes   int64
+	AvgLatency  time.Duration
+	LastUpdated time.Time
+}
+
+// NewABTester creates a new A/B tester
+func NewABTester() *ABTester {
+	return &ABTester{
+		enabled:  false, // Disabled by default
+		variants: make(map[string][]string),
+		weights:  make(map[string]map[string]float64),
+		results:  make(map[string]map[string]*ABTestResult),
+	}
+}
+
+// Enable enables A/B testing
+func (ab *ABTester) Enable() {
+	ab.mu.Lock()
+	defer ab.mu.Unlock()
+	ab.enabled = true
+}
+
+// Disable disables A/B testing
+func (ab *ABTester) Disable() {
+	ab.mu.Lock()
+	defer ab.mu.Unlock()
+	ab.enabled = false
+}
+
+// IsEnabled returns whether A/B testing is enabled
+func (ab *ABTester) IsEnabled() bool {
+	ab.mu.RLock()
+	defer ab.mu.RUnlock()
+	return ab.enabled
+}
+
+// AddVariant adds a model variant for A/B testing
+func (ab *ABTester) AddVariant(domain string, models []string, weights []float64) {
+	ab.mu.Lock()
+	defer ab.mu.Unlock()
+	
+	ab.variants[domain] = models
+	
+	if len(weights) == len(models) {
+		ab.weights[domain] = make(map[string]float64)
+		for i, model := range models {
+			ab.weights[domain][model] = weights[i]
+		}
+	} else {
+		// Equal weights
+		ab.weights[domain] = make(map[string]float64)
+		weight := 1.0 / float64(len(models))
+		for _, model := range models {
+			ab.weights[domain][model] = weight
+		}
+	}
+	
+	// Initialize results
+	ab.results[domain] = make(map[string]*ABTestResult)
+	for _, model := range models {
+		ab.results[domain][model] = &ABTestResult{
+			LastUpdated: time.Now(),
+		}
+	}
+}
+
+// SelectModel selects a model variant for A/B testing
+func (ab *ABTester) SelectModel(domain string) string {
+	ab.mu.RLock()
+	defer ab.mu.RUnlock()
+	
+	if !ab.enabled {
+		return ""
+	}
+	
+	variants, ok := ab.variants[domain]
+	if !ok || len(variants) == 0 {
+		return ""
+	}
+	
+	// Weighted random selection
+	weights, ok := ab.weights[domain]
+	if !ok {
+		// Equal probability
+		return variants[0] // Simple selection for now
+	}
+	
+	// Simple weighted selection (can be improved with proper random)
+	totalWeight := 0.0
+	for _, weight := range weights {
+		totalWeight += weight
+	}
+	
+	// For now, return first variant (can be improved with proper random selection)
+	// In production, use crypto/rand for proper weighted selection
+	return variants[0]
+}
+
+// RecordResult records an A/B test result
+func (ab *ABTester) RecordResult(domain, model string, success bool, latency time.Duration) {
+	ab.mu.Lock()
+	defer ab.mu.Unlock()
+	
+	if ab.results[domain] == nil {
+		ab.results[domain] = make(map[string]*ABTestResult)
+	}
+	
+	result, ok := ab.results[domain][model]
+	if !ok {
+		result = &ABTestResult{
+			LastUpdated: time.Now(),
+		}
+		ab.results[domain][model] = result
+	}
+	
+	result.Requests++
+	if success {
+		result.Successes++
+	}
+	
+	// Update average latency
+	if result.Requests == 1 {
+		result.AvgLatency = latency
+	} else {
+		result.AvgLatency = (result.AvgLatency*time.Duration(result.Requests-1) + latency) / time.Duration(result.Requests)
+	}
+	result.LastUpdated = time.Now()
+}
+
+// RequestQueue implements request queuing for high-load scenarios (Phase 4)
+type RequestQueue struct {
+	mu          sync.Mutex
+	maxSize     int
+	queue       []*QueuedRequest
+	processing  int
+	semaphore   chan struct{}
+}
+
+// QueuedRequest represents a queued request (Phase 4)
+type QueuedRequest struct {
+	ID        string
+	Operation string
+	Domain    string
+	Model     string
+	Payload   map[string]interface{}
+	Result    chan *QueueResult
+	Context   context.Context
+	CreatedAt time.Time
+}
+
+// QueueResult represents the result of a queued request (Phase 4)
+type QueueResult struct {
+	Result map[string]interface{}
+	Error  error
+}
+
+// NewRequestQueue creates a new request queue
+func NewRequestQueue(maxSize int) *RequestQueue {
+	return &RequestQueue{
+		maxSize:    maxSize,
+		queue:      make([]*QueuedRequest, 0),
+		semaphore:  make(chan struct{}, maxSize),
+	}
+}
+
+// Enqueue adds a request to the queue
+func (rq *RequestQueue) Enqueue(ctx context.Context, operation, domain, model string, payload map[string]interface{}) (*QueuedRequest, error) {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	
+	if len(rq.queue) >= rq.maxSize {
+		return nil, fmt.Errorf("request queue is full (max: %d)", rq.maxSize)
+	}
+	
+	req := &QueuedRequest{
+		ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
+		Operation: operation,
+		Domain:    domain,
+		Model:     model,
+		Payload:   payload,
+		Result:    make(chan *QueueResult, 1),
+		Context:   ctx,
+		CreatedAt: time.Now(),
+	}
+	
+	rq.queue = append(rq.queue, req)
+	return req, nil
+}
+
+// Dequeue removes and returns the next request from the queue
+func (rq *RequestQueue) Dequeue() *QueuedRequest {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	
+	if len(rq.queue) == 0 {
+		return nil
+	}
+	
+	req := rq.queue[0]
+	rq.queue = rq.queue[1:]
+	rq.processing++
+	
+	return req
+}
+
+// Release releases a processing slot
+func (rq *RequestQueue) Release() {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	
+	if rq.processing > 0 {
+		rq.processing--
+	}
+}
+
+// Size returns the current queue size
+func (rq *RequestQueue) Size() int {
+	rq.mu.Lock()
+	defer rq.mu.Unlock()
+	return len(rq.queue)
+}
+
+// Tracer implements distributed tracing for LocalAI calls (Phase 4)
+type Tracer struct {
+	mu      sync.RWMutex
+	traces  map[string]*Trace
+	enabled bool
+}
+
+// Trace represents a distributed trace (Phase 4)
+type Trace struct {
+	TraceID    string
+	SpanID     string
+	ParentID   string
+	Operation  string
+	Domain     string
+	Model      string
+	StartTime  time.Time
+	EndTime    time.Time
+	Duration   time.Duration
+	Status     string // "success", "error"
+	Attributes map[string]interface{}
+}
+
+// NewTracer creates a new tracer
+func NewTracer() *Tracer {
+	return &Tracer{
+		traces:  make(map[string]*Trace),
+		enabled: true, // Enabled by default
+	}
+}
+
+// StartSpan starts a new trace span
+func (t *Tracer) StartSpan(traceID, parentID, operation, domain, model string) string {
+	if !t.enabled {
+		return ""
+	}
+	
+	spanID := fmt.Sprintf("%s-%d", traceID, time.Now().UnixNano())
+	
+	trace := &Trace{
+		TraceID:    traceID,
+		SpanID:     spanID,
+		ParentID:   parentID,
+		Operation:  operation,
+		Domain:     domain,
+		Model:      model,
+		StartTime:  time.Now(),
+		Attributes: make(map[string]interface{}),
+	}
+	
+	t.mu.Lock()
+	t.traces[spanID] = trace
+	t.mu.Unlock()
+	
+	return spanID
+}
+
+// EndSpan ends a trace span
+func (t *Tracer) EndSpan(spanID string, status string, attributes map[string]interface{}) {
+	if !t.enabled || spanID == "" {
+		return
+	}
+	
+	t.mu.Lock()
+	trace, ok := t.traces[spanID]
+	if !ok {
+		t.mu.Unlock()
+		return
+	}
+	
+	trace.EndTime = time.Now()
+	trace.Duration = trace.EndTime.Sub(trace.StartTime)
+	trace.Status = status
+	
+	if attributes != nil {
+		for k, v := range attributes {
+			trace.Attributes[k] = v
+		}
+	}
+	
+	t.mu.Unlock()
+}
+
+// GetTrace returns a trace by span ID
+func (t *Tracer) GetTrace(spanID string) *Trace {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.traces[spanID]
 }
 
 // Helper function for power calculation
