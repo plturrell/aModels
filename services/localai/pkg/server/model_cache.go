@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/domain"
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/gpu"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/ai"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/gguf"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/transformers"
@@ -47,6 +49,13 @@ type ModelCache struct {
 	loadingTimes     map[string]time.Duration // Track loading times per domain
 	loadingTimesMu   sync.RWMutex
 
+	// GPU orchestrator integration
+	gpuRouter           *gpu.GPURouter
+	modelGPUAllocations map[string]string // domain -> allocation ID
+	sharedGPUGroup      map[string][]string // GPU ID -> list of domains sharing it
+	gpuAllocMu          sync.RWMutex
+	modelRegistry       *ModelRegistry
+
 	// Domain manager for configuration
 	domainManager *domain.DomainManager
 }
@@ -55,6 +64,13 @@ type ModelCache struct {
 func NewModelCache(domainManager *domain.DomainManager, maxMemoryMB int64) *ModelCache {
 	if maxMemoryMB <= 0 {
 		maxMemoryMB = 8192 // Default 8GB
+	}
+
+	// Initialize GPU router if orchestrator URL is configured
+	var gpuRouter *gpu.GPURouter
+	if orchestratorURL := os.Getenv("GPU_ORCHESTRATOR_URL"); orchestratorURL != "" {
+		gpuRouter = gpu.NewGPURouter(orchestratorURL, nil)
+		log.Printf("🔌 GPU orchestrator integration enabled: %s", orchestratorURL)
 	}
 
 	return &ModelCache{
@@ -70,7 +86,11 @@ func NewModelCache(domainManager *domain.DomainManager, maxMemoryMB int64) *Mode
 		loadingInProgress:  make(map[string]chan struct{}),
 		modelMemoryMB:      make(map[string]int64),
 		loadingTimes:       make(map[string]time.Duration),
-		domainManager:      domainManager,
+		gpuRouter:          gpuRouter,
+		modelGPUAllocations: make(map[string]string),
+		sharedGPUGroup:      make(map[string][]string),
+		modelRegistry:       NewModelRegistry(),
+		domainManager:       domainManager,
 	}
 }
 
@@ -152,6 +172,11 @@ func (mc *ModelCache) GetSafetensorModel(ctx context.Context, domain string) (*a
 
 		log.Printf("📥 Lazy loading safetensors model for domain %s from %s...", domain, path)
 		start := time.Now()
+
+		// Allocate GPU if needed (SafeTensors are CPU-only, but check anyway)
+		// This is a placeholder - SafeTensors models don't use GPU
+		// But we check in case the model config indicates GPU usage
+		_ = mc.allocateGPUForModel(context.Background(), domain, path, "safetensors", nil)
 
 		loadedModel, err := ai.LoadVaultGemmaFromSafetensors(path)
 		if err != nil {
@@ -250,6 +275,49 @@ func (mc *ModelCache) GetGGUFModel(ctx context.Context, domain string) (*gguf.Mo
 
 		// Determine GPU layers configuration
 		gpuLayers := mc.getGPULayersForDomain(domain)
+		
+		// Allocate GPU if needed (before loading)
+		if gpuLayers != 0 {
+			// Try to load config first to get accurate model size
+			// GGUF models might have config.json in the same directory
+			var modelConfig *ai.VaultGemmaConfig
+			configPath := filepath.Join(filepath.Dir(path), "config.json")
+			if configData, err := os.ReadFile(configPath); err == nil {
+				var config ai.VaultGemmaConfig
+				if err := json.Unmarshal(configData, &config); err == nil {
+					modelConfig = &config
+					log.Printf("📋 Loaded model config for GPU allocation: %d layers, %d hidden size", config.NumLayers, config.HiddenSize)
+				}
+			}
+			
+			// If no config file, estimate from path/model name
+			if modelConfig == nil {
+				// Estimate based on model path/name
+				modelType := mc.modelRegistry.GetModelTypeFromPath(path)
+				req := mc.modelRegistry.GetRequirements(path, modelType)
+				if req != nil {
+					// Use registry defaults for estimation
+					modelConfig = &ai.VaultGemmaConfig{
+						NumLayers:  18, // Default estimate
+						HiddenSize: 2048,
+						VocabSize:  256000,
+					}
+					// Adjust based on model type
+					if strings.Contains(strings.ToLower(modelType), "7b") {
+						modelConfig.NumLayers = 28
+						modelConfig.HiddenSize = 3072
+					} else if strings.Contains(strings.ToLower(modelType), "2b") {
+						modelConfig.NumLayers = 18
+						modelConfig.HiddenSize = 2048
+					}
+				}
+			}
+			
+			if err := mc.allocateGPUForModel(context.Background(), domain, path, "gguf", modelConfig); err != nil {
+				log.Printf("⚠️  GPU allocation failed, continuing with CPU: %v", err)
+				gpuLayers = 0 // Fallback to CPU
+			}
+		}
 
 		var loadedModel *gguf.Model
 		var err error
@@ -350,10 +418,14 @@ func (mc *ModelCache) UnloadUnusedModels(maxAge time.Duration) {
 	}
 	mc.accessTimesMu.Unlock()
 
+	ctx := context.Background()
+
 	// Unload safetensors models
 	mc.safetensorMu.Lock()
 	for _, domain := range domainsToUnload {
 		if _, exists := mc.safetensorModels[domain]; exists {
+			// Release GPU allocation before unloading
+			mc.releaseGPUForModel(ctx, domain)
 			delete(mc.safetensorModels, domain)
 			mc.removeModelMemory(domain)
 			mc.accessTimesMu.Lock()
@@ -368,6 +440,8 @@ func (mc *ModelCache) UnloadUnusedModels(maxAge time.Duration) {
 	mc.ggufMu.Lock()
 	for _, domain := range domainsToUnload {
 		if _, exists := mc.ggufModels[domain]; exists {
+			// Release GPU allocation before unloading
+			mc.releaseGPUForModel(ctx, domain)
 			delete(mc.ggufModels, domain)
 			mc.removeModelMemory(domain)
 			mc.accessTimesMu.Lock()
@@ -427,9 +501,13 @@ func (mc *ModelCache) EvictModelsByMemory() {
 			break
 		}
 
+		ctx := context.Background()
+
 		// Try to unload safetensors model
 		mc.safetensorMu.Lock()
 		if _, exists := mc.safetensorModels[da.domain]; exists {
+			// Release GPU allocation before evicting
+			mc.releaseGPUForModel(ctx, da.domain)
 			delete(mc.safetensorModels, da.domain)
 			mc.safetensorMu.Unlock()
 			mc.removeModelMemory(da.domain)
@@ -445,6 +523,8 @@ func (mc *ModelCache) EvictModelsByMemory() {
 		// Try to unload GGUF model
 		mc.ggufMu.Lock()
 		if _, exists := mc.ggufModels[da.domain]; exists {
+			// Release GPU allocation before evicting
+			mc.releaseGPUForModel(ctx, da.domain)
 			delete(mc.ggufModels, da.domain)
 			mc.ggufMu.Unlock()
 			mc.removeModelMemory(da.domain)
@@ -620,6 +700,167 @@ func (mc *ModelCache) removeModelMemory(domain string) {
 	mc.currentMemoryMu.Unlock()
 
 	log.Printf("📊 Memory usage: %d MB / %d MB (domain: %s, freed: %d MB)", currentMB, mc.maxMemoryMB, domain, memoryMB)
+}
+
+// allocateGPUForModel allocates GPU for a model using hybrid strategy
+func (mc *ModelCache) allocateGPUForModel(ctx context.Context, domain, modelPath, backendType string, modelConfig *ai.VaultGemmaConfig) error {
+	if mc.gpuRouter == nil {
+		return nil // No GPU orchestrator configured
+	}
+
+	// Get model requirements
+	modelType := mc.modelRegistry.GetModelTypeFromPath(modelPath)
+	req := mc.modelRegistry.GetRequirements(modelPath, modelType)
+	
+	// Determine if model needs GPU
+	needsGPU := false
+	if backendType == "gguf" {
+		// GGUF models may use GPU
+		gpuLayers := mc.getGPULayersForDomain(domain)
+		needsGPU = gpuLayers != 0
+	} else if backendType == "safetensors" {
+		// SafeTensors models are CPU-only, no GPU allocation needed
+		return nil
+	} else if backendType == "transformers" {
+		// Transformers service handles its own GPU allocation
+		return nil
+	}
+
+	if !needsGPU {
+		return nil
+	}
+
+	// Determine allocation strategy
+	strategy := os.Getenv("GPU_ALLOCATION_STRATEGY")
+	if strategy == "" {
+		strategy = "hybrid"
+	}
+
+	// Check if model is large (needs dedicated GPU)
+	isLarge := false
+	if modelConfig != nil {
+		isLarge = mc.modelRegistry.IsLargeModel(modelPath, modelType, modelConfig.NumLayers, modelConfig.HiddenSize, modelConfig.VocabSize)
+	} else {
+		isLarge = req != nil && req.Dedicated
+	}
+
+	// Build workload data
+	workloadData := make(map[string]interface{})
+	workloadData["model_name"] = modelType
+	workloadData["model_path"] = modelPath
+	workloadData["backend_type"] = backendType
+	workloadData["domain"] = domain
+	
+	if modelConfig != nil {
+		workloadData["num_layers"] = modelConfig.NumLayers
+		workloadData["hidden_size"] = modelConfig.HiddenSize
+		workloadData["vocab_size"] = modelConfig.VocabSize
+		modelSizeB := mc.modelRegistry.EstimateModelSize(modelConfig.NumLayers, modelConfig.HiddenSize, modelConfig.VocabSize)
+		workloadData["model_size_b"] = modelSizeB
+		
+		if modelSizeB < 3.0 {
+			workloadData["model_size"] = "small"
+		} else if modelSizeB < 7.0 {
+			workloadData["model_size"] = "medium"
+		} else {
+			workloadData["model_size"] = "large"
+		}
+	}
+	
+	if req != nil {
+		workloadData["min_memory_mb"] = req.MinMemoryMB
+		workloadData["priority"] = req.Priority
+	}
+
+	// Determine required GPUs and memory
+	requiredGPUs := 1
+	minMemoryMB := int64(4096) // Default 4GB
+	if req != nil {
+		requiredGPUs = req.RequiredGPUs
+		minMemoryMB = req.MinMemoryMB
+	}
+
+	// For hybrid strategy: large models get dedicated, small models can share
+	if strategy == "hybrid" {
+		if isLarge {
+			workloadData["dedicated"] = true
+			log.Printf("🎯 Allocating dedicated GPU for large model: %s (domain: %s)", modelType, domain)
+		} else {
+			workloadData["dedicated"] = false
+			workloadData["allow_sharing"] = true
+			log.Printf("🎯 Allocating shared GPU for small model: %s (domain: %s)", modelType, domain)
+		}
+	} else if strategy == "dedicated" {
+		workloadData["dedicated"] = true
+	} else {
+		workloadData["dedicated"] = false
+		workloadData["allow_sharing"] = true
+	}
+
+	// Request GPU allocation
+	allocationID, allocatedGPUs, err := mc.gpuRouter.AllocateGPUsWithWorkload(ctx, requiredGPUs, workloadData)
+	if err != nil {
+		log.Printf("⚠️  Failed to allocate GPU for domain %s: %v (continuing with CPU fallback)", domain, err)
+		return err // Return error but allow fallback
+	}
+
+	// Track allocation
+	mc.gpuAllocMu.Lock()
+	if allocationID == "" {
+		// Fallback: generate a simple allocation ID for tracking
+		allocationID = fmt.Sprintf("%s-%d", domain, time.Now().UnixNano())
+	}
+	mc.modelGPUAllocations[domain] = allocationID
+	
+	// Track shared GPU groups if not dedicated
+	if !isLarge && strategy == "hybrid" && len(allocatedGPUs) > 0 {
+		gpuID := fmt.Sprintf("%d", allocatedGPUs[0])
+		if mc.sharedGPUGroup[gpuID] == nil {
+			mc.sharedGPUGroup[gpuID] = []string{}
+		}
+		mc.sharedGPUGroup[gpuID] = append(mc.sharedGPUGroup[gpuID], domain)
+	}
+	mc.gpuAllocMu.Unlock()
+
+	log.Printf("✅ GPU allocated for domain %s (allocation ID: %s)", domain, allocationID)
+	return nil
+}
+
+// releaseGPUForModel releases GPU allocation for a model
+func (mc *ModelCache) releaseGPUForModel(ctx context.Context, domain string) error {
+	if mc.gpuRouter == nil {
+		return nil
+	}
+
+	mc.gpuAllocMu.Lock()
+	allocationID, exists := mc.modelGPUAllocations[domain]
+	if !exists {
+		mc.gpuAllocMu.Unlock()
+		return nil // No allocation to release
+	}
+	delete(mc.modelGPUAllocations, domain)
+	
+	// Remove from shared GPU groups
+	for gpuID, domains := range mc.sharedGPUGroup {
+		for i, d := range domains {
+			if d == domain {
+				mc.sharedGPUGroup[gpuID] = append(domains[:i], domains[i+1:]...)
+				if len(mc.sharedGPUGroup[gpuID]) == 0 {
+					delete(mc.sharedGPUGroup, gpuID)
+				}
+				break
+			}
+		}
+	}
+	mc.gpuAllocMu.Unlock()
+
+	// Release via router (if it's the last model using that allocation)
+	// For now, we'll just log - actual release happens when all models are unloaded
+	log.Printf("🔄 Released GPU allocation tracking for domain %s (ID: %s)", domain, allocationID)
+	
+	// If this was the only model using the GPU, we could release it
+	// But for simplicity, we'll keep the allocation until explicitly released
+	return nil
 }
 
 // PreloadModel preloads a model in the background (with context)

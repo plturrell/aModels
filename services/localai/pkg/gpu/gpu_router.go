@@ -37,42 +37,57 @@ func NewGPURouter(orchestratorURL string, logger *log.Logger) *GPURouter {
 
 // AllocateGPUs allocates GPUs from the orchestrator for LocalAI service
 func (r *GPURouter) AllocateGPUs(ctx context.Context, requiredGPUs int) error {
+	_, _, err := r.AllocateGPUsWithWorkload(ctx, requiredGPUs, nil)
+	return err
+}
+
+// AllocateGPUsWithWorkload allocates GPUs with detailed workload data
+// Returns allocation ID, allocated GPU IDs, and error
+func (r *GPURouter) AllocateGPUsWithWorkload(ctx context.Context, requiredGPUs int, workloadData map[string]interface{}) (string, []int, error) {
 	if r.orchestratorURL == "" {
 		r.logger.Println("GPU orchestrator URL not configured, skipping allocation")
-		return nil
+		return "", nil, nil
+	}
+
+	// Build workload data with defaults
+	if workloadData == nil {
+		workloadData = make(map[string]interface{})
+	}
+	workloadData["required_gpus"] = requiredGPUs
+	
+	// Ensure service_name is set
+	if _, ok := workloadData["service_name"]; !ok {
+		workloadData["service_name"] = "localai"
 	}
 
 	requestData := map[string]interface{}{
-		"service_name": "localai",
+		"service_name":  workloadData["service_name"],
 		"workload_type": "inference",
-		"workload_data": map[string]interface{}{
-			"required_gpus": requiredGPUs,
-			"model_count":   10, // Estimate
-		},
+		"workload_data": workloadData,
 	}
 
 	jsonData, err := json.Marshal(requestData)
 	if err != nil {
-		return fmt.Errorf("failed to marshal request: %w", err)
+		return "", nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	url := fmt.Sprintf("%s/gpu/allocate", r.orchestratorURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(jsonData)))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return "", nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
 		r.logger.Printf("Warning: Failed to allocate GPUs: %v", err)
-		return err
+		return "", nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		r.logger.Printf("Warning: GPU orchestrator returned status %d", resp.StatusCode)
-		return fmt.Errorf("GPU orchestrator returned status %d", resp.StatusCode)
+		return "", nil, fmt.Errorf("GPU orchestrator returned status %d", resp.StatusCode)
 	}
 
 	var allocation struct {
@@ -81,7 +96,7 @@ func (r *GPURouter) AllocateGPUs(ctx context.Context, requiredGPUs int) error {
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&allocation); err != nil {
-		return fmt.Errorf("failed to decode response: %w", err)
+		return "", nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	r.mu.Lock()
@@ -99,7 +114,7 @@ func (r *GPURouter) AllocateGPUs(ctx context.Context, requiredGPUs int) error {
 		r.logger.Printf("Allocated GPUs %v from orchestrator (allocation ID: %s)", allocation.GPUIDs, allocation.ID)
 	}
 
-	return nil
+	return allocation.ID, allocation.GPUIDs, nil
 }
 
 // ReleaseGPUs releases allocated GPUs
@@ -156,6 +171,13 @@ func (r *GPURouter) GetGPUs() []int {
 	gpus := make([]int, len(r.allocatedGPUs))
 	copy(gpus, r.allocatedGPUs)
 	return gpus
+}
+
+// GetAllocationID returns the current allocation ID
+func (r *GPURouter) GetAllocationID() string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.allocationID
 }
 
 // SelectGPUForModel selects the best GPU for a model based on size and current utilization

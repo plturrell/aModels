@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -105,17 +106,90 @@ func (w *WorkloadAnalyzer) analyzeInferenceWorkload(data map[string]interface{})
 		MaxUtilization: 80.0,
 	}
 
+	// Check for specific model types first
+	if modelName, ok := data["model_name"].(string); ok {
+		modelNameLower := strings.ToLower(modelName)
+		
+		// Large models (7B+) - need dedicated GPU, more memory
+		if strings.Contains(modelNameLower, "gemma-7b") || strings.Contains(modelNameLower, "7b") {
+			req.MinMemoryMB = 16384 // 16GB
+			req.RequiredGPUs = 1
+			req.Priority = 8
+			req.MaxUtilization = 85.0
+			if w.logger != nil {
+				w.logger.Printf("Detected Gemma 7B model - allocating dedicated GPU with 16GB memory")
+			}
+		} else if strings.Contains(modelNameLower, "gemma-2b") || strings.Contains(modelNameLower, "2b") {
+			// Medium models (2B) - can share GPU
+			req.MinMemoryMB = 4096 // 4GB
+			req.RequiredGPUs = 1
+			req.Priority = 7
+			req.MaxUtilization = 80.0
+			if w.logger != nil {
+				w.logger.Printf("Detected Gemma 2B model - can share GPU with 4GB memory")
+			}
+		} else if strings.Contains(modelNameLower, "vaultgemma") || strings.Contains(modelNameLower, "vault-gemma") {
+			// Small models (1B) - can share GPU
+			req.MinMemoryMB = 2048 // 2GB
+			req.RequiredGPUs = 1
+			req.Priority = 6
+			req.MaxUtilization = 75.0
+			if w.logger != nil {
+				w.logger.Printf("Detected VaultGemma 1B model - can share GPU with 2GB memory")
+			}
+		} else if strings.Contains(modelNameLower, "phi-3.5") || strings.Contains(modelNameLower, "phi3.5") {
+			// Phi-3.5-mini - can share GPU
+			req.MinMemoryMB = 4096 // 4GB
+			req.RequiredGPUs = 1
+			req.Priority = 7
+			req.MaxUtilization = 80.0
+			if w.logger != nil {
+				w.logger.Printf("Detected Phi-3.5-mini model - can share GPU with 4GB memory")
+			}
+		} else if strings.Contains(modelNameLower, "granite-4.0") || strings.Contains(modelNameLower, "granite4.0") {
+			// Granite 4.0 - can share GPU
+			req.MinMemoryMB = 4096 // 4GB
+			req.RequiredGPUs = 1
+			req.Priority = 7
+			req.MaxUtilization = 80.0
+			if w.logger != nil {
+				w.logger.Printf("Detected Granite 4.0 model - can share GPU with 4GB memory")
+			}
+		}
+	}
+
+	// Override with explicit model_size if provided
 	if modelSize, ok := data["model_size"].(string); ok {
 		switch modelSize {
 		case "small":
-			req.MinMemoryMB = 2048
+			if req.MinMemoryMB > 2048 {
+				req.MinMemoryMB = 2048
+			}
 		case "medium":
-			req.MinMemoryMB = 4096
+			if req.MinMemoryMB > 4096 {
+				req.MinMemoryMB = 4096
+			}
 		case "large":
 			req.MinMemoryMB = 8192
 		case "xlarge":
 			req.MinMemoryMB = 16384
 		}
+	}
+
+	// Check for explicit memory requirement
+	if minMemory, ok := data["min_memory_mb"].(float64); ok {
+		req.MinMemoryMB = int64(minMemory)
+	} else if minMemory, ok := data["min_memory_mb"].(int64); ok {
+		req.MinMemoryMB = minMemory
+	}
+
+	// Check for dedicated allocation requirement
+	if dedicated, ok := data["dedicated"].(bool); ok && dedicated {
+		// Dedicated GPU - ensure sufficient memory
+		if req.MinMemoryMB < 8192 {
+			req.MinMemoryMB = 8192
+		}
+		req.Priority = 8
 	}
 
 	if concurrent, ok := data["concurrent_requests"].(float64); ok {
