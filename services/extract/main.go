@@ -383,6 +383,16 @@ func main() {
 	}
 	server.catalog = catalog
 
+	// Initialize catalog service client (optional - won't fail if not configured)
+	catalogServiceURL := os.Getenv("CATALOG_SERVICE_URL")
+	if catalogServiceURL == "" {
+		catalogServiceURL = "http://localhost:8084" // Default catalog service URL
+	}
+	server.catalogClient = NewCatalogClient(catalogServiceURL, logger)
+	if catalogServiceURL != "" {
+		logger.Printf("Catalog service client initialized (url=%s)", catalogServiceURL)
+	}
+
 	go func() {
 		if err := server.startGRPCServer(grpcAddr); err != nil {
 			logger.Fatalf("gRPC server exited: %v", err)
@@ -487,6 +497,7 @@ type extractServer struct {
 	telemetry          *telemetryClient
 	telemetryOperation string
 	catalog            *Catalog
+	catalogClient      *CatalogClient // HTTP client for catalog service integration
 
 	// Orchestration chain matcher (for Phase 2 integration)
 	chainMatcher *OrchestrationChainMatcher
@@ -1338,6 +1349,33 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			} else {
 				s.logger.Printf("Saved Petri net '%s' to catalog", petriNet.ID)
 			}
+		}
+	}
+
+	// Register extracted data elements in catalog service
+	if s.catalogClient != nil && len(nodes) > 0 {
+		// Convert nodes to data elements and register in bulk
+		dataElements := make([]DataElementRequest, 0, len(nodes))
+		for _, node := range nodes {
+			// Only register meaningful nodes (skip root, project, system nodes)
+			if node.Type == "root" || node.Type == "project" || node.Type == "system" || node.Type == "information-system" {
+				continue
+			}
+			element := ConvertNodeToDataElement(node, req.ProjectID, req.SystemID)
+			dataElements = append(dataElements, element)
+		}
+
+		if len(dataElements) > 0 {
+			// Register in background to avoid blocking extraction
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				if err := s.catalogClient.RegisterDataElementsBulk(ctx, dataElements); err != nil {
+					s.logger.Printf("Warning: Failed to register data elements in catalog service: %v", err)
+				} else {
+					s.logger.Printf("✅ Registered %d data elements in catalog service", len(dataElements))
+				}
+			}()
 		}
 	}
 

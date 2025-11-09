@@ -112,6 +112,84 @@ func (h *CatalogHandlers) HandleCreateDataElement(w http.ResponseWriter, r *http
 	writeJSON(w, http.StatusCreated, h.dataElementToMap(element))
 }
 
+// HandleCreateDataElementsBulk handles POST /catalog/data-elements/bulk.
+func (h *CatalogHandlers) HandleCreateDataElementsBulk(w http.ResponseWriter, r *http.Request) {
+	var req []struct {
+		Name                 string            `json:"name"`
+		DataElementConceptID string            `json:"data_element_concept_id"`
+		RepresentationID     string            `json:"representation_id"`
+		Definition           string            `json:"definition"`
+		Identifier           string            `json:"identifier,omitempty"`
+		Metadata             map[string]string `json:"metadata,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	if len(req) == 0 {
+		http.Error(w, "No data elements provided", http.StatusBadRequest)
+		return
+	}
+
+	var created []map[string]any
+	var errors []map[string]any
+
+	for i, elemReq := range req {
+		if elemReq.Name == "" || elemReq.DataElementConceptID == "" || elemReq.RepresentationID == "" {
+			errors = append(errors, map[string]any{
+				"index": i,
+				"error": "name, data_element_concept_id, and representation_id are required",
+			})
+			continue
+		}
+
+		// Generate identifier if not provided
+		identifier := elemReq.Identifier
+		if identifier == "" {
+			identifier = h.registry.GenerateURI(elemReq.Name)
+		}
+
+		// Create data element
+		element := iso11179.NewDataElement(
+			identifier,
+			elemReq.Name,
+			elemReq.DataElementConceptID,
+			elemReq.RepresentationID,
+			elemReq.Definition,
+		)
+
+		// Add metadata if provided
+		if elemReq.Metadata != nil {
+			for k, v := range elemReq.Metadata {
+				element.AddMetadata(k, v)
+			}
+		}
+
+		// Validate
+		if validationErrors := h.registry.ValidateDataElement(element); len(validationErrors) > 0 {
+			errors = append(errors, map[string]any{
+				"index":   i,
+				"error":   "Validation failed",
+				"details": validationErrors,
+			})
+			continue
+		}
+
+		// Register
+		h.registry.RegisterDataElement(element)
+		created = append(created, h.dataElementToMap(element))
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"created": len(created),
+		"errors":  len(errors),
+		"results": created,
+		"failures": errors,
+	})
+}
+
 // HandleGetOntology handles GET /catalog/ontology.
 func (h *CatalogHandlers) HandleGetOntology(w http.ResponseWriter, r *http.Request) {
 	// Return ontology metadata

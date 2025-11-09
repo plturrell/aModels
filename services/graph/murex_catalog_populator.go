@@ -10,32 +10,46 @@ import (
 )
 
 // MurexCatalogPopulator populates the catalog with Murex-specific data elements.
+// Now uses HTTP client instead of direct registry access for microservice architecture.
 type MurexCatalogPopulator struct {
 	extractor     *MurexTerminologyExtractor
-	registry      *iso11179.MetadataRegistry
+	registry      *iso11179.MetadataRegistry // Kept for backward compatibility, but deprecated
+	catalogClient *CatalogClient             // HTTP client for catalog service
 	logger        *log.Logger
+	useHTTP       bool // Flag to choose between HTTP and direct registry
 }
 
 // NewMurexCatalogPopulator creates a new Murex catalog populator.
+// If catalogClient is provided, uses HTTP. Otherwise falls back to direct registry (deprecated).
 func NewMurexCatalogPopulator(
 	extractor *MurexTerminologyExtractor,
 	registry *iso11179.MetadataRegistry,
+	catalogClient *CatalogClient,
 	logger *log.Logger,
 ) *MurexCatalogPopulator {
+	useHTTP := catalogClient != nil && catalogClient.enabled
 	return &MurexCatalogPopulator{
-		extractor: extractor,
-		registry:  registry,
-		logger:    logger,
+		extractor:     extractor,
+		registry:      registry,
+		catalogClient: catalogClient,
+		logger:        logger,
+		useHTTP:       useHTTP,
 	}
 }
 
 // PopulateFromTerminology populates the catalog from extracted terminology.
 func (mcp *MurexCatalogPopulator) PopulateFromTerminology(ctx context.Context) error {
+	method := "direct registry"
+	if mcp.useHTTP {
+		method = "HTTP"
+	}
 	if mcp.logger != nil {
-		mcp.logger.Printf("Populating catalog from Murex terminology")
+		mcp.logger.Printf("Populating catalog from Murex terminology (using %s)", method)
 	}
 
 	terminology := mcp.extractor.GetTerminology()
+
+	var elements []DataElementRequest
 
 	// Register domain-specific data elements
 	for domain, examples := range terminology.Domains {
@@ -49,12 +63,19 @@ func (mcp *MurexCatalogPopulator) PopulateFromTerminology(ctx context.Context) e
 			)
 			element.AddMetadata("source", "murex")
 			element.AddMetadata("domain", domain)
-			element.AddMetadata("confidence", example.Confidence)
+			element.AddMetadata("confidence", fmt.Sprintf("%f", example.Confidence))
 			element.AddMetadata("timestamp", example.Timestamp.Format(time.RFC3339))
 
-			mcp.registry.RegisterDataElement(element)
-			if mcp.logger != nil {
-				mcp.logger.Printf("Registered data element %s", element.Identifier)
+			if mcp.useHTTP {
+				elements = append(elements, ConvertISO11179ToRequest(element))
+			} else {
+				// Fallback to direct registry (deprecated)
+				if mcp.registry != nil {
+					mcp.registry.RegisterDataElement(element)
+				}
+				if mcp.logger != nil {
+					mcp.logger.Printf("Registered data element %s (direct)", element.Identifier)
+				}
 			}
 		}
 	}
@@ -72,11 +93,33 @@ func (mcp *MurexCatalogPopulator) PopulateFromTerminology(ctx context.Context) e
 			element.AddMetadata("source", "murex")
 			element.AddMetadata("role", role)
 			element.AddMetadata("business_role", role)
-			element.AddMetadata("confidence", example.Confidence)
+			element.AddMetadata("confidence", fmt.Sprintf("%f", example.Confidence))
 
-			mcp.registry.RegisterDataElement(element)
+			if mcp.useHTTP {
+				elements = append(elements, ConvertISO11179ToRequest(element))
+			} else {
+				// Fallback to direct registry (deprecated)
+				if mcp.registry != nil {
+					mcp.registry.RegisterDataElement(element)
+				}
+				if mcp.logger != nil {
+					mcp.logger.Printf("Registered role element %s (direct)", element.Identifier)
+				}
+			}
+		}
+	}
+
+	// Register via HTTP if using HTTP client
+	if mcp.useHTTP && len(elements) > 0 {
+		if err := mcp.catalogClient.RegisterDataElementsBulk(ctx, elements); err != nil {
+			// Log error but don't fail - catalog registration is best effort
 			if mcp.logger != nil {
-				mcp.logger.Printf("Registered role element %s", element.Identifier)
+				mcp.logger.Printf("Warning: Failed to register terminology elements via HTTP: %v", err)
+			}
+			// Continue - don't fail the entire operation
+		} else {
+			if mcp.logger != nil {
+				mcp.logger.Printf("Registered %d terminology elements via HTTP", len(elements))
 			}
 		}
 	}
@@ -90,11 +133,16 @@ func (mcp *MurexCatalogPopulator) PopulateFromTerminology(ctx context.Context) e
 
 // PopulateFromTrainingData populates the catalog from training data schemas.
 func (mcp *MurexCatalogPopulator) PopulateFromTrainingData(ctx context.Context) error {
+	method := "direct registry"
+	if mcp.useHTTP {
+		method = "HTTP"
+	}
 	if mcp.logger != nil {
-		mcp.logger.Printf("Populating catalog from Murex training data")
+		mcp.logger.Printf("Populating catalog from Murex training data (using %s)", method)
 	}
 
 	trainingData := mcp.extractor.GetTrainingData()
+	var elements []DataElementRequest
 
 	// Register schema examples as data elements
 	for _, schemaExample := range trainingData.SchemaExamples {
@@ -110,9 +158,15 @@ func (mcp *MurexCatalogPopulator) PopulateFromTrainingData(ctx context.Context) 
 		tableElement.AddMetadata("source_system", "murex")
 		tableElement.AddMetadata("table_name", schemaExample.TableName)
 
-		mcp.registry.RegisterDataElement(tableElement)
-		if mcp.logger != nil {
-			mcp.logger.Printf("Registered table element %s", tableElement.Identifier)
+		if mcp.useHTTP {
+			elements = append(elements, ConvertISO11179ToRequest(tableElement))
+		} else {
+			if mcp.registry != nil {
+				mcp.registry.RegisterDataElement(tableElement)
+			}
+			if mcp.logger != nil {
+				mcp.logger.Printf("Registered table element %s (direct)", tableElement.Identifier)
+			}
 		}
 
 		// Register columns/fields
@@ -127,14 +181,20 @@ func (mcp *MurexCatalogPopulator) PopulateFromTrainingData(ctx context.Context) 
 			columnElement.AddMetadata("source", "murex")
 			columnElement.AddMetadata("table", schemaExample.TableName)
 			columnElement.AddMetadata("data_type", column.Type)
-			columnElement.AddMetadata("nullable", column.Nullable)
+			columnElement.AddMetadata("nullable", fmt.Sprintf("%v", column.Nullable))
 			if len(column.Examples) > 0 {
 				columnElement.AddMetadata("example_value", fmt.Sprintf("%v", column.Examples[0]))
 			}
 
-			mcp.registry.RegisterDataElement(columnElement)
-			if mcp.logger != nil {
-				mcp.logger.Printf("Registered column element %s", columnElement.Identifier)
+			if mcp.useHTTP {
+				elements = append(elements, ConvertISO11179ToRequest(columnElement))
+			} else {
+				if mcp.registry != nil {
+					mcp.registry.RegisterDataElement(columnElement)
+				}
+				if mcp.logger != nil {
+					mcp.logger.Printf("Registered column element %s (direct)", columnElement.Identifier)
+				}
 			}
 		}
 	}
@@ -154,9 +214,30 @@ func (mcp *MurexCatalogPopulator) PopulateFromTrainingData(ctx context.Context) 
 		element.AddMetadata("pattern", fieldExample.Pattern)
 		element.AddMetadata("data_type", fieldExample.FieldType)
 
-		mcp.registry.RegisterDataElement(element)
-		if mcp.logger != nil {
-			mcp.logger.Printf("Registered field element %s", element.Identifier)
+		if mcp.useHTTP {
+			elements = append(elements, ConvertISO11179ToRequest(element))
+		} else {
+			if mcp.registry != nil {
+				mcp.registry.RegisterDataElement(element)
+			}
+			if mcp.logger != nil {
+				mcp.logger.Printf("Registered field element %s (direct)", element.Identifier)
+			}
+		}
+	}
+
+	// Register via HTTP if using HTTP client
+	if mcp.useHTTP && len(elements) > 0 {
+		if err := mcp.catalogClient.RegisterDataElementsBulk(ctx, elements); err != nil {
+			// Log error but don't fail - catalog registration is best effort
+			if mcp.logger != nil {
+				mcp.logger.Printf("Warning: Failed to register training data elements via HTTP: %v", err)
+			}
+			// Continue - don't fail the entire operation
+		} else {
+			if mcp.logger != nil {
+				mcp.logger.Printf("Registered %d training data elements via HTTP", len(elements))
+			}
 		}
 	}
 

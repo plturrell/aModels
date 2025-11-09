@@ -497,6 +497,15 @@ func main() {
 		}
 	})
 
+	// Bulk registration endpoint
+	mux.HandleFunc("/catalog/data-elements/bulk", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		catalogHandlers.HandleCreateDataElementsBulk(w, r)
+	})
+
 	mux.HandleFunc("/catalog/ontology", catalogHandlers.HandleGetOntology)
 	mux.HandleFunc("/catalog/semantic-search", catalogHandlers.HandleSemanticSearch)
 

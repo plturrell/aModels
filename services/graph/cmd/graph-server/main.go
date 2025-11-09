@@ -119,8 +119,26 @@ func main() {
 			// Create terminology extractor
 			terminologyExtractor := graph.NewMurexTerminologyExtractor(murexConnector, log.Default())
 
-			// Optional catalog populator (nil for now)
+			// Initialize catalog service client (HTTP-based integration)
+			catalogServiceURL := strings.TrimSpace(os.Getenv("CATALOG_SERVICE_URL"))
+			if catalogServiceURL == "" {
+				catalogServiceURL = "http://localhost:8084" // Default catalog service URL
+			}
+			catalogClient := graph.NewCatalogClient(catalogServiceURL, log.Default())
+			if catalogServiceURL != "" {
+				log.Printf("Catalog service client initialized (url=%s)", catalogServiceURL)
+			}
+
+			// Optional catalog populator (now uses HTTP client instead of direct registry)
 			var catalogPopulator *graph.MurexCatalogPopulator
+			// Note: registry is nil - using HTTP client only
+			// For backward compatibility, we could create a registry, but HTTP is preferred
+			catalogPopulator = graph.NewMurexCatalogPopulator(
+				terminologyExtractor,
+				nil, // No direct registry - using HTTP
+				catalogClient,
+				log.Default(),
+			)
 
 			// Terminology learner integration
 			var terminologyLearner *graph.MurexTerminologyLearnerIntegration
