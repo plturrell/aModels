@@ -30,6 +30,7 @@ import (
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/transformers"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/vision"
 	"golang.org/x/time/rate"
+	"os"
 )
 
 var (
@@ -195,6 +196,12 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), RequestTimeoutDefault)
 	defer cancel()
 
+	// Check if request batching is enabled
+	if s.batchProcessor != nil && os.Getenv("ENABLE_REQUEST_BATCHING") == "1" {
+		s.handleChatWithBatching(w, r, ctx)
+		return
+	}
+
 	// Track request
 	s.mu.Lock()
 	s.requestCount++
@@ -233,7 +240,7 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 	preferredBackend := pickPreferredBackend()
 
 	// Resolve model with fallback
-	model, modelKey, fallbackUsed, fallbackKey, err := s.resolveModelForDomain(domain, domainConfig, preferredBackend)
+	model, modelKey, fallbackUsed, fallbackKey, err := s.resolveModelForDomain(ctx, domain, domainConfig, preferredBackend)
 	if err != nil {
 		handleChatError(w, err, http.StatusInternalServerError)
 		return
@@ -804,6 +811,26 @@ func (s *VaultGemmaServer) HandleMetrics(w http.ResponseWriter, r *http.Request)
 			fmt.Fprintf(w, "# TYPE vaultgemma_gguf_models_loaded gauge\n")
 			fmt.Fprintf(w, "vaultgemma_gguf_models_loaded %d\n", ggufCount)
 		}
+		if currentMB, ok := cacheStats["current_memory_mb"].(int64); ok {
+			fmt.Fprintf(w, "# HELP vaultgemma_model_cache_memory_mb Current memory usage in MB\n")
+			fmt.Fprintf(w, "# TYPE vaultgemma_model_cache_memory_mb gauge\n")
+			fmt.Fprintf(w, "vaultgemma_model_cache_memory_mb %d\n", currentMB)
+		}
+		if avgLoadingTime, ok := cacheStats["avg_loading_time_s"].(float64); ok {
+			fmt.Fprintf(w, "# HELP vaultgemma_model_avg_loading_time_seconds Average model loading time in seconds\n")
+			fmt.Fprintf(w, "# TYPE vaultgemma_model_avg_loading_time_seconds gauge\n")
+			fmt.Fprintf(w, "vaultgemma_model_avg_loading_time_seconds %.3f\n", avgLoadingTime)
+		}
+		if maxLoadingTime, ok := cacheStats["max_loading_time_s"].(float64); ok {
+			fmt.Fprintf(w, "# HELP vaultgemma_model_max_loading_time_seconds Maximum model loading time in seconds\n")
+			fmt.Fprintf(w, "# TYPE vaultgemma_model_max_loading_time_seconds gauge\n")
+			fmt.Fprintf(w, "vaultgemma_model_max_loading_time_seconds %.3f\n", maxLoadingTime)
+		}
+		if totalLoaded, ok := cacheStats["total_models_loaded"].(int); ok {
+			fmt.Fprintf(w, "# HELP vaultgemma_models_loaded_total Total number of models loaded\n")
+			fmt.Fprintf(w, "# TYPE vaultgemma_models_loaded_total counter\n")
+			fmt.Fprintf(w, "vaultgemma_models_loaded_total %d\n", totalLoaded)
+		}
 	}
 
 	fmt.Fprintf(w, "\n")
@@ -1013,6 +1040,55 @@ func (s *VaultGemmaServer) splitIntoWords(text string) []string {
 		words = append(words, current.String())
 	}
 	return words
+}
+
+// handleChatWithBatching handles chat requests with batching enabled
+func (s *VaultGemmaServer) handleChatWithBatching(w http.ResponseWriter, r *http.Request, ctx context.Context) {
+	// Validate and decode request
+	req, err := validateChatRequest(r)
+	if err != nil {
+		handleChatError(w, err, http.StatusBadRequest)
+		return
+	}
+
+	// Convert to ChatRequest for batch processor
+	chatReq := &ChatRequest{
+		Model:       req.Model,
+		Messages:    convertToChatMessages(req.Messages),
+		MaxTokens:   req.MaxTokens,
+		Temperature: req.Temperature,
+		TopP:        req.TopP,
+		TopK:        req.TopK,
+		Domains:     req.Domains,
+	}
+
+	// Process through batch processor
+	resp, err := s.batchProcessor.ProcessRequest(ctx, chatReq)
+	if err != nil {
+		handleChatError(w, err, http.StatusInternalServerError)
+		return
+	}
+
+	// Record batch metrics
+	if s.profiler != nil {
+		s.profiler.RecordRequest(time.Since(time.Now()))
+	}
+
+	// Build and send response
+	w.Header().Set(HeaderContentType, ContentTypeJSON)
+	json.NewEncoder(w).Encode(resp)
+}
+
+// convertToChatMessages converts internal messages to ChatMessage format
+func convertToChatMessages(messages []ChatMessageInternal) []ChatMessage {
+	result := make([]ChatMessage, len(messages))
+	for i, msg := range messages {
+		result[i] = ChatMessage{
+			Role:    msg.Role,
+			Content: msg.Content,
+		}
+	}
+	return result
 }
 
 // hashString generates a simple hash for tokenization

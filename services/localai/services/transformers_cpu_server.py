@@ -25,14 +25,24 @@ The response contains the generated text and token count:
 from __future__ import annotations
 
 import os
-from functools import lru_cache
-from typing import Dict, List
+import threading
 import time
+from functools import lru_cache
+from typing import Dict, List, Optional
+from datetime import datetime, timedelta
 
 import torch
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# Try to import quantization libraries
+try:
+    from transformers import BitsAndBytesConfig
+    HAS_BITSANDBYTES = True
+except ImportError:
+    HAS_BITSANDBYTES = False
+    BitsAndBytesConfig = None
 
 # Use /models mount point from Docker volume, or fallback to absolute path
 MODELS_BASE = os.getenv("MODELS_BASE", "/models")
@@ -79,10 +89,23 @@ torch.set_grad_enabled(False)
 
 # Detect device (GPU if available, otherwise CPU)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+NUM_GPUS = torch.cuda.device_count() if DEVICE == "cuda" else 0
+
+# Quantization setting from environment
+QUANTIZATION = os.getenv("TRANSFORMERS_QUANTIZATION", "none").lower()
+
+# Model access tracking for eviction
+_model_access_times: Dict[str, datetime] = {}
+_model_access_lock = threading.Lock()
+MODEL_UNLOAD_TIMEOUT = int(os.getenv("MODEL_UNLOAD_TIMEOUT_SECONDS", "3600"))  # 1 hour default
+
 if DEVICE == "cuda":
     print(f"✅ Using GPU: {torch.cuda.get_device_name(0)}")
     print(f"   CUDA Version: {torch.version.cuda}")
     print(f"   GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
+    print(f"   Number of GPUs: {NUM_GPUS}")
+    if QUANTIZATION != "none":
+        print(f"   Quantization: {QUANTIZATION}")
 else:
     print("⚠️  CUDA not available, using CPU")
     torch.set_num_threads(max(1, os.cpu_count() or 1))
@@ -149,11 +172,31 @@ def _format_chat_prompt(messages: List[ChatMessage]) -> str:
     return f"{prompt_body}\nAssistant:"
 
 
+def _update_model_access(model_key: str):
+    """Update last access time for a model"""
+    with _model_access_lock:
+        _model_access_times[model_key] = datetime.now()
+
+def _unload_unused_models():
+    """Unload models that haven't been accessed recently"""
+    cutoff = datetime.now() - timedelta(seconds=MODEL_UNLOAD_TIMEOUT)
+    with _model_access_lock:
+        to_unload = [
+            key for key, access_time in _model_access_times.items()
+            if access_time < cutoff
+        ]
+    
+    for model_key in to_unload:
+        # Note: lru_cache doesn't support manual eviction easily
+        # In production, you might want to use a custom cache implementation
+        print(f"[DEBUG] Model {model_key} would be unloaded (not accessed for {MODEL_UNLOAD_TIMEOUT}s)")
+
 def _run_generation(req: GenerateRequest) -> GenerateResponse:
     print(f"[DEBUG] Loading tokenizer for {req.model}")
     tokenizer = load_tokenizer(req.model)
     print(f"[DEBUG] Loading model for {req.model}")
     model = load_model(req.model)
+    _update_model_access(req.model)
 
     print(f"[DEBUG] Tokenizing prompt: {req.prompt[:50]}...")
     inputs = tokenizer(req.prompt, return_tensors="pt")
@@ -202,6 +245,33 @@ def load_tokenizer(model_key: str):
     return tokenizer
 
 
+def _get_device_map() -> str:
+    """Get device map for multi-GPU support"""
+    if DEVICE != "cuda" or NUM_GPUS == 0:
+        return "cpu"
+    if NUM_GPUS == 1:
+        return "cuda:0"
+    # For multi-GPU, use auto device_map to distribute layers
+    return "auto"
+
+def _get_quantization_config():
+    """Get quantization configuration if enabled"""
+    if not HAS_BITSANDBYTES or QUANTIZATION == "none":
+        return None
+    
+    if QUANTIZATION == "4bit":
+        return BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4"
+        )
+    elif QUANTIZATION == "8bit":
+        return BitsAndBytesConfig(
+            load_in_8bit=True
+        )
+    return None
+
 @lru_cache(maxsize=None)
 def load_model(model_key: str):
     cfg = MODEL_REGISTRY.get(model_key)
@@ -214,12 +284,16 @@ def load_model(model_key: str):
     if DEVICE == "cuda":
         # Use float16 for GPU to save memory and speed up inference
         torch_dtype = torch.float16
-        device_map = "cuda:0"
-        print(f"[DEBUG] Loading on GPU with float16")
+        device_map = _get_device_map()
+        print(f"[DEBUG] Loading on {device_map} with float16")
     else:
         torch_dtype = torch.float32
         device_map = "cpu"
         print(f"[DEBUG] Loading on CPU with float32")
+    
+    quantization_config = _get_quantization_config()
+    if quantization_config:
+        print(f"[DEBUG] Using quantization: {QUANTIZATION}")
     
     model = AutoModelForCausalLM.from_pretrained(
         cfg["path"],
@@ -227,9 +301,15 @@ def load_model(model_key: str):
         low_cpu_mem_usage=True,
         device_map=device_map,
         trust_remote_code=True,
+        quantization_config=quantization_config,
     )
     model.eval()
-    print(f"[DEBUG] Model loaded successfully on {DEVICE}")
+    
+    # Update access time
+    with _model_access_lock:
+        _model_access_times[model_key] = datetime.now()
+    
+    print(f"[DEBUG] Model loaded successfully on {device_map}")
     return model
 
 

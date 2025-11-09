@@ -8,11 +8,9 @@ dependencies = [
     "sqlmodel",
     "httpx",
     "redis",
-    "hdbcli",
     "python-dotenv",
     "pydantic-settings",
 ]
 
 [project.optional-dependencies]
-hana = ["hdbcli"]
 postgresql = ["psycopg2-binary"]

@@ -7,7 +7,6 @@ from typing import Optional
 from fastapi.concurrency import run_in_threadpool
 
 from ..config import get_settings
-from ..db.hana import upsert_hana_record
 from ..models.flow import FlowMapping
 from ..repositories import FlowRegistryRepository
 from .catalog import FlowSpec
@@ -22,9 +21,7 @@ except ImportError:  # pragma: no cover - optional dependency
 
 
 class FlowRegistryService:
-    """
-    Coordinates persistence across SQLite, HANA, and optional Redis caches.
-    """
+    """Coordinates persistence across SQLite and optional Redis caches."""
 
     def __init__(self, repository: FlowRegistryRepository, redis_client: Optional["Redis"] = None):
         self._repo = repository
@@ -68,18 +65,6 @@ class FlowRegistryService:
             )
 
         mapping = await run_in_threadpool(persist)
-
-        # Mirror to HANA when configured.
-        await run_in_threadpool(
-            upsert_hana_record,
-            mapping.local_id,
-            mapping.remote_id,
-            mapping.name,
-            mapping.description,
-            mapping.project_id,
-            mapping.updated_at,
-            mapping.synced_at,
-        )
 
         await self._cache_mapping(mapping)
 

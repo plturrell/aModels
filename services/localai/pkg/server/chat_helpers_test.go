@@ -2,18 +2,19 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/domain"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/inference"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/ai"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths/util"
 	"golang.org/x/time/rate"
-	"time"
 )
 
 // TestValidateChatRequest_ValidRequest tests validation of valid requests
@@ -129,7 +130,8 @@ func TestResolveModelForDomain(t *testing.T) {
 	srv := newTestServer()
 
 	// Test with existing model
-	model, modelKey, fallbackUsed, fallbackKey, err := srv.resolveModelForDomain("general", nil, "safetensors")
+	ctx := context.Background()
+	model, modelKey, fallbackUsed, fallbackKey, err := srv.resolveModelForDomain(ctx, "general", nil, "safetensors")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -162,7 +164,8 @@ func TestResolveModelForDomain_WithFallback(t *testing.T) {
 		FallbackModel: "general",
 	}
 
-	model, modelKey, fallbackUsed, fallbackKey, err := srv.resolveModelForDomain("sql", domainConfig, "safetensors")
+	ctx := context.Background()
+	model, modelKey, fallbackUsed, fallbackKey, err := srv.resolveModelForDomain(ctx, "sql", domainConfig, "safetensors")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -194,7 +197,8 @@ func TestResolveModelForDomain_TransformersBackend(t *testing.T) {
 		BackendType: BackendTypeTransformers,
 	}
 
-	model, modelKey, fallbackUsed, fallbackKey, err := srv.resolveModelForDomain("phi", domainConfig, BackendTypeTransformers)
+	ctx := context.Background()
+	model, modelKey, fallbackUsed, fallbackKey, err := srv.resolveModelForDomain(ctx, "phi", domainConfig, BackendTypeTransformers)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -228,7 +232,8 @@ func TestResolveModelForDomain_NoModelAvailable(t *testing.T) {
 		ModelPath: "models/nonexistent",
 	}
 
-	_, _, _, _, err := srv.resolveModelForDomain("nonexistent", domainConfig, "safetensors")
+	ctx := context.Background()
+	_, _, _, _, err := srv.resolveModelForDomain(ctx, "nonexistent", domainConfig, "safetensors")
 	if err == nil {
 		t.Fatal("expected error when no model is available")
 	}

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -118,17 +119,37 @@ func (bp *BatchProcessor) processBatch(batch *RequestBatch) {
 		requests[i] = br.Request
 	}
 
-	// Process batch (this would call the actual processing function)
-	// For now, process individually
-	responses := make([]*ChatResponse, len(requests))
-	for i, req := range requests {
-		// In a real implementation, this would batch process
-		// For now, we'll just create a placeholder response
-		responses[i] = &ChatResponse{
-			ID:      "batch-resp",
-			Object:  "chat.completion",
-			Created: time.Now().Unix(),
-			Model:   req.Model,
+	// Process batch using the processor function if set
+	var responses []*ChatResponse
+	bp.mu.Lock()
+	processor := bp.processor
+	bp.mu.Unlock()
+
+	if processor != nil {
+		responses = processor(ctx, requests)
+	} else {
+		// Fallback: create placeholder responses
+		responses = make([]*ChatResponse, len(requests))
+		for i, req := range requests {
+			responses[i] = &ChatResponse{
+				ID:      fmt.Sprintf("batch-resp-%d", i),
+				Object:  "chat.completion",
+				Created: time.Now().Unix(),
+				Model:   req.Model,
+				Choices: []ChatChoice{
+					{
+						Index: 0,
+						Message: ChatMessage{
+							Role:    "assistant",
+							Content: "Batch processing not fully implemented",
+						},
+						FinishReason: "stop",
+					},
+				},
+				Usage: TokenUsage{
+					TotalTokens: 0,
+				},
+			}
 		}
 	}
 

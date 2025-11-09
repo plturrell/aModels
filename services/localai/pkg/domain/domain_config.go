@@ -28,6 +28,7 @@ type DomainConfig struct {
 	Keywords           []string            `json:"keywords"` // For domain detection
 	FallbackModel      string              `json:"fallback_model"`
 	EnabledEnvVar      string              `json:"enabled_env_var,omitempty"`
+	GPULayers          *int                `json:"gpu_layers,omitempty"` // Number of GPU layers for GGUF models (-1 for all, 0 for CPU)
 	VisionConfig       *VisionConfig       `json:"vision_config,omitempty"`
 	TransformersConfig *TransformersConfig `json:"transformers_config,omitempty"`
 }

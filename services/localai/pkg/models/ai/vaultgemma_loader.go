@@ -11,6 +11,7 @@ import (
 	"sort"
 
     "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/maths/util"
+    "golang.org/x/sys/unix"
 )
 
 const (
@@ -91,6 +92,14 @@ func LoadVaultGemmaFromSafetensors(modelPath string) (*VaultGemma, error) {
 }
 
 func (vg *VaultGemma) loadWeights(path string) error {
+	// Check if memory-mapped loading is enabled
+	useMMap := os.Getenv("SAFETENSORS_USE_MMAP") == "1" || os.Getenv("SAFETENSORS_MMAP") == "true"
+	
+	if useMMap {
+		return vg.loadWeightsMMap(path)
+	}
+	
+	// Standard file-based loading
 	f, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("failed to open weights file: %v", err)
@@ -139,6 +148,62 @@ func (vg *VaultGemma) loadWeights(path string) error {
 	return nil
 }
 
+// loadWeightsMMap loads weights using memory-mapped files for reduced memory footprint
+func (vg *VaultGemma) loadWeightsMMap(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("failed to open weights file: %v", err)
+	}
+	defer f.Close()
+
+	// Get file size
+	fileInfo, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to stat file: %v", err)
+	}
+	fileSize := fileInfo.Size()
+
+	// Memory map the file
+	data, err := unix.Mmap(int(f.Fd()), 0, int(fileSize), unix.PROT_READ, unix.MAP_SHARED)
+	if err != nil {
+		// Fallback to standard loading if mmap fails
+		return vg.loadWeights(path)
+	}
+	defer unix.Munmap(data)
+
+	// Read header size (first 8 bytes, little-endian)
+	headerSize := int64(binary.LittleEndian.Uint64(data[0:8]))
+
+	// Parse header JSON
+	var header map[string]TensorInfo
+	if err := json.Unmarshal(data[8:8+headerSize], &header); err != nil {
+		return fmt.Errorf("failed to parse header: %v", err)
+	}
+
+	// Current position in file (after header)
+	dataStart := int64(8 + headerSize)
+
+	// Load each tensor from memory-mapped data
+	for name, info := range header {
+		if name == "__metadata__" {
+			continue
+		}
+
+		// Read tensor data from memory-mapped region
+		tensorData, err := vg.readTensorMMap(data, info, dataStart)
+		if err != nil {
+			return fmt.Errorf("failed to read tensor %s: %v", name, err)
+		}
+
+		// Assign to model
+		if err := vg.assignTensor(name, tensorData, info.Shape); err != nil {
+			return fmt.Errorf("failed to assign tensor %s: %v", name, err)
+		}
+	}
+
+	return nil
+}
+
 func (vg *VaultGemma) readTensor(f *os.File, info TensorInfo, dataStart int64) ([]float64, error) {
 	// Seek to tensor data
 	offset := dataStart + info.DataOffsets[0]
@@ -163,6 +228,80 @@ func (vg *VaultGemma) readTensor(f *os.File, info TensorInfo, dataStart int64) (
 	default:
 		return nil, fmt.Errorf("unsupported dtype: %s", info.DType)
 	}
+}
+
+// readTensorMMap reads tensor data from a memory-mapped region
+func (vg *VaultGemma) readTensorMMap(data []byte, info TensorInfo, dataStart int64) ([]float64, error) {
+	// Calculate offset in memory-mapped data
+	offset := dataStart + info.DataOffsets[0]
+	
+	// Calculate number of elements
+	numElements := 1
+	for _, dim := range info.Shape {
+		numElements *= dim
+	}
+
+	// Read based on dtype from memory-mapped region
+	switch info.DType {
+	case "F32", "float32":
+		return vg.readFloat32TensorMMap(data[offset:], numElements)
+	case "F16", "float16":
+		return vg.readFloat16TensorMMap(data[offset:], numElements)
+	case "BF16", "bfloat16":
+		return vg.readBFloat16TensorMMap(data[offset:], numElements)
+	default:
+		return nil, fmt.Errorf("unsupported dtype: %s", info.DType)
+	}
+}
+
+// readFloat32TensorMMap reads float32 tensor from memory-mapped data
+func (vg *VaultGemma) readFloat32TensorMMap(data []byte, numElements int) ([]float64, error) {
+	result := make([]float64, numElements)
+	
+	// Use unsafe to directly convert byte slice to float32 slice for efficiency
+	if len(data) < numElements*float32Size {
+		return nil, fmt.Errorf("insufficient data: need %d bytes, have %d", numElements*float32Size, len(data))
+	}
+	
+	// Direct conversion from memory-mapped bytes to float64
+	for i := 0; i < numElements; i++ {
+		bits := binary.LittleEndian.Uint32(data[i*float32Size : (i+1)*float32Size])
+		result[i] = float64(math.Float32frombits(bits))
+	}
+	
+	return result, nil
+}
+
+// readFloat16TensorMMap reads float16 tensor from memory-mapped data
+func (vg *VaultGemma) readFloat16TensorMMap(data []byte, numElements int) ([]float64, error) {
+	result := make([]float64, numElements)
+	
+	if len(data) < numElements*float16Size {
+		return nil, fmt.Errorf("insufficient data: need %d bytes, have %d", numElements*float16Size, len(data))
+	}
+	
+	for i := 0; i < numElements; i++ {
+		bits := binary.LittleEndian.Uint16(data[i*float16Size : (i+1)*float16Size])
+		result[i] = float16ToFloat64(bits)
+	}
+	
+	return result, nil
+}
+
+// readBFloat16TensorMMap reads bfloat16 tensor from memory-mapped data
+func (vg *VaultGemma) readBFloat16TensorMMap(data []byte, numElements int) ([]float64, error) {
+	result := make([]float64, numElements)
+	
+	if len(data) < numElements*float16Size {
+		return nil, fmt.Errorf("insufficient data: need %d bytes, have %d", numElements*float16Size, len(data))
+	}
+	
+	for i := 0; i < numElements; i++ {
+		bits := binary.LittleEndian.Uint16(data[i*float16Size : (i+1)*float16Size])
+		result[i] = bfloat16ToFloat64(bits)
+	}
+	
+	return result, nil
 }
 
 func (vg *VaultGemma) readFloat32Tensor(f *os.File, numElements int) ([]float64, error) {

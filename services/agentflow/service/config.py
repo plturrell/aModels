@@ -70,8 +70,8 @@ class Settings(BaseSettings):
         validation_alias="AGENTFLOW_SGMI_VIEW_SUMMARY_PATH",
     )
     registry_table: str = Field(
-        default="AGENTFLOW_REGISTRY",
-        validation_alias="AGENTFLOW_HANA_TABLE",
+        default="agentflow_registry",
+        validation_alias="AGENTFLOW_REGISTRY_TABLE",
     )
 
     langflow_base_url: str = Field(
@@ -111,35 +111,6 @@ class Settings(BaseSettings):
     redis_namespace: str = Field(
         default="agentflow",
         validation_alias="AGENTFLOW_REDIS_NAMESPACE",
-    )
-
-    hana_enabled: bool = Field(
-        default=True,
-        validation_alias="AGENTFLOW_HANA_ENABLED",
-    )
-    hana_host: str = Field(
-        default="d93a8739-44a8-4845-bef3-8ec724dea2ce.hana.prod-us10.hanacloud.ondemand.com",
-        validation_alias="AGENTFLOW_HANA_HOST",
-    )
-    hana_port: int = Field(
-        default=443,
-        validation_alias="AGENTFLOW_HANA_PORT",
-    )
-    hana_user: str = Field(
-        default="DBADMIN",
-        validation_alias="AGENTFLOW_HANA_USER",
-    )
-    hana_password: str = Field(
-        default="Initial@1",
-        validation_alias="AGENTFLOW_HANA_PASSWORD",
-    )
-    hana_schema: Optional[str] = Field(
-        default=None,
-        validation_alias="AGENTFLOW_HANA_SCHEMA",
-    )
-    hana_ssl: bool = Field(
-        default=True,
-        validation_alias="AGENTFLOW_HANA_SSL",
     )
 
     postgres_enabled: bool = Field(
@@ -221,8 +192,6 @@ class Settings(BaseSettings):
 
     @field_validator(
         "redis_enabled",
-        "hana_enabled",
-        "hana_ssl",
         "database_echo",
         mode="before",
     )

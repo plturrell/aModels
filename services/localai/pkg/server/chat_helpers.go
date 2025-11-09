@@ -126,6 +126,7 @@ func buildPromptFromMessages(messages []ChatMessageInternal) string {
 
 // resolveModelForDomain resolves the model for a given domain with fallback logic
 func (s *VaultGemmaServer) resolveModelForDomain(
+	ctx context.Context,
 	domain string,
 	domainConfig *domain.DomainConfig,
 	preferredBackend string,

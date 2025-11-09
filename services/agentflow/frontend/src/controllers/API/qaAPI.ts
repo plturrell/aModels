@@ -1,5 +1,9 @@
 import { QARequest, QAResponse, RunStatus } from '../../types/api/qa';
 
+declare const process: {
+  env: Record<string, string | undefined>;
+};
+
 const API_BASE_URL = process.env.REACT_APP_ORCHESTRATION_URL || 'http://localhost:8081';
 const LANGGRAPH_URL = process.env.REACT_APP_LANGGRAPH_URL || 'http://localhost:8080';
 const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:8080';
@@ -25,7 +29,7 @@ export interface Message {
   content: string;
   timestamp: Date;
   sources?: {
-    hana_data?: any[];
+    beo4j_data?: any[];
     search_results?: any[];
     news_results?: any[];
     calculations?: any;
@@ -123,8 +127,8 @@ class QAAPI {
       if (message.sources) {
         content += `### Sources\n\n`;
         
-        if (message.sources.hana_data?.length) {
-          content += `#### HANA Data (${message.sources.hana_data.length} records)\n\n`;
+        if (message.sources.beo4j_data?.length) {
+          content += `#### Beo4j Data (${message.sources.beo4j_data.length} records)\n\n`;
         }
         
         if (message.sources.search_results?.length) {
@@ -185,7 +189,7 @@ class QAAPI {
       },
       {
         id: '2',
-        title: 'HANA Database Performance',
+        title: 'Beo4j Graph Performance',
         createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
         updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
         messageCount: 6,
@@ -193,20 +197,20 @@ class QAAPI {
           {
             id: '2-1',
             role: 'user',
-            content: 'How can I optimize my HANA database performance?',
+            content: 'How can I optimize Beo4j graph performance?',
             timestamp: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
           },
           {
             id: '2-2',
             role: 'assistant',
-            content: 'Here are key strategies for optimizing HANA database performance:\n\n1. **Memory Management** - Ensure adequate RAM allocation\n2. **Index Optimization** - Use appropriate indexes\n3. **Query Optimization** - Optimize SQL queries\n4. **Partitioning** - Implement table partitioning\n5. **Compression** - Use column store compression',
+            content: 'Here are key strategies for optimizing Beo4j graph performance:\n\n1. **Memory Management** - Ensure adequate RAM allocation\n2. **Index Optimization** - Use appropriate indexes\n3. **Query Optimization** - Optimize Cypher queries\n4. **Shard Planning** - Partition large subgraphs\n5. **Compression** - Enable relationship compression',
             timestamp: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000 + 45000),
             sources: {
-              hana_data: [
+              beo4j_data: [
                 {
-                  table_name: 'performance_metrics',
-                  query_time: '2.3s',
-                  memory_usage: '85%'
+                  node_label: 'performance_metrics',
+                  query_time: '180ms',
+                  memory_usage: '72%'
                 }
               ]
             }

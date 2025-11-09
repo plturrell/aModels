@@ -185,6 +185,9 @@ func main() {
 			log.Printf("✅ Registered default model: %s", *modelPath)
 		}
 
+		// Collect domains for preloading
+		preloadDomains := []string{}
+		
 		// Register domain-specific models
 		if domainManager != nil {
 			configs := domainManager.ListDomainConfigs()
@@ -220,6 +223,35 @@ func main() {
 			}
 		}
 		log.Printf("✅ Model registration complete - models will load on first use")
+		
+		// Preload frequently used models if configured
+		preloadEnv := os.Getenv("PRELOAD_MODELS")
+		if preloadEnv != "" {
+			// Parse comma-separated list of domains to preload
+			envDomains := strings.Split(preloadEnv, ",")
+			for _, d := range envDomains {
+				d = strings.TrimSpace(d)
+				if d != "" {
+					preloadDomains = append(preloadDomains, d)
+				}
+			}
+		}
+		
+		// Also preload default models if configured
+		if os.Getenv("PRELOAD_DEFAULT_MODELS") == "1" || os.Getenv("PRELOAD_DEFAULT_MODELS") == "true" {
+			if !disableFallback {
+				preloadDomains = append(preloadDomains, "general", "vaultgemma")
+			}
+		}
+		
+		// Preload models in background
+		if len(preloadDomains) > 0 {
+			log.Printf("\n🚀 Preloading %d models in background: %v", len(preloadDomains), preloadDomains)
+			ctx := context.Background()
+			for _, domain := range preloadDomains {
+				vgServer.modelCache.PreloadModel(ctx, domain)
+			}
+		}
 	}
 
 	// Load domain-specific configurations

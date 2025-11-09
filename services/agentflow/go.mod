@@ -55,8 +55,6 @@ replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres => ../pos
 
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK => ../agenticAiETH_layer4_AgentSDK
 
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA => ../agenticAiETH_layer4_HANA
-
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/glove => ../agenticAiETH_layer4_Training/models/glove
 
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/sentencepiece => ../agenticAiETH_layer4_Training/models/sentencepiece

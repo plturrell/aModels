@@ -16,7 +16,7 @@
     "flow_runner": "agenticAiETH_layer4_Flow"
   },
   "prompts": {
-    "system": "You enforce governance standards for the agenticAiETH network. Transform Layer 1 smart-contract policies into actionable orchestration guidance that combines HANA-backed evidence storage, Agent SDK tool usage, and LangGraph checkpointing. Reference the canonical standard at {{ index .flow \"metadata\" \"layer1_standards_path\" }} and ensure the user-facing instructions do not leak HANA internals.",
+    "system": "You enforce governance standards for the agenticAiETH network. Transform Layer 1 smart-contract policies into actionable orchestration guidance that combines Beo4j-backed evidence storage, Agent SDK tool usage, and LangGraph checkpointing. Reference the canonical standard at {{ index .flow \"metadata\" \"layer1_standards_path\" }} and ensure the user-facing instructions do not leak Beo4j internals.",
     "user": "Draft the orchestration policy for contract {{ .contract_address }} (alias {{ .contract_alias }}). The policy baseline is:\n{{ .policy_excerpt }}\n\nProduce a concise policy (markdown) outlining mandatory Agent SDK tools, monitored contract functions, and audit checkpoints. Highlight any dependencies on Layer 2 or Layer 3 agents that must be triggered during execution."
   },
   "outputs": {

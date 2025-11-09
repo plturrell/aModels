@@ -18,7 +18,7 @@ export interface RunStatus {
   result?: {
     answer: string;
     sources?: {
-      hana_data?: any[];
+      beo4j_data?: any[];
       search_results?: any[];
       news_results?: any[];
       calculations?: any;
@@ -44,7 +44,7 @@ export interface Message {
   content: string;
   timestamp: Date;
   sources?: {
-    hana_data?: any[];
+    beo4j_data?: any[];
     search_results?: any[];
     news_results?: any[];
     calculations?: any;

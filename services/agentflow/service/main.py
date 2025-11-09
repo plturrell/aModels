@@ -9,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from .cache import get_redis_client
 from .config import get_settings
 from .db import init_db
-from .db.hana import ensure_hana_registry
 from .db.postgres import ensure_postgres_registry
 from .routers import flows_router, health_router, sgmi_router
 from .services import FlowCatalog
@@ -22,12 +21,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     settings = get_settings()
     init_db()
-    hana_ready = ensure_hana_registry()
     postgres_ready = ensure_postgres_registry()
-    if hana_ready:
-        logger.info("HANA registry table verified.")
-    else:
-        logger.warning("HANA registry table skipped (disabled or driver missing).")
     if postgres_ready:
         logger.info("PostgreSQL registry table verified.")
     else:

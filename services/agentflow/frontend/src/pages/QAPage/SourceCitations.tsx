@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight, ExternalLink, FileText, Database, Calculator
 
 interface SourceCitationsProps {
   sources: {
-    hana_data?: any[];
+    beo4j_data?: any[];
     search_results?: any[];
     news_results?: any[];
     calculations?: any;
@@ -12,7 +12,7 @@ interface SourceCitationsProps {
 
 const SourceCitations: React.FC<SourceCitationsProps> = ({ sources }) => {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    hana: false,
+    beo4j: false,
     regulations: false,
     news: false,
     calculations: false
@@ -27,7 +27,7 @@ const SourceCitations: React.FC<SourceCitationsProps> = ({ sources }) => {
 
   const getSourceIcon = (type: string) => {
     switch (type) {
-      case 'hana':
+      case 'beo4j':
         return <Database className="w-4 h-4 text-blue-600" />;
       case 'regulations':
         return <FileText className="w-4 h-4 text-green-600" />;
@@ -40,7 +40,7 @@ const SourceCitations: React.FC<SourceCitationsProps> = ({ sources }) => {
     }
   };
 
-  const renderHanaData = (data: any[]) => {
+  const renderBeo4jData = (data: any[]) => {
     if (!data || data.length === 0) return null;
 
     return (
@@ -159,7 +159,7 @@ const SourceCitations: React.FC<SourceCitationsProps> = ({ sources }) => {
     );
   };
 
-  const hasAnySources = sources.hana_data?.length > 0 || 
+  const hasAnySources = sources.beo4j_data?.length > 0 || 
                        sources.search_results?.length > 0 || 
                        sources.news_results?.length > 0 || 
                        sources.calculations;
@@ -173,24 +173,24 @@ const SourceCitations: React.FC<SourceCitationsProps> = ({ sources }) => {
       <h3 className="text-sm font-medium text-gray-900 mb-3">Sources</h3>
       
       <div className="space-y-3">
-        {/* HANA Data */}
-        {sources.hana_data && sources.hana_data.length > 0 && (
+        {/* Beo4j Data */}
+        {sources.beo4j_data && sources.beo4j_data.length > 0 && (
           <div>
             <button
-              onClick={() => toggleSection('hana')}
+              onClick={() => toggleSection('beo4j')}
               className="flex items-center space-x-2 text-sm font-medium text-gray-700 hover:text-gray-900 w-full text-left"
             >
-              {expandedSections.hana ? (
+              {expandedSections.beo4j ? (
                 <ChevronDown className="w-4 h-4" />
               ) : (
                 <ChevronRight className="w-4 h-4" />
               )}
-              {getSourceIcon('hana')}
-              <span>HANA Data ({sources.hana_data.length})</span>
+              {getSourceIcon('beo4j')}
+              <span>Beo4j Data ({sources.beo4j_data.length})</span>
             </button>
-            {expandedSections.hana && (
+            {expandedSections.beo4j && (
               <div className="mt-2">
-                {renderHanaData(sources.hana_data)}
+                {renderBeo4jData(sources.beo4j_data)}
               </div>
             )}
           </div>
