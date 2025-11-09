@@ -35,6 +35,8 @@ type ChatRequest struct {
 	Messages    []Message `json:"messages"`
 	MaxTokens   int       `json:"max_tokens,omitempty"`
 	Temperature float64   `json:"temperature,omitempty"`
+	TopP        float64   `json:"top_p,omitempty"`
+	Stop        []string  `json:"stop,omitempty"`
 	Stream      bool      `json:"stream,omitempty"`
 }
 
@@ -113,6 +115,50 @@ func (c *Client) ChatCompletion(ctx context.Context, req *ChatRequest) (*ChatRes
 	}
 
 	return &chatResp, nil
+}
+
+// CompletionRequest provides a lightweight compatibility layer for benchmark adapters.
+type CompletionRequest struct {
+	Model       string
+	Prompt      string
+	Temperature float64
+	TopP        float64
+	MaxTokens   int
+	Stop        []string
+}
+
+// CompletionChoice represents a single completion choice.
+type CompletionChoice struct {
+	Text string
+}
+
+// CompletionResponse mirrors the legacy LocalAI completion response structure.
+type CompletionResponse struct {
+	Choices []CompletionChoice
+}
+
+// Complete maps legacy completion calls onto ChatCompletion.
+func (c *Client) Complete(req CompletionRequest) (*CompletionResponse, error) {
+	chatReq := &ChatRequest{
+		Model:       req.Model,
+		Messages:    []Message{{Role: "user", Content: req.Prompt}},
+		Temperature: req.Temperature,
+		TopP:        req.TopP,
+		MaxTokens:   req.MaxTokens,
+		Stop:        req.Stop,
+	}
+
+	resp, err := c.ChatCompletion(context.Background(), chatReq)
+	if err != nil {
+		return nil, err
+	}
+
+	completion := &CompletionResponse{Choices: make([]CompletionChoice, len(resp.Choices))}
+	for i, choice := range resp.Choices {
+		completion.Choices[i] = CompletionChoice{Text: choice.Message.Content}
+	}
+
+	return completion, nil
 }
 
 // ListModels lists available models

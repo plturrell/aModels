@@ -6,13 +6,15 @@ import (
 	"log"
 	"os"
 	"strings"
+
+	"ai_benchmarks/services/shared/pkg/domain"
 )
 
 // CrossSystemExtractor extracts patterns across multiple systems and platforms.
 // Phase 8.3: Enhanced with domain normalization for domain-aware pattern extraction.
 type CrossSystemExtractor struct {
 	logger             *log.Logger
-	domainDetector     *DomainDetector     // Phase 8.3: Domain detector for domain normalization
+	domainDetector     *DomainDetector // Phase 8.3: Domain detector for domain normalization
 	terminologyLearner *TerminologyLearner // Phase 10: LNN-based terminology learning
 }
 
@@ -149,9 +151,7 @@ func (cse *CrossSystemExtractor) normalizePatternsWithDomain(
 	}
 
 	// Get domain config
-	cse.domainDetector.mu.RLock()
-	domainConfig, exists := cse.domainDetector.domainConfigs[domainID]
-	cse.domainDetector.mu.RUnlock()
+	domainConfig, exists := cse.domainDetector.Config(domainID)
 
 	if !exists {
 		cse.normalizePatterns(patterns)
@@ -186,7 +186,7 @@ func (cse *CrossSystemExtractor) normalizePatternsWithDomain(
 // normalizePatternWithDomainConfig normalizes a single pattern using domain config.
 func (cse *CrossSystemExtractor) normalizePatternWithDomainConfig(
 	pattern *CrossSystemPattern,
-	domainConfig DomainConfig,
+	domainConfig domain.DomainConfig,
 ) map[string]any {
 	normalized := make(map[string]any)
 

@@ -337,9 +337,7 @@ func (ssa *SemanticSchemaAnalyzer) inferDomainWithKeywords(
 	}
 
 	// Get domain config from detector
-	ssa.domainDetector.mu.RLock()
-	domainConfig, exists := ssa.domainDetector.domainConfigs[domainID]
-	ssa.domainDetector.mu.RUnlock()
+	domainConfig, exists := ssa.domainDetector.Config(domainID)
 
 	if !exists {
 		return "unknown", 0.0
@@ -385,9 +383,7 @@ func (ssa *SemanticSchemaAnalyzer) calculateSemanticSimilarityWithDomain(
 	}
 
 	// Get domain config
-	ssa.domainDetector.mu.RLock()
-	domainConfig, exists := ssa.domainDetector.domainConfigs[domainID]
-	ssa.domainDetector.mu.RUnlock()
+	domainConfig, exists := ssa.domainDetector.Config(domainID)
 
 	if !exists {
 		// Fallback to regular similarity

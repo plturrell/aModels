@@ -156,9 +156,7 @@ func (mff *ModelFusionFramework) optimizeWeightsForDomain(
 	}
 
 	// Get domain config
-	mff.domainDetector.mu.RLock()
-	domainConfig, exists := mff.domainDetector.domainConfigs[domainID]
-	mff.domainDetector.mu.RUnlock()
+	domainConfig, exists := mff.domainDetector.Config(domainID)
 
 	if !exists {
 		return DefaultModelWeights()

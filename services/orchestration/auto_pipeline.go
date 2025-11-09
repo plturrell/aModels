@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"sync"
 	"time"
+
+	"ai_benchmarks/services/shared/pkg/domain"
 )
 
 // AutoPipelineOrchestrator orchestrates end-to-end automation of extraction → training → deployment.
@@ -20,29 +22,18 @@ type AutoPipelineOrchestrator struct {
 	gleanClient      *GleanClient
 	modelRegistry    *ModelRegistry
 	abTestManager    *ABTestManager
-	domainDetector   *DomainDetector // Phase 9.3: Domain detector for domain-aware orchestration
-}
-
-// DomainDetector is a placeholder - would import from extract service
-type DomainDetector struct {
-	localaiURL string
-	logger     *log.Logger
-}
-
-// NewDomainDetector creates a domain detector (placeholder).
-func NewDomainDetector(localaiURL string, logger *log.Logger) *DomainDetector {
-	return &DomainDetector{
-		localaiURL: localaiURL,
-		logger:     logger,
-	}
+	domainDetector   *domain.Detector // Phase 9.3: Domain detector for domain-aware orchestration
 }
 
 // NewAutoPipelineOrchestrator creates a new auto-pipeline orchestrator.
 func NewAutoPipelineOrchestrator(logger *log.Logger) *AutoPipelineOrchestrator {
 	localaiURL := os.Getenv("LOCALAI_URL")
-	var domainDetector *DomainDetector
+	var domainDetector *domain.Detector
 	if localaiURL != "" {
-		domainDetector = NewDomainDetector(localaiURL, logger)
+		domainDetector = domain.NewDetector(localaiURL, logger)
+		if err := domainDetector.LoadDomains(context.Background()); err != nil && err != domain.ErrNoDomains {
+			logger.Printf("AutoPipeline: failed initial domain sync: %v", err)
+		}
 	}
 	
 	return &AutoPipelineOrchestrator{

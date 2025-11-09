@@ -1,139 +1,67 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
+	"context"
 	"log"
-	"net/http"
-	"strings"
-	"sync"
+
+	"ai_benchmarks/services/shared/pkg/domain"
 )
 
-// DomainDetector detects and associates domains with extracted data
+// DomainDetector wraps the shared domain.Detector so existing call sites remain unchanged.
 type DomainDetector struct {
-	domainConfigs map[string]DomainConfig
-	localaiURL    string
-	mu            sync.RWMutex
-	logger        *log.Logger
+	detector *domain.Detector
+	logger   *log.Logger
 }
 
-// DomainConfig represents a domain configuration from LocalAI
-type DomainConfig struct {
-	Name     string   `json:"name"`
-	AgentID  string   `json:"agent_id"`
-	Keywords []string `json:"keywords"`
-	Tags     []string `json:"tags"`
-	Layer    string   `json:"layer"`
-	Team     string   `json:"team"`
-}
-
-// NewDomainDetector creates a new domain detector
-func NewDomainDetector(localaiURL string, logger *log.Logger) *DomainDetector {
-	dd := &DomainDetector{
-		domainConfigs: make(map[string]DomainConfig),
-		localaiURL:    localaiURL,
-		logger:        logger,
+// Config returns the domain configuration for the given domain ID.
+func (dd *DomainDetector) Config(domainID string) (domain.DomainConfig, bool) {
+	if dd == nil || dd.detector == nil {
+		return domain.DomainConfig{}, false
 	}
+	return dd.detector.Config(domainID)
+}
 
-	// Load domains on initialization
-	if err := dd.LoadDomains(); err != nil {
+// DomainCount returns the number of loaded domains.
+func (dd *DomainDetector) DomainCount() int {
+	if dd == nil || dd.detector == nil {
+		return 0
+	}
+	return dd.detector.DomainCount()
+}
+
+// Domains returns a snapshot of loaded domain configurations.
+func (dd *DomainDetector) Domains() map[string]domain.DomainConfig {
+	if dd == nil || dd.detector == nil {
+		return map[string]domain.DomainConfig{}
+	}
+	return dd.detector.Domains()
+}
+
+// NewDomainDetector creates a new domain detector backed by the shared package.
+func NewDomainDetector(localaiURL string, logger *log.Logger) *DomainDetector {
+	det := domain.NewDetector(localaiURL, logger)
+	if err := det.LoadDomains(context.Background()); err != nil && err != domain.ErrNoDomains {
 		logger.Printf("⚠️  Failed to load domains for detection: %v", err)
 	}
-
-	return dd
+	return &DomainDetector{detector: det, logger: logger}
 }
 
 // LoadDomains loads domain configurations from LocalAI
 func (dd *DomainDetector) LoadDomains() error {
-	if dd.localaiURL == "" {
-		// No LocalAI URL configured, skip domain detection
+	if dd == nil || dd.detector == nil {
 		return nil
 	}
-
-	url := strings.TrimSuffix(dd.localaiURL, "/") + "/v1/domains"
-	resp, err := http.Get(url)
-	if err != nil {
-		return fmt.Errorf("failed to fetch domains from LocalAI: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("LocalAI returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var domainsResponse struct {
-		Data []struct {
-			ID     string       `json:"id"`
-			Config DomainConfig `json:"config"`
-		} `json:"data"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&domainsResponse); err != nil {
-		return fmt.Errorf("failed to decode domains response: %w", err)
-	}
-
-	dd.mu.Lock()
-	defer dd.mu.Unlock()
-
-	dd.domainConfigs = make(map[string]DomainConfig)
-	for _, domain := range domainsResponse.Data {
-		config := domain.Config
-		dd.domainConfigs[domain.ID] = config
-	}
-
-	dd.logger.Printf("✅ Loaded %d domains for detection", len(dd.domainConfigs))
-	return nil
+	return dd.detector.LoadDomains(context.Background())
 }
 
 // DetectDomain detects the most appropriate domain for given text content
 func (dd *DomainDetector) DetectDomain(text string) (string, string) {
-	if dd == nil || len(dd.domainConfigs) == 0 {
-		return "", ""
-	}
-
-	dd.mu.RLock()
-	defer dd.mu.RUnlock()
-
-	textLower := strings.ToLower(text)
-	bestScore := 0
-	bestDomain := ""
-	bestAgentID := ""
-
-	for domainID, config := range dd.domainConfigs {
-		if config.AgentID == "" {
-			continue
-		}
-
-		score := 0
-		// Check keyword matches
-		for _, keyword := range config.Keywords {
-			if strings.Contains(textLower, strings.ToLower(keyword)) {
-				score++
-			}
-		}
-
-		// Check tag matches (less weight)
-		for _, tag := range config.Tags {
-			if strings.Contains(textLower, strings.ToLower(tag)) {
-				score += 1
-			}
-		}
-
-		if score > bestScore {
-			bestScore = score
-			bestDomain = domainID
-			bestAgentID = config.AgentID
-		}
-	}
-
-	return bestDomain, bestAgentID
+	return dd.detector.DetectDomain(text)
 }
 
 // AssociateDomainsWithNodes associates domains with extracted nodes based on content
 func (dd *DomainDetector) AssociateDomainsWithNodes(nodes []Node) {
-	if dd == nil || len(dd.domainConfigs) == 0 {
+	if dd == nil || dd.detector == nil {
 		return
 	}
 
@@ -168,7 +96,7 @@ func (dd *DomainDetector) AssociateDomainsWithNodes(nodes []Node) {
 
 // AssociateDomainsWithEdges associates domains with extracted edges based on source/target nodes
 func (dd *DomainDetector) AssociateDomainsWithEdges(edges []Edge, nodes map[string]*Node) {
-	if dd == nil || len(dd.domainConfigs) == 0 {
+	if dd == nil || dd.detector == nil {
 		return
 	}
 
@@ -213,7 +141,7 @@ func (dd *DomainDetector) AssociateDomainsWithEdges(edges []Edge, nodes map[stri
 func (dd *DomainDetector) AssociateDomainsWithSQL(sqlQueries []string) map[string]string {
 	result := make(map[string]string)
 
-	if dd == nil || len(dd.domainConfigs) == 0 {
+	if dd == nil || dd.detector == nil {
 		return result
 	}
 

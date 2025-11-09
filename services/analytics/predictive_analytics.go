@@ -3,50 +3,52 @@ package analytics
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
+	"math"
 	"os"
 	"strings"
 	"time"
+
+	"ai_benchmarks/pkg/localai"
+	"ai_benchmarks/services/shared/pkg/domain"
 )
 
 // PredictiveAnalytics provides predictive analytics and forecasting.
 // Phase 9.4: Enhanced with domain-aware predictions for domain-specific forecasting.
 type PredictiveAnalytics struct {
-	logger        *log.Logger
-	domainDetector *DomainDetector // Phase 9.4: Domain detector for domain predictions
-	localaiURL    string           // Phase 9.4: LocalAI URL for domain configs
-}
-
-// DomainDetector is a placeholder - would import from extract service
-type DomainDetector struct {
-	localaiURL string
-	logger     *log.Logger
-}
-
-// NewDomainDetector creates a domain detector (placeholder).
-func NewDomainDetector(localaiURL string, logger *log.Logger) *DomainDetector {
-	return &DomainDetector{
-		localaiURL: localaiURL,
-		logger:     logger,
-	}
+	logger         *log.Logger
+	domainDetector *domain.Detector // Phase 9.4: Domain detector for domain predictions
+	localaiURL     string           // Phase 9.4: LocalAI URL for domain configs
+	llmClient      *localai.Client
+	llmModel       string
 }
 
 // NewPredictiveAnalytics creates a new predictive analytics service.
 func NewPredictiveAnalytics(logger *log.Logger) *PredictiveAnalytics {
 	localaiURL := os.Getenv("LOCALAI_URL")
-	var domainDetector *DomainDetector
+	llmModel := os.Getenv("PREDICTIVE_ANALYTICS_LLM_MODEL")
+	if llmModel == "" {
+		llmModel = "phi-3.5-mini"
+	}
+	pa := &PredictiveAnalytics{
+		logger:     logger,
+		localaiURL: localaiURL,
+		llmModel:   llmModel,
+	}
+
 	if localaiURL != "" {
-		domainDetector = NewDomainDetector(localaiURL, logger)
+		detector := domain.NewDetector(localaiURL, logger)
+		if err := detector.LoadDomains(context.Background()); err != nil && !errors.Is(err, domain.ErrNoDomains) {
+			logger.Printf("PredictiveAnalytics: failed initial domain sync: %v", err)
+		} else {
+			pa.domainDetector = detector
+		}
+		pa.llmClient = localai.NewClient(localaiURL)
 	}
-	
-	return &PredictiveAnalytics{
-		logger:        logger,
-		domainDetector: domainDetector, // Phase 9.4: Domain detector
-		localaiURL:    localaiURL,
-	}
+
+	return pa
 }
 
 // PredictDataQualityIssues predicts data quality issues before they occur.
@@ -56,32 +58,32 @@ func (pa *PredictiveAnalytics) PredictDataQualityIssues(
 	historicalTrends []map[string]any,
 ) (*QualityPrediction, error) {
 	pa.logger.Println("Predicting data quality issues...")
-	
+
 	prediction := &QualityPrediction{
 		PredictedIssues: []string{},
 		RiskLevel:       "low",
 		Confidence:      0.0,
 		TimeHorizon:     "7 days",
 	}
-	
+
 	// Analyze trends
 	if len(historicalTrends) > 0 {
 		// Detect declining trends
 		trendAnalysis := pa.analyzeTrends(historicalTrends)
-		
+
 		if trendAnalysis.EntropyDeclining {
-			prediction.PredictedIssues = append(prediction.PredictedIssues, 
+			prediction.PredictedIssues = append(prediction.PredictedIssues,
 				"Metadata entropy declining - potential schema quality degradation")
 			prediction.RiskLevel = "medium"
 		}
-		
+
 		if trendAnalysis.KLDivergenceIncreasing {
 			prediction.PredictedIssues = append(prediction.PredictedIssues,
 				"KL divergence increasing - data type distribution deviating")
 			prediction.RiskLevel = "high"
 		}
 	}
-	
+
 	// Check current metrics against thresholds
 	if entropy, ok := currentMetrics["metadata_entropy"].(float64); ok {
 		if entropy < 2.0 {
@@ -92,10 +94,16 @@ func (pa *PredictiveAnalytics) PredictDataQualityIssues(
 			}
 		}
 	}
-	
+
 	prediction.Confidence = 0.75
 	prediction.PredictedAt = time.Now()
-	
+
+	if pa.llmClient != nil {
+		if err := pa.enhanceQualityPredictionWithLLM(ctx, prediction, currentMetrics, historicalTrends); err != nil {
+			pa.logger.Printf("PredictiveAnalytics: LocalAI quality refinement failed: %v", err)
+		}
+	}
+
 	return prediction, nil
 }
 
@@ -107,14 +115,14 @@ func (pa *PredictiveAnalytics) RecommendExtractionStrategy(
 	historicalData map[string]any,
 ) (*ExtractionRecommendation, error) {
 	pa.logger.Printf("Recommending extraction strategy for project=%s, system=%s", projectID, systemID)
-	
+
 	recommendation := &ExtractionRecommendation{
 		Strategy:        "standard",
 		Priority:        "medium",
 		Recommendations: []string{},
 		Confidence:      0.7,
 	}
-	
+
 	// Analyze historical data patterns
 	if dataVolume, ok := historicalData["data_volume"].(float64); ok {
 		if dataVolume > 1000000 {
@@ -127,7 +135,7 @@ func (pa *PredictiveAnalytics) RecommendExtractionStrategy(
 				"Use streaming processing for real-time updates")
 		}
 	}
-	
+
 	// Check schema complexity
 	if schemaComplexity, ok := historicalData["schema_complexity"].(float64); ok {
 		if schemaComplexity > 0.8 {
@@ -136,7 +144,13 @@ func (pa *PredictiveAnalytics) RecommendExtractionStrategy(
 				"High schema complexity - use advanced extraction features")
 		}
 	}
-	
+
+	if pa.llmClient != nil {
+		if err := pa.enhanceExtractionRecommendationWithLLM(ctx, recommendation, historicalData); err != nil {
+			pa.logger.Printf("PredictiveAnalytics: LocalAI extraction refinement failed: %v", err)
+		}
+	}
+
 	return recommendation, nil
 }
 
@@ -148,25 +162,25 @@ func (pa *PredictiveAnalytics) ForecastTrainingDataNeeds(
 	timeHorizonDays int,
 ) (*TrainingDataForecast, error) {
 	pa.logger.Println("Forecasting training data needs...")
-	
+
 	forecast := &TrainingDataForecast{
-		CurrentCoverage: currentCoverage,
+		CurrentCoverage:    currentCoverage,
 		ForecastedCoverage: make(map[string]int),
 		RecommendedActions: []string{},
 	}
-	
+
 	// Project coverage based on growth rate
 	for pattern, count := range currentCoverage {
 		projectedCount := int(float64(count) * (1.0 + growthRate*float64(timeHorizonDays)/30.0))
 		forecast.ForecastedCoverage[pattern] = projectedCount
-		
+
 		// Recommend actions if coverage is insufficient
 		if count < 100 {
 			forecast.RecommendedActions = append(forecast.RecommendedActions,
 				fmt.Sprintf("Collect more data for pattern: %s (current: %d)", pattern, count))
 		}
 	}
-	
+
 	return forecast, nil
 }
 
@@ -177,35 +191,35 @@ func (pa *PredictiveAnalytics) DetectAnomalies(
 	historicalPatterns []map[string]any,
 ) (*AnomalyDetection, error) {
 	pa.logger.Println("Detecting anomalies in patterns...")
-	
+
 	detection := &AnomalyDetection{
 		Anomalies: []Anomaly{},
 		Severity:  "low",
 	}
-	
+
 	// Simple anomaly detection: compare current vs historical
 	if len(historicalPatterns) > 0 {
 		// Calculate baseline statistics
 		baseline := pa.calculateBaseline(historicalPatterns)
-		
+
 		// Check for deviations
 		for _, pattern := range currentPatterns {
 			if pa.isAnomalous(pattern, baseline) {
 				anomaly := Anomaly{
-					Pattern:   pattern,
-					Type:      "deviation",
-					Severity:  "medium",
+					Pattern:    pattern,
+					Type:       "deviation",
+					Severity:   "medium",
 					DetectedAt: time.Now(),
 				}
 				detection.Anomalies = append(detection.Anomalies, anomaly)
 			}
 		}
 	}
-	
+
 	if len(detection.Anomalies) > 0 {
 		detection.Severity = "medium"
 	}
-	
+
 	return detection, nil
 }
 
@@ -218,31 +232,31 @@ func (pa *PredictiveAnalytics) PredictDomainPerformance(
 	timeHorizonDays int,
 ) (*DomainPerformancePrediction, error) {
 	pa.logger.Printf("Predicting performance for domain %s (horizon: %d days)", domainID, timeHorizonDays)
-	
+
 	prediction := &DomainPerformancePrediction{
-		DomainID:      domainID,
-		TimeHorizon:   timeHorizonDays,
-		PredictedAt:   time.Now(),
-		Metrics:       make(map[string]float64),
-		Trends:        []string{},
+		DomainID:        domainID,
+		TimeHorizon:     timeHorizonDays,
+		PredictedAt:     time.Now(),
+		Metrics:         make(map[string]float64),
+		Trends:          []string{},
 		Recommendations: []string{},
 	}
-	
+
 	// Get domain config for context
-	domainConfig := pa.getDomainConfig(domainID)
-	
+	domainConfig, hasConfig := pa.getDomainConfig(domainID)
+
 	// Analyze historical trends
 	if len(historicalMetrics) >= 2 {
 		first := historicalMetrics[0]
 		last := historicalMetrics[len(historicalMetrics)-1]
-		
+
 		// Predict accuracy trend
 		if firstAcc, ok1 := first["accuracy"].(float64); ok1 {
 			if lastAcc, ok2 := last["accuracy"].(float64); ok2 {
 				trend := (lastAcc - firstAcc) / float64(len(historicalMetrics)-1)
 				predictedAcc := lastAcc + trend*float64(timeHorizonDays)
 				prediction.Metrics["accuracy"] = predictedAcc
-				
+
 				if trend > 0 {
 					prediction.Trends = append(prediction.Trends, "Accuracy improving")
 				} else if trend < 0 {
@@ -252,14 +266,14 @@ func (pa *PredictiveAnalytics) PredictDomainPerformance(
 				}
 			}
 		}
-		
+
 		// Predict latency trend
 		if firstLat, ok1 := first["latency_ms"].(float64); ok1 {
 			if lastLat, ok2 := last["latency_ms"].(float64); ok2 {
 				trend := (lastLat - firstLat) / float64(len(historicalMetrics)-1)
 				predictedLat := lastLat + trend*float64(timeHorizonDays)
 				prediction.Metrics["latency_ms"] = predictedLat
-				
+
 				if predictedLat > 2000 {
 					prediction.Recommendations = append(prediction.Recommendations,
 						"High latency predicted - consider model optimization")
@@ -267,17 +281,17 @@ func (pa *PredictiveAnalytics) PredictDomainPerformance(
 			}
 		}
 	}
-	
+
 	// Adjust predictions based on domain characteristics
-	if domainConfig != nil {
-		layer := domainConfig["layer"].(string)
-		if layer == "data" {
+	if hasConfig {
+		switch domainConfig.Layer {
+		case "data":
 			// Data layer: prioritize latency
 			if lat, ok := prediction.Metrics["latency_ms"]; ok && lat > 1000 {
 				prediction.Recommendations = append(prediction.Recommendations,
 					"Data layer requires low latency - consider smaller model")
 			}
-		} else if layer == "business" {
+		case "business":
 			// Business layer: prioritize accuracy
 			if acc, ok := prediction.Metrics["accuracy"]; ok && acc < 0.8 {
 				prediction.Recommendations = append(prediction.Recommendations,
@@ -285,7 +299,13 @@ func (pa *PredictiveAnalytics) PredictDomainPerformance(
 			}
 		}
 	}
-	
+
+	if pa.llmClient != nil {
+		if err := pa.enhanceDomainPerformanceWithLLM(ctx, prediction, domainID, historicalMetrics, hasConfig); err != nil {
+			pa.logger.Printf("PredictiveAnalytics: LocalAI domain performance refinement failed: %v", err)
+		}
+	}
+
 	return prediction, nil
 }
 
@@ -298,21 +318,21 @@ func (pa *PredictiveAnalytics) PredictDomainDataQuality(
 	historicalQuality []map[string]any,
 ) (*DomainQualityPrediction, error) {
 	pa.logger.Printf("Predicting data quality for domain %s", domainID)
-	
+
 	prediction := &DomainQualityPrediction{
-		DomainID:      domainID,
-		PredictedAt:   time.Now(),
-		RiskLevel:    "low",
-		Confidence:    0.7,
-		Issues:        []string{},
+		DomainID:        domainID,
+		PredictedAt:     time.Now(),
+		RiskLevel:       "low",
+		Confidence:      0.7,
+		Issues:          []string{},
 		Recommendations: []string{},
 	}
-	
+
 	// Analyze trends
 	if len(historicalQuality) >= 2 {
 		first := historicalQuality[0]
 		last := historicalQuality[len(historicalQuality)-1]
-		
+
 		// Check completeness trend
 		if firstComp, ok1 := first["completeness"].(float64); ok1 {
 			if lastComp, ok2 := last["completeness"].(float64); ok2 {
@@ -325,7 +345,7 @@ func (pa *PredictiveAnalytics) PredictDomainDataQuality(
 				}
 			}
 		}
-		
+
 		// Check consistency trend
 		if firstCons, ok1 := first["consistency"].(float64); ok1 {
 			if lastCons, ok2 := last["consistency"].(float64); ok2 {
@@ -339,7 +359,7 @@ func (pa *PredictiveAnalytics) PredictDomainDataQuality(
 			}
 		}
 	}
-	
+
 	return prediction, nil
 }
 
@@ -352,24 +372,24 @@ func (pa *PredictiveAnalytics) PredictDomainTrainingNeeds(
 	growthRate float64,
 ) (*DomainTrainingNeeds, error) {
 	pa.logger.Printf("Predicting training needs for domain %s", domainID)
-	
+
 	needs := &DomainTrainingNeeds{
-		DomainID:           domainID,
-		PredictedAt:        time.Now(),
-		CurrentCoverage:    currentCoverage,
-		ProjectedCoverage:  make(map[string]int),
-		PriorityAreas:      []string{},
-		Recommendations:    []string{},
+		DomainID:          domainID,
+		PredictedAt:       time.Now(),
+		CurrentCoverage:   currentCoverage,
+		ProjectedCoverage: make(map[string]int),
+		PriorityAreas:     []string{},
+		Recommendations:   []string{},
 	}
-	
+
 	// Get domain config for context
-	domainConfig := pa.getDomainConfig(domainID)
-	
+	domainConfig, hasConfig := pa.getDomainConfig(domainID)
+
 	// Project coverage needs
 	for pattern, count := range currentCoverage {
 		projected := int(float64(count) * (1.0 + growthRate))
 		needs.ProjectedCoverage[pattern] = projected
-		
+
 		// Identify priority areas
 		if count < 50 {
 			needs.PriorityAreas = append(needs.PriorityAreas, pattern)
@@ -377,50 +397,26 @@ func (pa *PredictiveAnalytics) PredictDomainTrainingNeeds(
 				fmt.Sprintf("Collect more training data for pattern: %s", pattern))
 		}
 	}
-	
+
 	// Adjust based on domain characteristics
-	if domainConfig != nil {
-		keywords := domainConfig["keywords"].([]string)
-		if len(keywords) > 10 {
+	if hasConfig {
+		if len(domainConfig.Keywords) > 10 {
 			// Semantic-rich domain: needs more diverse training data
 			needs.Recommendations = append(needs.Recommendations,
 				"Semantic-rich domain - focus on diverse training examples")
 		}
 	}
-	
+
 	return needs, nil
 }
 
 // getDomainConfig fetches domain configuration from LocalAI.
-func (pa *PredictiveAnalytics) getDomainConfig(domainID string) map[string]any {
-	if pa.localaiURL == "" {
-		return nil
+func (pa *PredictiveAnalytics) getDomainConfig(domainID string) (domain.DomainConfig, bool) {
+	if pa.domainDetector == nil {
+		return domain.DomainConfig{}, false
 	}
-	
-	url := strings.TrimSuffix(pa.localaiURL, "/") + "/v1/domains"
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-	
-	if resp.StatusCode != http.StatusOK {
-		return nil
-	}
-	
-	body, _ := io.ReadAll(resp.Body)
-	var domainsData map[string]any
-	if json.Unmarshal(body, &domainsData) != nil {
-		return nil
-	}
-	
-	domains := domainsData["domains"].(map[string]any)
-	if domainInfo, ok := domains[domainID].(map[string]any); ok {
-		config := domainInfo["config"].(map[string]any)
-		return config
-	}
-	
-	return nil
+	cfg, ok := pa.domainDetector.Config(domainID)
+	return cfg, ok
 }
 
 // DomainPerformancePrediction represents domain performance prediction.
@@ -455,11 +451,11 @@ type DomainTrainingNeeds struct {
 
 // QualityPrediction represents a prediction about data quality.
 type QualityPrediction struct {
-	PredictedIssues []string    `json:"predicted_issues"`
-	RiskLevel       string      `json:"risk_level"`
-	Confidence      float64     `json:"confidence"`
-	TimeHorizon     string      `json:"time_horizon"`
-	PredictedAt     time.Time   `json:"predicted_at"`
+	PredictedIssues []string  `json:"predicted_issues"`
+	RiskLevel       string    `json:"risk_level"`
+	Confidence      float64   `json:"confidence"`
+	TimeHorizon     string    `json:"time_horizon"`
+	PredictedAt     time.Time `json:"predicted_at"`
 }
 
 // ExtractionRecommendation represents a recommendation for extraction strategy.
@@ -497,15 +493,15 @@ func (pa *PredictiveAnalytics) analyzeTrends(trends []map[string]any) *TrendAnal
 		EntropyDeclining:       false,
 		KLDivergenceIncreasing: false,
 	}
-	
+
 	if len(trends) < 2 {
 		return analysis
 	}
-	
+
 	// Simple trend detection
 	first := trends[0]
 	last := trends[len(trends)-1]
-	
+
 	if firstEntropy, ok1 := first["metadata_entropy"].(float64); ok1 {
 		if lastEntropy, ok2 := last["metadata_entropy"].(float64); ok2 {
 			if lastEntropy < firstEntropy {
@@ -513,7 +509,7 @@ func (pa *PredictiveAnalytics) analyzeTrends(trends []map[string]any) *TrendAnal
 			}
 		}
 	}
-	
+
 	if firstKL, ok1 := first["kl_divergence"].(float64); ok1 {
 		if lastKL, ok2 := last["kl_divergence"].(float64); ok2 {
 			if lastKL > firstKL {
@@ -521,7 +517,7 @@ func (pa *PredictiveAnalytics) analyzeTrends(trends []map[string]any) *TrendAnal
 			}
 		}
 	}
-	
+
 	return analysis
 }
 
@@ -531,41 +527,254 @@ type TrendAnalysis struct {
 }
 
 func (pa *PredictiveAnalytics) calculateBaseline(patterns []map[string]any) map[string]float64 {
-	baseline := make(map[string]float64)
-	
-	// Calculate average values
+	sums := make(map[string]float64)
+	counts := make(map[string]int)
+
 	for _, pattern := range patterns {
 		for key, value := range pattern {
 			if num, ok := value.(float64); ok {
-				baseline[key] = (baseline[key] + num) / 2.0
+				sums[key] += num
+				counts[key]++
 			}
 		}
 	}
-	
+
+	baseline := make(map[string]float64)
+	for key, sum := range sums {
+		if count := counts[key]; count > 0 {
+			baseline[key] = sum / float64(count)
+		}
+	}
+
 	return baseline
 }
 
 func (pa *PredictiveAnalytics) isAnomalous(pattern map[string]any, baseline map[string]float64) bool {
 	threshold := 0.3 // 30% deviation
-	
+
 	for key, value := range pattern {
-		if num, ok := value.(float64); ok {
-			if baselineValue, exists := baseline[key]; exists {
-				deviation := abs(num - baselineValue) / baselineValue
-				if deviation > threshold {
-					return true
-				}
-			}
+		num, ok := value.(float64)
+		if !ok {
+			continue
+		}
+
+		baselineValue, exists := baseline[key]
+		if !exists {
+			continue
+		}
+
+		var deviation float64
+		if baselineValue == 0 {
+			deviation = math.Abs(num)
+		} else {
+			deviation = math.Abs((num - baselineValue) / baselineValue)
+		}
+
+		if deviation > threshold {
+			return true
 		}
 	}
-	
+
 	return false
 }
 
-func abs(x float64) float64 {
-	if x < 0 {
-		return -x
+func (pa *PredictiveAnalytics) enhanceQualityPredictionWithLLM(
+	ctx context.Context,
+	prediction *QualityPrediction,
+	currentMetrics map[string]any,
+	historicalTrends []map[string]any,
+) error {
+	if prediction == nil {
+		return errors.New("nil quality prediction")
 	}
-	return x
+
+	payload := map[string]any{
+		"task":                "quality_prediction",
+		"baseline_prediction": prediction,
+		"current_metrics":     currentMetrics,
+		"historical_trends":   historicalTrends,
+	}
+
+	var response struct {
+		RiskLevel       string   `json:"risk_level"`
+		Confidence      float64  `json:"confidence"`
+		TimeHorizon     string   `json:"time_horizon"`
+		PredictedIssues []string `json:"predicted_issues"`
+		Notes           []string `json:"notes"`
+	}
+
+	if err := pa.invokeLLM(ctx, "You are a data quality risk analyst. Return JSON.", payload, &response); err != nil {
+		return err
+	}
+
+	if response.RiskLevel != "" {
+		prediction.RiskLevel = response.RiskLevel
+	}
+	if response.Confidence > 0 {
+		prediction.Confidence = response.Confidence
+	}
+	if response.TimeHorizon != "" {
+		prediction.TimeHorizon = response.TimeHorizon
+	}
+	if len(response.PredictedIssues) > 0 {
+		prediction.PredictedIssues = mergeStringSlices(prediction.PredictedIssues, response.PredictedIssues)
+	}
+	if len(response.Notes) > 0 {
+		prediction.PredictedIssues = mergeStringSlices(prediction.PredictedIssues, response.Notes)
+	}
+
+	return nil
 }
 
+func (pa *PredictiveAnalytics) enhanceExtractionRecommendationWithLLM(
+	ctx context.Context,
+	recommendation *ExtractionRecommendation,
+	historicalData map[string]any,
+) error {
+	if recommendation == nil {
+		return errors.New("nil extraction recommendation")
+	}
+
+	payload := map[string]any{
+		"task":                    "extraction_strategy",
+		"baseline_recommendation": recommendation,
+		"historical_data":         historicalData,
+	}
+
+	var response struct {
+		Strategy        string   `json:"strategy"`
+		Priority        string   `json:"priority"`
+		Recommendations []string `json:"recommendations"`
+		Confidence      float64  `json:"confidence"`
+	}
+
+	if err := pa.invokeLLM(ctx, "You help choose data extraction strategies. Return JSON only.", payload, &response); err != nil {
+		return err
+	}
+
+	if response.Strategy != "" {
+		recommendation.Strategy = response.Strategy
+	}
+	if response.Priority != "" {
+		recommendation.Priority = response.Priority
+	}
+	if response.Confidence > 0 {
+		recommendation.Confidence = response.Confidence
+	}
+	if len(response.Recommendations) > 0 {
+		recommendation.Recommendations = mergeStringSlices(recommendation.Recommendations, response.Recommendations)
+	}
+
+	return nil
+}
+
+func (pa *PredictiveAnalytics) enhanceDomainPerformanceWithLLM(
+	ctx context.Context,
+	prediction *DomainPerformancePrediction,
+	domainID string,
+	historicalMetrics []map[string]any,
+	hasConfig bool,
+) error {
+	if prediction == nil {
+		return errors.New("nil domain performance prediction")
+	}
+
+	payload := map[string]any{
+		"task":                "domain_performance_forecast",
+		"domain_id":           domainID,
+		"baseline_prediction": prediction,
+		"historical_metrics":  historicalMetrics,
+		"has_domain_config":   hasConfig,
+	}
+
+	var response struct {
+		Metrics         map[string]float64 `json:"metrics"`
+		Trends          []string           `json:"trends"`
+		Recommendations []string           `json:"recommendations"`
+	}
+
+	if err := pa.invokeLLM(ctx, "You forecast model performance for domains. Respond with JSON.", payload, &response); err != nil {
+		return err
+	}
+
+	if len(response.Metrics) > 0 {
+		if prediction.Metrics == nil {
+			prediction.Metrics = make(map[string]float64)
+		}
+		for k, v := range response.Metrics {
+			prediction.Metrics[k] = v
+		}
+	}
+	if len(response.Trends) > 0 {
+		prediction.Trends = mergeStringSlices(prediction.Trends, response.Trends)
+	}
+	if len(response.Recommendations) > 0 {
+		prediction.Recommendations = mergeStringSlices(prediction.Recommendations, response.Recommendations)
+	}
+
+	return nil
+}
+
+func (pa *PredictiveAnalytics) invokeLLM(
+	ctx context.Context,
+	systemPrompt string,
+	payload any,
+	out any,
+) error {
+	if pa.llmClient == nil {
+		return errors.New("llm client not configured")
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+
+	request := &localai.ChatRequest{
+		Model: pa.llmModel,
+		Messages: []localai.Message{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: string(body)},
+		},
+		Temperature: 0.2,
+		MaxTokens:   512,
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, domain.LLMRequestTimeout())
+	defer cancel()
+
+	response, err := pa.llmClient.ChatCompletion(timeoutCtx, request)
+	if err != nil {
+		return fmt.Errorf("localai chat completion: %w", err)
+	}
+
+	content := strings.TrimSpace(response.GetContent())
+	if content == "" {
+		return errors.New("empty response from LocalAI")
+	}
+
+	if err := json.Unmarshal([]byte(content), out); err != nil {
+		return fmt.Errorf("decode LocalAI response: %w", err)
+	}
+
+	return nil
+}
+
+func mergeStringSlices(base []string, additions []string) []string {
+	existing := make(map[string]struct{}, len(base))
+	for _, item := range base {
+		existing[item] = struct{}{}
+	}
+	for _, item := range additions {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if _, ok := existing[item]; ok {
+			continue
+		}
+		base = append(base, item)
+		existing[item] = struct{}{}
+	}
+	return base
+}
