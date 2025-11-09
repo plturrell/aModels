@@ -32,35 +32,79 @@ class FlowCatalog:
 
     def __init__(self, root: Path):
         self.root = root
+        self._specs_by_id: Dict[str, FlowSpec] = {}
+        self._spec_list: List[FlowSpec] = []
+        self._snapshot: Dict[str, float] = {}
 
     def _iter_json_files(self) -> Iterable[Path]:
         if not self.root.exists():
             return []
         return sorted(path for path in self.root.rglob("*.json") if path.is_file())
 
-    def list(self) -> List[FlowSpec]:
-        specs: List[FlowSpec] = []
-        for json_path in self._iter_json_files():
-            with json_path.open("r", encoding="utf-8") as handle:
-                data = json.load(handle)
-            flow_id = data.get("id") or data.get("name")
-            if not flow_id:
-                raise ValueError(f"Flow {json_path} missing 'id' field")
-            specs.append(
-                FlowSpec(
-                    id=flow_id,
-                    name=data.get("name"),
-                    description=data.get("description"),
-                    category=data.get("category"),
-                    tags=[tag for tag in data.get("tags", []) if isinstance(tag, str)],
-                    path=json_path,
-                    raw=data,
+    def _snapshot_paths(self, paths: Iterable[Path]) -> Dict[str, float]:
+        snapshot: Dict[str, float] = {}
+        for path in paths:
+            try:
+                snapshot[str(path)] = path.stat().st_mtime_ns
+            except FileNotFoundError:
+                continue
+        return snapshot
+
+    def _build_spec(self, json_path: Path, data: Dict[str, Any]) -> FlowSpec:
+        flow_id = data.get("id") or data.get("name")
+        if not flow_id:
+            relative = json_path.relative_to(self.root) if json_path.is_relative_to(self.root) else json_path
+            raise ValueError(f"Flow {relative} missing 'id' field")
+
+        tags = [tag for tag in data.get("tags", []) if isinstance(tag, str)]
+
+        return FlowSpec(
+            id=flow_id,
+            name=data.get("name"),
+            description=data.get("description"),
+            category=data.get("category"),
+            tags=tags,
+            path=json_path,
+            raw=data,
+        )
+
+    def _refresh_cache(self) -> None:
+        paths = list(self._iter_json_files())
+        snapshot = self._snapshot_paths(paths)
+        if snapshot == self._snapshot:
+            return
+
+        specs_by_id: Dict[str, FlowSpec] = {}
+        spec_list: List[FlowSpec] = []
+
+        for json_path in paths:
+            try:
+                with json_path.open("r", encoding="utf-8") as handle:
+                    data = json.load(handle)
+            except FileNotFoundError:
+                # File was removed between discovery and load – skip; snapshot already reflects removal.
+                continue
+
+            spec = self._build_spec(json_path, data)
+            if spec.id in specs_by_id:
+                existing_path = specs_by_id[spec.id].path
+                raise ValueError(
+                    f"Duplicate flow id '{spec.id}' in {json_path} (already defined in {existing_path})"
                 )
-            )
-        return specs
+            specs_by_id[spec.id] = spec
+            spec_list.append(spec)
+
+        self._specs_by_id = specs_by_id
+        self._spec_list = spec_list
+        self._snapshot = snapshot
+
+    def list(self) -> List[FlowSpec]:
+        self._refresh_cache()
+        return list(self._spec_list)
 
     def get(self, flow_id: str) -> FlowSpec:
-        for spec in self.list():
-            if spec.id == flow_id:
-                return spec
-        raise KeyError(f"Flow {flow_id} not found in catalog {self.root}")
+        self._refresh_cache()
+        spec = self._specs_by_id.get(flow_id)
+        if spec is None:
+            raise KeyError(f"Flow {flow_id} not found in catalog {self.root}")
+        return spec

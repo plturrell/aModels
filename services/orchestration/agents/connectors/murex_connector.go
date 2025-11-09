@@ -68,7 +68,14 @@ func NewMurexConnector(config map[string]interface{}, logger *log.Logger) *Murex
 		apiKey:        apiKey,
 		discoveredEndpoints: make(map[string]EndpointInfo),
 		allowMockData: allowMockData,
+		// Use connection pooling for better performance (Priority 1)
 		httpClient: &http.Client{
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+				MaxConnsPerHost:     50,
+			},
 			Timeout: 30 * time.Second,
 		},
 	}

@@ -91,8 +91,34 @@ func RunOrchestrationChainNode(localAIURL string) stategraph.NodeFunc {
 
 		op.Log("Running orchestration chain: %s", chainName)
 
+		// Priority 2: Extract workflow context from state for LocalAI headers
+		headers := make(map[string]string)
+		if workflowID, ok := state["workflow_id"].(string); ok && workflowID != "" {
+			headers["X-Workflow-ID"] = workflowID
+		}
+		if priority, ok := state["workflow_priority"].(float64); ok {
+			headers["X-Workflow-Priority"] = fmt.Sprintf("%.0f", priority)
+		} else if priority, ok := state["workflow_priority"].(int); ok {
+			headers["X-Workflow-Priority"] = fmt.Sprintf("%d", priority)
+		}
+		if deps, ok := state["workflow_dependencies"].([]interface{}); ok && len(deps) > 0 {
+			// Convert dependencies to comma-separated string
+			depsStr := ""
+			for i, dep := range deps {
+				if depStr, ok := dep.(string); ok {
+					if i > 0 {
+						depsStr += ","
+					}
+					depsStr += depStr
+				}
+			}
+			if depsStr != "" {
+				headers["X-Workflow-Dependencies"] = depsStr
+			}
+		}
+
 		// Create or load orchestration chain based on chain name
-		chain, err := createOrchestrationChain(chainName, localAIURL)
+		chain, err := createOrchestrationChain(chainName, localAIURL, headers)
 		if err != nil {
 			op.End(err)
 			return nil, fmt.Errorf("create chain %s: %w", chainName, err)
@@ -292,9 +318,14 @@ func ChainResultRoutingFunc(ctx context.Context, value any) ([]string, error) {
 //
 // All chains use the orchestration framework from infrastructure/third_party/orchestration/
 // and are configured with LocalAI as the LLM backend.
-func createOrchestrationChain(chainName, localAIURL string) (chains.Chain, error) {
+func createOrchestrationChain(chainName, localAIURL string, headers map[string]string) (chains.Chain, error) {
 	// Create LocalAI LLM instance using the orchestration framework
-	llm, err := localai.New(localai.WithBaseURL(localAIURL))
+	opts := []localai.Option{localai.WithBaseURL(localAIURL)}
+	// Priority 2: Add workflow context headers if provided
+	if headers != nil && len(headers) > 0 {
+		opts = append(opts, localai.WithHeaders(headers))
+	}
+	llm, err := localai.New(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("create LocalAI LLM: %w", err)
 	}

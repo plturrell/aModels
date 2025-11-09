@@ -94,7 +94,16 @@ func NewDMSPipeline(config DMSPipelineConfig) (*DMSPipeline, error) {
 		dmsURL:             config.DMSURL,
 		graphServiceURL:    graphServiceURL,
 		logger:             config.Logger,
-		httpClient:         &http.Client{Timeout: 120 * time.Second},
+		// Use connection pooling for better performance (Priority 1)
+		httpClient: &http.Client{
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+				MaxConnsPerHost:     50,
+			},
+			Timeout: 120 * time.Second,
+		},
 	}
 
 	// Create learning orchestrator

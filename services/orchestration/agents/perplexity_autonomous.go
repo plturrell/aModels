@@ -73,7 +73,16 @@ func NewPerplexityAutonomousWrapper(config PerplexityAutonomousConfig) (*Perplex
 		autonomousSystem:  autonomousSystem,
 		patternLearningURL: config.PatternLearningURL,
 		lnnURL:            config.LNNURL,
-		httpClient:        &http.Client{Timeout: 120 * time.Second},
+		// Use connection pooling for better performance (Priority 1)
+		httpClient: &http.Client{
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+				MaxConnsPerHost:     50,
+			},
+			Timeout: 120 * time.Second,
+		},
 		logger:            config.Logger,
 	}, nil
 }

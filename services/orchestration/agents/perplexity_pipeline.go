@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -29,6 +30,7 @@ type PerplexityPipeline struct {
 	searchURL          string
 	extractURL         string
 	graphServiceURL    string // Priority 5: Graph service URL for GNN queries
+	gpuOrchestratorURL string // Priority 3: GPU orchestrator URL for GPU allocation
 	learningOrchestrator *LearningOrchestrator
 	requestTracker     *RequestTracker
 	logger             *log.Logger
@@ -78,7 +80,21 @@ func NewPerplexityPipeline(config PerplexityPipelineConfig) (*PerplexityPipeline
 	if graphServiceURL == "" {
 		graphServiceURL = "http://graph-service:8081"
 	}
+	
+	// Get GPU orchestrator URL for GPU allocation (Priority 3)
+	gpuOrchestratorURL := os.Getenv("GPU_ORCHESTRATOR_URL")
+	if gpuOrchestratorURL == "" {
+		gpuOrchestratorURL = "http://gpu-orchestrator:8086"
+	}
 
+	// Use connection pooling for better performance (Priority 1)
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		MaxConnsPerHost:     50,
+	}
+	
 	pipeline := &PerplexityPipeline{
 		perplexityConnector: perplexityConnector,
 		ocrClient:          ocrClient,
@@ -90,8 +106,12 @@ func NewPerplexityPipeline(config PerplexityPipelineConfig) (*PerplexityPipeline
 		searchURL:          config.SearchURL,
 		extractURL:         config.ExtractURL,
 		graphServiceURL:    graphServiceURL,
+		gpuOrchestratorURL:  gpuOrchestratorURL,
 		logger:             config.Logger,
-		httpClient:         &http.Client{Timeout: 120 * time.Second},
+		httpClient: &http.Client{
+			Transport: transport,
+			Timeout:   120 * time.Second,
+		},
 	}
 
 	// Create learning orchestrator
@@ -1496,6 +1516,28 @@ func (pp *PerplexityPipeline) learnFromLocalAI(ctx context.Context, docID, title
 		return nil
 	}
 
+	// Priority 3: Request GPU allocation for domain learning operations
+	var gpuAllocationID string
+	if pp.gpuOrchestratorURL != "" {
+		gpuAllocID, err := pp.requestGPUAllocation(ctx, "domain_learning", domain, len(content))
+		if err != nil {
+			if pp.logger != nil {
+				pp.logger.Printf("Warning: Failed to allocate GPU for domain learning: %v (continuing with CPU)", err)
+			}
+		} else {
+			gpuAllocationID = gpuAllocID
+			if pp.logger != nil {
+				pp.logger.Printf("Allocated GPU for domain learning: %s", gpuAllocationID)
+			}
+		}
+		// Ensure GPU is released after learning operations
+		defer func() {
+			if gpuAllocationID != "" {
+				pp.releaseGPUAllocation(ctx, gpuAllocationID)
+			}
+		}()
+	}
+
 	// Step 1: Update domain model with new document
 	updatePayload := map[string]interface{}{
 		"domain":   domain,
@@ -1556,6 +1598,106 @@ func (pp *PerplexityPipeline) learnFromLocalAI(ctx context.Context, docID, title
 		}
 	} else if pp.logger != nil {
 		pp.logger.Printf("Learned domain patterns for document %s in domain '%s'", docID, domain)
+	}
+
+	return nil
+}
+
+// requestGPUAllocation requests GPU allocation from the GPU orchestrator (Priority 3).
+func (pp *PerplexityPipeline) requestGPUAllocation(ctx context.Context, workloadType, domain string, contentSize int) (string, error) {
+	if pp.gpuOrchestratorURL == "" {
+		return "", fmt.Errorf("GPU orchestrator URL not configured")
+	}
+
+	// Estimate GPU requirements based on content size
+	requiredGPUs := 1
+	minMemoryMB := 4096 // 4GB default
+	if contentSize > 1000000 { // > 1MB
+		minMemoryMB = 8192 // 8GB for large documents
+	}
+
+	workloadData := map[string]interface{}{
+		"workload_type":    workloadType,
+		"domain":           domain,
+		"content_size":     contentSize,
+		"required_gpus":    requiredGPUs,
+		"min_memory_mb":    minMemoryMB,
+		"priority":         7, // High priority for domain learning
+	}
+
+	requestBody := map[string]interface{}{
+		"service_name":  "orchestration",
+		"workload_type": workloadType,
+		"workload_data": workloadData,
+	}
+
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		return "", fmt.Errorf("marshal GPU allocation request: %w", err)
+	}
+
+	url := strings.TrimRight(pp.gpuOrchestratorURL, "/") + "/gpu/allocate"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(jsonData)))
+	if err != nil {
+		return "", fmt.Errorf("create GPU allocation request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := pp.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("execute GPU allocation request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return "", fmt.Errorf("GPU orchestrator returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var allocation struct {
+		ID     string `json:"id"`
+		GPUIDs []int  `json:"gpu_ids"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&allocation); err != nil {
+		return "", fmt.Errorf("decode GPU allocation response: %w", err)
+	}
+
+	return allocation.ID, nil
+}
+
+// releaseGPUAllocation releases GPU allocation (Priority 3).
+func (pp *PerplexityPipeline) releaseGPUAllocation(ctx context.Context, allocationID string) error {
+	if pp.gpuOrchestratorURL == "" || allocationID == "" {
+		return nil
+	}
+
+	url := strings.TrimRight(pp.gpuOrchestratorURL, "/") + "/gpu/release"
+	requestBody := map[string]interface{}{
+		"allocation_id": allocationID,
+		"service_name":  "orchestration",
+	}
+
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		return fmt.Errorf("marshal GPU release request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(jsonData)))
+	if err != nil {
+		return fmt.Errorf("create GPU release request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := pp.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("execute GPU release request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("GPU orchestrator returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	return nil

@@ -85,7 +85,16 @@ func NewPerplexityAdvancedPipeline(config PerplexityAdvancedConfig) (*Perplexity
 		performanceMonitor: performanceMonitor,
 		autoScaler:         autoScaler,
 		logger:             config.Logger,
-		httpClient:         &http.Client{Timeout: 300 * time.Second},
+		// Use connection pooling for better performance (Priority 1)
+		httpClient: &http.Client{
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+				MaxConnsPerHost:     50,
+			},
+			Timeout: 300 * time.Second,
+		},
 	}, nil
 }
 

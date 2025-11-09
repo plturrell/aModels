@@ -46,12 +46,23 @@ func NewPerplexityConnector(config map[string]interface{}, logger *log.Logger) *
 		baseURL = "https://api.perplexity.ai"
 	}
 
+	// Use connection pooling for better performance (Priority 1)
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		MaxConnsPerHost:     50,
+	}
+	
 	return &PerplexityConnector{
 		config:     config,
 		logger:     logger,
 		apiKey:     apiKey,
 		baseURL:    baseURL,
-		httpClient: &http.Client{Timeout: 60 * time.Second},
+		httpClient: &http.Client{
+			Transport: transport,
+			Timeout:   60 * time.Second,
+		},
 	}
 }
 

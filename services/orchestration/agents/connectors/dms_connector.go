@@ -43,11 +43,22 @@ func NewDMSConnector(config map[string]interface{}, logger *log.Logger) *DMSConn
 		baseURL = "http://localhost:8096" // Default DMS port
 	}
 
+	// Use connection pooling for better performance (Priority 1)
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		MaxConnsPerHost:     50,
+	}
+	
 	return &DMSConnector{
 		config:     config,
 		logger:     logger,
 		baseURL:    baseURL,
-		httpClient: &http.Client{Timeout: 60 * time.Second},
+		httpClient: &http.Client{
+			Transport: transport,
+			Timeout:   60 * time.Second,
+		},
 	}
 }
 

@@ -27,6 +27,7 @@ type LLM struct {
 	maxTokens        int
 	domains          []string
 	autoRouting      bool
+	headers          map[string]string // Priority 2: Custom headers for workflow context
 }
 
 // Option is a function that configures a LocalAI LLM.
@@ -78,6 +79,18 @@ func WithDomains(domains []string) Option {
 func WithAutoRouting(enabled bool) Option {
 	return func(l *LLM) {
 		l.autoRouting = enabled
+	}
+}
+
+// WithHeaders sets custom headers to be sent with each request (Priority 2).
+func WithHeaders(headers map[string]string) Option {
+	return func(l *LLM) {
+		if l.headers == nil {
+			l.headers = make(map[string]string)
+		}
+		for k, v := range headers {
+			l.headers[k] = v
+		}
 	}
 }
 
@@ -207,6 +220,11 @@ func (l *LLM) GenerateContent(ctx context.Context, messages []llms.MessageConten
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	
+	// Priority 2: Add custom headers (e.g., workflow context)
+	for k, v := range l.headers {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := l.client.Do(req)
 	if err != nil {

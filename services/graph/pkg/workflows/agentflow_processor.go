@@ -139,6 +139,30 @@ func RunAgentFlowFlowNode(agentflowServiceURL string) stategraph.NodeFunc {
 					return flowResp, fmt.Errorf("build AgentFlow request: %w", err)
 				}
 				req.Header.Set("Content-Type", "application/json")
+				
+				// Priority 2: Add workflow context headers if available
+				if workflowID, ok := state["workflow_id"].(string); ok && workflowID != "" {
+					req.Header.Set("X-Workflow-ID", workflowID)
+				}
+				if priority, ok := state["workflow_priority"].(float64); ok {
+					req.Header.Set("X-Workflow-Priority", fmt.Sprintf("%.0f", priority))
+				} else if priority, ok := state["workflow_priority"].(int); ok {
+					req.Header.Set("X-Workflow-Priority", fmt.Sprintf("%d", priority))
+				}
+				if deps, ok := state["workflow_dependencies"].([]interface{}); ok && len(deps) > 0 {
+					depsStr := ""
+					for i, dep := range deps {
+						if depStr, ok := dep.(string); ok {
+							if i > 0 {
+								depsStr += ","
+							}
+							depsStr += depStr
+						}
+					}
+					if depsStr != "" {
+						req.Header.Set("X-Workflow-Dependencies", depsStr)
+					}
+				}
 
 				startTime := time.Now()
 				resp, err := agentflowHTTPClient.Do(req)

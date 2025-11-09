@@ -54,6 +54,14 @@ func NewMurexPipeline(config MurexPipelineConfig) (*MurexPipeline, error) {
 	}
 	murexConnector := connectors.NewMurexConnector(murexConfig, config.Logger)
 
+	// Use connection pooling for better performance (Priority 1)
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		MaxConnsPerHost:     50,
+	}
+	
 	pipeline := &MurexPipeline{
 		murexConnector:     murexConnector,
 		unifiedWorkflowURL: config.UnifiedWorkflowURL,
@@ -63,7 +71,10 @@ func NewMurexPipeline(config MurexPipelineConfig) (*MurexPipeline, error) {
 		searchURL:          config.SearchURL,
 		sapGLURL:           config.SAPGLURL,
 		logger:             config.Logger,
-		httpClient:         &http.Client{Timeout: 120 * time.Second},
+		httpClient: &http.Client{
+			Transport: transport,
+			Timeout:   120 * time.Second,
+		},
 	}
 
 	// Create learning orchestrator

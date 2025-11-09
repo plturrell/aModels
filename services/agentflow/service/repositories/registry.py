@@ -44,12 +44,18 @@ class FlowRegistryRepository:
             record = FlowMapping(local_id=local_id)
             self._session.add(record)
 
-        record.remote_id = remote_id or record.remote_id
-        record.name = name or record.name
-        record.description = description or record.description
-        record.project_id = project_id or record.project_id
-        record.folder_path = folder_path or record.folder_path
-        record.updated_at = updated_at or record.updated_at
+        if remote_id is not None:
+            record.remote_id = remote_id
+        if name is not None:
+            record.name = name
+        if description is not None:
+            record.description = description
+        if project_id is not None:
+            record.project_id = project_id
+        if folder_path is not None:
+            record.folder_path = folder_path
+        if updated_at is not None:
+            record.updated_at = updated_at
         record.synced_at = datetime.utcnow()
 
         if metadata is not None:

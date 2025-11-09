@@ -46,7 +46,7 @@ func TestOrchestrationChainCreation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			chain, err := createOrchestrationChain(tc.chainName, localAIURL)
+			chain, err := createOrchestrationChain(tc.chainName, localAIURL, nil)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("createOrchestrationChain() error = %v, wantErr %v", err, tc.wantErr)
 				return
