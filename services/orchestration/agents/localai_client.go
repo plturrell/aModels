@@ -211,6 +211,10 @@ func (c *LocalAIClient) StoreDocument(ctx context.Context, domain, model string,
 			if err == nil {
 				// Phase 2: Record metrics
 				c.metrics.RecordCall("StoreDocument", domain, tryModel, time.Since(startTime), true)
+				// Phase 4: Record A/B test result if enabled
+				if c.abTester != nil && c.abTester.IsEnabled() {
+					c.abTester.RecordResult(domain, tryModel, true, time.Since(startTime))
+				}
 				// Phase 3: Cache successful response
 				if cacheKey := c.getCacheKey("StoreDocument", domain, tryModel, payload); cacheKey != "" {
 					c.responseCache.Set(cacheKey, result, 5*time.Minute) // Cache for 5 minutes
@@ -218,6 +222,9 @@ func (c *LocalAIClient) StoreDocument(ctx context.Context, domain, model string,
 				if tryModel != model && c.logger != nil {
 					c.logger.Printf("Successfully used fallback model %s (original: %s) for domain %s", tryModel, model, domain)
 				}
+				c.tracer.EndSpan(spanID, "success", map[string]interface{}{
+					"model": tryModel,
+				})
 				return result, nil
 			}
 			lastErr = err
