@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 
@@ -54,11 +54,11 @@ class Settings(BaseSettings):
     """
 
     project_root: Path = Field(
-        default=Path("/Users/user/Library/CloudStorage/Dropbox/agenticAiETH/agenticAiETH_layer4_AgentFlow"),
+        default=Path("/app/agentflow"),
         validation_alias="AGENTFLOW_PROJECT_ROOT",
     )
     flows_dir: Path = Field(
-        default=Path("/Users/user/Library/CloudStorage/Dropbox/agenticAiETH/agenticAiETH_layer4_AgentFlow/flows"),
+        default=Path("/app/agentflow/flows"),
         validation_alias="AGENTFLOW_FLOWS_DIR",
     )
     sgmi_view_lineage_path: Path = Field(
@@ -111,6 +111,19 @@ class Settings(BaseSettings):
     redis_namespace: str = Field(
         default="agentflow",
         validation_alias="AGENTFLOW_REDIS_NAMESPACE",
+    )
+
+    deepagents_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("AGENTFLOW_DEEPAGENTS_ENABLED", "DEEPAGENTS_ENABLED"),
+    )
+    deepagents_url: str = Field(
+        default="http://deepagents-service:9004",
+        validation_alias=AliasChoices("AGENTFLOW_DEEPAGENTS_URL", "DEEPAGENTS_URL"),
+    )
+    deepagents_timeout_seconds: int = Field(
+        default=120,
+        validation_alias=AliasChoices("AGENTFLOW_DEEPAGENTS_TIMEOUT_SECONDS", "DEEPAGENTS_TIMEOUT_SECONDS"),
     )
 
     postgres_enabled: bool = Field(
@@ -192,6 +205,7 @@ class Settings(BaseSettings):
 
     @field_validator(
         "redis_enabled",
+        "deepagents_enabled",
         "database_echo",
         mode="before",
     )

@@ -20,6 +20,8 @@ type GPURouter struct {
 	mu              sync.RWMutex
 	httpClient      *http.Client
 	logger          *log.Logger
+	// Connection pooling (Phase 1) - use shared pool if available
+	useSharedPool bool
 }
 
 // NewGPURouter creates a new GPU router
@@ -28,10 +30,22 @@ func NewGPURouter(orchestratorURL string, logger *log.Logger) *GPURouter {
 		logger = log.New(os.Stdout, "[gpu-router] ", log.LstdFlags|log.Lmsgprefix)
 	}
 	
+	// Use shared HTTP pool if available (Phase 1)
+	// For now, create a client with connection pooling enabled
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		MaxConnsPerHost:     50,
+	}
+	
 	return &GPURouter{
 		orchestratorURL: orchestratorURL,
-		httpClient:      &http.Client{Timeout: 10 * time.Second},
-		logger:          logger,
+		httpClient: &http.Client{
+			Transport: transport,
+			Timeout:   10 * time.Second,
+		},
+		logger: logger,
 	}
 }
 

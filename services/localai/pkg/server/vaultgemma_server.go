@@ -105,6 +105,9 @@ type VaultGemmaServer struct {
 	modelCache       *ModelCache
 	batchProcessor   *BatchProcessor
 	profiler         *Profiler
+	// Postgres integration (Phase 1)
+	postgresLogger   *storage.PostgresInferenceLogger
+	postgresCache    *storage.PostgresCacheStore
 }
 
 // ModelRegistry exposes configuration metadata for orchestration layer discovery
@@ -275,6 +278,17 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 	if sessionID == "" {
 		sessionID = DefaultSessionID
 	}
+	
+	// Extract workflow context from headers (Phase 1)
+	workflowID := r.Header.Get("X-Workflow-ID")
+	if workflowID == "" {
+		// Try to get from request body if available
+		if reqBody, ok := r.Context().Value("request_body").(map[string]interface{}); ok {
+			if wfID, ok := reqBody["workflow_id"].(string); ok {
+				workflowID = wfID
+			}
+		}
+	}
 
 	// Log request start
 	if s.enhancedLogging != nil {
@@ -298,6 +312,27 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 	// Record profiling metrics
 	if s.profiler != nil {
 		s.profiler.RecordRequest(duration)
+	}
+
+	// Log inference to Postgres (Phase 1) - non-blocking
+	if s.postgresLogger != nil {
+		go func() {
+			logEntry := &storage.InferenceLog{
+				Domain:          domain,
+				ModelName:       modelKey,
+				PromptLength:    len(prompt),
+				ResponseLength:  len(result.Content),
+				LatencyMS:       int(duration.Milliseconds()),
+				TokensGenerated: result.TokensUsed,
+				TokensPrompt:    len(prompt) / 4, // Rough estimate
+				WorkflowID:      workflowID,
+				UserID:          userID,
+				CreatedAt:       time.Now(),
+			}
+			if err := s.postgresLogger.LogInference(context.Background(), logEntry); err != nil {
+				log.Printf("⚠️  Failed to log inference to Postgres: %v", err)
+			}
+		}()
 	}
 
 	// Update metadata with final values
@@ -973,6 +1008,38 @@ func NewVaultGemmaServer(models map[string]*ai.VaultGemma, ggufModels map[string
 		}
 	}
 
+	// Initialize Postgres integration (Phase 1)
+	var postgresLogger *storage.PostgresInferenceLogger
+	var postgresCache *storage.PostgresCacheStore
+	postgresDSN := os.Getenv("POSTGRES_DSN")
+	if postgresDSN != "" {
+		// Initialize inference logger
+		if logger, err := storage.NewPostgresInferenceLogger(postgresDSN); err == nil {
+			postgresLogger = logger
+			log.Printf("✅ Postgres inference logger initialized")
+		} else {
+			log.Printf("⚠️  Failed to initialize Postgres inference logger: %v", err)
+		}
+
+		// Initialize cache store
+		if cacheStore, err := storage.NewPostgresCacheStore(postgresDSN); err == nil {
+			postgresCache = cacheStore
+			log.Printf("✅ Postgres cache store initialized")
+			
+			// Restore cache state on startup
+			ctx := context.Background()
+			if states, err := cacheStore.LoadAllCacheStates(ctx); err == nil {
+				log.Printf("📦 Restored %d model cache states from Postgres", len(states))
+				// Cache states are loaded but not automatically restored to ModelCache
+				// This is intentional - models will be loaded on first use
+			} else {
+				log.Printf("⚠️  Failed to load cache states: %v", err)
+			}
+		} else {
+			log.Printf("⚠️  Failed to initialize Postgres cache store: %v", err)
+		}
+	}
+
 	return &VaultGemmaServer{
 		models:             models,
 		ggufModels:         ggufModels,
@@ -998,6 +1065,9 @@ func NewVaultGemmaServer(models map[string]*ai.VaultGemma, ggufModels map[string
 		modelCache:       modelCache,
 		batchProcessor:   batchProcessor,
 		profiler:         profiler,
+		// Postgres integration (Phase 1)
+		postgresLogger:   postgresLogger,
+		postgresCache:    postgresCache,
 	}
 }
 

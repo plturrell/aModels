@@ -15,6 +15,7 @@ import (
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/gpu"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/ai"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/gguf"
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/storage"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/transformers"
 	llama "github.com/go-skynet/go-llama.cpp"
 )
@@ -58,6 +59,9 @@ type ModelCache struct {
 
 	// Domain manager for configuration
 	domainManager *domain.DomainManager
+	
+	// Postgres cache store (Phase 1)
+	postgresCache *storage.PostgresCacheStore
 }
 
 // NewModelCache creates a new model cache with lazy loading support
@@ -71,6 +75,17 @@ func NewModelCache(domainManager *domain.DomainManager, maxMemoryMB int64) *Mode
 	if orchestratorURL := os.Getenv("GPU_ORCHESTRATOR_URL"); orchestratorURL != "" {
 		gpuRouter = gpu.NewGPURouter(orchestratorURL, nil)
 		log.Printf("🔌 GPU orchestrator integration enabled: %s", orchestratorURL)
+	}
+
+	// Initialize Postgres cache store if DSN is configured (Phase 1)
+	var postgresCache *storage.PostgresCacheStore
+	if postgresDSN := os.Getenv("POSTGRES_DSN"); postgresDSN != "" {
+		if cacheStore, err := storage.NewPostgresCacheStore(postgresDSN); err == nil {
+			postgresCache = cacheStore
+			log.Printf("✅ Postgres cache store initialized for ModelCache")
+		} else {
+			log.Printf("⚠️  Failed to initialize Postgres cache store: %v", err)
+		}
 	}
 
 	return &ModelCache{
@@ -91,6 +106,7 @@ func NewModelCache(domainManager *domain.DomainManager, maxMemoryMB int64) *Mode
 		sharedGPUGroup:      make(map[string][]string),
 		modelRegistry:       NewModelRegistry(),
 		domainManager:       domainManager,
+		postgresCache:       postgresCache,
 	}
 }
 
@@ -203,6 +219,25 @@ func (mc *ModelCache) GetSafetensorModel(ctx context.Context, domain string) (*a
 		mc.addModelMemory(domain, memoryMB)
 
 		mc.updateAccessTime(domain)
+		
+		// Persist cache state to Postgres (Phase 1)
+		if mc.postgresCache != nil {
+			go func() {
+				state := &storage.CacheState{
+					Domain:      domain,
+					ModelType:   "safetensors",
+					ModelPath:   path,
+					LoadedAt:    time.Now(),
+					MemoryMB:    memoryMB,
+					AccessCount: 1,
+					LastAccess:  time.Now(),
+					CacheData:   make(map[string]interface{}),
+				}
+				if err := mc.postgresCache.SaveCacheState(context.Background(), state); err != nil {
+					log.Printf("⚠️  Failed to persist cache state for domain %s: %v", domain, err)
+				}
+			}()
+		}
 	}()
 
 	// Wait for loading to complete
@@ -361,6 +396,25 @@ func (mc *ModelCache) GetGGUFModel(ctx context.Context, domain string) (*gguf.Mo
 		mc.addModelMemory(domain, memoryMB)
 
 		mc.updateAccessTime(domain)
+		
+		// Persist cache state to Postgres (Phase 1)
+		if mc.postgresCache != nil {
+			go func() {
+				state := &storage.CacheState{
+					Domain:      domain,
+					ModelType:   "gguf",
+					ModelPath:   path,
+					LoadedAt:    time.Now(),
+					MemoryMB:    memoryMB,
+					AccessCount: 1,
+					LastAccess:  time.Now(),
+					CacheData:   make(map[string]interface{}),
+				}
+				if err := mc.postgresCache.SaveCacheState(context.Background(), state); err != nil {
+					log.Printf("⚠️  Failed to persist cache state for domain %s: %v", domain, err)
+				}
+			}()
+		}
 	}()
 
 	select {

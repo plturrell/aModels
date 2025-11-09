@@ -51,6 +51,42 @@ func NewGPUOrchestrator(
 
 // AllocateGPUs allocates GPUs for a service using intelligent scheduling
 func (o *GPUOrchestrator) AllocateGPUs(ctx context.Context, serviceName string, workloadType string, workloadData map[string]interface{}) (*gpu_allocator.Allocation, error) {
+	// Extract workflow context from workload data (Phase 1)
+	workflowID := ""
+	workflowPriority := 5 // Default priority (1-10 scale)
+	workflowDependencies := []string{}
+	
+	if workloadData != nil {
+		if wfID, ok := workloadData["workflow_id"].(string); ok {
+			workflowID = wfID
+		}
+		if priority, ok := workloadData["workflow_priority"].(int); ok {
+			workflowPriority = priority
+		} else if priority, ok := workloadData["workflow_priority"].(float64); ok {
+			workflowPriority = int(priority)
+		}
+		if deps, ok := workloadData["workflow_dependencies"].([]interface{}); ok {
+			for _, dep := range deps {
+				if depStr, ok := dep.(string); ok {
+					workflowDependencies = append(workflowDependencies, depStr)
+				}
+			}
+		}
+		
+		// Ensure workflow context is in workload data for scheduler
+		if workflowID != "" {
+			workloadData["workflow_id"] = workflowID
+		}
+		workloadData["workflow_priority"] = workflowPriority
+		if len(workflowDependencies) > 0 {
+			workloadData["workflow_dependencies"] = workflowDependencies
+		}
+	}
+	
+	if o.logger != nil && workflowID != "" {
+		o.logger.Printf("Allocating GPUs for workflow %s (priority: %d, dependencies: %v)", workflowID, workflowPriority, workflowDependencies)
+	}
+	
 	// Use DeepAgents for intelligent allocation if available
 	if o.deepAgentsURL != "" {
 		allocation, err := o.allocateViaDeepAgents(ctx, serviceName, workloadType, workloadData)
@@ -60,7 +96,7 @@ func (o *GPUOrchestrator) AllocateGPUs(ctx context.Context, serviceName string, 
 		o.logger.Printf("DeepAgents allocation failed, falling back to standard allocation: %v", err)
 	}
 
-	// Fallback to standard scheduling
+	// Fallback to priority-based scheduling (Phase 1)
 	return o.scheduler.Schedule(serviceName, workloadType, workloadData)
 }
 

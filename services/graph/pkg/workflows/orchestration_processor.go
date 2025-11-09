@@ -511,7 +511,16 @@ func QueryKnowledgeGraphForChainNode(extractServiceURL string) stategraph.NodeFu
 		}
 		req.Header.Set("Content-Type", "application/json")
 
-		client := &http.Client{Timeout: 30 * time.Second}
+		// Use connection pooling for better performance (Phase 1)
+		client := &http.Client{
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+				MaxConnsPerHost:     50,
+			},
+			Timeout: 30 * time.Second,
+		}
 		resp, err := client.Do(req)
 		if err != nil {
 			// Fall back to using knowledge graph from state if available

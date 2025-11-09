@@ -1,8 +1,9 @@
 """DeepAgents integration for AgentFlow service."""
 
-import os
 from typing import Any, Dict, Optional
+
 import httpx
+
 from ..config import get_settings
 
 # HTTP client for DeepAgents requests
@@ -10,29 +11,22 @@ _deepagents_client: Optional[httpx.AsyncClient] = None
 
 
 def get_deepagents_client() -> Optional[httpx.AsyncClient]:
-    """Get or create DeepAgents HTTP client.
-
-    DeepAgents is enabled by default (10/10 integration).
-    Set DEEPAGENTS_ENABLED=false to disable.
-    """
+    """Get or create DeepAgents HTTP client if enabled."""
     global _deepagents_client
 
-    # Enabled by default (10/10 integration)
-    # Only disable if explicitly set to false
-    enabled = os.getenv("DEEPAGENTS_ENABLED", "").lower() != "false"
-
-    if not enabled:
+    settings = get_settings()
+    if not settings.deepagents_enabled:
         return None
 
     if _deepagents_client is None:
-        base_url = os.getenv("DEEPAGENTS_URL", "http://deepagents-service:9004")
         _deepagents_client = httpx.AsyncClient(
-            base_url=base_url,
-            timeout=120.0,  # Deep agents can take longer
+            base_url=settings.deepagents_url,
+            timeout=settings.deepagents_timeout_seconds,
         )
         import logging
+
         logger = logging.getLogger(__name__)
-        logger.info(f"DeepAgents integration enabled (URL: {base_url})")
+        logger.info("DeepAgents integration enabled", extra={"url": settings.deepagents_url})
 
     return _deepagents_client
 

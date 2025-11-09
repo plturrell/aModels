@@ -36,7 +36,14 @@ type GPUAllocation struct {
 	Priority     int      `json:"priority"`
 }
 
+// gpuHTTPClient uses connection pooling for better performance (Phase 1)
 var gpuHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		MaxConnsPerHost:     50,
+	},
 	Timeout: 30 * time.Second,
 }
 
@@ -59,6 +66,20 @@ func ProcessGPUAllocationNode(opts GPUProcessorOptions) stategraph.NodeFunc {
 			gpuReq.ServiceName = getString(req["service_name"])
 			gpuReq.WorkloadType = getString(req["workload_type"])
 			gpuReq.WorkflowID = getString(req["workflow_id"])
+			
+			// Extract workflow priority and dependencies (Phase 1)
+			if priority, ok := req["workflow_priority"].(float64); ok {
+				if gpuReq.WorkloadData == nil {
+					gpuReq.WorkloadData = make(map[string]interface{})
+				}
+				gpuReq.WorkloadData["workflow_priority"] = int(priority)
+			}
+			if deps, ok := req["workflow_dependencies"].([]interface{}); ok {
+				if gpuReq.WorkloadData == nil {
+					gpuReq.WorkloadData = make(map[string]interface{})
+				}
+				gpuReq.WorkloadData["workflow_dependencies"] = deps
+			}
 
 			if workloadData, ok := req["workload_data"].(map[string]any); ok {
 				gpuReq.WorkloadData = workloadData
@@ -78,11 +99,27 @@ func ProcessGPUAllocationNode(opts GPUProcessorOptions) stategraph.NodeFunc {
 					gpuReq.WorkloadData = map[string]interface{}{
 						"chain_name": chainName,
 					}
+					// Extract workflow ID and priority if available (Phase 1)
+					if workflowID, ok := state["workflow_id"].(string); ok {
+						gpuReq.WorkflowID = workflowID
+						gpuReq.WorkloadData["workflow_id"] = workflowID
+					}
+					if priority, ok := state["workflow_priority"].(float64); ok {
+						gpuReq.WorkloadData["workflow_priority"] = int(priority)
+					}
 				} else if afReq, ok := unifiedReq["agentflow_request"].(map[string]any); ok && afReq != nil {
 					gpuReq.WorkloadType = "inference"
 					flowID := getString(afReq["flow_id"])
 					gpuReq.WorkloadData = map[string]interface{}{
 						"flow_id": flowID,
+					}
+					// Extract workflow ID and priority if available (Phase 1)
+					if workflowID, ok := state["workflow_id"].(string); ok {
+						gpuReq.WorkflowID = workflowID
+						gpuReq.WorkloadData["workflow_id"] = workflowID
+					}
+					if priority, ok := state["workflow_priority"].(float64); ok {
+						gpuReq.WorkloadData["workflow_priority"] = int(priority)
 					}
 				}
 			}
@@ -99,6 +136,14 @@ func ProcessGPUAllocationNode(opts GPUProcessorOptions) stategraph.NodeFunc {
 
 		log.Printf("Processing GPU allocation for service: %s, workload type: %s", gpuReq.ServiceName, gpuReq.WorkloadType)
 
+		// Ensure workflow ID is included in workload data (Phase 1)
+		if gpuReq.WorkflowID != "" {
+			if gpuReq.WorkloadData == nil {
+				gpuReq.WorkloadData = make(map[string]interface{})
+			}
+			gpuReq.WorkloadData["workflow_id"] = gpuReq.WorkflowID
+		}
+		
 		// Call GPU orchestrator API
 		requestBody := map[string]interface{}{
 			"service_name":  gpuReq.ServiceName,

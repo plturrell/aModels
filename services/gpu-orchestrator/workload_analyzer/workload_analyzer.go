@@ -99,10 +99,20 @@ func (w *WorkloadAnalyzer) analyzeTrainingWorkload(data map[string]interface{}) 
 
 // analyzeInferenceWorkload analyzes inference workload requirements
 func (w *WorkloadAnalyzer) analyzeInferenceWorkload(data map[string]interface{}) (*WorkloadRequirements, error) {
+	// Default priority for inference
+	defaultPriority := 7 // Higher priority for inference
+	
+	// Extract workflow priority if available (Phase 1)
+	if priority, ok := data["workflow_priority"].(int); ok {
+		defaultPriority = priority
+	} else if priority, ok := data["workflow_priority"].(float64); ok {
+		defaultPriority = int(priority)
+	}
+	
 	req := &WorkloadRequirements{
 		RequiredGPUs:   1,
 		MinMemoryMB:    4096, // 4GB minimum
-		Priority:       7,    // Higher priority for inference
+		Priority:       defaultPriority,
 		MaxUtilization: 80.0,
 	}
 
