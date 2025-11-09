@@ -1480,10 +1480,32 @@ func (pp *PerplexityPipeline) detectDomain(content string) string {
 	return detectedDomain
 }
 
-// storeInLocalAI stores the document in Local AI service with domain-aware routing and explicit model selection.
+// storeInLocalAI stores the document in Local AI service with domain-aware routing, explicit model selection, and GPU allocation (Phase 3).
 func (pp *PerplexityPipeline) storeInLocalAI(ctx context.Context, docID, title, content, domain string, metadata map[string]interface{}) error {
 	if pp.localAIClient == nil {
 		return nil
+	}
+
+	// Phase 3: Request GPU allocation for inference operations (for large content)
+	var gpuAllocationID string
+	if pp.gpuOrchestratorURL != "" && len(content) > 10000 { // Request GPU for large documents
+		gpuAllocID, err := pp.requestGPUAllocation(ctx, "inference", domain, len(content))
+		if err != nil {
+			if pp.logger != nil {
+				pp.logger.Printf("Warning: Failed to allocate GPU for inference: %v (continuing with CPU)", err)
+			}
+		} else {
+			gpuAllocationID = gpuAllocID
+			if pp.logger != nil {
+				pp.logger.Printf("Allocated GPU for inference: %s", gpuAllocationID)
+			}
+		}
+		// Ensure GPU is released after inference
+		defer func() {
+			if gpuAllocationID != "" {
+				pp.releaseGPUAllocation(ctx, gpuAllocationID)
+			}
+		}()
 	}
 
 	// Add domain to metadata
@@ -1493,8 +1515,11 @@ func (pp *PerplexityPipeline) storeInLocalAI(ctx context.Context, docID, title, 
 	metadata["domain"] = domain
 	metadata["detected_domain"] = domain
 
-	// Explicit model selection based on domain
-	model := pp.selectModelForDomain(domain)
+	// Phase 3: Use optimized model selection based on metrics, fallback to domain-based
+	model := pp.localAIClient.SelectOptimalModel(domain)
+	if model == "" {
+		model = pp.selectModelForDomain(domain)
+	}
 
 	payload := map[string]interface{}{
 		"id":       docID,
@@ -1503,7 +1528,7 @@ func (pp *PerplexityPipeline) storeInLocalAI(ctx context.Context, docID, title, 
 		"metadata": metadata,
 	}
 
-	// Use LocalAIClient with explicit model selection, retry logic, and circuit breaker
+	// Use LocalAIClient with explicit model selection, retry logic, circuit breaker, caching, and batch support
 	_, err := pp.localAIClient.StoreDocument(ctx, domain, model, payload)
 	return err
 }

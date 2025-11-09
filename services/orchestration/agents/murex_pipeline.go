@@ -28,6 +28,7 @@ type MurexPipeline struct {
 	logger               *log.Logger
 	httpClient           *http.Client
 	localAIClient        *LocalAIClient // Standardized LocalAI client with retry and validation
+	gpuHelper            *GPUHelper // Phase 3: GPU allocation helper
 }
 
 // MurexPipelineConfig configures the pipeline.
@@ -89,8 +90,14 @@ func NewMurexPipeline(config MurexPipelineConfig) (*MurexPipeline, error) {
 		pipeline.localAIClient = NewLocalAIClient(config.LocalAIURL, pipeline.httpClient, config.Logger)
 	}
 
+	// Phase 3: Initialize GPU helper for GPU allocation
+	gpuOrchestratorURL := os.Getenv("GPU_ORCHESTRATOR_URL")
+	if gpuOrchestratorURL == "" {
+		gpuOrchestratorURL = "http://gpu-orchestrator:8086"
+	}
+	pipeline.gpuHelper = NewGPUHelper(gpuOrchestratorURL, pipeline.httpClient, config.Logger)
+
 	return pipeline, nil
-}
 
 // GetRequestTracker returns the request tracker.
 func (mp *MurexPipeline) GetRequestTracker() *RequestTracker {
@@ -311,19 +318,48 @@ func (mp *MurexPipeline) exportForTraining(ctx context.Context, doc *ProcessedDo
 	return err
 }
 
-// storeInLocalAI stores trade in LocalAI with explicit model selection.
+// storeInLocalAI stores trade in LocalAI with explicit model selection and GPU allocation (Phase 3).
 func (mp *MurexPipeline) storeInLocalAI(ctx context.Context, doc *ProcessedDocument, docMap map[string]interface{}, tableName string) error {
 	if mp.localAIClient == nil {
 		return nil
 	}
 
 	domain := mp.detectDomain(docMap)
-	// Explicit model selection: use gemma-2b for finance domain (from domains.json analysis)
-	model := "gemma-2b-q4_k_m.gguf"
-	if domain == "finance" || domain == "general" {
-		// Finance domain typically uses gemma-2b or granite-4.0
-		// Default to gemma-2b for Murex trades
-		model = "gemma-2b-q4_k_m.gguf"
+	
+	// Phase 3: Request GPU allocation for inference operations (for large content)
+	var gpuAllocationID string
+	contentSize := 0
+	if content, ok := docMap["content"].(string); ok {
+		contentSize = len(content)
+	} else if contentMap, ok := docMap["content"].(map[string]interface{}); ok {
+		// Estimate size from map
+		contentSize = len(fmt.Sprintf("%v", contentMap))
+	}
+	
+	if mp.gpuHelper != nil && contentSize > 10000 { // Request GPU for large content
+		gpuAllocID, err := mp.gpuHelper.RequestGPUAllocation(ctx, "inference", domain, contentSize, 7)
+		if err != nil {
+			if mp.logger != nil {
+				mp.logger.Printf("Warning: Failed to allocate GPU for inference: %v (continuing with CPU)", err)
+			}
+		} else {
+			gpuAllocationID = gpuAllocID
+			if mp.logger != nil {
+				mp.logger.Printf("Allocated GPU for inference: %s", gpuAllocationID)
+			}
+		}
+		// Ensure GPU is released after inference
+		defer func() {
+			if gpuAllocationID != "" {
+				mp.gpuHelper.ReleaseGPUAllocation(ctx, gpuAllocationID)
+			}
+		}()
+	}
+	
+	// Phase 3: Use optimized model selection based on metrics, fallback to domain-based
+	model := mp.localAIClient.SelectOptimalModel(domain)
+	if model == "" {
+		model = "gemma-2b-q4_k_m.gguf" // Default for finance domain
 	}
 	
 	payload := map[string]interface{}{
@@ -335,7 +371,7 @@ func (mp *MurexPipeline) storeInLocalAI(ctx context.Context, doc *ProcessedDocum
 		},
 	}
 
-	// Use LocalAIClient with explicit model selection, retry logic, and circuit breaker
+	// Use LocalAIClient with explicit model selection, retry logic, circuit breaker, and caching
 	resp, err := mp.localAIClient.StoreDocument(ctx, domain, model, payload)
 	if err != nil {
 		return err

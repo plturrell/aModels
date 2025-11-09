@@ -37,6 +37,7 @@ type DMSPipeline struct {
 	logger              *log.Logger
 	httpClient          *http.Client
 	localAIClient        *LocalAIClient // Standardized LocalAI client with retry and validation
+	gpuHelper              *GPUHelper // Phase 3: GPU allocation helper
 }
 
 // DMSPipelineConfig configures the pipeline.
@@ -82,6 +83,12 @@ func NewDMSPipeline(config DMSPipelineConfig) (*DMSPipeline, error) {
 		graphServiceURL = "http://graph-service:8081"
 	}
 
+	// Get GPU orchestrator URL for GPU allocation (Phase 3)
+	gpuOrchestratorURL := os.Getenv("GPU_ORCHESTRATOR_URL")
+	if gpuOrchestratorURL == "" {
+		gpuOrchestratorURL = "http://gpu-orchestrator:8086"
+	}
+
 	pipeline := &DMSPipeline{
 		dmsConnector:       dmsConnector,
 		ocrClient:          ocrClient,
@@ -117,6 +124,9 @@ func NewDMSPipeline(config DMSPipelineConfig) (*DMSPipeline, error) {
 	if config.LocalAIURL != "" {
 		pipeline.localAIClient = NewLocalAIClient(config.LocalAIURL, pipeline.httpClient, config.Logger)
 	}
+
+	// Phase 3: Initialize GPU helper for GPU allocation
+	pipeline.gpuHelper = NewGPUHelper(gpuOrchestratorURL, pipeline.httpClient, config.Logger)
 
 	return pipeline, nil
 }

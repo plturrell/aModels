@@ -13,7 +13,7 @@ import (
 )
 
 // LocalAIClient provides a standardized client for LocalAI interactions
-// with explicit model selection, retry logic, model validation, and metrics collection.
+// with explicit model selection, retry logic, model validation, metrics collection, caching, and batch operations.
 type LocalAIClient struct {
 	baseURL        string
 	httpClient     *http.Client
@@ -23,6 +23,7 @@ type LocalAIClient struct {
 	metrics        *LocalAIMetrics // Phase 2: Metrics collection
 	timeout        time.Duration   // Phase 2: Configurable timeout
 	fallbackModels map[string][]string // Phase 2: Model fallback strategy
+	responseCache  *ResponseCache // Phase 3: Response caching
 }
 
 // CircuitBreaker implements circuit breaker pattern for LocalAI calls
@@ -111,12 +112,25 @@ func NewLocalAIClientWithConfig(config LocalAIClientConfig) *LocalAIClient {
 		metrics:        NewLocalAIMetrics(), // Phase 2: Metrics collection
 		timeout:        config.Timeout,
 		fallbackModels: fallbackModels, // Phase 2: Model fallback strategy
+		responseCache:  NewResponseCache(), // Phase 3: Response caching
 	}
 }
 
-// StoreDocument stores a document in LocalAI with explicit model/domain selection and fallback (Phase 2)
+// StoreDocument stores a document in LocalAI with explicit model/domain selection, fallback, and caching (Phase 3)
 func (c *LocalAIClient) StoreDocument(ctx context.Context, domain, model string, payload map[string]interface{}) (map[string]interface{}, error) {
 	startTime := time.Now()
+	
+	// Phase 3: Check cache first (for idempotent operations)
+	if cacheKey := c.getCacheKey("StoreDocument", domain, model, payload); cacheKey != "" {
+		if cached, found := c.responseCache.Get(cacheKey); found {
+			if c.logger != nil {
+				c.logger.Printf("Cache hit for StoreDocument (domain: %s, model: %s)", domain, model)
+			}
+			// Record cache hit metrics
+			c.metrics.RecordCall("StoreDocument", domain, model, time.Since(startTime), true)
+			return cached, nil
+		}
+	}
 	
 	// Phase 2: Try primary model first, then fallback models
 	modelsToTry := []string{model}
@@ -154,6 +168,10 @@ func (c *LocalAIClient) StoreDocument(ctx context.Context, domain, model string,
 			if err == nil {
 				// Phase 2: Record metrics
 				c.metrics.RecordCall("StoreDocument", domain, tryModel, time.Since(startTime), true)
+				// Phase 3: Cache successful response
+				if cacheKey := c.getCacheKey("StoreDocument", domain, tryModel, payload); cacheKey != "" {
+					c.responseCache.Set(cacheKey, result, 5*time.Minute) // Cache for 5 minutes
+				}
 				if tryModel != model && c.logger != nil {
 					c.logger.Printf("Successfully used fallback model %s (original: %s) for domain %s", tryModel, model, domain)
 				}
@@ -170,6 +188,10 @@ func (c *LocalAIClient) StoreDocument(ctx context.Context, domain, model string,
 		if err == nil {
 			// Phase 2: Record metrics
 			c.metrics.RecordCall("StoreDocument", domain, tryModel, time.Since(startTime), true)
+			// Phase 3: Cache successful response
+			if cacheKey := c.getCacheKey("StoreDocument", domain, tryModel, payload); cacheKey != "" {
+				c.responseCache.Set(cacheKey, result, 5*time.Minute) // Cache for 5 minutes
+			}
 			if tryModel != model && c.logger != nil {
 				c.logger.Printf("Successfully used fallback model %s (original: %s) for domain %s", tryModel, model, domain)
 			}
@@ -577,6 +599,266 @@ func (cb *CircuitBreaker) GetState() string {
 	cb.mu.RLock()
 	defer cb.mu.RUnlock()
 	return cb.state
+}
+
+// ResponseCache provides caching for LocalAI responses (Phase 3)
+type ResponseCache struct {
+	mu    sync.RWMutex
+	items map[string]*CacheItem
+}
+
+// CacheItem represents a cached response
+type CacheItem struct {
+	Value      map[string]interface{}
+	ExpiresAt  time.Time
+}
+
+// NewResponseCache creates a new response cache
+func NewResponseCache() *ResponseCache {
+	cache := &ResponseCache{
+		items: make(map[string]*CacheItem),
+	}
+	// Start cleanup goroutine
+	go cache.cleanup()
+	return cache
+}
+
+// Get retrieves a cached value
+func (rc *ResponseCache) Get(key string) (map[string]interface{}, bool) {
+	rc.mu.RLock()
+	defer rc.mu.RUnlock()
+	
+	item, exists := rc.items[key]
+	if !exists {
+		return nil, false
+	}
+	
+	if time.Now().After(item.ExpiresAt) {
+		return nil, false
+	}
+	
+	return item.Value, true
+}
+
+// Set stores a value in the cache
+func (rc *ResponseCache) Set(key string, value map[string]interface{}, ttl time.Duration) {
+	rc.mu.Lock()
+	defer rc.mu.Unlock()
+	
+	rc.items[key] = &CacheItem{
+		Value:     value,
+		ExpiresAt: time.Now().Add(ttl),
+	}
+}
+
+// cleanup removes expired items periodically
+func (rc *ResponseCache) cleanup() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	
+	for range ticker.C {
+		rc.mu.Lock()
+		now := time.Now()
+		for key, item := range rc.items {
+			if now.After(item.ExpiresAt) {
+				delete(rc.items, key)
+			}
+		}
+		rc.mu.Unlock()
+	}
+}
+
+// getCacheKey generates a cache key from operation, domain, model, and payload (Phase 3)
+func (c *LocalAIClient) getCacheKey(operation, domain, model string, payload map[string]interface{}) string {
+	// Only cache idempotent operations with stable keys
+	if operation != "StoreDocument" {
+		return "" // Don't cache non-idempotent operations
+	}
+	
+	// Generate key from stable payload fields
+	keyParts := []string{operation, domain, model}
+	if payload != nil {
+		if id, ok := payload["id"].(string); ok && id != "" {
+			keyParts = append(keyParts, id)
+		} else if docID, ok := payload["document_id"].(string); ok && docID != "" {
+			keyParts = append(keyParts, docID)
+		} else {
+			return "" // No stable ID, don't cache
+		}
+	}
+	
+	return strings.Join(keyParts, ":")
+}
+
+// BatchStoreDocuments stores multiple documents in a single batch (Phase 3)
+func (c *LocalAIClient) BatchStoreDocuments(ctx context.Context, documents []BatchDocument) ([]BatchResult, error) {
+	if len(documents) == 0 {
+		return []BatchResult{}, nil
+	}
+	
+	startTime := time.Now()
+	
+	// Phase 3: Check cache for each document
+	results := make([]BatchResult, 0, len(documents))
+	toProcess := make([]BatchDocument, 0)
+	
+	for _, doc := range documents {
+		if cacheKey := c.getCacheKey("StoreDocument", doc.Domain, doc.Model, doc.Payload); cacheKey != "" {
+			if cached, found := c.responseCache.Get(cacheKey); found {
+				results = append(results, BatchResult{
+					Index:  doc.Index,
+					Result: cached,
+					Cached: true,
+				})
+				continue
+			}
+		}
+		toProcess = append(toProcess, doc)
+	}
+	
+	// If all were cached, return early
+	if len(toProcess) == 0 {
+		return results, nil
+	}
+	
+	// Phase 3: Batch process remaining documents
+	// Process in parallel with limited concurrency
+	const maxConcurrency = 10
+	semaphore := make(chan struct{}, maxConcurrency)
+	resultChan := make(chan BatchResult, len(toProcess))
+	
+	// Launch goroutines
+	for _, doc := range toProcess {
+		go func(d BatchDocument) {
+			semaphore <- struct{}{} // Acquire
+			defer func() { <-semaphore }() // Release
+			
+			result, err := c.StoreDocument(ctx, d.Domain, d.Model, d.Payload)
+			resultChan <- BatchResult{
+				Index:  d.Index,
+				Result: result,
+				Error:  err,
+				Cached: false,
+			}
+		}(doc)
+	}
+	
+	// Collect results
+	for i := 0; i < len(toProcess); i++ {
+		result := <-resultChan
+		results = append(results, result)
+	}
+	
+	// Sort results by index
+	sortResults(results)
+	
+	// Phase 3: Record batch metrics
+	c.metrics.RecordCall("BatchStoreDocuments", "", "", time.Since(startTime), true)
+	
+	return results, nil
+}
+
+// BatchDocument represents a document in a batch operation (Phase 3)
+type BatchDocument struct {
+	Index   int
+	Domain  string
+	Model   string
+	Payload map[string]interface{}
+}
+
+// BatchResult represents the result of a batch operation (Phase 3)
+type BatchResult struct {
+	Index  int
+	Result map[string]interface{}
+	Error  error
+	Cached bool
+}
+
+// sortResults sorts batch results by index
+func sortResults(results []BatchResult) {
+	// Simple insertion sort for small batches
+	for i := 1; i < len(results); i++ {
+		key := results[i]
+		j := i - 1
+		for j >= 0 && results[j].Index > key.Index {
+			results[j+1] = results[j]
+			j--
+		}
+		results[j+1] = key
+	}
+}
+
+// SelectOptimalModel selects the best model based on performance metrics (Phase 3)
+func (c *LocalAIClient) SelectOptimalModel(domain string) string {
+	metrics := c.metrics.GetMetrics()
+	
+	// Get model usage and latency data
+	modelUsageRaw, ok := metrics["model_usage"]
+	if !ok {
+		return "" // No metrics available, use fallback
+	}
+	
+	modelUsage, ok := modelUsageRaw.(map[string]int64)
+	if !ok {
+		return "" // Invalid type, use fallback
+	}
+	
+	modelAvgLatencyRaw, ok := metrics["model_avg_latency"]
+	if !ok {
+		return "" // No latency metrics available, use fallback
+	}
+	
+	modelAvgLatency, ok := modelAvgLatencyRaw.(map[string]time.Duration)
+	if !ok {
+		return "" // Invalid type, use fallback
+	}
+	
+	// Filter models by domain (if we had domain-specific metrics)
+	// For now, use general metrics
+	
+	bestModel := ""
+	bestScore := 0.0
+	
+	for model, count := range modelUsage {
+		if count < 5 {
+			continue // Need at least 5 samples
+		}
+		
+		avgLatency, exists := modelAvgLatency[model]
+		if !exists {
+			continue
+		}
+		
+		// Score = usage_count / avg_latency_ms (higher is better)
+		// Prefer models with high usage and low latency
+		latencyMS := float64(avgLatency.Milliseconds())
+		if latencyMS == 0 {
+			latencyMS = 1 // Avoid division by zero
+		}
+		
+		score := float64(count) / latencyMS
+		if score > bestScore {
+			bestScore = score
+			bestModel = model
+		}
+	}
+	
+	// Fallback to default selection if no metrics available
+	if bestModel == "" {
+		// Use default model selection logic
+		switch domain {
+		case "general", "":
+			return "phi-3.5-mini"
+		case "finance", "treasury", "subledger", "trade_recon":
+			return "gemma-2b-q4_k_m.gguf"
+		case "browser", "web_analysis":
+			return "gemma-7b-q4_k_m.gguf"
+		default:
+			return "gemma-2b-q4_k_m.gguf"
+		}
+	}
+	
+	return bestModel
 }
 
 // Helper function for power calculation

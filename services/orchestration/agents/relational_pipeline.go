@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -28,6 +29,7 @@ type RelationalPipeline struct {
 	logger               *log.Logger
 	httpClient           *http.Client
 	localAIClient        *LocalAIClient // Standardized LocalAI client with retry and validation
+	gpuHelper            *GPUHelper // Phase 3: GPU allocation helper
 }
 
 // RelationalPipelineConfig configures the pipeline.
@@ -84,6 +86,13 @@ func NewRelationalPipeline(config RelationalPipelineConfig) (*RelationalPipeline
 	if config.LocalAIURL != "" {
 		pipeline.localAIClient = NewLocalAIClient(config.LocalAIURL, pipeline.httpClient, config.Logger)
 	}
+
+	// Phase 3: Initialize GPU helper for GPU allocation
+	gpuOrchestratorURL := os.Getenv("GPU_ORCHESTRATOR_URL")
+	if gpuOrchestratorURL == "" {
+		gpuOrchestratorURL = "http://gpu-orchestrator:8086"
+	}
+	pipeline.gpuHelper = NewGPUHelper(gpuOrchestratorURL, pipeline.httpClient, config.Logger)
 
 	return pipeline, nil
 }
@@ -472,11 +481,34 @@ func (rp *RelationalPipeline) processTable(ctx context.Context, doc map[string]i
 	// Step 4: Domain Detection
 	domain := rp.detectDomain(title + " " + content)
 
-	// Step 5: Local AI Storage
+	// Step 5: Local AI Storage (Phase 3: with GPU allocation for inference)
 	if rp.localAIURL != "" && content != "" {
 		if rp.logger != nil {
 			rp.logger.Printf("Storing table %s in Local AI (domain: %s)", tableID, domain)
 		}
+		
+		// Phase 3: Request GPU allocation for inference operations (for large content)
+		var gpuAllocationID string
+		if rp.gpuHelper != nil && len(content) > 10000 { // Request GPU for large content
+			gpuAllocID, err := rp.gpuHelper.RequestGPUAllocation(ctx, "inference", domain, len(content), 7)
+			if err != nil {
+				if rp.logger != nil {
+					rp.logger.Printf("Warning: Failed to allocate GPU for inference: %v (continuing with CPU)", err)
+				}
+			} else {
+				gpuAllocationID = gpuAllocID
+				if rp.logger != nil {
+					rp.logger.Printf("Allocated GPU for inference: %s", gpuAllocationID)
+				}
+			}
+			// Ensure GPU is released after inference
+			defer func() {
+				if gpuAllocationID != "" {
+					rp.gpuHelper.ReleaseGPUAllocation(ctx, gpuAllocationID)
+				}
+			}()
+		}
+		
 		localAIPayload := map[string]interface{}{
 			"document_id": tableID,
 			"title":       title,
@@ -485,9 +517,12 @@ func (rp *RelationalPipeline) processTable(ctx context.Context, doc map[string]i
 			"source":      "relational",
 		}
 		var localAIResult map[string]interface{}
-		// Use LocalAIClient with explicit model selection, retry logic, and circuit breaker
+		// Phase 3: Use optimized model selection based on metrics, fallback to domain-based
 		if rp.localAIClient != nil {
-			model := rp.selectModelForDomain(domain)
+			model := rp.localAIClient.SelectOptimalModel(domain)
+			if model == "" {
+				model = rp.selectModelForDomain(domain)
+			}
 			if _, err := rp.localAIClient.StoreDocument(ctx, domain, model, localAIPayload); err == nil {
 				if rp.logger != nil {
 					rp.logger.Printf("Table %s stored in Local AI (domain: %s, model: %s)", tableID, domain, model)
