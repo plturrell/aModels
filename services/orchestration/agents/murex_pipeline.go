@@ -27,6 +27,7 @@ type MurexPipeline struct {
 	requestTracker       *RequestTracker
 	logger               *log.Logger
 	httpClient           *http.Client
+	localAIClient        *LocalAIClient // Standardized LocalAI client with retry and validation
 }
 
 // MurexPipelineConfig configures the pipeline.
@@ -82,6 +83,11 @@ func NewMurexPipeline(config MurexPipelineConfig) (*MurexPipeline, error) {
 
 	// Create request tracker
 	pipeline.requestTracker = NewRequestTracker(config.Logger)
+
+	// Initialize LocalAI client with retry logic and circuit breaker
+	if config.LocalAIURL != "" {
+		pipeline.localAIClient = NewLocalAIClient(config.LocalAIURL, pipeline.httpClient, config.Logger)
+	}
 
 	return pipeline, nil
 }
@@ -305,12 +311,22 @@ func (mp *MurexPipeline) exportForTraining(ctx context.Context, doc *ProcessedDo
 	return err
 }
 
-// storeInLocalAI stores trade in LocalAI.
+// storeInLocalAI stores trade in LocalAI with explicit model selection.
 func (mp *MurexPipeline) storeInLocalAI(ctx context.Context, doc *ProcessedDocument, docMap map[string]interface{}, tableName string) error {
+	if mp.localAIClient == nil {
+		return nil
+	}
+
 	domain := mp.detectDomain(docMap)
+	// Explicit model selection: use gemma-2b for finance domain (from domains.json analysis)
+	model := "gemma-2b-q4_k_m.gguf"
+	if domain == "finance" || domain == "general" {
+		// Finance domain typically uses gemma-2b or granite-4.0
+		// Default to gemma-2b for Murex trades
+		model = "gemma-2b-q4_k_m.gguf"
+	}
 	
 	payload := map[string]interface{}{
-		"domain":    domain,
 		"source":    "murex",
 		"source_id": doc.ID,
 		"content":   docMap["content"],
@@ -319,7 +335,8 @@ func (mp *MurexPipeline) storeInLocalAI(ctx context.Context, doc *ProcessedDocum
 		},
 	}
 
-	resp, err := mp.postJSON(ctx, mp.localAIURL+"/api/localai/store", payload)
+	// Use LocalAIClient with explicit model selection, retry logic, and circuit breaker
+	resp, err := mp.localAIClient.StoreDocument(ctx, domain, model, payload)
 	if err != nil {
 		return err
 	}

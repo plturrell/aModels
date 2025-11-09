@@ -36,6 +36,7 @@ type DMSPipeline struct {
 	requestTracker      *RequestTracker
 	logger              *log.Logger
 	httpClient          *http.Client
+	localAIClient        *LocalAIClient // Standardized LocalAI client with retry and validation
 }
 
 // DMSPipelineConfig configures the pipeline.
@@ -111,6 +112,11 @@ func NewDMSPipeline(config DMSPipelineConfig) (*DMSPipeline, error) {
 
 	// Create request tracker
 	pipeline.requestTracker = NewRequestTracker(config.Logger)
+
+	// Initialize LocalAI client with retry logic and circuit breaker
+	if config.LocalAIURL != "" {
+		pipeline.localAIClient = NewLocalAIClient(config.LocalAIURL, pipeline.httpClient, config.Logger)
+	}
 
 	return pipeline, nil
 }
@@ -538,7 +544,15 @@ Convert to markdown format with proper structure.`, title, researchContext)
 			"source":      "dms",
 		}
 		var localAIResult map[string]interface{}
-		if err := dp.postJSON(ctx, strings.TrimRight(dp.localAIURL, "/")+"/v1/documents", localAIPayload, &localAIResult); err == nil {
+		// Use LocalAIClient with explicit model selection, retry logic, and circuit breaker
+		if dp.localAIClient != nil {
+			model := dp.selectModelForDomain(domain)
+			if _, err := dp.localAIClient.StoreDocument(ctx, domain, model, localAIPayload); err == nil {
+				if dp.logger != nil {
+					dp.logger.Printf("Document %s stored in Local AI (domain: %s, model: %s)", docID, domain, model)
+				}
+			}
+		} else if err := dp.postJSON(ctx, strings.TrimRight(dp.localAIURL, "/")+"/v1/documents", localAIPayload, &localAIResult); err == nil {
 			if dp.logger != nil {
 				dp.logger.Printf("Document %s stored in Local AI", docID)
 			}
@@ -605,6 +619,25 @@ func (dp *DMSPipeline) detectDomain(text string) string {
 		return "technical"
 	}
 	return "general"
+}
+
+// selectModelForDomain selects the appropriate model for a given domain based on domains.json analysis
+func (dp *DMSPipeline) selectModelForDomain(domain string) string {
+	// Model selection based on domain configuration analysis
+	// Most domains use gemma-2b-q4_k_m.gguf, some use transformers models
+	switch domain {
+	case "general", "":
+		return "phi-3.5-mini" // Default to phi-3.5-mini for general domain
+	case "finance", "treasury", "subledger", "trade_recon":
+		// Finance domains: use gemma-2b or granite-4.0
+		return "gemma-2b-q4_k_m.gguf"
+	case "browser", "web_analysis":
+		// Browser domain uses gemma-7b
+		return "gemma-7b-q4_k_m.gguf"
+	default:
+		// Default to gemma-2b for most domains
+		return "gemma-2b-q4_k_m.gguf"
+	}
 }
 
 func (dp *DMSPipeline) postJSON(ctx context.Context, url string, payload interface{}, result interface{}) error {

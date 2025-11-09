@@ -35,6 +35,7 @@ type PerplexityPipeline struct {
 	requestTracker     *RequestTracker
 	logger             *log.Logger
 	httpClient         *http.Client
+	localAIClient       *LocalAIClient // Standardized LocalAI client with retry and validation
 }
 
 // PerplexityPipelineConfig configures the pipeline.
@@ -119,6 +120,11 @@ func NewPerplexityPipeline(config PerplexityPipelineConfig) (*PerplexityPipeline
 
 	// Create request tracker
 	pipeline.requestTracker = NewRequestTracker(config.Logger)
+
+	// Initialize LocalAI client with retry logic and circuit breaker
+	if config.LocalAIURL != "" {
+		pipeline.localAIClient = NewLocalAIClient(config.LocalAIURL, pipeline.httpClient, config.Logger)
+	}
 
 	return pipeline, nil
 }
@@ -1474,8 +1480,12 @@ func (pp *PerplexityPipeline) detectDomain(content string) string {
 	return detectedDomain
 }
 
-// storeInLocalAI stores the document in Local AI service with domain-aware routing.
+// storeInLocalAI stores the document in Local AI service with domain-aware routing and explicit model selection.
 func (pp *PerplexityPipeline) storeInLocalAI(ctx context.Context, docID, title, content, domain string, metadata map[string]interface{}) error {
+	if pp.localAIClient == nil {
+		return nil
+	}
+
 	// Add domain to metadata
 	if metadata == nil {
 		metadata = make(map[string]interface{})
@@ -1483,36 +1493,25 @@ func (pp *PerplexityPipeline) storeInLocalAI(ctx context.Context, docID, title, 
 	metadata["domain"] = domain
 	metadata["detected_domain"] = domain
 
+	// Explicit model selection based on domain
+	model := pp.selectModelForDomain(domain)
+
 	payload := map[string]interface{}{
 		"id":       docID,
 		"content":  content,
 		"title":    title,
 		"metadata": metadata,
-		"domain":   domain, // Include domain for routing
 	}
 
-	// Try domain-specific endpoint first, fallback to generic
-	url := strings.TrimRight(pp.localAIURL, "/") + "/documents"
-	if domain != "general" && domain != "" {
-		// Use domain-specific endpoint if available
-		domainURL := strings.TrimRight(pp.localAIURL, "/") + "/v1/domains/" + domain + "/documents"
-		// Try domain-specific, but fallback to generic if it fails
-		err := pp.postJSON(ctx, domainURL, payload, nil)
-		if err == nil {
-			return nil
-		}
-		// Fallback to generic endpoint
-		if pp.logger != nil {
-			pp.logger.Printf("Domain-specific storage failed, using generic endpoint: %v", err)
-		}
-	}
-
-	return pp.postJSON(ctx, url, payload, nil)
+	// Use LocalAIClient with explicit model selection, retry logic, and circuit breaker
+	_, err := pp.localAIClient.StoreDocument(ctx, domain, model, payload)
+	return err
 }
 
 // learnFromLocalAI learns from document to improve domain models and embeddings.
+// Uses LocalAIClient with explicit model selection, retry logic, and circuit breaker.
 func (pp *PerplexityPipeline) learnFromLocalAI(ctx context.Context, docID, title, content, domain string) error {
-	if pp.localAIURL == "" {
+	if pp.localAIClient == nil {
 		return nil
 	}
 
@@ -1538,9 +1537,12 @@ func (pp *PerplexityPipeline) learnFromLocalAI(ctx context.Context, docID, title
 		}()
 	}
 
+	// Determine model based on domain (explicit model selection)
+	model := pp.selectModelForDomain(domain)
+
 	// Step 1: Update domain model with new document
 	updatePayload := map[string]interface{}{
-		"domain":   domain,
+		"model": model, // Explicit model selection
 		"document": map[string]interface{}{
 			"id":      docID,
 			"title":   title,
@@ -1549,38 +1551,36 @@ func (pp *PerplexityPipeline) learnFromLocalAI(ctx context.Context, docID, title
 		"action": "update_domain_model",
 	}
 
-	updateURL := strings.TrimRight(pp.localAIURL, "/") + "/v1/domains/" + domain + "/learn"
-	var updateResult map[string]interface{}
-	if err := pp.postJSON(ctx, updateURL, updatePayload, &updateResult); err != nil {
+	_, err := pp.localAIClient.CallDomainEndpoint(ctx, domain, "learn", updatePayload)
+	if err != nil {
 		// Non-fatal - domain learning may not be available
 		if pp.logger != nil {
 			pp.logger.Printf("Domain model update not available or failed: %v", err)
 		}
 	} else if pp.logger != nil {
-		pp.logger.Printf("Updated domain model '%s' with document %s", domain, docID)
+		pp.logger.Printf("Updated domain model '%s' (model: %s) with document %s", domain, model, docID)
 	}
 
 	// Step 2: Generate and store embeddings for domain-specific model
 	embeddingPayload := map[string]interface{}{
-		"domain":   domain,
-		"text":     title + " " + content,
+		"model": model, // Explicit model selection
+		"text":   title + " " + content,
 		"document_id": docID,
 	}
 
-	embeddingURL := strings.TrimRight(pp.localAIURL, "/") + "/v1/domains/" + domain + "/embeddings"
-	var embeddingResult map[string]interface{}
-	if err := pp.postJSON(ctx, embeddingURL, embeddingPayload, &embeddingResult); err != nil {
+	_, err = pp.localAIClient.CallDomainEndpoint(ctx, domain, "embeddings", embeddingPayload)
+	if err != nil {
 		// Non-fatal - embedding generation may not be available
 		if pp.logger != nil {
 			pp.logger.Printf("Embedding generation not available or failed: %v", err)
 		}
 	} else if pp.logger != nil {
-		pp.logger.Printf("Generated embeddings for document %s in domain '%s'", docID, domain)
+		pp.logger.Printf("Generated embeddings for document %s in domain '%s' (model: %s)", docID, domain, model)
 	}
 
 	// Step 3: Learn domain patterns from document content
 	patternPayload := map[string]interface{}{
-		"domain":   domain,
+		"model": model, // Explicit model selection
 		"document": map[string]interface{}{
 			"id":      docID,
 			"title":   title,
@@ -1589,18 +1589,36 @@ func (pp *PerplexityPipeline) learnFromLocalAI(ctx context.Context, docID, title
 		"action": "learn_domain_patterns",
 	}
 
-	patternURL := strings.TrimRight(pp.localAIURL, "/") + "/v1/domains/" + domain + "/patterns"
-	var patternResult map[string]interface{}
-	if err := pp.postJSON(ctx, patternURL, patternPayload, &patternResult); err != nil {
+	_, err = pp.localAIClient.CallDomainEndpoint(ctx, domain, "patterns", patternPayload)
+	if err != nil {
 		// Non-fatal - pattern learning may not be available
 		if pp.logger != nil {
 			pp.logger.Printf("Domain pattern learning not available or failed: %v", err)
 		}
 	} else if pp.logger != nil {
-		pp.logger.Printf("Learned domain patterns for document %s in domain '%s'", docID, domain)
+		pp.logger.Printf("Learned domain patterns for document %s in domain '%s' (model: %s)", docID, domain, model)
 	}
 
 	return nil
+}
+
+// selectModelForDomain selects the appropriate model for a given domain based on domains.json analysis
+func (pp *PerplexityPipeline) selectModelForDomain(domain string) string {
+	// Model selection based on domain configuration analysis
+	// Most domains use gemma-2b-q4_k_m.gguf, some use transformers models
+	switch domain {
+	case "general", "":
+		return "phi-3.5-mini" // Default to phi-3.5-mini for general domain
+	case "finance", "treasury", "subledger", "trade_recon":
+		// Finance domains: use gemma-2b or granite-4.0
+		return "gemma-2b-q4_k_m.gguf"
+	case "browser", "web_analysis":
+		// Browser domain uses gemma-7b
+		return "gemma-7b-q4_k_m.gguf"
+	default:
+		// Default to gemma-2b for most domains
+		return "gemma-2b-q4_k_m.gguf"
+	}
 }
 
 // requestGPUAllocation requests GPU allocation from the GPU orchestrator (Priority 3).

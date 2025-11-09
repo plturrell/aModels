@@ -27,6 +27,7 @@ type RelationalPipeline struct {
 	requestTracker       *RequestTracker
 	logger               *log.Logger
 	httpClient           *http.Client
+	localAIClient        *LocalAIClient // Standardized LocalAI client with retry and validation
 }
 
 // RelationalPipelineConfig configures the pipeline.
@@ -78,6 +79,11 @@ func NewRelationalPipeline(config RelationalPipelineConfig) (*RelationalPipeline
 
 	// Create request tracker
 	pipeline.requestTracker = NewRequestTracker(config.Logger)
+
+	// Initialize LocalAI client with retry logic and circuit breaker
+	if config.LocalAIURL != "" {
+		pipeline.localAIClient = NewLocalAIClient(config.LocalAIURL, pipeline.httpClient, config.Logger)
+	}
 
 	return pipeline, nil
 }
@@ -479,7 +485,15 @@ func (rp *RelationalPipeline) processTable(ctx context.Context, doc map[string]i
 			"source":      "relational",
 		}
 		var localAIResult map[string]interface{}
-		if err := rp.postJSON(ctx, strings.TrimRight(rp.localAIURL, "/")+"/v1/documents", localAIPayload, &localAIResult); err == nil {
+		// Use LocalAIClient with explicit model selection, retry logic, and circuit breaker
+		if rp.localAIClient != nil {
+			model := rp.selectModelForDomain(domain)
+			if _, err := rp.localAIClient.StoreDocument(ctx, domain, model, localAIPayload); err == nil {
+				if rp.logger != nil {
+					rp.logger.Printf("Table %s stored in Local AI (domain: %s, model: %s)", tableID, domain, model)
+				}
+			}
+		} else if err := rp.postJSON(ctx, strings.TrimRight(rp.localAIURL, "/")+"/v1/documents", localAIPayload, &localAIResult); err == nil {
 			if rp.logger != nil {
 				rp.logger.Printf("Table %s stored in Local AI", tableID)
 			}
@@ -547,6 +561,25 @@ func (rp *RelationalPipeline) detectDomain(text string) string {
 		return "technical"
 	}
 	return "general"
+}
+
+// selectModelForDomain selects the appropriate model for a given domain based on domains.json analysis
+func (rp *RelationalPipeline) selectModelForDomain(domain string) string {
+	// Model selection based on domain configuration analysis
+	// Most domains use gemma-2b-q4_k_m.gguf, some use transformers models
+	switch domain {
+	case "general", "":
+		return "phi-3.5-mini" // Default to phi-3.5-mini for general domain
+	case "finance", "treasury", "subledger", "trade_recon":
+		// Finance domains: use gemma-2b or granite-4.0
+		return "gemma-2b-q4_k_m.gguf"
+	case "browser", "web_analysis":
+		// Browser domain uses gemma-7b
+		return "gemma-7b-q4_k_m.gguf"
+	default:
+		// Default to gemma-2b for most domains
+		return "gemma-2b-q4_k_m.gguf"
+	}
 }
 
 func (rp *RelationalPipeline) postJSON(ctx context.Context, url string, payload interface{}, result interface{}) error {
