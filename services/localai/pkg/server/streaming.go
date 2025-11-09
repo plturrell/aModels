@@ -289,7 +289,7 @@ func (s *VaultGemmaServer) HandleStreamingChat(w http.ResponseWriter, r *http.Re
 	}
 
 	// Create context with timeout
-	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second) // Longer timeout for streaming
+	ctx, cancel := context.WithTimeout(r.Context(), RequestTimeoutStreaming)
 	defer cancel()
 
 	// Create stream writer

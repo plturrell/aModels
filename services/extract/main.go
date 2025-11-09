@@ -1,44 +1,45 @@
 package main
 
 import (
-	"bytes"
-	"context"
-	"crypto/sha256"
-	"database/sql"
-	"encoding/csv"
-	"encoding/json"
-	"errors"
-	"flag"
-	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"sort"
-	"strconv"
-	"strings"
-	"time"
+    "bytes"
+    "context"
+    "crypto/sha256"
+    "database/sql"
+    "encoding/csv"
+    "encoding/json"
+    "errors"
+    "flag"
+    "fmt"
+    "io"
+    "log"
+    "net/http"
+    "os"
+    "os/exec"
+    "path/filepath"
+    "sort"
+    "strconv"
+    "strings"
+    "time"
 
-	_ "github.com/Chahine-tech/sql-parser-go/pkg/parser"
-	_ "github.com/SAP/go-hdb/driver"
-	"github.com/lib/pq"
-	extractpb "github.com/plturrell/aModels/services/extract/gen/extractpb"
+    _ "github.com/Chahine-tech/sql-parser-go/pkg/parser"
+    _ "github.com/SAP/go-hdb/driver"
+    "github.com/lib/pq"
+    extractpb "github.com/plturrell/aModels/services/extract/gen/extractpb"
 
-	"github.com/plturrell/aModels/services/extract/internal/config"
-	handlers "github.com/plturrell/aModels/services/extract/internal/handlers"
-	"github.com/plturrell/aModels/services/extract/internal/processing"
+    telemetryclient "github.com/plturrell/aModels/services/extract/internal/agents/telemetry"
+    "github.com/plturrell/aModels/services/extract/internal/config"
+    handlers "github.com/plturrell/aModels/services/extract/internal/handlers"
+    "github.com/plturrell/aModels/services/extract/internal/processing"
 )
 
 const (
-	// Server configuration
-	defaultPort       = "8081"
-	defaultGRPCPort   = "9090"
-	defaultFlightAddr = ":8815"
+    // Server configuration
+    defaultPort       = "8081"
+    defaultGRPCPort   = "9090"
+    defaultFlightAddr = ":8815"
 
-	// External service URLs
-	defaultLangextractURL = "http://langextract-api:5000"
+    // External service URLs
+    defaultLangextractURL = "http://langextract-api:5000"
 
 	// Extraction defaults
 	defaultPromptDescription = "Extract the key entities (people, projects, dates, locations) from the document text."
@@ -108,6 +109,18 @@ func main() {
 
 		// Domain detector for associating extracted data with domains
 		domainDetector: NewDomainDetector(os.Getenv("LOCALAI_URL"), logger),
+	}
+
+	if cfg.AgentTelemetry.BaseURL != "" {
+		agentTelemetryClient, err := telemetryclient.NewClient(cfg.AgentTelemetry.BaseURL, server.client)
+		if err != nil {
+			logger.Printf("agent telemetry disabled: %v", err)
+		} else {
+			server.agentTelemetry = agentTelemetryClient
+			logger.Printf("agent telemetry enabled (base=%s)", cfg.AgentTelemetry.BaseURL)
+		}
+	} else {
+		logger.Println("agent telemetry disabled: AGENT_METRICS_BASE_URL not set")
 	}
 
 	// Create persistence layer
@@ -411,6 +424,7 @@ func main() {
 	mux.HandleFunc("/training-data/export", server.handleExportTrainingData)        // Export training data (Phase 4)
 	mux.HandleFunc("/model/metrics", server.handleModelMetrics)                     // Get model performance metrics (Phase 5)
 	mux.HandleFunc("/model/uncertain", server.handleUncertainPredictions)           // Get uncertain predictions for review (Phase 5)
+	mux.HandleFunc("/signavio/agent-metrics/", server.handleSignavioAgentMetrics)
 	mux.HandleFunc("/catalog/projects", server.handleGetProjects)
 	mux.HandleFunc("/catalog/projects/add", server.handleAddProject)
 	mux.HandleFunc("/catalog/systems", server.handleGetSystems)
@@ -489,6 +503,9 @@ type extractServer struct {
 
 	// Multi-modal extractor (for Phase 6 unified integration)
 	multiModalExtractor *MultiModalExtractor
+
+	// Agent telemetry client for Signavio exposure
+	agentTelemetry *telemetryclient.Client
 }
 
 func parseIntEnv(envVar string, defaultValue int) int {
@@ -695,6 +712,122 @@ type Edge struct {
 	TargetID string         `json:"target"`
 	Label    string         `json:"label"`
 	Props    map[string]any `json:"properties,omitempty"`
+}
+
+type signavioAgentMetricsResponse struct {
+	SessionID string                     `json:"session_id"`
+	Metrics   signavioAgentMetricsSummary `json:"metrics"`
+	Events    []signavioAgentMetricEvent  `json:"events"`
+}
+
+type signavioAgentMetricsSummary struct {
+	UserPromptCount      int     `json:"user_prompt_count"`
+	ToolCallStartedCount int     `json:"tool_call_started_count"`
+	ToolCallCount        int     `json:"tool_call_count"`
+	ToolSuccessCount     int     `json:"tool_success_count"`
+	ToolErrorCount       int     `json:"tool_error_count"`
+	ToolSuccessRate      float64 `json:"tool_success_rate"`
+	AverageToolLatencyMs float64 `json:"avg_tool_latency_ms"`
+	ModelChangeCount     int     `json:"model_change_count"`
+	LastUserPrompt       string  `json:"last_user_prompt,omitempty"`
+}
+
+type signavioAgentMetricEvent struct {
+	Timestamp time.Time                               `json:"timestamp"`
+	SessionID string                                  `json:"session_id"`
+	Type      telemetryclient.AgentMetricEventKind     `json:"type"`
+	Payload   map[string]any                          `json:"payload"`
+}
+
+func (s *extractServer) handleSignavioAgentMetrics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if s.agentTelemetry == nil {
+		http.Error(w, "agent telemetry unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	const prefix = "/signavio/agent-metrics/"
+	if !strings.HasPrefix(r.URL.Path, prefix) {
+		http.NotFound(w, r)
+		return
+	}
+
+	sessionID := strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
+	if sessionID == "" {
+		http.Error(w, "session id is required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	telemetryResp, err := s.agentTelemetry.GetEvents(ctx, sessionID)
+	if err != nil {
+		s.logger.Printf("agent telemetry fetch failed for session %s: %v", sessionID, err)
+		http.Error(w, "failed to fetch agent telemetry", http.StatusBadGateway)
+		return
+	}
+
+	summary := signavioAgentMetricsSummary{}
+	var latencySum float64
+	var latencyCount int
+
+	events := make([]signavioAgentMetricEvent, 0, len(telemetryResp.Events))
+	for _, event := range telemetryResp.Events {
+		payloadCopy := make(map[string]any, len(event.Payload))
+		for k, v := range event.Payload {
+			payloadCopy[k] = v
+		}
+
+		events = append(events, signavioAgentMetricEvent{
+			Timestamp: event.Timestamp,
+			SessionID: event.SessionID,
+			Type:      event.Type,
+			Payload:   payloadCopy,
+		})
+
+		switch event.Type {
+		case telemetryclient.EventUserPrompt:
+			summary.UserPromptCount++
+			if prompt, ok := payloadCopy["prompt"].(string); ok && prompt != "" {
+				summary.LastUserPrompt = prompt
+			}
+		case telemetryclient.EventToolCallStarted:
+			summary.ToolCallStartedCount++
+		case telemetryclient.EventToolCallCompleted:
+			summary.ToolCallCount++
+			if success, ok := payloadCopy["success"].(bool); ok {
+				if success {
+					summary.ToolSuccessCount++
+				} else {
+					summary.ToolErrorCount++
+				}
+			}
+			if latency, ok := payloadCopy["latency_ms"].(float64); ok {
+				latencySum += latency
+				latencyCount++
+			}
+		case telemetryclient.EventModelChange:
+			summary.ModelChangeCount++
+		}
+	}
+
+	if summary.ToolCallCount > 0 {
+		summary.ToolSuccessRate = float64(summary.ToolSuccessCount) / float64(summary.ToolCallCount)
+	}
+	if latencyCount > 0 {
+		summary.AverageToolLatencyMs = latencySum / float64(latencyCount)
+	}
+
+	response := signavioAgentMetricsResponse{
+		SessionID: telemetryResp.SessionID,
+		Metrics:   summary,
+		Events:    events,
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, response)
 }
 
 type graphRequest struct {

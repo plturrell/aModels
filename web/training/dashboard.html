@@ -232,6 +232,22 @@
             font-size: 0.9rem;
         }
 
+        .session-input {
+            padding: 10px 15px;
+            border-radius: 25px;
+            border: 1px solid rgba(52, 152, 219, 0.6);
+            background: rgba(255, 255, 255, 0.9);
+            min-width: 220px;
+        }
+
+        .session-display {
+            padding: 10px 15px;
+            border-radius: 25px;
+            background: rgba(52, 152, 219, 0.1);
+            border: 1px solid rgba(52, 152, 219, 0.3);
+            font-weight: 600;
+        }
+
         .btn-primary {
             background: linear-gradient(45deg, #3498db, #2980b9);
             color: white;
@@ -397,6 +413,10 @@
             <button class="btn btn-warning" onclick="pauseTraining()">Pause Training</button>
             <button class="btn btn-danger" onclick="stopTraining()">Stop Training</button>
             <button class="btn btn-primary" onclick="refreshData()">Refresh Data</button>
+            <input id="sessionInput" class="session-input" type="text" placeholder="Enter session ID" />
+            <button class="btn btn-primary" onclick="applySession()">Set Session</button>
+            <button class="btn btn-primary" onclick="loadLatestSession()">Use Latest Session</button>
+            <span id="currentSessionDisplay" class="session-display">Session: --</span>
         </div>
 
         <div class="grid">
@@ -408,20 +428,20 @@
                 </h3>
                 <div class="metrics-grid">
                     <div class="metric">
-                        <div class="metric-value" id="avgAccuracy">0%</div>
-                        <div class="metric-label">Avg Accuracy</div>
+                        <div class="metric-value" id="avgAccuracy">0</div>
+                        <div class="metric-label">User Prompts</div>
                     </div>
                     <div class="metric">
-                        <div class="metric-value" id="avgLatency">0ms</div>
-                        <div class="metric-label">Avg Latency</div>
+                        <div class="metric-value" id="avgLatency">0</div>
+                        <div class="metric-label">Tool Calls</div>
                     </div>
                     <div class="metric">
-                        <div class="metric-value" id="throughput">0/s</div>
-                        <div class="metric-label">Throughput</div>
+                        <div class="metric-value" id="throughput">0%</div>
+                        <div class="metric-label">Success Rate</div>
                     </div>
                     <div class="metric">
-                        <div class="metric-value" id="memoryUsage">0MB</div>
-                        <div class="metric-label">Memory</div>
+                        <div class="metric-value" id="memoryUsage">0ms</div>
+                        <div class="metric-label">Avg Tool Latency</div>
                     </div>
                 </div>
             </div>

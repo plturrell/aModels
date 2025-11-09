@@ -16,6 +16,7 @@ type Config struct {
 	Persistence PersistenceConfig
 	Telemetry   TelemetryConfig
 	SAPRPT      SAPRPTConfig
+	AgentTelemetry AgentTelemetryConfig
 }
 
 // ServerConfig holds server configuration
@@ -72,6 +73,11 @@ type TelemetryConfig struct {
 	CallTimeout   time.Duration
 }
 
+// AgentTelemetryConfig holds configuration for retrieving agent metrics telemetry data.
+type AgentTelemetryConfig struct {
+	BaseURL string
+}
+
 // LoadConfig loads configuration from environment variables
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
@@ -110,6 +116,9 @@ func LoadConfig() (*Config, error) {
 			UserIDHash:   os.Getenv("POSTGRES_LANG_SERVICE_USER_ID"),
 			DialTimeout:  defaultDialTimeout,
 			CallTimeout:  defaultCallTimeout,
+		},
+		AgentTelemetry: AgentTelemetryConfig{
+			BaseURL: strings.TrimRight(strings.TrimSpace(os.Getenv("AGENT_METRICS_BASE_URL")), "/"),
 		},
 		SAPRPT: SAPRPTConfig{
 			UseEmbeddings:      parseBoolEnv("USE_SAP_RPT_EMBEDDINGS", false),

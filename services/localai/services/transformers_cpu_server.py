@@ -34,14 +34,29 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# Use /models mount point from Docker volume
+# Use /models mount point from Docker volume, or fallback to absolute path
 MODELS_BASE = os.getenv("MODELS_BASE", "/models")
+# If MODELS_BASE doesn't exist, try absolute path from aModels root
+if not os.path.exists(MODELS_BASE):
+    # Try absolute path: /home/aModels/models
+    absolute_models = "/home/aModels/models"
+    if os.path.exists(absolute_models):
+        MODELS_BASE = absolute_models
+        print(f"✅ Using absolute models path: {MODELS_BASE}")
+    else:
+        # Try relative path: ../../models from services/localai/services/
+        relative_models = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "..", "..", "models")
+        if os.path.exists(relative_models):
+            MODELS_BASE = os.path.abspath(relative_models)
+            print(f"✅ Using relative models path: {MODELS_BASE}")
+else:
+    print(f"✅ Using MODELS_BASE from environment: {MODELS_BASE}")
+
 MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
     "phi-3.5-mini": {
         "path": os.path.join(
             MODELS_BASE,
-            "phi",
-            "phi-3-pytorch-phi-3.5-mini-instruct-v2",
+            "phi-3.5-mini-instruct-pytorch",
         )
     },
     "granite-4.0-h-micro": {
@@ -49,6 +64,12 @@ MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
             MODELS_BASE,
             "granite",
             "granite-4.0-transformers-granite",
+        )
+    },
+    "vaultgemma": {
+        "path": os.path.join(
+            MODELS_BASE,
+            "vaultgemma-1b-transformers",
         )
     },
 }
@@ -188,15 +209,27 @@ def load_model(model_key: str):
         raise ValueError(f"unknown model: {model_key}")
     
     print(f"[DEBUG] Loading model from {cfg['path']}")
+    
+    # Use appropriate dtype and device for GPU
+    if DEVICE == "cuda":
+        # Use float16 for GPU to save memory and speed up inference
+        torch_dtype = torch.float16
+        device_map = "cuda:0"
+        print(f"[DEBUG] Loading on GPU with float16")
+    else:
+        torch_dtype = torch.float32
+        device_map = "cpu"
+        print(f"[DEBUG] Loading on CPU with float32")
+    
     model = AutoModelForCausalLM.from_pretrained(
         cfg["path"],
-        torch_dtype=torch.float32,
+        torch_dtype=torch_dtype,
         low_cpu_mem_usage=True,
-        device_map="cpu",
+        device_map=device_map,
         trust_remote_code=True,
     )
     model.eval()
-    print("[DEBUG] Model loaded successfully")
+    print(f"[DEBUG] Model loaded successfully on {DEVICE}")
     return model
 
 
@@ -229,6 +262,8 @@ def chat_completions(req: ChatCompletionRequest):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     prompt_token_ids = tokenizer(prompt, return_tensors="pt")["input_ids"]
+    if DEVICE == "cuda":
+        prompt_token_ids = prompt_token_ids.to(DEVICE)
     prompt_tokens = prompt_token_ids.shape[1]
 
     try:
@@ -264,7 +299,19 @@ def chat_completions(req: ChatCompletionRequest):
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "models": list(MODEL_REGISTRY.keys())}
+    gpu_info = {}
+    if DEVICE == "cuda":
+        gpu_info = {
+            "device": torch.cuda.get_device_name(0),
+            "memory_allocated_gb": torch.cuda.memory_allocated(0) / 1024**3,
+            "memory_reserved_gb": torch.cuda.memory_reserved(0) / 1024**3,
+        }
+    return {
+        "status": "ok",
+        "device": DEVICE,
+        "gpu": gpu_info,
+        "models": list(MODEL_REGISTRY.keys())
+    }
 
 
 if __name__ == "__main__":

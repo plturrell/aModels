@@ -33,9 +33,15 @@
       "name": "Phi-3.5-mini Assistant",
       "layer": "general",
       "team": "FoundationTeam",
-      "backend_type": "safetensors",
+      "backend_type": "hf-transformers",
       "model_path": "../../models/phi-3.5-mini-instruct-pytorch",
+      "model_name": "phi-3.5-mini",
       "agent_id": "phi-3.5-mini",
+      "transformers_config": {
+        "endpoint": "http://localhost:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
       "attention_weights": {
         "instruction_following": 0.95,
         "reasoning": 0.9,

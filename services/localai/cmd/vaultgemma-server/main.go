@@ -19,6 +19,7 @@ import (
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/gguf"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/server"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/transformers"
+	llama "github.com/go-skynet/go-llama.cpp"
 	"golang.org/x/time/rate"
 )
 
@@ -132,14 +133,43 @@ func main() {
 				loaded, ok := uniqueGGUFModels[cfgModelPath]
 				if !ok {
 					log.Printf("📥 Loading GGUF model for domain %s from %s...", name, cfgModelPath)
-					gm, err := gguf.Load(cfgModelPath)
+					
+					// Enable GPU layers if available (use -1 to offload all layers to GPU)
+					// Check if CUDA is available via environment or try to detect
+					gpuLayers := 0
+					if os.Getenv("CUDA_VISIBLE_DEVICES") != "" || os.Getenv("GGML_CUDA") != "" {
+						// Offload all layers to GPU (-1 means all layers)
+						gpuLayers = -1
+						log.Printf("🚀 GPU acceleration enabled for GGUF model (offloading all layers)")
+					} else {
+						// Try to detect GPU availability
+						// For now, enable GPU layers by default if we're on a system with GPU
+						// User can disable with DISABLE_GGUF_GPU=1
+						if os.Getenv("DISABLE_GGUF_GPU") == "" {
+							gpuLayers = -1 // Offload all layers
+							log.Printf("🚀 GPU acceleration enabled for GGUF model (auto-detected)")
+						}
+					}
+					
+					var gm *gguf.Model
+					var err error
+					if gpuLayers != 0 {
+						gm, err = gguf.Load(cfgModelPath, llama.SetGPULayers(gpuLayers))
+					} else {
+						gm, err = gguf.Load(cfgModelPath)
+					}
+					
 					if err != nil {
 						log.Printf("⚠️  Failed to load GGUF model %s: %v", filepath.Base(cfgModelPath), err)
 						continue
 					}
 					uniqueGGUFModels[cfgModelPath] = gm
 					loaded = gm
-					log.Printf("✅ GGUF model ready: %s", filepath.Base(cfgModelPath))
+					if gpuLayers != 0 {
+						log.Printf("✅ GGUF model ready with GPU acceleration: %s", filepath.Base(cfgModelPath))
+					} else {
+						log.Printf("✅ GGUF model ready (CPU): %s", filepath.Base(cfgModelPath))
+					}
 				}
 				ggufModels[name] = loaded
 				if model != nil && !disableFallback {

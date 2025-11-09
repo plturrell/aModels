@@ -386,7 +386,7 @@ func (s *VaultGemmaServer) HandleFunctionCalling(w http.ResponseWriter, r *http.
 	}
 
 	// Create context with timeout
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), RequestTimeoutFunctionCalling)
 	defer cancel()
 
 	// Track request

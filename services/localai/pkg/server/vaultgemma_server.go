@@ -1,3 +1,7 @@
+// Package server provides the HTTP server implementation for the LocalAI VaultGemma service.
+// It handles chat completions, embeddings, streaming, function calling, and other
+// OpenAI-compatible API endpoints. The server supports multiple backends including
+// safetensors (CPU), GGUF (CPU/GPU), and HuggingFace transformers (GPU).
 package server
 
 import (
@@ -180,22 +184,10 @@ func (s *VaultGemmaServer) enrichPromptWithAgentCatalog(prompt string) string {
 	return builder.String()
 }
 
+// HandleChat handles chat completion requests using refactored helper functions
 func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
-	// Validate HTTP method
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Validate content type
-	if r.Header.Get("Content-Type") != "application/json" {
-		http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
-		return
-	}
-
-	// Create context with timeout. Transformers backends can take longer on first use,
-	// so allow a generous window.
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(r.Context(), RequestTimeoutDefault)
 	defer cancel()
 
 	// Track request
@@ -204,104 +196,48 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	start := time.Now()
-	var req struct {
-		Model    string `json:"model"`
-		Messages []struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"messages"`
-		MaxTokens    int      `json:"max_tokens,omitempty"`
-		Temperature  float64  `json:"temperature,omitempty"`
-		TopP         float64  `json:"top_p,omitempty"`
-		TopK         int      `json:"top_k,omitempty"`
-		Domains      []string `json:"domains,omitempty"` // User's available domains
-		Images       []string `json:"images,omitempty"`
-		VisionPrompt string   `json:"vision_prompt,omitempty"`
-	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Failed to decode request: %v", err)
-		http.Error(w, fmt.Sprintf("Invalid JSON: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	// Validate request
-	if len(req.Messages) == 0 {
-		http.Error(w, "Messages array cannot be empty", http.StatusBadRequest)
+	// Validate and decode request
+	req, err := validateChatRequest(r)
+	if err != nil {
+		handleChatError(w, err, http.StatusBadRequest)
 		return
 	}
 
 	// Check context deadline
 	select {
 	case <-ctx.Done():
-		http.Error(w, "Request timeout", http.StatusRequestTimeout)
+		handleChatError(w, ErrTimeout, http.StatusRequestTimeout)
 		return
 	default:
 	}
 
-	var prompt string
-	for _, msg := range req.Messages {
-		prompt += msg.Content + "\n"
-	}
-
+	// Build prompt from messages
+	prompt := buildPromptFromMessages(req.Messages)
 	prompt = s.enrichPromptWithAgentCatalog(prompt)
 
 	// Detect or use specified domain
 	domain := req.Model
-	if domain == "auto" || domain == "" {
+	if domain == DomainAuto || domain == "" {
 		domain = s.domainManager.DetectDomain(prompt, req.Domains)
 		log.Printf("Auto-detected domain: %s", domain)
 	}
 
-	// Retrieve domain configuration before model resolution
+	// Retrieve domain configuration
 	domainConfig, _ := s.domainManager.GetDomainConfig(domain)
-	// Determine preferred backend based on environment/GPU when not set in config
 	preferredBackend := pickPreferredBackend()
-	requireModel := true
-	if domainConfig != nil {
-		if strings.EqualFold(domainConfig.BackendType, "hf-transformers") {
-			requireModel = false
-		} else {
-			modelPath := strings.ToLower(strings.TrimSpace(domainConfig.ModelPath))
-			if strings.HasSuffix(modelPath, ".gguf") {
-				requireModel = false
-			}
-		}
+
+	// Resolve model with fallback
+	model, modelKey, fallbackUsed, fallbackKey, err := s.resolveModelForDomain(domain, domainConfig, preferredBackend)
+	if err != nil {
+		handleChatError(w, err, http.StatusInternalServerError)
+		return
 	}
 
-	// Resolve model with fallback and default handling
-	modelKey := domain
-	model, exists := s.models[modelKey]
-	fallbackUsed := false
-	fallbackKey := ""
-	if !exists && requireModel {
-		log.Printf("Domain model not found: %s, attempting fallback", domain)
-		if domainConfig != nil && domainConfig.FallbackModel != "" {
-			if fallbackModel, ok := s.models[domainConfig.FallbackModel]; ok {
-				log.Printf("Using fallback model '%s' for domain '%s'", domainConfig.FallbackModel, domain)
-				model = fallbackModel
-				modelKey = domainConfig.FallbackModel
-				fallbackUsed = true
-				fallbackKey = domainConfig.FallbackModel
-			}
-		}
-	}
-
-	if model == nil && requireModel {
-		defaultDomain := s.domainManager.GetDefaultDomain()
-		if defaultDomain != "" {
-			if defaultModel, ok := s.models[defaultDomain]; ok {
-				log.Printf("Using default domain '%s' model for request originally targeting '%s'", defaultDomain, domain)
-				model = defaultModel
-				domain = defaultDomain
-				modelKey = defaultDomain
-				domainConfig, _ = s.domainManager.GetDomainConfig(defaultDomain)
-			}
-		}
-		if model == nil {
-			http.Error(w, fmt.Sprintf("No models available"), http.StatusInternalServerError)
-			return
-		}
+	// Update domain if fallback changed it
+	if fallbackUsed && fallbackKey != "" {
+		domain = fallbackKey
+		domainConfig, _ = s.domainManager.GetDomainConfig(domain)
 	}
 
 	// Use domain-specific parameters
@@ -309,29 +245,23 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 	if maxTokens == 0 && domainConfig != nil {
 		maxTokens = domainConfig.MaxTokens
 	}
+	if maxTokens == 0 {
+		maxTokens = DefaultMaxTokens
+	}
 
 	topP, topK := resolveSampling(req.TopP, req.TopK, domainConfig)
-	req.TopP = topP
-	req.TopK = topK
-
-	metadata := map[string]interface{}{
-		"model_key": modelKey,
-		"cache_hit": false,
-	}
-	metadata["top_p"] = topP
-	metadata["top_k"] = topK
 
 	// Generate request ID for tracking
 	requestID := fmt.Sprintf("req_%d", time.Now().UnixNano())
 
 	// Extract user and session info from headers
-	userID := r.Header.Get("X-User-ID")
+	userID := r.Header.Get(HeaderUserID)
 	if userID == "" {
-		userID = "anonymous"
+		userID = AnonymousUserID
 	}
-	sessionID := r.Header.Get("X-Session-ID")
+	sessionID := r.Header.Get(HeaderSessionID)
 	if sessionID == "" {
-		sessionID = "default"
+		sessionID = DefaultSessionID
 	}
 
 	// Log request start
@@ -339,331 +269,80 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 		s.enhancedLogging.LogRequestStart(ctx, requestID, modelKey, domain, prompt, userID, sessionID)
 	}
 
-	var content string
-	var tokensUsed int
-	var cacheHit bool
-	var semanticHit bool
-
-	handledExternally := false
-
-	backendType := ""
-	if domainConfig != nil {
-		backendType = strings.TrimSpace(domainConfig.BackendType)
-	}
-	if backendType == "" {
-		backendType = preferredBackend
-	}
-
-	if strings.EqualFold(backendType, "deepseek-ocr") {
-		service := s.ocrServices[domain]
-		if service == nil {
-			http.Error(w, fmt.Sprintf("OCR service not configured for domain: %s", domain), http.StatusBadGateway)
-			return
-		}
-		if len(req.Images) == 0 {
-			http.Error(w, "images array must contain at least one base64 encoded image for deepseek-ocr domains", http.StatusBadRequest)
-			return
-		}
-		imageData, err := decodeImagePayload(req.Images[0])
-		if err != nil {
-			http.Error(w, fmt.Sprintf("failed to decode image payload: %v", err), http.StatusBadRequest)
-			return
-		}
-		ocrPrompt := req.VisionPrompt
-		if ocrPrompt == "" && domainConfig.VisionConfig != nil {
-			ocrPrompt = domainConfig.VisionConfig.DefaultPrompt
-		}
-
-		text, err := service.ExtractText(ctx, imageData, ocrPrompt)
-		if err != nil {
-			log.Printf("❌ DeepSeek OCR failed: %v", err)
-			if s.enhancedLogging != nil {
-				s.enhancedLogging.LogError(ctx, requestID, modelKey, domain, prompt, fmt.Sprintf("DeepSeek OCR failed: %v", err), userID, sessionID, metadata)
-			}
-			http.Error(w, fmt.Sprintf("deepseek-ocr inference failed: %v", err), http.StatusBadGateway)
-			return
-		}
-
-		content = text
-		tokensUsed = len(strings.Fields(text))
-		handledExternally = true
-		metadata["backend_type"] = "deepseek-ocr"
-		if ocrPrompt != "" {
-			metadata["ocr_prompt"] = truncateString(ocrPrompt, 160)
-		}
-	}
-
-	if !handledExternally && strings.EqualFold(backendType, "hf-transformers") {
-		client := s.transformerClients[domain]
-		if client == nil {
-			http.Error(w, fmt.Sprintf("transformers service not configured for domain: %s", domain), http.StatusBadGateway)
-			return
-		}
-		chatMessages := make([]transformers.ChatMessage, 0, len(req.Messages))
-		for _, msg := range req.Messages {
-			if msg.Role == "" || msg.Content == "" {
-				continue
-			}
-			chatMessages = append(chatMessages, transformers.ChatMessage{
-				Role:    msg.Role,
-				Content: msg.Content,
-			})
-		}
-		if len(chatMessages) == 0 {
-			http.Error(w, "transformers backend requires at least one message", http.StatusBadRequest)
-			return
-		}
-
-		generated, used, err := client.Generate(ctx, chatMessages, maxTokens, req.Temperature, topP)
-		if err != nil {
-			log.Printf("❌ Transformers backend failed for domain %s: %v", domain, err)
-			http.Error(w, fmt.Sprintf("transformers backend failed: %v", err), http.StatusBadGateway)
-			return
-		}
-		content = generated
-		tokensUsed = used
-		handledExternally = true
-		metadata["backend_type"] = "hf-transformers"
-		if domainConfig.TransformersConfig != nil {
-			metadata["transformers_model"] = domainConfig.TransformersConfig.ModelName
-		}
-	}
-
-	// Check cache first if HANA is available
-	if !handledExternally && s.hanaCache != nil {
-		// Generate cache key
-		cacheKey := s.hanaCache.GenerateCacheKey(prompt, modelKey, domain, req.Temperature, maxTokens, topP, topK)
-
-		// Try to get from cache
-		cacheEntry, err := s.hanaCache.Get(ctx, cacheKey)
-		if err == nil && cacheEntry != nil {
-			content = cacheEntry.Response
-			tokensUsed = cacheEntry.TokensUsed
-			cacheHit = true
-			log.Printf("🎯 Cache hit for domain: %s", domain)
-
-			// Log cache hit
-			if s.enhancedLogging != nil {
-				s.enhancedLogging.LogCacheHit(ctx, requestID, modelKey, domain, prompt, content, tokensUsed, "exact", 1.0, userID, sessionID)
-			}
-		}
-	}
-
-	// If no exact cache hit, try semantic cache
-	if !handledExternally && !cacheHit && s.semanticCache != nil {
-		// Find semantically similar cached responses
-		similarEntries, err := s.semanticCache.FindSemanticSimilar(ctx, prompt, modelKey, domain, 0.8, 5)
-		if err == nil && len(similarEntries) > 0 {
-			// Use the most similar entry
-			bestEntry := similarEntries[0]
-			content = bestEntry.Response
-			tokensUsed = bestEntry.TokensUsed
-			semanticHit = true
-			log.Printf("🧠 Semantic cache hit for domain: %s (similarity: %.2f)", domain, bestEntry.SimilarityScore)
-
-			// Log semantic cache hit
-			if s.enhancedLogging != nil {
-				s.enhancedLogging.LogCacheHit(ctx, requestID, modelKey, domain, prompt, content, tokensUsed, "semantic", bestEntry.SimilarityScore, userID, sessionID)
-			}
-		}
-	}
-	// Attempt GGUF-backed generation when available
-	if !handledExternally && !cacheHit && !semanticHit {
-		if ggufModel, ok := s.ggufModels[modelKey]; ok && ggufModel != nil {
-			temperature := req.Temperature
-			if temperature <= 0 {
-				if domainConfig != nil && domainConfig.Temperature > 0 {
-					temperature = float64(domainConfig.Temperature)
-				} else {
-					temperature = 0.7
-				}
-			}
-			if maxTokens <= 0 {
-				maxTokens = 128
-			}
-
-			generated, used, err := ggufModel.Generate(prompt, maxTokens, temperature, topP, topK)
-			if err != nil {
-				log.Printf("⚠️ GGUF inference failed for %s: %v", modelKey, err)
-			} else {
-				content = generated
-				tokensUsed = used
-				metadata["backend_type"] = "gguf"
-				handledExternally = true
-			}
-		}
-	}
-
-	// Generate response using actual inference if not cached
-	if !handledExternally && !cacheHit && !semanticHit {
-		// Use enhanced inference engine if available, otherwise fall back to basic engine
-		if s.enhancedEngine != nil {
-			enhancedReq := &inference.EnhancedInferenceRequest{
-				Prompt:      prompt,
-				Domain:      domain,
-				MaxTokens:   maxTokens,
-				Temperature: req.Temperature,
-				Model:       model,
-				TopP:        topP,
-				TopK:        topK,
-			}
-
-			response := s.enhancedEngine.GenerateEnhancedResponse(ctx, enhancedReq)
-			if response.Error != nil {
-				log.Printf("❌ Enhanced inference failed: %v", response.Error)
-
-				// Log error
-				if s.enhancedLogging != nil {
-					s.enhancedLogging.LogError(ctx, requestID, modelKey, domain, prompt, fmt.Sprintf("Enhanced inference failed: %v", response.Error), userID, sessionID, metadata)
-				}
-
-				http.Error(w, fmt.Sprintf("Enhanced inference failed: %v", response.Error), http.StatusInternalServerError)
-				return
-			}
-
-			content = response.Content
-			tokensUsed = response.TokensUsed
-		} else {
-			// Fall back to basic inference engine
-			if s.inferenceEngine == nil {
-				s.inferenceEngine = inference.NewInferenceEngine(s.models, s.domainManager)
-			}
-
-			inferenceReq := &inference.InferenceRequest{
-				Prompt:      prompt,
-				Domain:      domain,
-				MaxTokens:   maxTokens,
-				Temperature: req.Temperature,
-				Model:       model,
-				TopP:        topP,
-				TopK:        topK,
-			}
-
-			response := s.inferenceEngine.GenerateResponse(ctx, inferenceReq)
-			if response.Error != nil {
-				log.Printf("❌ Inference failed: %v", response.Error)
-
-				// Log error
-				if s.enhancedLogging != nil {
-					s.enhancedLogging.LogError(ctx, requestID, modelKey, domain, prompt, fmt.Sprintf("Basic inference failed: %v", response.Error), userID, sessionID, metadata)
-				}
-
-				http.Error(w, fmt.Sprintf("Inference failed: %v", response.Error), http.StatusInternalServerError)
-				return
-			}
-
-			content = response.Content
-			tokensUsed = response.TokensUsed
-		}
+	// Process chat request
+	result, err := s.processChatRequest(ctx, req, domain, domainConfig, model, modelKey, prompt, maxTokens, topP, topK, requestID, userID, sessionID)
+	if err != nil {
+		handleChatError(w, err, http.StatusBadGateway)
+		return
 	}
 
 	duration := time.Since(start)
-
 	log.Printf("Chat request processed in %.2fms for domain: %s", duration.Seconds()*1000, domain)
 
 	// Update metadata with final values
-	if _, ok := metadata["backend_type"]; !ok {
-		metadata["backend_type"] = "vaultgemma"
+	if _, ok := result.Metadata["backend_type"]; !ok {
+		result.Metadata["backend_type"] = BackendTypeSafetensors
 	}
-	metadata["cache_hit"] = cacheHit
+	result.Metadata["cache_hit"] = result.CacheHit
 	if domainConfig != nil {
-		metadata["domain_name"] = domainConfig.Name
+		result.Metadata["domain_name"] = domainConfig.Name
 	}
 	if fallbackUsed {
-		metadata["fallback_used"] = true
-		metadata["fallback_model"] = fallbackKey
-
-		// Log model switch
+		result.Metadata["fallback_used"] = true
+		result.Metadata["fallback_model"] = fallbackKey
 		if s.enhancedLogging != nil {
 			s.enhancedLogging.LogModelSwitch(ctx, requestID, modelKey, fallbackKey, domain, prompt, "model_unavailable", userID, sessionID)
 		}
 	} else {
-		metadata["fallback_used"] = false
+		result.Metadata["fallback_used"] = false
 	}
 
-	// Log request completion with enhanced logging
+	// Log request completion
 	if s.enhancedLogging != nil {
-		s.enhancedLogging.LogRequestEnd(ctx, requestID, modelKey, domain, prompt, content, tokensUsed, duration.Milliseconds(), req.Temperature, maxTokens, cacheHit, semanticHit, userID, sessionID, metadata)
+		s.enhancedLogging.LogRequestEnd(ctx, requestID, modelKey, domain, prompt, result.Content, result.TokensUsed, duration.Milliseconds(), req.Temperature, maxTokens, result.CacheHit, result.SemanticHit, userID, sessionID, result.Metadata)
 	}
 
-	// Cache the response if not already cached and HANA is available
-	if !handledExternally && !cacheHit && !semanticHit && s.hanaCache != nil {
-		cacheKey := s.hanaCache.GenerateCacheKey(prompt, modelKey, domain, req.Temperature, maxTokens, topP, topK)
-		cacheEntry := &storage.CacheEntry{
-			CacheKey:    cacheKey,
-			PromptHash:  fmt.Sprintf("%x", []byte(prompt)),
-			Model:       modelKey,
-			Domain:      domain,
-			Response:    content,
-			TokensUsed:  tokensUsed,
-			Temperature: req.Temperature,
-			MaxTokens:   maxTokens,
-		}
-
-		// Cache asynchronously
-		go func() {
-			if err := s.hanaCache.Set(context.Background(), cacheEntry); err != nil {
-				log.Printf("⚠️ Failed to cache response: %v", err)
-			}
-		}()
+	// Save to cache if not already cached
+	if !result.HandledExternally && !result.CacheHit && !result.SemanticHit {
+		s.saveToCache(ctx, prompt, modelKey, domain, result.Content, result.TokensUsed, req.Temperature, maxTokens, topP, topK)
 	}
 
-	// Also store in semantic cache for future similarity matching
-	if !handledExternally && !cacheHit && !semanticHit && s.semanticCache != nil {
-		semanticCacheKey := s.semanticCache.GenerateCacheKey(prompt, modelKey, domain, req.Temperature, maxTokens, topP, topK)
-		semanticEntry := &storage.SemanticCacheEntry{
-			CacheKey:        semanticCacheKey,
-			PromptHash:      fmt.Sprintf("%x", []byte(prompt)),
-			SemanticHash:    s.semanticCache.GenerateSemanticHash(prompt),
-			Model:           modelKey,
-			Domain:          domain,
-			Prompt:          prompt,
-			Response:        content,
-			TokensUsed:      tokensUsed,
-			Temperature:     req.Temperature,
-			MaxTokens:       maxTokens,
-			SimilarityScore: 1.0,
-			Metadata: map[string]string{
-				"user_id":    "anonymous",
-				"session_id": "default",
-				"source":     "inference",
-			},
-			Tags: []string{domain, "inference", "generated"},
-		}
-
-		// Cache asynchronously
-		go func() {
-			if err := s.semanticCache.Set(context.Background(), semanticEntry); err != nil {
-				log.Printf("⚠️ Failed to cache semantic response: %v", err)
-			}
-		}()
-	}
-
-	resp := map[string]interface{}{
-		"id":      fmt.Sprintf("chatcmpl-%d", time.Now().Unix()),
-		"object":  "chat.completion",
-		"created": time.Now().Unix(),
-		"model":   modelKey,
-		"choices": []map[string]interface{}{
-			{
-				"index": 0,
-				"message": map[string]string{
-					"role":    "assistant",
-					"content": content,
-				},
-				"finish_reason": "stop",
-			},
-		},
-		"usage": map[string]int{
-			"prompt_tokens":     len(prompt) / 4,
-			"completion_tokens": tokensUsed,
-			"total_tokens":      (len(prompt) / 4) + tokensUsed,
-		},
-		"metadata": metadata,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
+	// Build and send response
+	resp := buildChatResponse(modelKey, result.Content, result.TokensUsed, prompt, result.Metadata)
+	w.Header().Set(HeaderContentType, ContentTypeJSON)
 	json.NewEncoder(w).Encode(resp)
+}
+
+// handleChatError handles errors in chat requests with proper error formatting
+func handleChatError(w http.ResponseWriter, err error, statusCode int) {
+	errorMsg := err.Error()
+	errorCode := ErrorCodeInternalError
+
+	// Extract error code if it's a known error
+	if errors.Is(err, ErrInvalidRequest) {
+		errorCode = ErrorCodeInvalidRequest
+	} else if errors.Is(err, ErrModelNotFound) {
+		errorCode = ErrorCodeModelNotFound
+	} else if errors.Is(err, ErrBackendUnavailable) {
+		errorCode = ErrorCodeBackendUnavailable
+	} else if errors.Is(err, ErrTimeout) {
+		errorCode = ErrorCodeTimeout
+	} else if errors.Is(err, ErrInternalError) {
+		errorCode = ErrorCodeInternalError
+	}
+
+	// Build error response
+	errorResponse := map[string]interface{}{
+		"error": map[string]interface{}{
+			"message": errorMsg,
+			"type":    errorCode,
+			"code":    errorCode,
+		},
+	}
+
+	w.Header().Set(HeaderContentType, ContentTypeJSON)
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(errorResponse)
 }
 
 // pickPreferredBackend decides which backend to use when not specified in config.
@@ -674,12 +353,12 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 func pickPreferredBackend() string {
 	base := strings.TrimSpace(os.Getenv("TRANSFORMERS_BASE_URL"))
 	if base != "" {
-		return "hf-transformers"
+		return BackendTypeTransformers
 	}
 	if strings.EqualFold(strings.TrimSpace(os.Getenv("GGUF_ENABLE")), "1") {
-		return "gguf"
+		return BackendTypeGGUF
 	}
-	return "vaultgemma"
+	return BackendTypeSafetensors
 }
 
 func (s *VaultGemmaServer) HandleModels(w http.ResponseWriter, r *http.Request) {
@@ -695,7 +374,7 @@ func (s *VaultGemmaServer) HandleModels(w http.ResponseWriter, r *http.Request) 
 		},
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(HeaderContentType, ContentTypeJSON)
 	json.NewEncoder(w).Encode(resp)
 }
 
@@ -706,12 +385,12 @@ func (s *VaultGemmaServer) HandleEmbeddings(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if r.Header.Get("Content-Type") != "application/json" {
+	if r.Header.Get(HeaderContentType) != ContentTypeJSON {
 		http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), RequestTimeoutEmbeddings)
 	defer cancel()
 
 	var req struct {
@@ -811,7 +490,7 @@ func (s *VaultGemmaServer) HandleEmbeddings(w http.ResponseWriter, r *http.Reque
 		},
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(HeaderContentType, ContentTypeJSON)
 	json.NewEncoder(w).Encode(resp)
 }
 
@@ -827,7 +506,7 @@ func (s *VaultGemmaServer) HandleDomainRegistry(w http.ResponseWriter, r *http.R
 		registry.AgentCatalogUpdated = updatedAt.Format(time.RFC3339)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(HeaderContentType, ContentTypeJSON)
 	json.NewEncoder(w).Encode(registry)
 }
 
@@ -880,7 +559,7 @@ func (s *VaultGemmaServer) HandleHealth(w http.ResponseWriter, r *http.Request) 
 		s.enhancedLogging.LogHealthCheck(r.Context(), "healthy", health)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(HeaderContentType, ContentTypeJSON)
 	json.NewEncoder(w).Encode(health)
 }
 
@@ -1028,7 +707,7 @@ func (s *VaultGemmaServer) HandleListDomains(w http.ResponseWriter, r *http.Requ
 		domains = append(domains, domainInfo)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(HeaderContentType, ContentTypeJSON)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"object": "list",
 		"data":   domains,
