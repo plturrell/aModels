@@ -4,7 +4,7 @@ import pandas as pd
 import yaml
 import sys
 
-with open('configs/relational_rt_example.yaml') as f:
+with open('config/training/relational_rt_example.yaml') as f:
     cfg = yaml.safe_load(f)
 
 print("Validating training data files...")

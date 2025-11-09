@@ -120,7 +120,7 @@ docker compose -f infrastructure/docker/brev/docker-compose.yml up
 # 4. To run training jobs inside the prepared CUDA/Go/Python environment:
 #    (in a new terminal)
 # docker compose -f infrastructure/docker/brev/docker-compose.yml exec trainer bash
-# python tools/scripts/train_relational_transformer.py --config configs/rt.yaml --mode pretrain ...
+# python tools/scripts/train_relational_transformer.py --config config/training/rt_minimal_test.yaml --mode pretrain ...
 
 ### Optional: fetch Gemma weights from Kaggle
 

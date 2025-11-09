@@ -16,7 +16,7 @@ services:
     volumes:
       - esdata:/usr/share/elasticsearch/data
       # Mount elasticsearch config to disable external inference if needed
-      # - ../../configs/elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+      # - ../../config/elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
 
   transformers:
     build:
@@ -155,7 +155,7 @@ services:
     working_dir: /workspace
     volumes:
       - ../../tools/scripts:/workspace/scripts:rw
-      - ../../configs:/workspace/configs:rw
+      - ../../config:/workspace/configs:rw
       - ../../models:/workspace/models:rw
       - ../../data:/workspace/data:rw
       - ../../tools:/workspace/tools:rw
@@ -256,7 +256,7 @@ services:
       # Model Configuration - LocalAI only (no external LLM dependencies)
       # langextract-api: Disabled by default (empty URL = disabled)
       # To enable with LocalAI: set LANGEXTRACT_API_URL=http://localai:8081/v1
-      # See configs/langextract-config.md for details
+      # See config/langextract-config.md for details
       - LANGEXTRACT_API_URL=${LANGEXTRACT_API_URL:-}
       - LANGEXTRACT_API_KEY=${LANGEXTRACT_API_KEY:-}
       # Multimodal Extraction and DeepSeek OCR (Phase 6)
@@ -290,7 +290,7 @@ services:
       # Model Configuration - LocalAI only (no external LLM dependencies)
       - LOCALAI_URL=http://localai:8081
     volumes:
-      - ../../configs:/workspace/config:ro
+      - ../../config:/workspace/config:ro
       - ../../artifacts/model-release:/workspace/assets:ro
     ports:
       - "8080:8080"

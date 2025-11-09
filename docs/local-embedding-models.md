@@ -16,7 +16,7 @@ This document lists all locally available embedding models and ensures Elasticse
 
 ### 2. **Training Configuration Models**
 - **sentence-transformers/all-MiniLM-L6-v2**: Used in relational transformer training
-- **Location**: `configs/rt_sgmi.yaml` (line 55)
+- **Location**: `config/training/rt_sgmi.yaml` (line 55)
 - **Usage**: Text encoding for relational transformer training
 
 ## Service Configuration

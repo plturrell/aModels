@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG="${ROOT_DIR}/configs/relational_rt_example.yaml"
-EVAL_CONFIG="${EVAL_CONFIG:-${ROOT_DIR}/configs/eval_financed_emission_regression.yaml}"
+CONFIG="${ROOT_DIR}/config/training/relational_rt_example.yaml"
+EVAL_CONFIG="${EVAL_CONFIG:-${ROOT_DIR}/config/training/eval_financed_emission_regression.yaml}"
 CHECKPOINT_DIR="${ROOT_DIR}/checkpoints/main_schedule"
 PRETRAIN_CKPT="${CHECKPOINT_DIR}/rt_pretrain.pt"
 FINETUNE_CKPT="${CHECKPOINT_DIR}/rt_finetuned.pt"

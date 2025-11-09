@@ -1,0 +1,5 @@
+task_type: regression
+targets:
+  - table: carbon_emission
+    column: Financed_Emission
+    primary_key: LE_ID

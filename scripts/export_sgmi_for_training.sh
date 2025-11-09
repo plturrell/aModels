@@ -94,6 +94,6 @@ echo ""
 echo "✅ Data export complete!"
 echo ""
 echo "Next steps:"
-echo "1. Create training config: configs/rt_sgmi.yaml"
-echo "2. Run training: python3 tools/scripts/train_relational_transformer.py --config configs/rt_sgmi.yaml"
+echo "1. Create training config: config/training/rt_sgmi.yaml"
+echo "2. Run training: python3 tools/scripts/train_relational_transformer.py --config config/training/rt_sgmi.yaml"
 

@@ -1,0 +1,68 @@
+# Relational Transformer Training Configuration for SGMI Data
+# This config uses the table-column relationships exported from Postgres
+
+tables:
+  - name: table_columns
+    path: data/training/extracts/sgmi/table_columns.csv
+    format: csv
+    primary_key: column_id
+    # Foreign keys from table relationships (if available)
+    foreign_keys: []
+    # Note: For SGMI, we're using table-column metadata as the primary dataset
+    # The Relational Transformer will learn relationships between tables and columns
+
+targets:
+  # Target: predict column types based on table context
+  - table: table_columns
+    column: column_type
+    primary_key: column_id
+    # Limit to first 1000 columns for initial training
+    limit: 1000
+
+context:
+  max_cells: 1024
+  schema_seed: 1234
+  width_bound: 4
+  temporal_lookback_hours: 24
+  include_text: true
+  allow_temporal_leakage: false
+  random_seed: 42
+
+training:
+  amp: false
+  grad_clip: 1.0
+  loss_scale: 1024
+  dynamic_loss_scale: true
+  link_loss_weight: 0.1
+  ablate_column: false
+  ablate_feature: false
+  ablate_neighbor: false
+  ablate_temporal: false
+  ablate_full: false
+  batch_size: 16
+  mask_probability: 0.15
+  pretrain_learning_rate: 0.001
+  pretrain_weight_decay: 0.01
+  pretrain_steps: 500
+  fine_tune_learning_rate: 0.0001
+  fine_tune_weight_decay: 0.0
+  fine_tune_steps: 200
+  max_grad_norm: 1.0
+  num_workers: 0
+  device: cuda  # Use GPU if available
+
+model:
+  text_encoder: sentence-transformers/all-MiniLM-L6-v2
+  hidden_dim: 256
+  num_layers: 6
+  num_heads: 8
+  mlp_hidden_dim: 512
+  value_dim: 384
+  schema_dim: 384
+  temporal_dim: 5
+  role_dim: 64
+  dropout: 0.1
+
+zero_shot:
+  num_examples: 5
+

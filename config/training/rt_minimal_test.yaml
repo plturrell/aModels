@@ -1,0 +1,40 @@
+tables:
+  - name: carbon_emission
+    path: data/scb-data/carbon_emission_data.csv
+    format: csv
+    primary_key: LE_ID
+  - name: client_analytics
+    path: data/scb-data/client_analytics_data.csv
+    format: csv
+    primary_key: LE_ID
+    foreign_keys:
+      - parent_table: carbon_emission
+        parent_column: LE_ID
+        child_column: LE_ID
+
+targets:
+  - table: carbon_emission
+    column: Financed_Emission
+
+context:
+  max_cells: 32
+  width_bound: 2
+  include_text: false
+
+training:
+  batch_size: 1
+  pretrain_steps: 2
+  fine_tune_steps: 1
+  pretrain_learning_rate: 0.001
+  device: cpu
+
+model:
+  text_encoder: sentence-transformers/all-MiniLM-L6-v2
+  hidden_dim: 64
+  num_layers: 2
+  num_heads: 2
+  mlp_hidden_dim: 128
+  value_dim: 192
+  schema_dim: 192
+  dropout: 0.1
+
