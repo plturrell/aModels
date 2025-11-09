@@ -42,27 +42,39 @@ func main() {
 	disableFallbackEnv := strings.ToLower(strings.TrimSpace(os.Getenv("DISABLE_VAULTGEMMA_FALLBACK")))
 	disableFallback := disableFallbackEnv == "1" || disableFallbackEnv == "true" || disableFallbackEnv == "yes"
 
+	// Phase 4: Lazy loading - models will be loaded on first use
+	// Only load the default VaultGemma model if lazy loading is disabled
+	enableLazyLoading := os.Getenv("ENABLE_LAZY_LOADING") != "0" // Default to enabled
 	var model *ai.VaultGemma
-	if disableFallback {
-		log.Printf("\n⏭️  DISABLE_VAULTGEMMA_FALLBACK enabled — skipping VaultGemma safetensor load.")
-	} else {
-		log.Printf("\n📥 Loading VaultGemma model...")
-		stopSpinner := startLoadingSpinner("⏳ Loading VaultGemma weights")
-		loadedModel, err := ai.LoadVaultGemmaFromSafetensors(*modelPath)
-		stopSpinner()
-		if err != nil {
-			log.Printf("❌ Failed to load model: %v", err)
-			log.Printf("⚠️  Continuing with stubbed inference responses")
+	
+	if !enableLazyLoading {
+		// Legacy behavior: load model at startup
+		if disableFallback {
+			log.Printf("\n⏭️  DISABLE_VAULTGEMMA_FALLBACK enabled — skipping VaultGemma safetensor load.")
 		} else {
-			model = loadedModel
-		}
+			log.Printf("\n📥 Loading VaultGemma model (lazy loading disabled)...")
+			stopSpinner := startLoadingSpinner("⏳ Loading VaultGemma weights")
+			loadedModel, err := ai.LoadVaultGemmaFromSafetensors(*modelPath)
+			stopSpinner()
+			if err != nil {
+				log.Printf("❌ Failed to load model: %v", err)
+				log.Printf("⚠️  Continuing with stubbed inference responses")
+			} else {
+				model = loadedModel
+			}
 
-		if model != nil {
-			log.Printf("✅ Model loaded successfully!")
-			log.Printf("   - Layers: %d", model.Config.NumLayers)
-			log.Printf("   - Hidden size: %d", model.Config.HiddenSize)
-			log.Printf("   - Vocab size: %d", model.Config.VocabSize)
-			log.Printf("   - Attention heads: %d", model.Config.NumHeads)
+			if model != nil {
+				log.Printf("✅ Model loaded successfully!")
+				log.Printf("   - Layers: %d", model.Config.NumLayers)
+				log.Printf("   - Hidden size: %d", model.Config.HiddenSize)
+				log.Printf("   - Vocab size: %d", model.Config.VocabSize)
+				log.Printf("   - Attention heads: %d", model.Config.NumHeads)
+			}
+		}
+	} else {
+		log.Printf("\n🚀 Lazy loading enabled - models will be loaded on first use")
+		if !disableFallback {
+			log.Printf("📝 VaultGemma model will be loaded from: %s", *modelPath)
 		}
 	}
 
@@ -91,13 +103,8 @@ func main() {
 	ggufModels := make(map[string]*gguf.Model)
 	transformerClients := make(map[string]*transformers.Client)
 
-	uniqueSafetensorModels := make(map[string]*ai.VaultGemma)
-	if model != nil {
-		uniqueSafetensorModels[*modelPath] = model
-	}
-	uniqueGGUFModels := map[string]*gguf.Model{}
-
-	log.Printf("\n🎯 Loading additional models...")
+	// Phase 4: Register models for lazy loading instead of loading them
+	log.Printf("\n🎯 Registering models for lazy loading...")
 
 	if domainManager != nil {
 		configs := domainManager.ListDomainConfigs()
@@ -130,48 +137,9 @@ func main() {
 			}
 
 			if strings.HasSuffix(lowerPath, ".gguf") {
-				loaded, ok := uniqueGGUFModels[cfgModelPath]
-				if !ok {
-					log.Printf("📥 Loading GGUF model for domain %s from %s...", name, cfgModelPath)
-					
-					// Enable GPU layers if available (use -1 to offload all layers to GPU)
-					// Check if CUDA is available via environment or try to detect
-					gpuLayers := 0
-					if os.Getenv("CUDA_VISIBLE_DEVICES") != "" || os.Getenv("GGML_CUDA") != "" {
-						// Offload all layers to GPU (-1 means all layers)
-						gpuLayers = -1
-						log.Printf("🚀 GPU acceleration enabled for GGUF model (offloading all layers)")
-					} else {
-						// Try to detect GPU availability
-						// For now, enable GPU layers by default if we're on a system with GPU
-						// User can disable with DISABLE_GGUF_GPU=1
-						if os.Getenv("DISABLE_GGUF_GPU") == "" {
-							gpuLayers = -1 // Offload all layers
-							log.Printf("🚀 GPU acceleration enabled for GGUF model (auto-detected)")
-						}
-					}
-					
-					var gm *gguf.Model
-					var err error
-					if gpuLayers != 0 {
-						gm, err = gguf.Load(cfgModelPath, llama.SetGPULayers(gpuLayers))
-					} else {
-						gm, err = gguf.Load(cfgModelPath)
-					}
-					
-					if err != nil {
-						log.Printf("⚠️  Failed to load GGUF model %s: %v", filepath.Base(cfgModelPath), err)
-						continue
-					}
-					uniqueGGUFModels[cfgModelPath] = gm
-					loaded = gm
-					if gpuLayers != 0 {
-						log.Printf("✅ GGUF model ready with GPU acceleration: %s", filepath.Base(cfgModelPath))
-					} else {
-						log.Printf("✅ GGUF model ready (CPU): %s", filepath.Base(cfgModelPath))
-					}
-				}
-				ggufModels[name] = loaded
+				// Phase 4: Register GGUF model for lazy loading
+				log.Printf("📝 Registered GGUF model for domain %s: %s (will load on first use)", name, cfgModelPath)
+				// Model will be loaded via modelCache when needed
 				if model != nil && !disableFallback {
 					if _, exists := models[name]; !exists {
 						models[name] = model
@@ -184,30 +152,17 @@ func main() {
 				continue
 			}
 
-			if _, seen := uniqueSafetensorModels[cfgModelPath]; !seen {
-				if cfgModelPath == *modelPath {
-					uniqueSafetensorModels[cfgModelPath] = model
-				} else {
-					log.Printf("📥 Loading safetensors model for domain %s from %s...", name, cfgModelPath)
-					loadedModel, err := ai.LoadVaultGemmaFromSafetensors(cfgModelPath)
-					if err != nil {
-						log.Printf("⚠️  Failed to load model %s: %v", filepath.Base(cfgModelPath), err)
-						continue
-					}
-					uniqueSafetensorModels[cfgModelPath] = loadedModel
-					log.Printf("✅ Safetensors model ready: %s", filepath.Base(cfgModelPath))
+			// Phase 4: Register safetensors model for lazy loading
+			if cfgModelPath == *modelPath {
+				// Default model already handled above
+				if model != nil {
+					models[name] = model
 				}
-			}
-
-			if resolved, ok := uniqueSafetensorModels[cfgModelPath]; ok {
-				models[name] = resolved
+			} else {
+				log.Printf("📝 Registered safetensors model for domain %s: %s (will load on first use)", name, cfgModelPath)
+				// Model will be loaded via modelCache when needed
 			}
 		}
-	}
-
-	// Ensure GGUF models are released on shutdown
-	for _, gm := range uniqueGGUFModels {
-		defer gm.Close()
 	}
 
 	vgServer := server.NewVaultGemmaServer(
@@ -218,6 +173,54 @@ func main() {
 		rate.NewLimiter(rate.Every(time.Second), 10),
 		"2.0.0",
 	)
+
+	// Phase 4: Register models in cache for lazy loading
+	if enableLazyLoading && vgServer.modelCache != nil {
+		log.Printf("\n📝 Registering models in cache for lazy loading...")
+		
+		// Register default VaultGemma model if not disabled
+		if !disableFallback && *modelPath != "" {
+			vgServer.modelCache.RegisterSafetensorModel("general", *modelPath)
+			vgServer.modelCache.RegisterSafetensorModel("vaultgemma", *modelPath)
+			log.Printf("✅ Registered default model: %s", *modelPath)
+		}
+
+		// Register domain-specific models
+		if domainManager != nil {
+			configs := domainManager.ListDomainConfigs()
+			for name, cfg := range configs {
+				if cfg == nil {
+					continue
+				}
+
+				cfgModelPath := strings.TrimSpace(cfg.ModelPath)
+				if cfgModelPath == "" {
+					continue
+				}
+
+				lowerPath := strings.ToLower(cfgModelPath)
+
+				// Register GGUF models
+				if strings.HasSuffix(lowerPath, ".gguf") {
+					vgServer.modelCache.RegisterGGUFModel(name, cfgModelPath)
+					log.Printf("✅ Registered GGUF model for domain %s: %s", name, cfgModelPath)
+					continue
+				}
+
+				// Register safetensors models (skip if it's the default model path)
+				if cfgModelPath != *modelPath && !strings.EqualFold(cfg.BackendType, "hf-transformers") {
+					vgServer.modelCache.RegisterSafetensorModel(name, cfgModelPath)
+					log.Printf("✅ Registered safetensors model for domain %s: %s", name, cfgModelPath)
+				}
+
+				// Register transformers clients
+				if strings.EqualFold(cfg.BackendType, "hf-transformers") && cfg.TransformersConfig != nil {
+					vgServer.modelCache.RegisterTransformerClient(name, cfg.TransformersConfig)
+				}
+			}
+		}
+		log.Printf("✅ Model registration complete - models will load on first use")
+	}
 
 	// Load domain-specific configurations
 	domains := domainManager.ListDomains()
@@ -278,6 +281,13 @@ func main() {
 	http.HandleFunc("/v1/agent-catalog", server.EnableCORS(handleAgentCatalog(vgServer)))
 	http.HandleFunc("/health", server.EnableCORS(vgServer.HandleHealth))
 	http.HandleFunc("/metrics", server.EnableCORS(vgServer.HandleMetrics))
+	
+	// Phase 3: Performance profiling endpoints
+	if vgServer.profiler != nil {
+		http.HandleFunc("/debug/stats", server.EnableCORS(vgServer.profiler.HandleProfilingStats))
+	}
+	http.HandleFunc("/debug/pprof", server.EnableCORS(server.HandlePprofRedirect))
+	http.HandleFunc("/debug/pprof/", server.EnableCORS(http.DefaultServeMux.ServeHTTP))
 
 	// Serve web UI
 	http.Handle("/", http.FileServer(http.Dir("web")))
@@ -292,8 +302,18 @@ func main() {
 	log.Printf("   Registry: http://localhost%s/v1/domain-registry", addr)
 	log.Printf("   Chat:     http://localhost%s/v1/chat/completions", addr)
 	log.Printf("\n🎯 Production Features:")
-	totalLoaded := len(uniqueSafetensorModels) + len(uniqueGGUFModels)
-	log.Printf("   ✓ Models loaded: %d (GGUF: %d, Transformers: %d)", totalLoaded, len(uniqueGGUFModels), len(transformerClients))
+	// Phase 4: Count registered models (lazy loading)
+	totalRegistered := 0
+	if vgServer.modelCache != nil {
+		stats := vgServer.modelCache.GetStats()
+		if safetensorCount, ok := stats["safetensor_models"].(int); ok {
+			totalRegistered += safetensorCount
+		}
+		if ggufCount, ok := stats["gguf_models"].(int); ok {
+			totalRegistered += ggufCount
+		}
+	}
+	log.Printf("   ✓ Models registered: %d (Transformers: %d)", totalRegistered, len(transformerClients))
 	log.Printf("   ✓ Agent domains: %d", len(domains))
 	log.Printf("   ✓ Auto domain detection")
 	log.Printf("   ✓ Rate limiting: 10 req/sec")

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -99,6 +100,10 @@ type VaultGemmaServer struct {
 	catalogUpdatedAt time.Time
 	flightAddr       string
 	gpuRouter        *gpu.GPURouter
+	// Performance features
+	modelCache       *ModelCache
+	batchProcessor   *BatchProcessor
+	profiler         *Profiler
 }
 
 // ModelRegistry exposes configuration metadata for orchestration layer discovery
@@ -272,12 +277,21 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 	// Process chat request
 	result, err := s.processChatRequest(ctx, req, domain, domainConfig, model, modelKey, prompt, maxTokens, topP, topK, requestID, userID, sessionID)
 	if err != nil {
+		// Record error in profiler
+		if s.profiler != nil {
+			s.profiler.RecordError()
+		}
 		handleChatError(w, err, http.StatusBadGateway)
 		return
 	}
 
 	duration := time.Since(start)
 	log.Printf("Chat request processed in %.2fms for domain: %s", duration.Seconds()*1000, domain)
+
+	// Record profiling metrics
+	if s.profiler != nil {
+		s.profiler.RecordRequest(duration)
+	}
 
 	// Update metadata with final values
 	if _, ok := result.Metadata["backend_type"]; !ok {
@@ -403,8 +417,24 @@ func (s *VaultGemmaServer) HandleEmbeddings(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Get model (use vaultgemma as default)
-	model := s.getModelForDomain("vaultgemma")
+	// Get model (use vaultgemma as default) - Phase 4: Use lazy loading
+	var model *ai.VaultGemma
+	if s.modelCache != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), RequestTimeoutEmbeddings)
+		defer cancel()
+		loadedModel, err := s.modelCache.GetSafetensorModel(ctx, "vaultgemma")
+		if err == nil && loadedModel != nil {
+			model = loadedModel
+		}
+	}
+	
+	// Fallback to pre-loaded model
+	if model == nil {
+		s.mu.RLock()
+		model = s.models["vaultgemma"]
+		s.mu.RUnlock()
+	}
+	
 	if model == nil {
 		http.Error(w, "Model not available", http.StatusServiceUnavailable)
 		return
@@ -714,7 +744,7 @@ func (s *VaultGemmaServer) HandleListDomains(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-// handleMetrics provides Prometheus-style metrics endpoint
+// HandleMetrics provides Prometheus-style metrics endpoint with enhanced profiling
 func (s *VaultGemmaServer) HandleMetrics(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	requestCount := s.requestCount
@@ -732,7 +762,51 @@ func (s *VaultGemmaServer) HandleMetrics(w http.ResponseWriter, r *http.Request)
 
 	fmt.Fprintf(w, "# HELP vaultgemma_uptime_seconds Server uptime in seconds\n")
 	fmt.Fprintf(w, "# TYPE vaultgemma_uptime_seconds gauge\n")
-	fmt.Fprintf(w, "vaultgemma_uptime_seconds %.2f\n\n", uptime.Seconds())
+	fmt.Fprintf(w, "vaultgemma_uptime_seconds %.2f\n", uptime.Seconds())
+
+	// Add profiling stats if available
+	if s.profiler != nil {
+		stats := s.profiler.GetStats()
+		if latency, ok := stats["latency"].(map[string]interface{}); ok {
+			if avg, ok := latency["avg_ms"].(int64); ok {
+				fmt.Fprintf(w, "# HELP vaultgemma_request_latency_avg_ms Average request latency in milliseconds\n")
+				fmt.Fprintf(w, "# TYPE vaultgemma_request_latency_avg_ms gauge\n")
+				fmt.Fprintf(w, "vaultgemma_request_latency_avg_ms %d\n", avg)
+			}
+			if p95, ok := latency["p95_ms"].(int64); ok {
+				fmt.Fprintf(w, "# HELP vaultgemma_request_latency_p95_ms 95th percentile request latency in milliseconds\n")
+				fmt.Fprintf(w, "# TYPE vaultgemma_request_latency_p95_ms gauge\n")
+				fmt.Fprintf(w, "vaultgemma_request_latency_p95_ms %d\n", p95)
+			}
+			if p99, ok := latency["p99_ms"].(int64); ok {
+				fmt.Fprintf(w, "# HELP vaultgemma_request_latency_p99_ms 99th percentile request latency in milliseconds\n")
+				fmt.Fprintf(w, "# TYPE vaultgemma_request_latency_p99_ms gauge\n")
+				fmt.Fprintf(w, "vaultgemma_request_latency_p99_ms %d\n", p99)
+			}
+		}
+		if errorRate, ok := stats["error_rate"].(float64); ok {
+			fmt.Fprintf(w, "# HELP vaultgemma_error_rate Error rate (0.0 to 1.0)\n")
+			fmt.Fprintf(w, "# TYPE vaultgemma_error_rate gauge\n")
+			fmt.Fprintf(w, "vaultgemma_error_rate %.4f\n", errorRate)
+		}
+	}
+
+	// Add model cache stats if available
+	if s.modelCache != nil {
+		cacheStats := s.modelCache.GetStats()
+		if safetensorCount, ok := cacheStats["safetensor_models"].(int); ok {
+			fmt.Fprintf(w, "# HELP vaultgemma_safetensor_models_loaded Number of loaded safetensors models\n")
+			fmt.Fprintf(w, "# TYPE vaultgemma_safetensor_models_loaded gauge\n")
+			fmt.Fprintf(w, "vaultgemma_safetensor_models_loaded %d\n", safetensorCount)
+		}
+		if ggufCount, ok := cacheStats["gguf_models"].(int); ok {
+			fmt.Fprintf(w, "# HELP vaultgemma_gguf_models_loaded Number of loaded GGUF models\n")
+			fmt.Fprintf(w, "# TYPE vaultgemma_gguf_models_loaded gauge\n")
+			fmt.Fprintf(w, "vaultgemma_gguf_models_loaded %d\n", ggufCount)
+		}
+	}
+
+	fmt.Fprintf(w, "\n")
 
 	fmt.Fprintf(w, "# HELP vaultgemma_memory_alloc_bytes Memory allocated in bytes\n")
 	fmt.Fprintf(w, "# TYPE vaultgemma_memory_alloc_bytes gauge\n")
@@ -819,6 +893,23 @@ func NewVaultGemmaServer(models map[string]*ai.VaultGemma, ggufModels map[string
 	functionRegistry := NewFunctionRegistry()
 	retryConfig := DefaultRetryConfig()
 
+	// Initialize performance features
+	maxMemoryMB := int64(8192) // Default 8GB
+	if envMem := os.Getenv("MODEL_CACHE_MAX_MEMORY_MB"); envMem != "" {
+		if parsed, err := strconv.ParseInt(envMem, 10, 64); err == nil && parsed > 0 {
+			maxMemoryMB = parsed
+		}
+	}
+	modelCache := NewModelCache(domainManager, maxMemoryMB)
+	profiler := NewProfiler(1000)
+
+	// Initialize batch processor (optional, can be enabled via env)
+	batchSize := 10
+	batchTimeout := 50 * time.Millisecond
+	if os.Getenv("ENABLE_REQUEST_BATCHING") == "1" {
+		batchProcessor = NewBatchProcessor(batchSize, batchTimeout)
+	}
+
 	ocrServices := make(map[string]*vision.DeepSeekOCRService)
 	if domainManager != nil {
 		configs := domainManager.ListDomainConfigs()
@@ -876,6 +967,10 @@ func NewVaultGemmaServer(models map[string]*ai.VaultGemma, ggufModels map[string
 		retryConfig:      retryConfig,
 		ocrServices:      ocrServices,
 		gpuRouter:        gpuRouter,
+		// Performance features
+		modelCache:       modelCache,
+		batchProcessor:   batchProcessor,
+		profiler:         profiler,
 	}
 }
 

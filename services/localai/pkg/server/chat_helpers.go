@@ -147,7 +147,44 @@ func (s *VaultGemmaServer) resolveModelForDomain(
 		return nil, domain, false, "", nil
 	}
 
-	// Try to get model for domain
+	// Phase 4: Try lazy loading from cache first
+	if s.modelCache != nil {
+		// Check if this is a GGUF model
+		if domainConfig != nil {
+			modelPath := strings.ToLower(strings.TrimSpace(domainConfig.ModelPath))
+			if strings.HasSuffix(modelPath, ".gguf") {
+				// GGUF models are handled separately in processChatRequest
+				return nil, domain, false, "", nil
+			}
+		}
+
+		// Try to get safetensors model from cache (lazy loading)
+		cachedModel, err := s.modelCache.GetSafetensorModel(ctx, domain)
+		if err == nil && cachedModel != nil {
+			return cachedModel, domain, false, "", nil
+		}
+
+		// Try fallback model from cache
+		if domainConfig != nil && domainConfig.FallbackModel != "" {
+			fallbackModel, err := s.modelCache.GetSafetensorModel(ctx, domainConfig.FallbackModel)
+			if err == nil && fallbackModel != nil {
+				log.Printf("Using fallback model '%s' for domain '%s' (lazy loaded)", domainConfig.FallbackModel, domain)
+				return fallbackModel, domainConfig.FallbackModel, true, domainConfig.FallbackModel, nil
+			}
+		}
+
+		// Try default domain from cache
+		defaultDomain := s.domainManager.GetDefaultDomain()
+		if defaultDomain != "" {
+			defaultModel, err := s.modelCache.GetSafetensorModel(ctx, defaultDomain)
+			if err == nil && defaultModel != nil {
+				log.Printf("Using default domain '%s' model for request originally targeting '%s' (lazy loaded)", defaultDomain, domain)
+				return defaultModel, defaultDomain, false, "", nil
+			}
+		}
+	}
+
+	// Fallback to pre-loaded models (for backward compatibility)
 	modelKey = domain
 	model, exists := s.models[modelKey]
 
@@ -237,8 +274,21 @@ func (s *VaultGemmaServer) processChatRequest(
 		}
 	}
 
-	// Try GGUF backend
-	if ggufModel, ok := s.ggufModels[modelKey]; ok && ggufModel != nil {
+	// Try GGUF backend (with lazy loading)
+	var ggufModel *gguf.Model
+	if s.ggufModels[modelKey] != nil {
+		ggufModel = s.ggufModels[modelKey]
+	} else if s.modelCache != nil {
+		// Phase 4: Try lazy loading GGUF model from cache
+		loadedGGUF, err := s.modelCache.GetGGUFModel(ctx, modelKey)
+		if err == nil && loadedGGUF != nil {
+			ggufModel = loadedGGUF
+			// Cache it for future use
+			s.ggufModels[modelKey] = loadedGGUF
+		}
+	}
+
+	if ggufModel != nil {
 		ggufResult, err := s.processGGUFBackend(ctx, ggufModel, prompt, maxTokens, req.Temperature, topP, topK, modelKey)
 		if err == nil {
 			result.Content = ggufResult.Content
