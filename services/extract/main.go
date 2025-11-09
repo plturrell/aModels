@@ -1361,7 +1361,13 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			if node.Type == "root" || node.Type == "project" || node.Type == "system" || node.Type == "information-system" {
 				continue
 			}
-			element := ConvertNodeToDataElement(node, req.ProjectID, req.SystemID)
+			// Use AI enrichment if enabled, otherwise use basic conversion
+			var element DataElementRequest
+			if s.catalogClient != nil {
+				element = s.catalogClient.ConvertNodeToDataElementWithAI(ctx, node, req.ProjectID, req.SystemID)
+			} else {
+				element = ConvertNodeToDataElement(node, req.ProjectID, req.SystemID)
+			}
 			dataElements = append(dataElements, element)
 		}
 

@@ -15,13 +15,15 @@ import (
 
 // CatalogClient provides HTTP client for catalog service integration.
 type CatalogClient struct {
-	baseURL       string
-	httpClient    *http.Client
-	logger        *log.Logger
-	enabled       bool
-	maxRetries    int
-	retryDelay    time.Duration
-	circuitBreaker *CircuitBreaker
+	baseURL          string
+	httpClient       *http.Client
+	logger           *log.Logger
+	enabled          bool
+	maxRetries       int
+	retryDelay       time.Duration
+	circuitBreaker   *CircuitBreaker
+	deepAgentsClient *DeepAgentsClient
+	aiEnrichmentEnabled bool
 }
 
 // CircuitBreaker implements circuit breaker pattern for resilient service calls.
@@ -115,6 +117,9 @@ func (cb *CircuitBreaker) State() string {
 	return cb.state
 }
 
+// Note: DeepAgentsClient type is defined in deepagents.go
+// We reference it here for the catalog client integration
+
 // NewCatalogClient creates a new catalog service client.
 func NewCatalogClient(baseURL string, logger *log.Logger) *CatalogClient {
 	if baseURL == "" {
@@ -124,7 +129,7 @@ func NewCatalogClient(baseURL string, logger *log.Logger) *CatalogClient {
 		}
 	}
 
-	return &CatalogClient{
+	client := &CatalogClient{
 		baseURL:       baseURL,
 		httpClient:    &http.Client{Timeout: 30 * time.Second},
 		logger:        logger,
@@ -132,7 +137,20 @@ func NewCatalogClient(baseURL string, logger *log.Logger) *CatalogClient {
 		maxRetries:    3,
 		retryDelay:    1 * time.Second,
 		circuitBreaker: NewCircuitBreaker(5, 30*time.Second, logger), // 5 failures, 30s timeout
+		aiEnrichmentEnabled: os.Getenv("EXTRACT_AI_ENRICHMENT_ENABLED") == "true",
 	}
+
+	// Initialize DeepAgents client if AI enrichment is enabled
+	// Note: We use the DeepAgentsClient from deepagents.go
+	if client.aiEnrichmentEnabled {
+		// Use the existing DeepAgents client from extract service
+		client.deepAgentsClient = NewDeepAgentsClient(logger)
+		if logger != nil {
+			logger.Printf("AI metadata enrichment enabled for catalog client")
+		}
+	}
+
+	return client
 }
 
 // DataElementRequest represents a data element to register in the catalog.
@@ -319,6 +337,56 @@ func (c *CatalogClient) RegisterDataElementsBulk(ctx context.Context, elements [
 	}
 
 	return nil
+}
+
+// enrichMetadataWithAI enriches node metadata using DeepAgents.
+func (c *CatalogClient) enrichMetadataWithAI(ctx context.Context, node Node, projectID, systemID string) (*DataElementRequest, error) {
+	if c.deepAgentsClient == nil || !c.aiEnrichmentEnabled {
+		return nil, nil // Not enabled, return nil to use basic conversion
+	}
+
+	// Build context for AI analysis
+	contextStr := fmt.Sprintf("Node: %s (Type: %s, Label: %s)", node.ID, node.Type, node.Label)
+	if node.Props != nil {
+		contextStr += "\nProperties: "
+		for k, v := range node.Props {
+			contextStr += fmt.Sprintf("%s=%v; ", k, v)
+		}
+	}
+
+	// Call DeepAgents for analysis
+	analysis, err := c.deepAgentsClient.AnalyzeKnowledgeGraph(ctx, contextStr, projectID, systemID)
+	if err != nil || analysis == nil {
+		// Non-fatal - return nil to use basic conversion
+		if c.logger != nil {
+			c.logger.Printf("AI enrichment failed for node %s: %v", node.ID, err)
+		}
+		return nil, nil
+	}
+
+	// For now, return nil to fall back to basic conversion
+	// In a full implementation, we'd parse the analysis result to enhance definition, concept, etc.
+	return nil, nil
+}
+
+// ConvertNodeToDataElementWithAI converts with optional AI enrichment.
+func (c *CatalogClient) ConvertNodeToDataElementWithAI(ctx context.Context, node Node, projectID, systemID string) DataElementRequest {
+	// Try AI enrichment first
+	if c.aiEnrichmentEnabled && c.deepAgentsClient != nil {
+		enriched, err := c.enrichMetadataWithAI(ctx, node, projectID, systemID)
+		if err == nil && enriched != nil {
+			enriched.Metadata["ai_enriched"] = "true"
+			return *enriched
+		}
+		// Fall through to basic conversion if enrichment failed
+	}
+
+	// Basic conversion
+	element := ConvertNodeToDataElement(node, projectID, systemID)
+	if c.aiEnrichmentEnabled {
+		element.Metadata["ai_enrichment_attempted"] = "true"
+	}
+	return element
 }
 
 // ConvertNodeToDataElement converts an extracted node to a catalog data element request.

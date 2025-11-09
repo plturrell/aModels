@@ -1,13 +1,16 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/plturrell/aModels/services/catalog/iso11179"
+	"github.com/plturrell/aModels/services/catalog/research"
 )
 
 // CacheInterface defines the cache interface.
@@ -18,17 +21,41 @@ type CacheInterface interface {
 
 // CatalogHandlers provides HTTP handlers for the catalog API.
 type CatalogHandlers struct {
-	registry *iso11179.MetadataRegistry
-	logger   *log.Logger
-	cache    CacheInterface
+	registry          *iso11179.MetadataRegistry
+	logger            *log.Logger
+	cache             CacheInterface
+	deepAgentsClient  *DeepAgentsClient
+	deepResearchClient *research.DeepResearchClient
+	aiDeduplicationEnabled bool
+	aiValidationEnabled    bool
+	aiResearchEnabled      bool
 }
 
 // NewCatalogHandlers creates new catalog handlers.
 func NewCatalogHandlers(registry *iso11179.MetadataRegistry, logger *log.Logger) *CatalogHandlers {
-	return &CatalogHandlers{
+	handlers := &CatalogHandlers{
 		registry: registry,
 		logger:   logger,
+		aiDeduplicationEnabled: os.Getenv("CATALOG_AI_DEDUPLICATION_ENABLED") == "true",
+		aiValidationEnabled:    os.Getenv("CATALOG_AI_VALIDATION_ENABLED") == "true",
+		aiResearchEnabled:      os.Getenv("CATALOG_AI_RESEARCH_ENABLED") == "true",
 	}
+
+	// Initialize DeepAgents client if any AI feature is enabled
+	if handlers.aiDeduplicationEnabled || handlers.aiValidationEnabled {
+		handlers.deepAgentsClient = NewDeepAgentsClient(logger)
+	}
+
+	// Initialize DeepResearch client if research is enabled
+	if handlers.aiResearchEnabled {
+		deepResearchURL := os.Getenv("DEEP_RESEARCH_URL")
+		if deepResearchURL == "" {
+			deepResearchURL = "http://localhost:8085"
+		}
+		handlers.deepResearchClient = research.NewDeepResearchClient(deepResearchURL, logger)
+	}
+
+	return handlers
 }
 
 // SetCache sets the cache for the handlers.
@@ -112,8 +139,95 @@ func (h *CatalogHandlers) HandleCreateDataElement(w http.ResponseWriter, r *http
 	writeJSON(w, http.StatusCreated, h.dataElementToMap(element))
 }
 
+// checkDuplicatesWithDeepAgents checks for duplicates using DeepAgents.
+func (h *CatalogHandlers) checkDuplicatesWithDeepAgents(ctx context.Context, candidates []CandidateElement) (map[int]DeduplicationSuggestion, error) {
+	if h.deepAgentsClient == nil || !h.aiDeduplicationEnabled {
+		return nil, nil
+	}
+
+	// Get existing elements for context
+	existing := h.getExistingElementsForDeduplication()
+
+	response, err := h.deepAgentsClient.CheckDuplicates(ctx, candidates, existing)
+	if err != nil || response == nil {
+		return nil, err
+	}
+
+	// Convert to map by index
+	suggestions := make(map[int]DeduplicationSuggestion)
+	for _, suggestion := range response.Suggestions {
+		suggestions[suggestion.Index] = suggestion
+	}
+
+	return suggestions, nil
+}
+
+// validateWithDeepAgents validates definitions using DeepAgents.
+func (h *CatalogHandlers) validateWithDeepAgents(ctx context.Context, candidates []CandidateElement) (map[int]ValidationSuggestion, error) {
+	if h.deepAgentsClient == nil || !h.aiValidationEnabled {
+		return nil, nil
+	}
+
+	response, err := h.deepAgentsClient.ValidateDefinitions(ctx, candidates)
+	if err != nil || response == nil {
+		return nil, err
+	}
+
+	// Convert to map by index
+	suggestions := make(map[int]ValidationSuggestion)
+	for _, suggestion := range response.Suggestions {
+		suggestions[suggestion.Index] = suggestion
+	}
+
+	return suggestions, nil
+}
+
+// researchSimilarElements researches similar elements using Open Deep Research.
+func (h *CatalogHandlers) researchSimilarElements(ctx context.Context, name, definition string) (*research.ResearchReport, error) {
+	if h.deepResearchClient == nil || !h.aiResearchEnabled {
+		return nil, nil
+	}
+
+	query := fmt.Sprintf("Find data elements similar to '%s' with definition: %s", name, definition)
+	req := &research.ResearchRequest{
+		Query: query,
+		Context: map[string]interface{}{
+			"name":       name,
+			"definition": definition,
+		},
+		Tools: []string{"sparql_query", "catalog_search"},
+	}
+
+	report, err := h.deepResearchClient.Research(ctx, req)
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Printf("Deep Research failed: %v", err)
+		}
+		return nil, nil // Non-fatal
+	}
+
+	return report, nil
+}
+
+// getExistingElementsForDeduplication gets existing elements for deduplication context.
+func (h *CatalogHandlers) getExistingElementsForDeduplication() []ExistingElement {
+	var existing []ExistingElement
+	for _, element := range h.registry.DataElements {
+		existing = append(existing, ExistingElement{
+			Identifier:           element.Identifier,
+			Name:                 element.Name,
+			Definition:           element.Definition,
+			DataElementConceptID: element.DataElementConceptID,
+			RepresentationID:     element.RepresentationID,
+		})
+	}
+	return existing
+}
+
 // HandleCreateDataElementsBulk handles POST /catalog/data-elements/bulk.
 func (h *CatalogHandlers) HandleCreateDataElementsBulk(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	
 	var req []struct {
 		Name                 string            `json:"name"`
 		DataElementConceptID string            `json:"data_element_concept_id"`
@@ -133,8 +247,43 @@ func (h *CatalogHandlers) HandleCreateDataElementsBulk(w http.ResponseWriter, r 
 		return
 	}
 
+	// Convert to candidate elements for AI processing
+	candidates := make([]CandidateElement, len(req))
+	for i, elemReq := range req {
+		candidates[i] = CandidateElement{
+			Name:                 elemReq.Name,
+			Definition:           elemReq.Definition,
+			DataElementConceptID: elemReq.DataElementConceptID,
+			RepresentationID:     elemReq.RepresentationID,
+			Metadata:             elemReq.Metadata,
+		}
+	}
+
+	// AI Processing: Deduplication
+	var duplicateSuggestions map[int]DeduplicationSuggestion
+	if h.aiDeduplicationEnabled {
+		var err error
+		duplicateSuggestions, err = h.checkDuplicatesWithDeepAgents(ctx, candidates)
+		if err != nil && h.logger != nil {
+			h.logger.Printf("Warning: DeepAgents deduplication failed: %v", err)
+		}
+	}
+
+	// AI Processing: Validation
+	var validationSuggestions map[int]ValidationSuggestion
+	if h.aiValidationEnabled {
+		var err error
+		validationSuggestions, err = h.validateWithDeepAgents(ctx, candidates)
+		if err != nil && h.logger != nil {
+			h.logger.Printf("Warning: DeepAgents validation failed: %v", err)
+		}
+	}
+
 	var created []map[string]any
 	var errors []map[string]any
+	var aiSuggestions []map[string]any
+	var duplicatesDetected int
+	var researchFindings []map[string]any
 
 	for i, elemReq := range req {
 		if elemReq.Name == "" || elemReq.DataElementConceptID == "" || elemReq.RepresentationID == "" {
@@ -143,6 +292,35 @@ func (h *CatalogHandlers) HandleCreateDataElementsBulk(w http.ResponseWriter, r 
 				"error": "name, data_element_concept_id, and representation_id are required",
 			})
 			continue
+		}
+
+		// Check for duplicates (AI-powered)
+		if suggestion, ok := duplicateSuggestions[i]; ok && suggestion.Action == "skip" {
+			duplicatesDetected++
+			if h.logger != nil {
+				h.logger.Printf("Skipping duplicate element %d: %s (similar to %s)", i, elemReq.Name, suggestion.SimilarTo)
+			}
+			aiSuggestions = append(aiSuggestions, map[string]any{
+				"index":  i,
+				"action": "skipped_duplicate",
+				"reason": suggestion.Reason,
+				"similar_to": suggestion.SimilarTo,
+			})
+			continue
+		}
+
+		// Research similar elements (optional, non-blocking)
+		var researchReport *research.ResearchReport
+		if h.aiResearchEnabled {
+			var err error
+			researchReport, err = h.researchSimilarElements(ctx, elemReq.Name, elemReq.Definition)
+			if err == nil && researchReport != nil && researchReport.Report != nil {
+				researchFindings = append(researchFindings, map[string]any{
+					"index":   i,
+					"topic":   researchReport.Report.Topic,
+					"summary": researchReport.Report.Summary,
+				})
+			}
 		}
 
 		// Generate identifier if not provided
@@ -167,6 +345,20 @@ func (h *CatalogHandlers) HandleCreateDataElementsBulk(w http.ResponseWriter, r 
 			}
 		}
 
+		// Apply AI validation suggestions (if any)
+		if suggestion, ok := validationSuggestions[i]; ok {
+			element.AddMetadata("ai_validation_score", fmt.Sprintf("%.2f", suggestion.Score))
+			if len(suggestion.Improvements) > 0 {
+				element.AddMetadata("ai_validation_improvements", strings.Join(suggestion.Improvements, "; "))
+				aiSuggestions = append(aiSuggestions, map[string]any{
+					"index":        i,
+					"type":         "validation",
+					"score":        suggestion.Score,
+					"improvements": suggestion.Improvements,
+				})
+			}
+		}
+
 		// Validate
 		if validationErrors := h.registry.ValidateDataElement(element); len(validationErrors) > 0 {
 			errors = append(errors, map[string]any{
@@ -182,12 +374,24 @@ func (h *CatalogHandlers) HandleCreateDataElementsBulk(w http.ResponseWriter, r 
 		created = append(created, h.dataElementToMap(element))
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]any{
+	// Build response
+	response := map[string]any{
 		"created": len(created),
 		"errors":  len(errors),
 		"results": created,
 		"failures": errors,
-	})
+	}
+
+	// Add AI enhancements if available
+	if len(aiSuggestions) > 0 || duplicatesDetected > 0 || len(researchFindings) > 0 {
+		response["ai_suggestions"] = aiSuggestions
+		response["duplicates_detected"] = duplicatesDetected
+		if len(researchFindings) > 0 {
+			response["research_findings"] = researchFindings
+		}
+	}
+
+	writeJSON(w, http.StatusCreated, response)
 }
 
 // HandleGetOntology handles GET /catalog/ontology.
