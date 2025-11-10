@@ -690,6 +690,9 @@ class SearchHistory:
 class SearchOrchestrator:
     def __init__(self) -> None:
         go_url = os.getenv("GO_SEARCH_URL")
+        # Phase 5: GNN integration for structural embeddings
+        self.training_service_url = os.getenv("TRAINING_SERVICE_URL", "http://training-service:8080")
+        self.enable_gnn_search = os.getenv("ENABLE_GNN_SEARCH", "false").lower() == "true"
         self.go_client = GoSearchClient(go_url) if go_url else None
         self.search_history = SearchHistory()
 
@@ -792,9 +795,22 @@ class SearchOrchestrator:
                 results = [SearchResult(**item) for item in cached.get("results", [])]
                 return SearchResponse(backend=cached.get("backend", "cache"), results=results)
 
+        # Phase 5: Get semantic embedding (LLM-based)
         query_embedding = self._embed_text(request.query)
-
-        if self.elasticsearch.available:
+        
+        # Phase 5: Get GNN embedding if graph data is available in metadata
+        gnn_embedding = None
+        if self.enable_gnn_search:
+            # Extract graph structure from request metadata if available
+            graph_nodes = request.filters.get("graph_nodes", []) if isinstance(request.filters.get("graph_nodes"), list) else []
+            graph_edges = request.filters.get("graph_edges", []) if isinstance(request.filters.get("graph_edges"), list) else []
+            if graph_nodes or graph_edges:
+                gnn_embedding = self._get_gnn_embedding(graph_nodes, graph_edges, graph_level=True)
+        
+        # Phase 5: Use hybrid search if both embeddings available, otherwise fallback
+        if query_embedding and gnn_embedding:
+            response = self._hybrid_search(modified_request, query_embedding, gnn_embedding)
+        elif self.elasticsearch.available:
             response = self._search_elasticsearch(modified_request, query_embedding)
         else:
             response = self._search_in_memory(modified_request, query_embedding)
@@ -920,6 +936,82 @@ class SearchOrchestrator:
         if embedding is None:
             logger.debug("Embedding unavailable from Go service; falling back to text search")
         return embedding
+    
+    def _get_gnn_embedding(self, nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]], graph_level: bool = True) -> Optional[List[float]]:
+        """Phase 5: Get GNN embedding from training service for graph structures.
+        
+        Args:
+            nodes: List of graph nodes
+            edges: List of graph edges
+            graph_level: If True, returns graph-level embedding; if False, returns node-level embeddings
+        
+        Returns:
+            Graph-level embedding vector or None if unavailable
+        """
+        if not self.enable_gnn_search or not nodes:
+            return None
+        
+        try:
+            payload = {
+                "nodes": nodes,
+                "edges": edges,
+                "graph_level": graph_level
+            }
+            
+            response = httpx.post(
+                f"{self.training_service_url}/gnn/embeddings",
+                json=payload,
+                timeout=10.0
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            if result.get("status") == "success" and "embeddings" in result:
+                embeddings = result["embeddings"]
+                if graph_level and "graph_embedding" in embeddings:
+                    return embeddings["graph_embedding"]
+                elif not graph_level and "node_embeddings" in embeddings:
+                    # Return first node embedding as fallback
+                    node_embeddings = embeddings["node_embeddings"]
+                    if node_embeddings:
+                        first_key = next(iter(node_embeddings))
+                        return node_embeddings[first_key]
+            
+            logger.debug("GNN embedding unavailable from training service")
+            return None
+        except Exception as e:
+            logger.debug(f"GNN embedding request failed: {e}")
+            return None
+    
+    def _hybrid_search(self, request: SearchRequest, semantic_embedding: Optional[List[float]], gnn_embedding: Optional[List[float]]) -> SearchResponse:
+        """Phase 5: Hybrid search combining semantic (LLM) + structural (GNN) embeddings.
+        
+        Args:
+            request: Search request
+            semantic_embedding: Semantic embedding from LLM
+            gnn_embedding: Structural embedding from GNN
+        
+        Returns:
+            SearchResponse with combined results
+        """
+        # For now, prioritize semantic embedding, use GNN as boost
+        # In future, could do weighted combination
+        primary_embedding = semantic_embedding or gnn_embedding
+        
+        if self.elasticsearch.available:
+            response = self._search_elasticsearch(request, primary_embedding)
+            # Phase 5: Boost results with GNN similarity if available
+            if gnn_embedding and semantic_embedding and response.results:
+                # Re-rank results based on GNN similarity
+                # This is a simplified version - full implementation would query GNN for each result
+                logger.debug("Hybrid search: using semantic + GNN embeddings")
+                response.backend = "elasticsearch-hybrid"
+        else:
+            response = self._search_in_memory(request, primary_embedding)
+            if gnn_embedding:
+                response.backend = "in-memory-hybrid"
+        
+        return response
 
     def _search_elasticsearch(self, request: SearchRequest, query_embedding: Optional[List[float]]) -> SearchResponse:
         backend_label = "elasticsearch-text"

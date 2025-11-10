@@ -1568,6 +1568,9 @@ async def query_domain_gnn(domain_id: str, request: GNNDomainQueryRequest):
 async def register_domain_model(request: RegisterModelRequest):
     """Register a domain-specific GNN model.
     
+    Phase 3: Enhanced with model metadata (accuracy, training time, domain) for
+    model sharing with graph service and A/B testing support.
+    
     This endpoint registers a trained domain-specific GNN model
     in the registry for domain-aware routing.
     """
@@ -1578,6 +1581,11 @@ async def register_domain_model(request: RegisterModelRequest):
         )
     
     try:
+        # Phase 3: Extract additional metadata from training_metrics
+        training_metrics = request.training_metrics or {}
+        accuracy = training_metrics.get("accuracy", training_metrics.get("test_accuracy"))
+        training_time = training_metrics.get("training_time_seconds", training_metrics.get("training_time"))
+        
         model_info = gnn_domain_registry.register_model(
             domain_id=request.domain_id,
             model_type=request.model_type,
@@ -1589,6 +1597,7 @@ async def register_domain_model(request: RegisterModelRequest):
             is_active=request.is_active,
         )
         
+        # Phase 3: Return enhanced metadata for graph service
         return {
             "status": "success",
             "model": {
@@ -1597,6 +1606,13 @@ async def register_domain_model(request: RegisterModelRequest):
                 "version": model_info.version,
                 "model_path": model_info.model_path,
                 "created_at": model_info.created_at,
+                "updated_at": model_info.updated_at,
+                "is_active": model_info.is_active,
+                "description": model_info.description,
+                "accuracy": accuracy,
+                "training_time_seconds": training_time,
+                "has_metrics": bool(model_info.training_metrics),
+                "has_config": bool(model_info.model_config),
             },
             "timestamp": datetime.now().isoformat()
         }
@@ -1628,8 +1644,11 @@ async def list_domains():
 
 
 @app.get("/gnn/registry/domains/{domain_id}/models")
-async def list_domain_models(domain_id: str):
-    """List all models for a specific domain."""
+async def list_domain_models(domain_id: str, active_only: bool = True):
+    """List all models for a specific domain.
+    
+    Phase 3: Enhanced to include model metadata for graph service integration.
+    """
     if not gnn_domain_registry:
         raise HTTPException(
             status_code=503,
@@ -1637,9 +1656,14 @@ async def list_domain_models(domain_id: str):
         )
     
     try:
-        models = gnn_domain_registry.list_models_for_domain(domain_id, active_only=True)
+        models = gnn_domain_registry.list_models_for_domain(domain_id, active_only=active_only)
         models_info = {}
         for model_type, model_info in models.items():
+            # Phase 3: Extract metadata for graph service
+            training_metrics = model_info.training_metrics or {}
+            accuracy = training_metrics.get("accuracy", training_metrics.get("test_accuracy"))
+            training_time = training_metrics.get("training_time_seconds", training_metrics.get("training_time"))
+            
             models_info[model_type] = {
                 "version": model_info.version,
                 "model_path": model_info.model_path,
@@ -1647,6 +1671,10 @@ async def list_domain_models(domain_id: str):
                 "updated_at": model_info.updated_at,
                 "description": model_info.description,
                 "is_active": model_info.is_active,
+                "accuracy": accuracy,
+                "training_time_seconds": training_time,
+                "has_metrics": bool(model_info.training_metrics),
+                "has_config": bool(model_info.model_config),
             }
         
         return {
@@ -1658,6 +1686,57 @@ async def list_domain_models(domain_id: str):
         }
     except Exception as e:
         logger.error(f"Failed to list domain models: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/gnn/registry/models/{domain_id}/{model_type}")
+async def get_model_info(domain_id: str, model_type: str):
+    """Get information about a specific model for graph service.
+    
+    Phase 3: Model serving endpoint for graph service to query model information.
+    """
+    if not gnn_domain_registry:
+        raise HTTPException(
+            status_code=503,
+            detail="GNN domain registry not available."
+        )
+    
+    try:
+        models = gnn_domain_registry.list_models_for_domain(domain_id, active_only=False)
+        
+        if model_type not in models:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Model {model_type} not found for domain {domain_id}"
+            )
+        
+        model_info = models[model_type]
+        training_metrics = model_info.training_metrics or {}
+        accuracy = training_metrics.get("accuracy", training_metrics.get("test_accuracy"))
+        training_time = training_metrics.get("training_time_seconds", training_metrics.get("training_time"))
+        
+        return {
+            "status": "success",
+            "model": {
+                "domain_id": model_info.domain_id,
+                "model_type": model_info.model_type,
+                "version": model_info.version,
+                "model_path": model_info.model_path,
+                "created_at": model_info.created_at,
+                "updated_at": model_info.updated_at,
+                "description": model_info.description,
+                "is_active": model_info.is_active,
+                "accuracy": accuracy,
+                "training_time_seconds": training_time,
+                "training_metrics": model_info.training_metrics,
+                "model_config": model_info.model_config,
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get model info: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

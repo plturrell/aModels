@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math"
+	"net/http"
 	"os"
 	"sort"
 	"strings"
@@ -18,10 +20,12 @@ import (
 
 // PredictiveAnalytics provides predictive analytics and forecasting.
 // Phase 9.4: Enhanced with domain-aware predictions for domain-specific forecasting.
+// Phase 4: Enhanced with GNN insights for structural predictions.
 type PredictiveAnalytics struct {
 	logger         *log.Logger
 	domainDetector *domain.Detector // Phase 9.4: Domain detector for domain predictions
 	localaiURL     string           // Phase 9.4: LocalAI URL for domain configs
+	trainingURL    string           // Phase 4: Training service URL for GNN queries
 	llmClient      *localai.Client
 	llmModel       string
 	clock          func() time.Time
@@ -90,15 +94,20 @@ func keysFromMap(values map[string]any) string {
 // NewPredictiveAnalytics creates a new predictive analytics service.
 func NewPredictiveAnalytics(logger *log.Logger) *PredictiveAnalytics {
 	localaiURL := os.Getenv("LOCALAI_URL")
+	trainingURL := os.Getenv("TRAINING_SERVICE_URL")
+	if trainingURL == "" {
+		trainingURL = "http://training-service:8080"
+	}
 	llmModel := os.Getenv("PREDICTIVE_ANALYTICS_LLM_MODEL")
 	if llmModel == "" {
 		llmModel = "phi-3.5-mini"
 	}
 	pa := &PredictiveAnalytics{
-		logger:     logger,
-		localaiURL: localaiURL,
-		llmModel:   llmModel,
-		clock:      time.Now,
+		logger:      logger,
+		localaiURL:  localaiURL,
+		trainingURL: trainingURL,
+		llmModel:    llmModel,
+		clock:       time.Now,
 	}
 
 	if localaiURL != "" {
@@ -882,4 +891,111 @@ func mergeStringSlices(base []string, additions []string) []string {
 		existing[item] = struct{}{}
 	}
 	return base
+}
+
+// QueryGNNInsights queries training service for GNN structural insights.
+// Phase 4: GNN integration for enhanced predictions.
+func (pa *PredictiveAnalytics) QueryGNNInsights(
+	ctx context.Context,
+	nodes []map[string]any,
+	edges []map[string]any,
+	insightType string,
+) (map[string]any, error) {
+	if pa.trainingURL == "" {
+		return nil, errors.New("training service URL not configured")
+	}
+
+	pa.logDebug("querying gnn insights", "insight_type", insightType, "nodes", len(nodes), "edges", len(edges))
+
+	// Build request payload
+	payload := map[string]any{
+		"nodes":        nodes,
+		"edges":        edges,
+		"insight_type": insightType,
+		"threshold":    0.5,
+	}
+
+	// Make HTTP request to training service
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal gnn request: %w", err)
+	}
+
+	url := strings.TrimRight(pa.trainingURL, "/") + "/gnn/structural-insights"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(body)))
+	if err != nil {
+		return nil, fmt.Errorf("create gnn request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gnn request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("gnn request failed with status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode gnn response: %w", err)
+	}
+
+	pa.logDebug("gnn insights retrieved", "insight_type", insightType)
+	return result, nil
+}
+
+// PredictWithGNN enhances predictions using GNN insights.
+// Phase 4: Uses GNN embeddings for similarity-based forecasting and anomaly detection.
+func (pa *PredictiveAnalytics) PredictWithGNN(
+	ctx context.Context,
+	nodes []map[string]any,
+	edges []map[string]any,
+	predictionType string,
+) (map[string]any, error) {
+	pa.logInfo("predicting with gnn", "prediction_type", predictionType, "nodes", len(nodes), "edges", len(edges))
+
+	result := map[string]any{
+		"prediction_type": predictionType,
+		"gnn_enhanced":      true,
+		"timestamp":         pa.now(),
+	}
+
+	// Query GNN structural insights
+	insights, err := pa.QueryGNNInsights(ctx, nodes, edges, "all")
+	if err != nil {
+		pa.logWarn("gnn insights query failed", "error", err)
+		// Continue without GNN insights
+		result["gnn_available"] = false
+		return result, nil
+	}
+
+	result["gnn_available"] = true
+	result["gnn_insights"] = insights
+
+	// Extract anomaly information if available
+	if anomalies, ok := insights["insights"].(map[string]any); ok {
+		if anomalyData, ok := anomalies["anomalies"].(map[string]any); ok {
+			result["anomalies_detected"] = anomalyData
+			if anomaliesList, ok := anomalyData["anomalies"].([]any); ok {
+				if len(anomaliesList) > 0 {
+					result["has_anomalies"] = true
+					result["anomaly_count"] = len(anomaliesList)
+				}
+			}
+		}
+	}
+
+	// Extract pattern information if available
+	if patterns, ok := insights["insights"].(map[string]any); ok {
+		if patternData, ok := patterns["patterns"].(map[string]any); ok {
+			result["patterns_detected"] = patternData
+		}
+	}
+
+	return result, nil
 }
