@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Box,
   Typography,
@@ -32,6 +32,8 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import { Panel } from "../../../components/Panel";
+import { AnalyticsAIAssistant } from "../../../components/AnalyticsAIAssistant";
+import { PredictiveAnalytics } from "../../../components/PredictiveAnalytics";
 import type { ProcessingRequest } from "../../../api/perplexity";
 
 interface AnalyticsViewProps {
@@ -155,6 +157,37 @@ export function AnalyticsView({ historyData, loading, error }: AnalyticsViewProp
 
   return (
     <Box>
+      {/* AI Assistant */}
+      {analytics && (
+        <>
+          <AnalyticsAIAssistant
+            analyticsData={analytics}
+            onInsight={(insight) => {
+              console.log("AI Insight:", insight);
+            }}
+          />
+          <PredictiveAnalytics
+            analyticsData={analytics}
+            onPrediction={(prediction) => {
+              console.log("Prediction:", prediction);
+            }}
+          />
+        </>
+      )}
+
+      {/* Search within Analytics */}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <TextField
+          fullWidth
+          size="small"
+          placeholder="Search analytics metrics, trends, insights..."
+          sx={{ mb: 1 }}
+        />
+        <Typography variant="caption" color="text.secondary">
+          Search through analytics data, metrics, and insights
+        </Typography>
+      </Paper>
+
       {/* Real-time Toggle */}
       <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1 }}>
         <FormControlLabel

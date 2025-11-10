@@ -74,6 +74,58 @@
       
       <div id="status" class="sap-message sap-message-info" role="alert" aria-live="assertive"></div>
       
+      <!-- Search Quick View -->
+      <div id="search-quickview" class="sap-card" role="region" aria-label="Quick Search">
+        <div class="sap-card-content">
+          <div class="sap-text-primary" style="font-weight:600; margin-bottom:8px;">Quick Search</div>
+          <div style="display:flex; gap:8px; margin-bottom:8px;">
+            <input 
+              type="text" 
+              id="quick-search-input" 
+              class="sap-input" 
+              placeholder="Search..."
+              style="flex:1; padding:8px; border:1px solid var(--sap-border); border-radius:4px; font-size:14px;"
+            />
+            <button id="quick-search-btn" class="sap-button sap-button-primary" aria-label="Search" style="min-width:40px;">
+              🔍
+            </button>
+          </div>
+          <div id="search-results-preview" style="min-height:40px; max-height:120px; overflow-y:auto; display:none; font-size:12px;">
+            <div class="sap-text-secondary">No results yet</div>
+          </div>
+          <button id="open-search-shell" class="sap-button sap-button-transparent" style="width:100%; margin-top:8px; display:none; font-size:12px;">
+            Open in Shell →
+          </button>
+        </div>
+      </div>
+
+      <!-- LocalAI Chat Quick View -->
+      <div id="localai-quickview" class="sap-card" role="region" aria-label="LocalAI Chat">
+        <div class="sap-card-content">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div class="sap-text-primary" style="font-weight:600;">LocalAI Chat</div>
+            <button id="open-chat-shell" class="sap-button sap-button-transparent" aria-label="Open full chat" style="font-size:11px;">
+              Open Full →
+            </button>
+          </div>
+          <div style="display:flex; gap:8px; margin-bottom:8px;">
+            <input 
+              type="text" 
+              id="chat-input" 
+              class="sap-input" 
+              placeholder="Ask anything..."
+              style="flex:1; padding:8px; border:1px solid var(--sap-border); border-radius:4px; font-size:14px;"
+            />
+            <button id="chat-send-btn" class="sap-button sap-button-primary" aria-label="Send" style="min-width:40px;">
+              ➤
+            </button>
+          </div>
+          <div id="chat-history" style="max-height:100px; overflow-y:auto; font-size:11px; display:none;">
+            <div class="sap-text-secondary">No messages yet</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Analytics Quick View -->
       <div id="analytics-quickview" class="sap-card" style="display:none;" role="region" aria-label="Analytics Quick View">
         <div class="sap-card-content">

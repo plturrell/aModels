@@ -1,6 +1,7 @@
 /**
  * LocalAI Module - Apple-Level Chat
  * Premium message bubbles, smooth animations, delightful UX
+ * Now connected to real LocalAI API
  */
 
 import React, { useState, useRef, useEffect } from "react";
@@ -12,23 +13,33 @@ import {
   Container,
   alpha,
   Fade,
-  Grow
+  Grow,
+  Alert,
+  Chip,
+  Link
 } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import { PremiumCard } from "../../components/PremiumCard";
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-}
+import { useLocalAIChatStore } from "../../state/useLocalAIChatStore";
+import { useServiceContext } from "../../hooks/useServiceContext";
 
 export function LocalAIModule() {
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  const {
+    messages,
+    followUps,
+    pending,
+    error,
+    model,
+    sendMessage,
+    applyFollowUp,
+    reset
+  } = useLocalAIChatStore();
+  
+  const { getContextForLocalAI, setLocalAIContext } = useServiceContext();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -36,30 +47,31 @@ export function LocalAIModule() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, pending]);
 
   const handleSend = async () => {
-    if (!input.trim()) return;
-
-    const userMessage: Message = { 
-      role: "user", 
-      content: input,
-      timestamp: new Date()
-    };
-    setMessages((prev) => [...prev, userMessage]);
+    if (!input.trim() || pending) return;
+    
+    const message = input.trim();
     setInput("");
-    setSending(true);
+    
+    // Get cross-service context and include it in the message
+    const context = getContextForLocalAI();
+    const enhancedMessage = context && context !== "No context available."
+      ? `${message}\n\nContext from other services:\n${context}`
+      : message;
+    
+    // Update LocalAI context
+    setLocalAIContext({
+      lastMessage: message,
+      context: context
+    });
+    
+    await sendMessage(enhancedMessage);
+  };
 
-    // Simulate AI response with typing delay
-    setTimeout(() => {
-      const aiMessage: Message = {
-        role: "assistant",
-        content: "I'm a simulated AI response. In production, I would connect to your LocalAI models and provide intelligent, context-aware responses based on your input.",
-        timestamp: new Date()
-      };
-      setMessages((prev) => [...prev, aiMessage]);
-      setSending(false);
-    }, 1500);
+  const handleFollowUp = async (prompt: string) => {
+    await applyFollowUp(prompt);
   };
 
   return (
@@ -70,9 +82,23 @@ export function LocalAIModule() {
           <Typography variant="h4" sx={{ fontWeight: 700, mb: 1 }}>
             Chat
           </Typography>
-          <Typography variant="body1" sx={{ color: 'text.secondary' }}>
-            Powered by LocalAI models
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+            <Typography variant="body1" sx={{ color: 'text.secondary' }}>
+              Powered by LocalAI
+            </Typography>
+            {model && (
+              <Chip 
+                label={model} 
+                size="small" 
+                sx={{ 
+                  height: 20, 
+                  fontSize: '0.65rem',
+                  bgcolor: alpha('#007AFF', 0.1),
+                  color: 'primary.main'
+                }} 
+              />
+            )}
+          </Box>
         </Box>
 
         {/* Messages Container */}
@@ -124,8 +150,8 @@ export function LocalAIModule() {
             </Fade>
           )}
 
-          {messages.map((msg, index) => (
-            <Grow in key={index} timeout={400}>
+          {messages.map((msg) => (
+            <Grow in key={msg.id} timeout={400}>
               <Box
                 sx={{
                   display: 'flex',
@@ -149,8 +175,10 @@ export function LocalAIModule() {
                     maxWidth: '75%',
                     background: msg.role === 'user' 
                       ? 'linear-gradient(135deg, #007AFF 0%, #5AC8FA 100%)'
+                      : msg.error
+                      ? alpha('#f44336', 0.1)
                       : '#FFFFFF',
-                    color: msg.role === 'user' ? '#FFFFFF' : 'text.primary',
+                    color: msg.role === 'user' ? '#FFFFFF' : msg.error ? 'error.main' : 'text.primary',
                     border: msg.role === 'assistant' ? `1px solid ${alpha('#000', 0.06)}` : 'none',
                     boxShadow: msg.role === 'user'
                       ? '0px 8px 24px rgba(0, 122, 255, 0.25)'
@@ -159,20 +187,31 @@ export function LocalAIModule() {
                   hoverable={false}
                 >
                   <Box sx={{ p: 2.5 }}>
-                    <Typography 
-                      variant="caption" 
-                      sx={{ 
-                        opacity: 0.7,
-                        display: 'block',
-                        mb: 1,
-                        fontWeight: 600,
-                        textTransform: 'uppercase',
-                        fontSize: '0.7rem',
-                        letterSpacing: '0.5px'
-                      }}
-                    >
-                      {msg.role === "user" ? "You" : "Assistant"}
-                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography 
+                        variant="caption" 
+                        sx={{ 
+                          opacity: 0.7,
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          fontSize: '0.7rem',
+                          letterSpacing: '0.5px'
+                        }}
+                      >
+                        {msg.role === "user" ? "You" : "Assistant"}
+                      </Typography>
+                      {msg.streaming && (
+                        <Chip 
+                          label="Streaming" 
+                          size="small" 
+                          sx={{ 
+                            height: 18, 
+                            fontSize: '0.65rem',
+                            opacity: 0.7
+                          }} 
+                        />
+                      )}
+                    </Box>
                     <Typography 
                       variant="body1" 
                       sx={{ 
@@ -183,13 +222,38 @@ export function LocalAIModule() {
                     >
                       {msg.content}
                     </Typography>
+                    {msg.citations && msg.citations.length > 0 && (
+                      <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${alpha('#000', 0.1)}` }}>
+                        <Typography variant="caption" sx={{ fontWeight: 600, mb: 1, display: 'block' }}>
+                          Sources:
+                        </Typography>
+                        {msg.citations.map((citation, idx) => (
+                          <Link
+                            key={citation.id || idx}
+                            href={citation.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            sx={{
+                              display: 'block',
+                              fontSize: '0.75rem',
+                              color: 'primary.main',
+                              mb: 0.5,
+                              textDecoration: 'none',
+                              '&:hover': { textDecoration: 'underline' }
+                            }}
+                          >
+                            {idx + 1}. {citation.label}
+                          </Link>
+                        ))}
+                      </Box>
+                    )}
                   </Box>
                 </PremiumCard>
               </Box>
             </Grow>
           ))}
 
-          {sending && (
+          {pending && (
             <Fade in>
               <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 2 }}>
                 <PremiumCard sx={{ background: '#FFFFFF' }} hoverable={false}>
@@ -236,6 +300,37 @@ export function LocalAIModule() {
               </Box>
             </Fade>
           )}
+
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }} onClose={() => useLocalAIChatStore.getState().error = null}>
+              {error}
+            </Alert>
+          )}
+
+          {followUps.length > 0 && messages.length > 0 && !pending && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', mb: 1, display: 'block' }}>
+                Suggested follow-ups:
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {followUps.map((followUp) => (
+                  <Chip
+                    key={followUp.id}
+                    label={followUp.label}
+                    onClick={() => handleFollowUp(followUp.prompt)}
+                    size="small"
+                    sx={{
+                      cursor: 'pointer',
+                      '&:hover': {
+                        bgcolor: 'primary.main',
+                        color: 'white'
+                      }
+                    }}
+                  />
+                ))}
+              </Box>
+            </Box>
+          )}
           
           <div ref={messagesEndRef} />
         </Box>
@@ -270,7 +365,7 @@ export function LocalAIModule() {
             <Button
               variant="contained"
               onClick={handleSend}
-              disabled={sending || !input.trim()}
+              disabled={pending || !input.trim()}
               sx={{
                 minWidth: 48,
                 minHeight: 48,

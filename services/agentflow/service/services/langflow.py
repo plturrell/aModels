@@ -81,6 +81,7 @@ class LangflowClient:
         api_key: Optional[str] = None,
         auth_token: Optional[str] = None,
         timeout_seconds: int = 120,
+        logger: Optional[logging.Logger] = None,
     ):
         headers: Dict[str, str] = {
             "Accept": "application/json",
@@ -96,6 +97,7 @@ class LangflowClient:
             timeout=timeout_seconds,
             headers=headers,
         )
+        self._logger = logger or logging.getLogger(__name__)
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -116,8 +118,23 @@ class LangflowClient:
 
         if request.force and request.remote_id:
             response = await self._client.request("DELETE", f"/api/v1/flows/{request.remote_id}")
+            self._logger.info(
+                "Langflow delete request",
+                extra={
+                    "method": "DELETE",
+                    "path": f"/api/v1/flows/{request.remote_id}",
+                },
+            )
             if response.status_code not in (200, 202, 204, 404):
                 detail = await response.aread()
+                self._logger.warning(
+                    "Langflow delete failed",
+                    extra={
+                        "method": "DELETE",
+                        "path": f"/api/v1/flows/{request.remote_id}",
+                        "status_code": response.status_code,
+                    },
+                )
                 raise LangflowError(
                     f"Langflow delete failed ({response.status_code}): {detail.decode('utf-8', errors='ignore')}"
                 )
@@ -127,8 +144,23 @@ class LangflowClient:
             for candidate in existing:
                 if candidate.name and candidate.name.strip() == target_name:
                     response = await self._client.request("DELETE", f"/api/v1/flows/{candidate.id}")
+                    self._logger.info(
+                        "Langflow delete request",
+                        extra={
+                            "method": "DELETE",
+                            "path": f"/api/v1/flows/{candidate.id}",
+                        },
+                    )
                     if response.status_code not in (200, 202, 204, 404):
                         detail = await response.aread()
+                        self._logger.warning(
+                            "Langflow delete failed",
+                            extra={
+                                "method": "DELETE",
+                                "path": f"/api/v1/flows/{candidate.id}",
+                                "status_code": response.status_code,
+                            },
+                        )
                         raise LangflowError(
                             f"Langflow delete failed ({response.status_code}): {detail.decode('utf-8', errors='ignore')}"
                         )
@@ -153,7 +185,19 @@ class LangflowClient:
         return record
 
     async def _request(self, method: str, path: str, *, json: Optional[Dict[str, Any]] = None) -> Any:
-        response = await self._client.request(method, path, json=json)
+        try:
+            response = await self._client.request(method, path, json=json)
+        except httpx.RequestError as exc:
+            self._logger.warning(
+                "Langflow request transport error",
+                extra={
+                    "method": method,
+                    "path": path,
+                    "error": str(exc),
+                },
+                exc_info=exc,
+            )
+            raise LangflowError(f"Langflow request error: {exc}") from exc
         if response.status_code >= 400:
             detail = response.text
             try:
@@ -161,7 +205,7 @@ class LangflowClient:
                 detail = data.get("detail") or data.get("message") or detail
             except ValueError:
                 pass
-            logger.warning(
+            self._logger.warning(
                 "Langflow request failed",
                 extra={
                     "method": method,
@@ -171,11 +215,27 @@ class LangflowClient:
                 },
             )
             raise LangflowError(f"Langflow request failed ({response.status_code}): {detail}")
+        self._logger.debug(
+            "Langflow request completed",
+            extra={
+                "method": method,
+                "path": path,
+                "status_code": response.status_code,
+            },
+        )
         if response.status_code == 204:
             return None
         try:
             return response.json()
         except ValueError as exc:
+            self._logger.error(
+                "Langflow returned invalid JSON",
+                extra={
+                    "method": method,
+                    "path": path,
+                },
+                exc_info=exc,
+            )
             raise LangflowError(f"invalid JSON response: {exc}") from exc
 
     def _decode_flow_list(self, payload: Any) -> List[FlowRecord]:

@@ -406,4 +406,145 @@ document.addEventListener('DOMContentLoaded', async () => {
       showStatus('info', `${notification.title}: ${notification.message}`);
     });
   }
+
+  // Initialize quick search
+  const quickSearchInput = document.getElementById('quick-search-input');
+  const quickSearchBtn = document.getElementById('quick-search-btn');
+  const searchResultsPreview = document.getElementById('search-results-preview');
+  const openSearchShell = document.getElementById('open-search-shell');
+  let searchQuery = '';
+
+  async function performQuickSearch(query) {
+    if (!query.trim()) return;
+
+    searchQuery = query.trim();
+    showStatus('loading', 'Searching...');
+    searchResultsPreview.style.display = 'block';
+    searchResultsPreview.innerHTML = '<div class="sap-text-secondary" style="font-size:12px;">Searching...</div>';
+
+    try {
+      const base = await getBase();
+      const response = await fetch(`${base}/search/unified`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: searchQuery,
+          top_k: 5,
+          sources: ['inference', 'knowledge_graph', 'catalog']
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      const results = data.combined_results || [];
+
+      if (results.length === 0) {
+        searchResultsPreview.innerHTML = '<div class="sap-text-secondary" style="font-size:12px;">No results found</div>';
+        openSearchShell.style.display = 'none';
+      } else {
+        let html = '<div style="font-size:12px;">';
+        results.slice(0, 3).forEach((result, idx) => {
+          const title = result.title || result.content?.substring(0, 50) || 'Result';
+          html += `<div style="margin-bottom:4px; padding:4px; background:var(--sap-background); border-radius:2px;">
+            <div class="sap-text-primary" style="font-weight:500;">${idx + 1}. ${title}${title.length >= 50 ? '...' : ''}</div>
+          </div>`;
+        });
+        html += '</div>';
+        searchResultsPreview.innerHTML = html;
+        openSearchShell.style.display = 'block';
+        showStatus('success', `Found ${results.length} results`);
+      }
+    } catch (error) {
+      console.error('Quick search failed:', error);
+      searchResultsPreview.innerHTML = '<div class="sap-text-secondary" style="font-size:12px; color:var(--sap-error);">Search failed</div>';
+      showStatus('error', 'Search failed');
+    }
+  }
+
+  if (quickSearchBtn && quickSearchInput) {
+    quickSearchBtn.addEventListener('click', () => {
+      performQuickSearch(quickSearchInput.value);
+    });
+
+    quickSearchInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        performQuickSearch(quickSearchInput.value);
+      }
+    });
+  }
+
+  if (openSearchShell) {
+    openSearchShell.addEventListener('click', async () => {
+      const { browserUrl } = await chrome.storage.sync.get(['browserUrl']);
+      const url = browserUrl || 'http://localhost:8070';
+      const searchUrl = `${url}/#/search?q=${encodeURIComponent(searchQuery)}`;
+      
+      try {
+        await chrome.tabs.create({ url: searchUrl });
+        showStatus('success', 'Opened search in shell');
+      } catch (e) {
+        window.open(searchUrl, '_blank');
+      }
+    });
+  }
+
+  // Initialize LocalAI chat in popup
+  const chatInput = document.getElementById('chat-input');
+  const chatSendBtn = document.getElementById('chat-send-btn');
+  const openChatShell = document.getElementById('open-chat-shell');
+  const chatHistory = document.getElementById('chat-history');
+
+  // Load conversation history
+  if (chatHistory) {
+    const conversations = JSON.parse(localStorage.getItem('localai_conversations') || '[]');
+    if (conversations.length > 0) {
+      chatHistory.style.display = 'block';
+      chatHistory.innerHTML = '';
+      conversations.slice(-3).forEach(conv => {
+        const userMsg = document.createElement('div');
+        userMsg.className = 'sap-text-primary';
+        userMsg.style.marginBottom = '4px';
+        userMsg.textContent = `You: ${conv.user.substring(0, 50)}${conv.user.length > 50 ? '...' : ''}`;
+        chatHistory.appendChild(userMsg);
+        
+        const aiMsg = document.createElement('div');
+        aiMsg.className = 'sap-text-secondary';
+        aiMsg.style.marginBottom = '4px';
+        aiMsg.style.paddingLeft = '8px';
+        aiMsg.textContent = `AI: ${conv.assistant.substring(0, 50)}${conv.assistant.length > 50 ? '...' : ''}`;
+        chatHistory.appendChild(aiMsg);
+      });
+      chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+  }
+
+  if (chatSendBtn && chatInput) {
+    chatSendBtn.addEventListener('click', () => {
+      window.chatSend();
+    });
+
+    chatInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        window.chatSend();
+      }
+    });
+  }
+
+  if (openChatShell) {
+    openChatShell.addEventListener('click', async () => {
+      const { browserUrl } = await chrome.storage.sync.get(['browserUrl']);
+      const url = browserUrl || 'http://localhost:8070';
+      const chatUrl = `${url}/#/localai`;
+      
+      try {
+        await chrome.tabs.create({ url: chatUrl });
+        showStatus('success', 'Opened chat in shell');
+      } catch (e) {
+        window.open(chatUrl, '_blank');
+      }
+    });
+  }
 });

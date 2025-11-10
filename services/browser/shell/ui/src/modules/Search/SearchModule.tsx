@@ -25,6 +25,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import { Panel } from "../../components/Panel";
 import { DashboardRenderer } from "../../components/DashboardRenderer";
 import { ServiceHealthPanel } from "../../components/ServiceHealthPanel";
+import { SearchAIAssistant } from "../../components/SearchAIAssistant";
 import { 
   unifiedSearch, 
   generateNarrative, 

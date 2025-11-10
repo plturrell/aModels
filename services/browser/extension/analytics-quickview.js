@@ -8,11 +8,13 @@ class AnalyticsQuickView {
     this.cache = new Map();
     this.cacheTTL = 5 * 60 * 1000; // 5 minutes
     this.notifications = [];
+    this.ws = null; // WebSocket connection
     this.settings = {
       autoRefresh: true,
       refreshInterval: 30000, // 30 seconds
       showNotifications: true,
-      theme: 'auto'
+      theme: 'auto',
+      enableWebSocket: true
     };
     this.init();
   }
@@ -27,6 +29,11 @@ class AnalyticsQuickView {
     // Set up auto-refresh if enabled
     if (this.settings.autoRefresh) {
       this.startAutoRefresh();
+    }
+
+    // Start WebSocket for real-time updates if enabled
+    if (this.settings.enableWebSocket) {
+      this.startWebSocket();
     }
 
     // Listen for settings changes
@@ -74,10 +81,81 @@ class AnalyticsQuickView {
 
       const data = await response.json();
       this.cache.set(cacheKey, { data, timestamp: Date.now() });
+      
+      // Dispatch event for real-time updates
+      window.dispatchEvent(new CustomEvent('analytics-updated', {
+        detail: { data, timestamp: Date.now() }
+      }));
+      
       return data;
     } catch (error) {
       console.error('Failed to fetch dashboard stats:', error);
       return null;
+    }
+  }
+
+  /**
+   * Start WebSocket connection for real-time updates
+   */
+  startWebSocket() {
+    if (this.ws) {
+      return; // Already connected
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/api/runtime/analytics/ws`;
+
+    try {
+      this.ws = new WebSocket(wsUrl);
+      
+      this.ws.onopen = () => {
+        console.log('Analytics WebSocket connected');
+        this.ws.send(JSON.stringify({ type: 'subscribe' }));
+      };
+
+      this.ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.type === 'dashboard_update' && message.stats) {
+            // Update cache with new data
+            const cacheKey = 'dashboard_stats';
+            this.cache.set(cacheKey, { 
+              data: { stats: message.stats }, 
+              timestamp: Date.now() 
+            });
+            
+            // Dispatch update event
+            window.dispatchEvent(new CustomEvent('analytics-updated', {
+              detail: { data: { stats: message.stats }, timestamp: Date.now() }
+            }));
+          }
+        } catch (error) {
+          console.error('Failed to parse WebSocket message:', error);
+        }
+      };
+
+      this.ws.onerror = (error) => {
+        console.error('Analytics WebSocket error:', error);
+      };
+
+      this.ws.onclose = () => {
+        console.log('Analytics WebSocket closed');
+        this.ws = null;
+        // Attempt to reconnect after 5 seconds
+        setTimeout(() => this.startWebSocket(), 5000);
+      };
+    } catch (error) {
+      console.error('Failed to create WebSocket:', error);
+    }
+  }
+
+  /**
+   * Stop WebSocket connection
+   */
+  stopWebSocket() {
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
     }
   }
 

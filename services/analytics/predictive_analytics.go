@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -23,6 +24,67 @@ type PredictiveAnalytics struct {
 	localaiURL     string           // Phase 9.4: LocalAI URL for domain configs
 	llmClient      *localai.Client
 	llmModel       string
+	clock          func() time.Time
+}
+
+func (pa *PredictiveAnalytics) now() time.Time {
+	if pa != nil && pa.clock != nil {
+		return pa.clock()
+	}
+	return time.Now()
+}
+
+func (pa *PredictiveAnalytics) logInfo(msg string, kv ...any) {
+	pa.logWithLevel("INFO", msg, kv...)
+}
+
+func (pa *PredictiveAnalytics) logWarn(msg string, kv ...any) {
+	pa.logWithLevel("WARN", msg, kv...)
+}
+
+func (pa *PredictiveAnalytics) logDebug(msg string, kv ...any) {
+	pa.logWithLevel("DEBUG", msg, kv...)
+}
+
+func (pa *PredictiveAnalytics) logWithLevel(level string, msg string, kv ...any) {
+	if pa == nil || pa.logger == nil {
+		return
+	}
+	pa.logger.Printf("PredictiveAnalytics %s: %s%s", level, msg, formatKeyValues(kv))
+}
+
+func formatKeyValues(kv []any) string {
+	if len(kv) == 0 {
+		return ""
+	}
+	var builder strings.Builder
+	for i := 0; i < len(kv); i += 2 {
+		key, ok := kv[i].(string)
+		if !ok {
+			continue
+		}
+		builder.WriteRune(' ')
+		builder.WriteString(key)
+		builder.WriteRune('=')
+		var value any = "<missing>"
+		if i+1 < len(kv) {
+			value = kv[i+1]
+		}
+		builder.WriteString(fmt.Sprintf("%v", value))
+	}
+	return builder.String()
+}
+
+func keysFromMap(values map[string]any) string {
+	if len(values) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ",")
 }
 
 // NewPredictiveAnalytics creates a new predictive analytics service.
@@ -36,14 +98,16 @@ func NewPredictiveAnalytics(logger *log.Logger) *PredictiveAnalytics {
 		logger:     logger,
 		localaiURL: localaiURL,
 		llmModel:   llmModel,
+		clock:      time.Now,
 	}
 
 	if localaiURL != "" {
 		detector := domain.NewDetector(localaiURL, logger)
 		if err := detector.LoadDomains(context.Background()); err != nil && !errors.Is(err, domain.ErrNoDomains) {
-			logger.Printf("PredictiveAnalytics: failed initial domain sync: %v", err)
+			pa.logWarn("failed initial domain sync", "error", err)
 		} else {
 			pa.domainDetector = detector
+			pa.logInfo("initialized domain detector", "localai_url", localaiURL)
 		}
 		pa.llmClient = localai.NewClient(localaiURL)
 	}
@@ -57,7 +121,11 @@ func (pa *PredictiveAnalytics) PredictDataQualityIssues(
 	currentMetrics map[string]any,
 	historicalTrends []map[string]any,
 ) (*QualityPrediction, error) {
-	pa.logger.Println("Predicting data quality issues...")
+	pa.logInfo(
+		"predicting data quality issues",
+		"historical_count", len(historicalTrends),
+		"current_metric_keys", keysFromMap(currentMetrics),
+	)
 
 	prediction := &QualityPrediction{
 		PredictedIssues: []string{},
@@ -75,12 +143,14 @@ func (pa *PredictiveAnalytics) PredictDataQualityIssues(
 			prediction.PredictedIssues = append(prediction.PredictedIssues,
 				"Metadata entropy declining - potential schema quality degradation")
 			prediction.RiskLevel = "medium"
+			pa.logDebug("detected entropy decline", "risk_level", prediction.RiskLevel)
 		}
 
 		if trendAnalysis.KLDivergenceIncreasing {
 			prediction.PredictedIssues = append(prediction.PredictedIssues,
 				"KL divergence increasing - data type distribution deviating")
 			prediction.RiskLevel = "high"
+			pa.logDebug("detected kl divergence increase", "risk_level", prediction.RiskLevel)
 		}
 	}
 
@@ -92,15 +162,17 @@ func (pa *PredictiveAnalytics) PredictDataQualityIssues(
 			if prediction.RiskLevel == "low" {
 				prediction.RiskLevel = "medium"
 			}
+			pa.logDebug("metadata entropy below threshold", "entropy", entropy, "risk_level", prediction.RiskLevel)
 		}
 	}
 
 	prediction.Confidence = 0.75
-	prediction.PredictedAt = time.Now()
+	prediction.PredictedAt = pa.now()
 
 	if pa.llmClient != nil {
+		pa.logDebug("enhancing quality prediction with llm", "model", pa.llmModel)
 		if err := pa.enhanceQualityPredictionWithLLM(ctx, prediction, currentMetrics, historicalTrends); err != nil {
-			pa.logger.Printf("PredictiveAnalytics: LocalAI quality refinement failed: %v", err)
+			pa.logWarn("localai quality refinement failed", "error", err)
 		}
 	}
 
@@ -114,7 +186,11 @@ func (pa *PredictiveAnalytics) RecommendExtractionStrategy(
 	systemID string,
 	historicalData map[string]any,
 ) (*ExtractionRecommendation, error) {
-	pa.logger.Printf("Recommending extraction strategy for project=%s, system=%s", projectID, systemID)
+	pa.logInfo(
+		"recommending extraction strategy",
+		"project_id", projectID,
+		"system_id", systemID,
+	)
 
 	recommendation := &ExtractionRecommendation{
 		Strategy:        "standard",
@@ -129,10 +205,12 @@ func (pa *PredictiveAnalytics) RecommendExtractionStrategy(
 			recommendation.Strategy = "batch"
 			recommendation.Recommendations = append(recommendation.Recommendations,
 				"Use batch processing for large data volumes")
+			pa.logDebug("data volume exceeds batch threshold", "data_volume", dataVolume)
 		} else {
 			recommendation.Strategy = "streaming"
 			recommendation.Recommendations = append(recommendation.Recommendations,
 				"Use streaming processing for real-time updates")
+			pa.logDebug("data volume favors streaming", "data_volume", dataVolume)
 		}
 	}
 
@@ -142,12 +220,14 @@ func (pa *PredictiveAnalytics) RecommendExtractionStrategy(
 			recommendation.Priority = "high"
 			recommendation.Recommendations = append(recommendation.Recommendations,
 				"High schema complexity - use advanced extraction features")
+			pa.logDebug("schema complexity high", "schema_complexity", schemaComplexity)
 		}
 	}
 
 	if pa.llmClient != nil {
+		pa.logDebug("enhancing extraction recommendation with llm", "model", pa.llmModel)
 		if err := pa.enhanceExtractionRecommendationWithLLM(ctx, recommendation, historicalData); err != nil {
-			pa.logger.Printf("PredictiveAnalytics: LocalAI extraction refinement failed: %v", err)
+			pa.logWarn("localai extraction refinement failed", "error", err)
 		}
 	}
 
@@ -161,7 +241,12 @@ func (pa *PredictiveAnalytics) ForecastTrainingDataNeeds(
 	growthRate float64,
 	timeHorizonDays int,
 ) (*TrainingDataForecast, error) {
-	pa.logger.Println("Forecasting training data needs...")
+	pa.logInfo(
+		"forecasting training data needs",
+		"pattern_count", len(currentCoverage),
+		"growth_rate", growthRate,
+		"time_horizon_days", timeHorizonDays,
+	)
 
 	forecast := &TrainingDataForecast{
 		CurrentCoverage:    currentCoverage,
@@ -178,6 +263,7 @@ func (pa *PredictiveAnalytics) ForecastTrainingDataNeeds(
 		if count < 100 {
 			forecast.RecommendedActions = append(forecast.RecommendedActions,
 				fmt.Sprintf("Collect more data for pattern: %s (current: %d)", pattern, count))
+			pa.logDebug("identified low coverage pattern", "pattern", pattern, "count", count)
 		}
 	}
 
@@ -190,7 +276,11 @@ func (pa *PredictiveAnalytics) DetectAnomalies(
 	currentPatterns []map[string]any,
 	historicalPatterns []map[string]any,
 ) (*AnomalyDetection, error) {
-	pa.logger.Println("Detecting anomalies in patterns...")
+	pa.logInfo(
+		"detecting anomalies",
+		"current_count", len(currentPatterns),
+		"historical_count", len(historicalPatterns),
+	)
 
 	detection := &AnomalyDetection{
 		Anomalies: []Anomaly{},
@@ -209,7 +299,7 @@ func (pa *PredictiveAnalytics) DetectAnomalies(
 					Pattern:    pattern,
 					Type:       "deviation",
 					Severity:   "medium",
-					DetectedAt: time.Now(),
+					DetectedAt: pa.now(),
 				}
 				detection.Anomalies = append(detection.Anomalies, anomaly)
 			}
@@ -218,6 +308,7 @@ func (pa *PredictiveAnalytics) DetectAnomalies(
 
 	if len(detection.Anomalies) > 0 {
 		detection.Severity = "medium"
+		pa.logDebug("anomalies detected", "count", len(detection.Anomalies))
 	}
 
 	return detection, nil
@@ -231,12 +322,16 @@ func (pa *PredictiveAnalytics) PredictDomainPerformance(
 	historicalMetrics []map[string]any,
 	timeHorizonDays int,
 ) (*DomainPerformancePrediction, error) {
-	pa.logger.Printf("Predicting performance for domain %s (horizon: %d days)", domainID, timeHorizonDays)
+	pa.logInfo(
+		"predicting domain performance",
+		"domain_id", domainID,
+		"time_horizon_days", timeHorizonDays,
+	)
 
 	prediction := &DomainPerformancePrediction{
 		DomainID:        domainID,
 		TimeHorizon:     timeHorizonDays,
-		PredictedAt:     time.Now(),
+		PredictedAt:     pa.now(),
 		Metrics:         make(map[string]float64),
 		Trends:          []string{},
 		Recommendations: []string{},
@@ -259,10 +354,12 @@ func (pa *PredictiveAnalytics) PredictDomainPerformance(
 
 				if trend > 0 {
 					prediction.Trends = append(prediction.Trends, "Accuracy improving")
+					pa.logDebug("accuracy improving", "trend", trend)
 				} else if trend < 0 {
 					prediction.Trends = append(prediction.Trends, "Accuracy declining")
 					prediction.Recommendations = append(prediction.Recommendations,
 						"Consider retraining model or adjusting domain configuration")
+					pa.logDebug("accuracy declining", "trend", trend)
 				}
 			}
 		}
@@ -277,6 +374,7 @@ func (pa *PredictiveAnalytics) PredictDomainPerformance(
 				if predictedLat > 2000 {
 					prediction.Recommendations = append(prediction.Recommendations,
 						"High latency predicted - consider model optimization")
+					pa.logDebug("latency exceeds threshold", "predicted_latency_ms", predictedLat)
 				}
 			}
 		}
@@ -290,19 +388,22 @@ func (pa *PredictiveAnalytics) PredictDomainPerformance(
 			if lat, ok := prediction.Metrics["latency_ms"]; ok && lat > 1000 {
 				prediction.Recommendations = append(prediction.Recommendations,
 					"Data layer requires low latency - consider smaller model")
+				pa.logDebug("data layer latency recommendation", "latency_ms", prediction.Metrics["latency_ms"])
 			}
 		case "business":
 			// Business layer: prioritize accuracy
 			if acc, ok := prediction.Metrics["accuracy"]; ok && acc < 0.8 {
 				prediction.Recommendations = append(prediction.Recommendations,
 					"Business layer requires high accuracy - consider model enhancement")
+				pa.logDebug("business layer accuracy recommendation", "accuracy", prediction.Metrics["accuracy"])
 			}
 		}
 	}
 
 	if pa.llmClient != nil {
+		pa.logDebug("enhancing domain performance with llm", "model", pa.llmModel, "domain_id", domainID)
 		if err := pa.enhanceDomainPerformanceWithLLM(ctx, prediction, domainID, historicalMetrics, hasConfig); err != nil {
-			pa.logger.Printf("PredictiveAnalytics: LocalAI domain performance refinement failed: %v", err)
+			pa.logWarn("localai domain performance refinement failed", "error", err, "domain_id", domainID)
 		}
 	}
 
@@ -317,11 +418,11 @@ func (pa *PredictiveAnalytics) PredictDomainDataQuality(
 	currentQuality map[string]any,
 	historicalQuality []map[string]any,
 ) (*DomainQualityPrediction, error) {
-	pa.logger.Printf("Predicting data quality for domain %s", domainID)
+	pa.logInfo("predicting domain data quality", "domain_id", domainID, "historical_count", len(historicalQuality))
 
 	prediction := &DomainQualityPrediction{
 		DomainID:        domainID,
-		PredictedAt:     time.Now(),
+		PredictedAt:     pa.now(),
 		RiskLevel:       "low",
 		Confidence:      0.7,
 		Issues:          []string{},
@@ -342,6 +443,7 @@ func (pa *PredictiveAnalytics) PredictDomainDataQuality(
 						"Data completeness declining")
 					prediction.Recommendations = append(prediction.Recommendations,
 						"Increase data collection or validation")
+					pa.logDebug("completeness declining", "domain_id", domainID, "risk_level", prediction.RiskLevel)
 				}
 			}
 		}
@@ -355,6 +457,7 @@ func (pa *PredictiveAnalytics) PredictDomainDataQuality(
 						"Data consistency declining")
 					prediction.Recommendations = append(prediction.Recommendations,
 						"Review data quality rules and validation")
+					pa.logDebug("consistency declining", "domain_id", domainID, "risk_level", prediction.RiskLevel)
 				}
 			}
 		}
@@ -371,11 +474,11 @@ func (pa *PredictiveAnalytics) PredictDomainTrainingNeeds(
 	currentCoverage map[string]int,
 	growthRate float64,
 ) (*DomainTrainingNeeds, error) {
-	pa.logger.Printf("Predicting training needs for domain %s", domainID)
+	pa.logInfo("predicting domain training needs", "domain_id", domainID, "pattern_count", len(currentCoverage))
 
 	needs := &DomainTrainingNeeds{
 		DomainID:          domainID,
-		PredictedAt:       time.Now(),
+		PredictedAt:       pa.now(),
 		CurrentCoverage:   currentCoverage,
 		ProjectedCoverage: make(map[string]int),
 		PriorityAreas:     []string{},
@@ -395,6 +498,7 @@ func (pa *PredictiveAnalytics) PredictDomainTrainingNeeds(
 			needs.PriorityAreas = append(needs.PriorityAreas, pattern)
 			needs.Recommendations = append(needs.Recommendations,
 				fmt.Sprintf("Collect more training data for pattern: %s", pattern))
+			pa.logDebug("low coverage domain pattern", "pattern", pattern, "count", count)
 		}
 	}
 
@@ -404,6 +508,7 @@ func (pa *PredictiveAnalytics) PredictDomainTrainingNeeds(
 			// Semantic-rich domain: needs more diverse training data
 			needs.Recommendations = append(needs.Recommendations,
 				"Semantic-rich domain - focus on diverse training examples")
+			pa.logDebug("semantic rich domain detected", "keyword_count", len(domainConfig.Keywords))
 		}
 	}
 
