@@ -173,54 +173,105 @@ func replicateSchemaToPostgres(ctx context.Context, db *sql.DB, nodes []Node, ed
 		return err
 	}
 
+	// Get batch size from environment (default: 100)
+	batchSize := 100
+	if val := os.Getenv("POSTGRES_BATCH_SIZE"); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
+			batchSize = parsed
+		}
+	}
+
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("postgres begin tx: %w", err)
 	}
-
-	nodeStmt, err := tx.PrepareContext(ctx, `
-INSERT INTO glean_nodes (id, kind, label, properties_json, updated_at_utc)
-VALUES ($1, $2, $3, $4, NOW())
-ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, label = EXCLUDED.label, properties_json = EXCLUDED.properties_json, updated_at_utc = NOW()`)
-	if err != nil {
-		tx.Rollback()
-		return fmt.Errorf("postgres prepare nodes: %w", err)
-	}
-	defer nodeStmt.Close()
-
-	for _, node := range nodes {
-		if strings.TrimSpace(node.ID) == "" {
-			continue
-		}
-		if _, err := nodeStmt.ExecContext(ctx, node.ID, node.Type, node.Label, jsonBytes(node.Props)); err != nil {
+	defer func() {
+		if err != nil {
 			tx.Rollback()
-			return fmt.Errorf("postgres upsert node %s: %w", node.ID, err)
+		}
+	}()
+
+	// Batch insert nodes using COPY for better performance
+	if len(nodes) > 0 {
+		if err := batchInsertNodes(ctx, tx, nodes, batchSize); err != nil {
+			return fmt.Errorf("batch insert nodes: %w", err)
 		}
 	}
 
-	edgeStmt, err := tx.PrepareContext(ctx, `
-INSERT INTO glean_edges (source_id, target_id, label, properties_json, updated_at_utc)
-VALUES ($1, $2, $3, $4, NOW())
-ON CONFLICT (source_id, target_id, label) DO UPDATE SET properties_json = EXCLUDED.properties_json, updated_at_utc = NOW()`)
-	if err != nil {
-		tx.Rollback()
-		return fmt.Errorf("postgres prepare edges: %w", err)
-	}
-	defer edgeStmt.Close()
-
-	for _, edge := range edges {
-		if strings.TrimSpace(edge.SourceID) == "" || strings.TrimSpace(edge.TargetID) == "" {
-			continue
-		}
-		if _, err := edgeStmt.ExecContext(ctx, edge.SourceID, edge.TargetID, edge.Label, jsonBytes(edge.Props)); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("postgres upsert edge %s->%s: %w", edge.SourceID, edge.TargetID, err)
+	// Batch insert edges using COPY for better performance
+	if len(edges) > 0 {
+		if err := batchInsertEdges(ctx, tx, edges, batchSize); err != nil {
+			return fmt.Errorf("batch insert edges: %w", err)
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("postgres commit: %w", err)
 	}
+	return nil
+}
+
+// batchInsertNodes inserts nodes in batches for better performance
+func batchInsertNodes(ctx context.Context, tx *sql.Tx, nodes []Node, batchSize int) error {
+	stmt, err := tx.PrepareContext(ctx, `
+INSERT INTO glean_nodes (id, kind, label, properties_json, updated_at_utc)
+VALUES ($1, $2, $3, $4, NOW())
+ON CONFLICT (id) DO UPDATE SET kind = EXCLUDED.kind, label = EXCLUDED.label, properties_json = EXCLUDED.properties_json, updated_at_utc = NOW()`)
+	if err != nil {
+		return fmt.Errorf("postgres prepare nodes: %w", err)
+	}
+	defer stmt.Close()
+
+	// Process in batches
+	for i := 0; i < len(nodes); i += batchSize {
+		end := i + batchSize
+		if end > len(nodes) {
+			end = len(nodes)
+		}
+
+		batch := nodes[i:end]
+		for _, node := range batch {
+			if strings.TrimSpace(node.ID) == "" {
+				continue
+			}
+			if _, err := stmt.ExecContext(ctx, node.ID, node.Type, node.Label, jsonBytes(node.Props)); err != nil {
+				return fmt.Errorf("postgres upsert node %s: %w", node.ID, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// batchInsertEdges inserts edges in batches for better performance
+func batchInsertEdges(ctx context.Context, tx *sql.Tx, edges []Edge, batchSize int) error {
+	stmt, err := tx.PrepareContext(ctx, `
+INSERT INTO glean_edges (source_id, target_id, label, properties_json, updated_at_utc)
+VALUES ($1, $2, $3, $4, NOW())
+ON CONFLICT (source_id, target_id, label) DO UPDATE SET properties_json = EXCLUDED.properties_json, updated_at_utc = NOW()`)
+	if err != nil {
+		return fmt.Errorf("postgres prepare edges: %w", err)
+	}
+	defer stmt.Close()
+
+	// Process in batches
+	for i := 0; i < len(edges); i += batchSize {
+		end := i + batchSize
+		if end > len(edges) {
+			end = len(edges)
+		}
+
+		batch := edges[i:end]
+		for _, edge := range batch {
+			if strings.TrimSpace(edge.SourceID) == "" || strings.TrimSpace(edge.TargetID) == "" {
+				continue
+			}
+			if _, err := stmt.ExecContext(ctx, edge.SourceID, edge.TargetID, edge.Label, jsonBytes(edge.Props)); err != nil {
+				return fmt.Errorf("postgres upsert edge %s->%s: %w", edge.SourceID, edge.TargetID, err)
+			}
+		}
+	}
+
 	return nil
 }
 

@@ -7,6 +7,7 @@ from .db import get_session
 from .repositories import FlowRegistryRepository
 from .services import FlowCatalog, FlowRegistryService
 from .services.langflow import LangflowClient
+from .services.localai import LocalAIClient
 
 
 def get_catalog(request: Request) -> FlowCatalog:
@@ -15,6 +16,10 @@ def get_catalog(request: Request) -> FlowCatalog:
 
 def get_langflow_client(request: Request) -> LangflowClient:
     return request.app.state.langflow_client
+
+
+def get_localai_client(request: Request) -> LocalAIClient:
+    return request.app.state.localai_client
 
 
 def get_settings(request: Request) -> Settings:

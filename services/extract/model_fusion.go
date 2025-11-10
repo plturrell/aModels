@@ -28,6 +28,7 @@ type ModelFusionFramework struct {
 	weights                  ModelWeights
 	domainDetector           *DomainDetector         // Phase 8.2: Domain detector for domain-aware weights
 	domainWeights            map[string]ModelWeights // Phase 8.2: domain_id -> optimized weights
+	batchSize                int                    // Batch size for LocalAI predictions
 }
 
 // ModelWeights holds weights for ensemble predictions.
@@ -153,6 +154,14 @@ func NewModelFusionFramework(logger *log.Logger) *ModelFusionFramework {
 		logger.Printf("LocalAI integration enabled: %s (with connection pooling)", localaiURL)
 	}
 
+	// Get batch size from environment (default: 5)
+	batchSize := 5
+	if val := os.Getenv("LOCALAI_BATCH_SIZE"); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
+			batchSize = parsed
+		}
+	}
+
 	return &ModelFusionFramework{
 		logger:                   logger,
 		useRelationalTransformer: true,
@@ -164,6 +173,7 @@ func NewModelFusionFramework(logger *log.Logger) *ModelFusionFramework {
 		weights:                  DefaultModelWeights(),
 		domainDetector:           domainDetector,                // Phase 8.2: Domain detector
 		domainWeights:            make(map[string]ModelWeights), // Phase 8.2: Domain-specific weights
+		batchSize:                batchSize,
 	}
 }
 
@@ -523,6 +533,100 @@ func (mff *ModelFusionFramework) PredictWithMultipleModels(
 
 	// Fuse predictions
 	return mff.FusePredictions(ctx, predictions, "weighted_average", "")
+}
+
+// BatchPredictWithLocalAI generates predictions for multiple artifacts in a batch
+// This reduces the number of HTTP calls and improves throughput
+func (mff *ModelFusionFramework) BatchPredictWithLocalAI(
+	ctx context.Context,
+	requests []struct {
+		ArtifactType string
+		ArtifactData  map[string]any
+		ModelName     string
+	},
+) ([]*FusionModelPrediction, error) {
+	if mff.localaiClient == nil {
+		return nil, fmt.Errorf("LocalAI client not initialized")
+	}
+
+	if len(requests) == 0 {
+		return nil, fmt.Errorf("no requests provided")
+	}
+
+	// Process in batches
+	results := make([]*FusionModelPrediction, 0, len(requests))
+	
+	for i := 0; i < len(requests); i += mff.batchSize {
+		end := i + mff.batchSize
+		if end > len(requests) {
+			end = len(requests)
+		}
+
+		batch := requests[i:end]
+		batchResults, err := mff.processBatch(ctx, batch)
+		if err != nil {
+			// Log error but continue with other batches
+			mff.logger.Printf("Batch prediction error: %v", err)
+			// Add nil results for failed batch
+			for range batch {
+				results = append(results, nil)
+			}
+			continue
+		}
+
+		results = append(results, batchResults...)
+	}
+
+	return results, nil
+}
+
+// processBatch processes a batch of prediction requests concurrently
+func (mff *ModelFusionFramework) processBatch(
+	ctx context.Context,
+	requests []struct {
+		ArtifactType string
+		ArtifactData  map[string]any
+		ModelName     string
+	},
+) ([]*FusionModelPrediction, error) {
+	type result struct {
+		index int
+		pred  *FusionModelPrediction
+		err   error
+	}
+
+	results := make([]*FusionModelPrediction, len(requests))
+	resultChan := make(chan result, len(requests))
+
+	// Process all requests concurrently
+	for i, req := range requests {
+		go func(idx int, r struct {
+			ArtifactType string
+			ArtifactData  map[string]any
+			ModelName     string
+		}) {
+			pred, err := mff.predictWithLocalAI(ctx, r.ArtifactType, r.ArtifactData, r.ModelName)
+			resultChan <- result{index: idx, pred: pred, err: err}
+		}(i, req)
+	}
+
+	// Collect results
+	var lastErr error
+	for i := 0; i < len(requests); i++ {
+		res := <-resultChan
+		if res.err != nil {
+			lastErr = res.err
+			results[res.index] = nil
+		} else {
+			results[res.index] = res.pred
+		}
+	}
+
+	if lastErr != nil && len(results) == 0 {
+		return nil, lastErr
+	}
+
+	return results, nil
 }
 
 // predictWithRelationalTransformer generates prediction using RelationalTransformer.

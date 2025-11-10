@@ -109,6 +109,9 @@ func main() {
 
 		// Domain detector for associating extracted data with domains
 		domainDetector: NewDomainDetector(os.Getenv("LOCALAI_URL"), logger),
+
+		// AgentFlow client for direct integration
+		agentFlowClient: NewAgentFlowClient(logger),
 	}
 
 	if cfg.AgentTelemetry.BaseURL != "" {
@@ -437,6 +440,7 @@ func main() {
 	mux.HandleFunc("/workflow/petri-to-langgraph", server.handlePetriNetToLangGraph)                  // Convert Petri net to LangGraph
 	mux.HandleFunc("/workflow/petri-to-langgraph-advanced", server.handlePetriNetToAdvancedLangGraph) // Convert Petri net to advanced LangGraph (Phase 7.3)
 	mux.HandleFunc("/workflow/petri-to-agentflow", server.handlePetriNetToAgentFlow)                  // Convert Petri net to AgentFlow
+	mux.HandleFunc("/agentflow/run", server.handleAgentFlowRun)                                      // Direct AgentFlow execution
 	// Phase 10: Terminology learning endpoints
 	mux.HandleFunc("/terminology/domains", server.handleTerminologyDomains)     // List learned domains
 	mux.HandleFunc("/terminology/roles", server.handleTerminologyRoles)         // List learned roles
@@ -503,6 +507,9 @@ type extractServer struct {
 
 	// Domain detector for associating extracted data with domains
 	domainDetector *DomainDetector
+
+	// AgentFlow client for direct integration
+	agentFlowClient *AgentFlowClient
 
 	tablePersistence       TablePersistence
 	vectorPersistence      VectorPersistence
@@ -2303,6 +2310,38 @@ func (s *extractServer) handlePetriNetToAgentFlow(w http.ResponseWriter, r *http
 	agentFlowWorkflow := converter.ConvertPetriNetToAgentFlow(&petriNet)
 
 	handlers.WriteJSON(w, http.StatusOK, agentFlowWorkflow)
+}
+
+// handleAgentFlowRun executes an AgentFlow flow directly from Extract service
+func (s *extractServer) handleAgentFlowRun(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	defer r.Body.Close()
+
+	var req AgentFlowRunRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("failed to decode request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	if s.agentFlowClient == nil {
+		http.Error(w, "AgentFlow client not available", http.StatusInternalServerError)
+		return
+	}
+
+	ctx := r.Context()
+	resp, err := s.agentFlowClient.RunFlow(ctx, &req)
+	if err != nil {
+		s.logger.Printf("AgentFlow execution failed: %v", err)
+		handlers.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	handlers.WriteJSON(w, http.StatusOK, resp)
 }
 
 // handlePetriNetToAdvancedLangGraph converts a Petri net to an advanced LangGraph workflow (Phase 7.3).
