@@ -12,11 +12,20 @@ import (
 
 // ComplianceReasoningAgent provides LangGraph-style stateful reasoning for BCBS 239 compliance.
 // It orchestrates multi-step workflows: query generation → graph retrieval → synthesis → validation.
+// Supports multi-model integration: LocalAI, GNN, Goose, and DeepResearch.
 type ComplianceReasoningAgent struct {
 	localAIClient  *agents.LocalAIClient
 	graphClient    *BCBS239GraphClient
 	logger         *log.Logger
 	model          string // LocalAI model to use (e.g., "gemma-2b-q4_k_m.gguf")
+	
+	// Advanced model adapters
+	gnnAdapter         *GNNAdapter         // Graph Neural Network for structural analysis
+	gooseAdapter       *GooseAdapter       // Goose agent for autonomous tasks
+	deepResearchAdapter *DeepResearchAdapter // Deep research for comprehensive analysis
+	
+	// Model orchestration
+	modelOrchestrator *ModelOrchestrator
 }
 
 // NewComplianceReasoningAgent creates a new compliance reasoning agent.
@@ -29,12 +38,44 @@ func NewComplianceReasoningAgent(
 	if model == "" {
 		model = "gemma-2b-q4_k_m.gguf" // Default model
 	}
-	return &ComplianceReasoningAgent{
+	agent := &ComplianceReasoningAgent{
 		localAIClient: localAIClient,
 		graphClient:   graphClient,
 		logger:        logger,
 		model:         model,
 	}
+	
+	// Initialize orchestrator with LocalAI as default
+	agent.modelOrchestrator = NewModelOrchestrator(logger)
+	
+	return agent
+}
+
+// WithGNNAdapter adds Graph Neural Network capabilities.
+func (a *ComplianceReasoningAgent) WithGNNAdapter(adapter *GNNAdapter) *ComplianceReasoningAgent {
+	a.gnnAdapter = adapter
+	if a.modelOrchestrator != nil {
+		a.modelOrchestrator.RegisterModel(adapter)
+	}
+	return a
+}
+
+// WithGooseAdapter adds Goose autonomous agent capabilities.
+func (a *ComplianceReasoningAgent) WithGooseAdapter(adapter *GooseAdapter) *ComplianceReasoningAgent {
+	a.gooseAdapter = adapter
+	if a.modelOrchestrator != nil {
+		a.modelOrchestrator.RegisterModel(adapter)
+	}
+	return a
+}
+
+// WithDeepResearchAdapter adds Deep Research capabilities.
+func (a *ComplianceReasoningAgent) WithDeepResearchAdapter(adapter *DeepResearchAdapter) *ComplianceReasoningAgent {
+	a.deepResearchAdapter = adapter
+	if a.modelOrchestrator != nil {
+		a.modelOrchestrator.RegisterModel(adapter)
+	}
+	return a
 }
 
 // ComplianceWorkflowState represents the stateful workflow for compliance analysis.
@@ -292,6 +333,70 @@ func (n *SynthesisNode) Name() string {
 }
 
 func (n *SynthesisNode) Execute(ctx context.Context, state *ComplianceWorkflowState) error {
+	// Use ModelOrchestrator for intelligent model selection
+	if n.agent.modelOrchestrator != nil && len(n.agent.modelOrchestrator.models) > 0 {
+		return n.executeWithOrchestrator(ctx, state)
+	}
+	
+	// Fallback to LocalAI if orchestrator not available
+	return n.executeWithLocalAI(ctx, state)
+}
+
+// executeWithOrchestrator uses ModelOrchestrator for synthesis.
+func (n *SynthesisNode) executeWithOrchestrator(ctx context.Context, state *ComplianceWorkflowState) error {
+	// Prepare graph context data
+	graphData := &GraphContextData{
+		Facts: state.GraphFacts,
+	}
+	
+	// Create model query request
+	modelRequest := ModelQueryRequest{
+		QueryType:   state.CurrentNode,
+		Question:    state.Question,
+		PrincipleID: state.PrincipleID,
+		GraphData:   graphData,
+		Context: map[string]interface{}{
+			"workflow_state": state.CurrentNode,
+			"sources_count":  len(state.Sources),
+		},
+	}
+	
+	// Route and execute
+	response, err := n.agent.modelOrchestrator.RouteAndExecute(ctx, modelRequest)
+	if err != nil {
+		if n.agent.logger != nil {
+			n.agent.logger.Printf("Model orchestrator failed, falling back to LocalAI: %v", err)
+		}
+		return n.executeWithLocalAI(ctx, state)
+	}
+	
+	// Update state with orchestrated response
+	state.SynthesizedAnswer = response.Answer
+	state.Confidence = response.Confidence
+	state.Sources = append(state.Sources, response.Sources...)
+	
+	// Add metadata about which model was used
+	if state.Errors == nil {
+		state.Errors = []string{}
+	}
+	state.Errors = append(state.Errors, 
+		fmt.Sprintf("Synthesized using: %s (confidence: %.2f, time: %v)", 
+			response.ModelType, response.Confidence, response.ProcessTime))
+	
+	if n.agent.logger != nil {
+		n.agent.logger.Printf("Synthesis completed using %s (confidence: %.2f)", 
+			response.ModelType, response.Confidence)
+	}
+	
+	// Mark as requiring approval for critical analysis
+	n.checkCriticalApproval(state, response)
+	
+	state.NextNode = "validation"
+	return nil
+}
+
+// executeWithLocalAI uses LocalAI for synthesis (fallback).
+func (n *SynthesisNode) executeWithLocalAI(ctx context.Context, state *ComplianceWorkflowState) error {
 	// Convert graph facts to JSON for prompt
 	factsJSON, err := json.MarshalIndent(state.GraphFacts, "", "  ")
 	if err != nil {
@@ -397,6 +502,28 @@ func (n *ValidationNode) Execute(ctx context.Context, state *ComplianceWorkflowS
 	return nil
 }
 
+// checkCriticalApproval determines if the synthesis requires human approval.
+func (n *SynthesisNode) checkCriticalApproval(state *ComplianceWorkflowState, response *ModelQueryResponse) {
+	// Mark as requiring approval for high-criticality principles
+	criticalPrinciples := []string{"P3", "P4", "P7", "P12"} // Accuracy, Completeness, etc.
+	for _, p := range criticalPrinciples {
+		if state.PrincipleID == p {
+			state.RequiresApproval = true
+			state.ApprovalStatus = "pending"
+			return
+		}
+	}
+	
+	// Also require approval for low confidence
+	if response.Confidence < 0.7 {
+		state.RequiresApproval = true
+		state.ApprovalStatus = "pending"
+		if n.agent.logger != nil {
+			n.agent.logger.Printf("Low confidence (%.2f) - requiring human approval", response.Confidence)
+		}
+	}
+}
+
 // GenerateComplianceNarrative is a convenience method for simple compliance queries.
 func (a *ComplianceReasoningAgent) GenerateComplianceNarrative(
 	ctx context.Context,
@@ -416,4 +543,24 @@ func (a *ComplianceReasoningAgent) GenerateComplianceNarrative(
 	}
 
 	return state.SynthesizedAnswer, nil
+}
+
+// QueryWithHybridModels executes a query using multiple models and combines results.
+func (a *ComplianceReasoningAgent) QueryWithHybridModels(
+	ctx context.Context,
+	question string,
+	principleID string,
+	modelTypes []string,
+) (*HybridQueryResponse, error) {
+	if a.modelOrchestrator == nil {
+		return nil, fmt.Errorf("model orchestrator not initialized")
+	}
+	
+	request := ModelQueryRequest{
+		QueryType:   "hybrid",
+		Question:    question,
+		PrincipleID: principleID,
+	}
+	
+	return a.modelOrchestrator.HybridQuery(ctx, request, modelTypes)
 }

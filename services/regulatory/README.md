@@ -4,34 +4,57 @@ A comprehensive regulatory compliance framework integrating **LangGraph-style or
 
 ## 🏗️ Architecture Overview
 
-This framework implements the architecture proposed for BCBS 239 compliance, combining:
+This framework implements the architecture proposed for BCBS 239 compliance, combining **multi-model AI orchestration**:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    BCBS239Reporting (Orchestrator)              │
-│  • Coordinates multi-step compliance workflow                   │
-│  • Manages state transitions (draft → validated → approved)     │
-│  • Enforces human checkpoints for critical reports              │
-└────────────┬────────────────────────────────────┬───────────────┘
-             │                                    │
-    ┌────────▼────────┐                  ┌────────▼─────────┐
-    │ Calculation     │                  │ Compliance       │
-    │ Engine          │                  │ Reasoning Agent  │
-    │                 │                  │ (LocalAI)        │
-    │ • Computes      │                  │ • Question       │
-    │   metrics       │                  │   classification │
-    │ • Auto-emits    │                  │ • Cypher gen     │
-    │   to Neo4j      │                  │ • Synthesis      │
-    └────────┬────────┘                  └────────┬─────────┘
-             │                                    │
-    ┌────────▼────────────────────────────────────▼─────────┐
-    │          Neo4j Knowledge Graph (BCBS239GraphClient)   │
-    │  • 14 BCBS 239 Principles (nodes)                     │
-    │  • Controls ensuring each principle                    │
-    │  • Data assets with lineage (DEPENDS_ON edges)        │
-    │  • Calculations validated by controls                  │
-    │  • Cypher query templates for compliance analysis     │
-    └────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                    BCBS239Reporting (Orchestrator)                   │
+│  • Coordinates multi-step compliance workflow                        │
+│  • Manages state transitions (draft → validated → approved)          │
+│  • Enforces human checkpoints for critical reports                   │
+└────────────┬──────────────────────────────────────┬──────────────────┘
+             │                                      │
+    ┌────────▼────────┐                  ┌──────────▼─────────────────┐
+    │ Calculation     │                  │ Compliance Reasoning Agent │
+    │ Engine          │                  │ (Multi-Model Orchestrator) │
+    │                 │                  │                            │
+    │ • Computes      │                  │  ┌──────────────────────┐ │
+    │   metrics       │                  │  │  ModelOrchestrator   │ │
+    │ • Auto-emits    │                  │  │  • Intelligent       │ │
+    │   to Neo4j      │                  │  │    routing           │ │
+    └────────┬────────┘                  │  │  • Fallback chains   │ │
+             │                            │  └──────────┬───────────┘ │
+             │                            │             │              │
+             │                            │  ┌──────────▼──────┐      │
+             │                            │  │   LocalAI       │      │
+             │                            │  │  • General LLM  │      │
+             │                            │  └─────────────────┘      │
+             │                            │  ┌────────────────┐       │
+             │                            │  │   GNN Adapter   │      │
+             │                            │  │ • Structural    │      │
+             │                            │  │   analysis      │      │
+             │                            │  │ • Embeddings    │      │
+             │                            │  └─────────────────┘      │
+             │                            │  ┌──────────────────┐     │
+             │                            │  │  Goose Adapter    │    │
+             │                            │  │ • Autonomous tasks│    │
+             │                            │  │ • Multi-step      │    │
+             │                            │  └──────────────────────┘ │
+             │                            │  ┌────────────────────┐   │
+             │                            │  │ DeepResearch Adapter│  │
+             │                            │  │ • Comprehensive     │  │
+             │                            │  │   analysis          │  │
+             │                            │  └────────────────────┘   │
+             │                            └─────────────┬──────────────┘
+             │                                          │
+    ┌────────▼──────────────────────────────────────────▼──────────────┐
+    │          Neo4j Knowledge Graph (BCBS239GraphClient)              │
+    │  • 14 BCBS 239 Principles (nodes)                                │
+    │  • Controls ensuring each principle                               │
+    │  • Data assets with lineage (DEPENDS_ON edges)                   │
+    │  • Calculations validated by controls                             │
+    │  • Cypher query templates for compliance analysis                │
+    └───────────────────────────────────────────────────────────────────┘
 ```
 
 ### Component Breakdown
@@ -41,8 +64,52 @@ This framework implements the architecture proposed for BCBS 239 compliance, com
 | **BCBS239GraphSchema** | Neo4j schema manager | 14 BCBS principles, constraints, indexes, Cypher templates |
 | **BCBS239GraphClient** | Graph operations | Lineage tracing, control mapping, impact analysis, gap detection |
 | **RegulatoryCalculationEngine** | Calculation executor | Metric computation, auto-emit to graph, framework-specific logic |
-| **ComplianceReasoningAgent** | LangGraph-style orchestrator | Multi-node workflow: intake → query → synthesis → validation |
+| **ComplianceReasoningAgent** | Multi-model LangGraph orchestrator | Intelligent routing to LocalAI, GNN, Goose, or DeepResearch |
+| **ModelOrchestrator** | Model router & fallback manager | Rule-based routing, performance tracking, hybrid queries |
+| **GNNAdapter** | Graph Neural Network interface | Structural analysis, pattern recognition, embeddings |
+| **GooseAdapter** | Autonomous agent interface | Multi-step task execution, code generation |
+| **DeepResearchAdapter** | Research agent interface | Comprehensive analysis, multi-source validation |
 | **BCBS239Reporting** | Report generator | Graph-enriched reports, AI narratives, human checkpoints |
+
+---
+
+## 🤖 Multi-Model AI Integration
+
+The framework now supports **intelligent model orchestration** with automatic routing based on query type:
+
+### Supported Models
+
+#### 1. **LocalAI** (Default)
+- **Best for**: General compliance questions, narrative generation
+- **Capabilities**: Text generation, chat completion, prompt-based reasoning
+- **Usage**: Always available as fallback
+
+#### 2. **GNN (Graph Neural Networks)**
+- **Best for**: Structural analysis, pattern recognition, lineage tracing
+- **Capabilities**: 
+  - Graph embeddings for similarity search
+  - Anomaly detection in control networks
+  - Link prediction for missing relationships
+  - Node classification by compliance domain
+- **Auto-selected for**: Queries containing "pattern", "structure", "similar", "anomaly", "predict"
+
+#### 3. **Goose (Autonomous Agent)**
+- **Best for**: Multi-step autonomous tasks, workflow orchestration
+- **Capabilities**:
+  - Code generation for compliance scripts
+  - Multi-step task planning and execution
+  - Tool integration and MCP server interaction
+  - Documentation generation
+- **Auto-selected for**: Queries containing "workflow", "automate", "generate code", "create", "build"
+
+#### 4. **Deep Research Agent**
+- **Best for**: Comprehensive regulatory research, cross-reference validation
+- **Capabilities**:
+  - Multi-source analysis of regulatory documents
+  - Best practice recommendations
+  - Compliance gap identification
+  - Citation tracking and validation
+- **Auto-selected for**: Queries containing "research", "comprehensive", "detailed analysis", "regulatory document"
 
 ---
 
@@ -124,6 +191,66 @@ reporting := regulatory.NewBCBS239Reporting(
 ).
 WithGraphClient(bcbs239GraphClient).
 WithReasoningAgent(reasoningAgent)
+```
+
+### 2a. Configure Multi-Model AI (Optional but Recommended)
+
+Add GNN, Goose, and DeepResearch capabilities for enhanced compliance analysis:
+
+```go
+// Create model adapters
+gnnAdapter := regulatory.NewGNNAdapter(
+    "http://training-service:8080", // GNN training service
+    logger,
+)
+
+gooseAdapter := regulatory.NewGooseAdapter(
+    "http://goose-server:8081", // Goose agent server
+    logger,
+)
+
+deepResearchAdapter := regulatory.NewDeepResearchAdapter(
+    "http://deepagents:8082", // Deep research service
+    logger,
+)
+
+// Wire multi-model capabilities into reasoning agent
+reasoningAgent.
+    WithGNNAdapter(gnnAdapter).
+    WithGooseAdapter(gooseAdapter).
+    WithDeepResearchAdapter(deepResearchAdapter)
+
+// Now the agent will intelligently route queries:
+// - Structural questions → GNN
+// - Comprehensive research → DeepResearch
+// - Workflow automation → Goose
+// - General questions → LocalAI (fallback)
+```
+
+### 2b. Using Hybrid Multi-Model Queries
+
+Query multiple models simultaneously and combine results:
+
+```go
+// Execute hybrid query across GNN + DeepResearch
+hybridResponse, err := reasoningAgent.QueryWithHybridModels(
+    ctx,
+    "What are the structural patterns in P3 (Accuracy) compliance controls?",
+    "P3",
+    []string{"GNN", "DeepResearch"}, // Models to use
+)
+
+if err == nil {
+    fmt.Printf("Combined Analysis:\n%s\n", hybridResponse.CombinedAnswer)
+    fmt.Printf("Average Confidence: %.2f\n", hybridResponse.AverageConfidence)
+    fmt.Printf("Sources: %v\n", hybridResponse.Sources)
+    
+    // Access individual model responses
+    for _, resp := range hybridResponse.ModelResponses {
+        fmt.Printf("\n%s Analysis (%.2f confidence):\n%s\n", 
+            resp.ModelType, resp.Confidence, resp.Answer)
+    }
+}
 ```
 
 ### 3. Generate a BCBS 239 Report
@@ -440,18 +567,133 @@ type ComplianceWorkflowState struct {
 
 ---
 
+## 🔍 BCBS239 Audit Pipeline
+
+For **automated compliance auditing and insights**, use the executable audit pipeline:
+
+### Quick Start
+
+```bash
+cd /home/aModels/services/regulatory
+
+# Build the audit CLI
+go build -o bcbs-audit ./cmd/bcbs-audit
+
+# Run comprehensive audit
+./bcbs-audit \
+  --audit-id "Q4-2024-audit" \
+  --principles "P3,P4,P7,P12" \
+  --goose \
+  --research \
+  --auto-remediate \
+  --output detailed
+```
+
+### What the Pipeline Does
+
+1. **Audits** each BCBS239 principle against Neo4j graph controls
+2. **Deep Research** analyzes gaps with multi-source regulatory validation
+3. **Goose generates** production-ready remediation scripts automatically
+4. **Produces** actionable insights with prioritized recommendations
+
+### Goose Autonomous Remediation
+
+**Goose** generates production-ready automation scripts for identified gaps:
+
+```python
+# Example: Auto-generated by Goose for P3 (Accuracy) gap
+
+def accuracy_validation_control(driver, calculation_id):
+    """Automated control for BCBS239 P3 - validates calculations"""
+    with driver.session() as session:
+        # Retrieve calculation lineage
+        result = session.run("""
+            MATCH (calc:RegulatoryCalculation {calculation_id: $calc_id})
+                  -[:DEPENDS_ON]->(asset:DataAsset)
+            RETURN calc, asset
+        """, calc_id=calculation_id)
+        
+        # Validate data integrity and record results
+        # ... (full implementation with error handling)
+```
+
+### Deep Research Insights
+
+**Deep Research Agent** provides comprehensive regulatory analysis:
+
+```
+Research Report: BCBS 239 P4 Compliance
+Confidence: 92% | Sources: 8
+
+KEY FINDINGS:
+1. Automated Data Reconciliation [Basel Committee 2019 Survey]
+   - 87% of compliant banks use automated reconciliation
+   - Recommendation: Implement daily completeness checks
+
+2. Cross-System Data Lineage [FSI Working Paper No. 28]
+   - End-to-end lineage reduces gaps by 45%
+   - Graph databases recommended for complex lineage
+
+3. Exception Management Framework [BCBS 239 Guide]
+   - Formal exception tracking required
+   - Real-time alerting for completeness thresholds
+
+CITATIONS: [8 authoritative sources]
+```
+
+### Usage Examples
+
+```bash
+# Quick gap analysis
+./bcbs-audit --audit-id "gaps-001" --principles "P3,P4" --scope quick
+
+# Research-focused analysis
+./bcbs-audit --audit-id "research-001" --research --output detailed
+
+# Autonomous remediation
+./bcbs-audit --audit-id "auto-fix" --goose --auto-remediate
+
+# Full multi-model pipeline
+./bcbs-audit \
+  --audit-id "full-001" \
+  --goose \
+  --research \
+  --auto-remediate \
+  --output json > results.json
+```
+
+**See:** `AUDIT_PIPELINE_USAGE.md` for detailed examples and use cases.
+
+---
+
 ## 🔗 Integration Checklist
 
+### Core Framework (Required)
 - [x] Neo4j schema initialized with 14 BCBS 239 principles
 - [x] LocalAI server running (http://localhost:8080)
 - [x] Calculation engine wired to emit lineage to Neo4j
 - [x] Compliance reasoning agent configured with model
 - [x] Human approval workflow integrated
 - [x] Unit and integration tests passing
+
+### Multi-Model AI (Optional but Recommended)
+- [x] GNN adapter created for structural analysis
+- [x] Goose adapter created for autonomous tasks
+- [x] DeepResearch adapter created for comprehensive analysis
+- [x] ModelOrchestrator with intelligent routing
+- [x] Hybrid query support for multi-model analysis
+- [ ] GNN training service deployed (http://training-service:8080)
+- [ ] Goose server deployed (http://goose-server:8081)
+- [ ] DeepAgents service deployed (http://deepagents:8082)
+- [ ] Model performance monitoring dashboard
+
+### Production Deployment
 - [ ] Production Neo4j cluster configured
 - [ ] LocalAI GPU acceleration enabled
 - [ ] Approval UI/API endpoints deployed
 - [ ] Observability (LangSmith/traces) integrated
+- [ ] Model failover and fallback tested
+- [ ] Multi-model load balancing configured
 
 ---
 
