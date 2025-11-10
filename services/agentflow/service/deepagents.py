@@ -2,12 +2,22 @@
 
 from typing import Any, Dict, Optional
 
+import asyncio
+import logging
+import time
+
 import httpx
 
 from ..config import get_settings
 
 # HTTP client for DeepAgents requests
 _deepagents_client: Optional[httpx.AsyncClient] = None
+_deepagents_health_status: dict[str, float | bool] = {"ok": False, "checked_at": 0.0}
+_health_check_ttl_seconds = 30.0
+_health_check_lock = asyncio.Lock()
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_deepagents_client() -> Optional[httpx.AsyncClient]:
@@ -23,9 +33,6 @@ def get_deepagents_client() -> Optional[httpx.AsyncClient]:
             base_url=settings.deepagents_url,
             timeout=settings.deepagents_timeout_seconds,
         )
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.info("DeepAgents integration enabled", extra={"url": settings.deepagents_url})
 
     return _deepagents_client
@@ -53,18 +60,8 @@ async def analyze_flow_execution(
     if client is None:
         return None
 
-    # Quick health check before attempting analysis
-    try:
-        health_response = await client.get("/healthz", timeout=5.0)
-        if health_response.status_code != 200:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning("DeepAgents service unavailable, skipping analysis")
-            return None
-    except Exception:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning("DeepAgents health check failed, skipping analysis")
+    if not await _deepagents_is_healthy(client):
+        logger.warning("DeepAgents service unavailable, skipping analysis")
         return None
 
     max_retries = 2
@@ -75,9 +72,10 @@ async def analyze_flow_execution(
             # Exponential backoff
             import asyncio
             backoff = attempt * 1.0
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"Retrying DeepAgents analysis (attempt {attempt + 1}/{max_retries + 1}) after {backoff}s")
+            logger.info(
+                "Retrying DeepAgents analysis",
+                extra={"attempt": attempt + 1, "max_attempts": max_retries + 1, "backoff_seconds": backoff},
+            )
             await asyncio.sleep(backoff)
 
         try:
@@ -151,9 +149,10 @@ Be specific and actionable."""
 
             result = response.json()
 
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"DeepAgents analysis completed successfully (attempt {attempt + 1})")
+            logger.info(
+                "DeepAgents analysis completed successfully",
+                extra={"attempt": attempt + 1, "max_attempts": max_retries + 1},
+            )
 
             return {
                 "analysis": result.get("messages", []),
@@ -165,31 +164,31 @@ Be specific and actionable."""
             last_exception = e
             if e.response.status_code >= 500 and attempt < max_retries:
                 continue  # Retry on server errors
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"DeepAgents analysis failed with status {e.response.status_code}: {e}")
+            logger.warning(
+                "DeepAgents analysis failed with status",
+                extra={"status_code": e.response.status_code},
+                exc_info=e,
+            )
             return None
 
         except (httpx.RequestError, httpx.TimeoutException) as e:
             last_exception = e
             if attempt < max_retries:
                 continue  # Retry on network/timeout errors
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"DeepAgents analysis failed after {attempt + 1} attempts: {e}")
+            logger.warning(
+                "DeepAgents analysis failed after retries",
+                extra={"attempts": attempt + 1},
+                exc_info=e,
+            )
             return None
 
         except Exception as e:
             last_exception = e
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"DeepAgents analysis failed (non-fatal): {e}")
+            logger.warning("DeepAgents analysis failed (non-fatal)", exc_info=e)
             return None
 
     # Should not reach here, but handle gracefully
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.warning(f"DeepAgents analysis failed after all retries: {last_exception}")
+    logger.warning("DeepAgents analysis failed after all retries", exc_info=last_exception)
     return None
 
 
@@ -279,8 +278,6 @@ Be specific and actionable."""
 
         result = response.json()
 
-        import logging
-        logger = logging.getLogger(__name__)
         logger.info("DeepAgents flow suggestions completed successfully")
 
         return {
@@ -290,21 +287,19 @@ Be specific and actionable."""
         }
 
     except httpx.HTTPStatusError as e:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f"DeepAgents flow analysis failed with status {e.response.status_code}: {e}")
+        logger.warning(
+            "DeepAgents flow analysis failed with status",
+            extra={"status_code": e.response.status_code},
+            exc_info=e,
+        )
         return None
 
     except (httpx.RequestError, httpx.TimeoutException) as e:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f"DeepAgents flow analysis failed: {e}")
+        logger.warning("DeepAgents flow analysis failed", exc_info=e)
         return None
 
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f"DeepAgents flow analysis failed (non-fatal): {e}")
+        logger.warning("DeepAgents flow analysis failed (non-fatal)", exc_info=e)
         return None
 
 
@@ -355,4 +350,30 @@ async def close_deepagents_client():
     if _deepagents_client is not None:
         await _deepagents_client.aclose()
         _deepagents_client = None
+
+
+async def _deepagents_is_healthy(client: httpx.AsyncClient) -> bool:
+    """Return True when DeepAgents health endpoint reports ready, with caching."""
+    now = time.monotonic()
+    cached = _deepagents_health_status.get("checked_at", 0.0)
+    if cached and now - cached < _health_check_ttl_seconds:
+        return bool(_deepagents_health_status.get("ok", False))
+
+    async with _health_check_lock:
+        # Another coroutine may have refreshed the state
+        cached = _deepagents_health_status.get("checked_at", 0.0)
+        if cached and now - cached < _health_check_ttl_seconds:
+            return bool(_deepagents_health_status.get("ok", False))
+
+        try:
+            response = await client.get("/healthz", timeout=5.0)
+            healthy = response.status_code == 200
+        except Exception as exc:
+            logger.debug("DeepAgents health check failed", exc_info=exc)
+            healthy = False
+
+        _deepagents_health_status["ok"] = healthy
+        _deepagents_health_status["checked_at"] = time.monotonic()
+
+        return healthy
 
