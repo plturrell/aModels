@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .cache import get_redis_client
 from .config import get_settings
 from .db import init_db
-from .db.postgres import ensure_postgres_registry
+from .db.postgres import close_postgres_pool, ensure_postgres_registry
 from .routers import flows_router, health_router, sgmi_router
 from .services import FlowCatalog
 from .services.langflow import LangflowClient
@@ -56,6 +56,8 @@ async def lifespan(app: FastAPI):
         # Close DeepAgents client
         from .deepagents import close_deepagents_client
         await close_deepagents_client()
+        # Close Postgres connection pool
+        close_postgres_pool()
 
 
 app = FastAPI(title="AgentFlow Service", version="0.1.0", lifespan=lifespan)

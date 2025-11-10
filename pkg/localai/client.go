@@ -29,6 +29,23 @@ func NewClient(baseURL string) *Client {
 	}
 }
 
+// NewClientWithHTTPClient creates a new LocalAI client with a custom HTTP client
+// This allows for connection pooling and other HTTP client optimizations
+func NewClientWithHTTPClient(baseURL string, httpClient *http.Client) *Client {
+	if baseURL == "" {
+		baseURL = "http://localhost:8080"
+	}
+	if httpClient == nil {
+		httpClient = &http.Client{
+			Timeout: 60 * time.Second,
+		}
+	}
+	return &Client{
+		baseURL:    baseURL,
+		httpClient: httpClient,
+	}
+}
+
 // ChatRequest represents a chat completion request
 type ChatRequest struct {
 	Model       string    `json:"model"`

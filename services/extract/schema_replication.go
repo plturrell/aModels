@@ -367,12 +367,48 @@ func (p *postgresReplication) ensureConnection(ctx context.Context) (*sql.DB, er
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.db != nil {
-		return p.db, nil
+		// Verify connection is still alive
+		if err := p.db.PingContext(ctx); err == nil {
+			return p.db, nil
+		}
+		// Connection is dead, close it
+		p.db.Close()
+		p.db = nil
 	}
 
 	db, err := sql.Open("postgres", p.dsn)
 	if err != nil {
 		return nil, err
+	}
+
+	// Configure connection pool
+	maxOpenConns := 10
+	if val := os.Getenv("POSTGRES_POOL_MAX_OPEN"); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
+			maxOpenConns = parsed
+		}
+	}
+
+	maxIdleConns := 5
+	if val := os.Getenv("POSTGRES_POOL_MAX_IDLE"); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
+			maxIdleConns = parsed
+		}
+	}
+
+	maxLifetime := 5 * time.Minute
+	if val := os.Getenv("POSTGRES_POOL_MAX_LIFETIME"); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
+			maxLifetime = time.Duration(parsed) * time.Minute
+		}
+	}
+
+	db.SetMaxOpenConns(maxOpenConns)
+	db.SetMaxIdleConns(maxIdleConns)
+	db.SetConnMaxLifetime(maxLifetime)
+
+	if p.logger != nil {
+		p.logger.Printf("Postgres connection pool configured: maxOpen=%d, maxIdle=%d, maxLifetime=%v", maxOpenConns, maxIdleConns, maxLifetime)
 	}
 
 	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -386,15 +422,79 @@ func (p *postgresReplication) ensureConnection(ctx context.Context) (*sql.DB, er
 	return p.db, nil
 }
 
+// retryPostgresOperation retries a Postgres operation with exponential backoff
+func retryPostgresOperation(ctx context.Context, logger *log.Logger, maxAttempts int, initialBackoff time.Duration, maxBackoff time.Duration, fn func() error) error {
+	var lastErr error
+	backoff := initialBackoff
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			// Check context cancellation before waiting
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(backoff):
+			}
+
+			if logger != nil {
+				logger.Printf("Retrying Postgres operation (attempt %d/%d) after %v", attempt+1, maxAttempts, backoff)
+			}
+		}
+
+		err := fn()
+		if err == nil {
+			return nil
+		}
+
+		lastErr = err
+
+		// Check if error is retryable
+		errStr := strings.ToLower(err.Error())
+		isRetryable := strings.Contains(errStr, "connection") ||
+			strings.Contains(errStr, "deadlock") ||
+			strings.Contains(errStr, "timeout") ||
+			strings.Contains(errStr, "network") ||
+			strings.Contains(errStr, "broken pipe") ||
+			strings.Contains(errStr, "connection reset")
+
+		if !isRetryable {
+			// Non-retryable error, return immediately
+			return err
+		}
+
+		// Exponential backoff: double the backoff time, but cap at maxBackoff
+		backoff = time.Duration(float64(backoff) * 2)
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
+
+	return fmt.Errorf("failed after %d attempts: %w", maxAttempts, lastErr)
+}
+
 func (p *postgresReplication) Replicate(ctx context.Context, nodes []Node, edges []Edge) error {
 	if len(nodes) == 0 && len(edges) == 0 {
 		return nil
 	}
-	db, err := p.ensureConnection(ctx)
-	if err != nil {
-		return err
+
+	// Get retry configuration from environment
+	maxRetries := 3
+	if val := os.Getenv("POSTGRES_RETRY_MAX_ATTEMPTS"); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
+			maxRetries = parsed
+		}
 	}
-	return replicateSchemaToPostgres(ctx, db, nodes, edges)
+
+	initialBackoff := 200 * time.Millisecond
+	maxBackoff := 1 * time.Second
+
+	return retryPostgresOperation(ctx, p.logger, maxRetries, initialBackoff, maxBackoff, func() error {
+		db, err := p.ensureConnection(ctx)
+		if err != nil {
+			return err
+		}
+		return replicateSchemaToPostgres(ctx, db, nodes, edges)
+	})
 }
 
 func (p *postgresReplication) Close() {
