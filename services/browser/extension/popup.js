@@ -348,4 +348,62 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   // Connection is now managed by ConnectionManager (connection-manager.js)
   // Command palette is opened via Cmd+K (handled in command-palette.js)
+  
+  // Initialize analytics quick view
+  if (window.analyticsQuickView) {
+    const quickViewEl = document.getElementById('analytics-quickview');
+    const previewEl = document.getElementById('analytics-preview');
+    const refreshBtn = document.getElementById('refresh-analytics');
+    
+    async function loadAnalyticsPreview() {
+      if (!quickViewEl || !previewEl) return;
+      
+      try {
+        const stats = await window.analyticsQuickView.fetchDashboardStats();
+        if (stats && stats.stats) {
+          const data = stats.stats;
+          previewEl.innerHTML = `
+            <div style="width:100%;">
+              <div style="display:flex; gap:12px; font-size:12px;">
+                <div>
+                  <div class="sap-text-secondary">Elements</div>
+                  <div class="sap-text-primary" style="font-weight:600;">${data.total_data_elements || 0}</div>
+                </div>
+                <div>
+                  <div class="sap-text-secondary">Products</div>
+                  <div class="sap-text-primary" style="font-weight:600;">${data.total_data_products || 0}</div>
+                </div>
+                <div>
+                  <div class="sap-text-secondary">Accesses</div>
+                  <div class="sap-text-primary" style="font-weight:600;">${data.usage_statistics?.total_accesses || 0}</div>
+                </div>
+              </div>
+            </div>
+          `;
+          quickViewEl.style.display = 'block';
+        } else {
+          previewEl.innerHTML = '<div class="sap-text-secondary">No data available</div>';
+        }
+      } catch (error) {
+        console.error('Failed to load analytics preview:', error);
+        previewEl.innerHTML = '<div class="sap-text-secondary">Error loading analytics</div>';
+      }
+    }
+    
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        window.analyticsQuickView.clearCache();
+        loadAnalyticsPreview();
+      });
+    }
+    
+    // Load preview on popup open
+    loadAnalyticsPreview();
+    
+    // Listen for notifications
+    window.addEventListener('analytics-notification', (event) => {
+      const notification = event.detail;
+      showStatus('info', `${notification.title}: ${notification.message}`);
+    });
+  }
 });

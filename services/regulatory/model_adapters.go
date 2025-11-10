@@ -67,19 +67,19 @@ func NewGNNAdapter(trainingServiceURL string, logger *log.Logger) *GNNAdapter {
 // Query executes a GNN-based structural analysis query.
 func (a *GNNAdapter) Query(ctx context.Context, request ModelQueryRequest) (*ModelQueryResponse, error) {
 	startTime := time.Now()
-	
+
 	// Prepare GNN query based on request type
 	gnnRequest := map[string]interface{}{
 		"query_type": a.mapToGNNQueryType(request.QueryType),
 		"question":   request.Question,
 	}
-	
+
 	// Include graph data if available
 	if request.GraphData != nil {
 		gnnRequest["nodes"] = request.GraphData.Nodes
 		gnnRequest["edges"] = request.GraphData.Edges
 	}
-	
+
 	// Add BCBS239-specific parameters
 	if request.PrincipleID != "" {
 		gnnRequest["params"] = map[string]interface{}{
@@ -88,13 +88,13 @@ func (a *GNNAdapter) Query(ctx context.Context, request ModelQueryRequest) (*Mod
 			"framework":    "BCBS239",
 		}
 	}
-	
+
 	// Call GNN service
 	result, err := a.callGNNService(ctx, gnnRequest)
 	if err != nil {
 		return nil, fmt.Errorf("GNN query failed: %w", err)
 	}
-	
+
 	// Parse and return response
 	response := &ModelQueryResponse{
 		Answer:      a.extractAnswer(result),
@@ -104,11 +104,11 @@ func (a *GNNAdapter) Query(ctx context.Context, request ModelQueryRequest) (*Mod
 		ModelType:   "GNN",
 		ProcessTime: time.Since(startTime),
 	}
-	
+
 	if a.logger != nil {
 		a.logger.Printf("GNN query completed in %v (confidence: %.2f)", response.ProcessTime, response.Confidence)
 	}
-	
+
 	return response, nil
 }
 
@@ -133,48 +133,48 @@ func (a *GNNAdapter) GetModelType() string {
 // callGNNService makes HTTP request to GNN training service.
 func (a *GNNAdapter) callGNNService(ctx context.Context, request map[string]interface{}) (map[string]interface{}, error) {
 	url := a.trainingServiceURL + "/api/gnn/query"
-	
+
 	jsonData, err := json.Marshal(request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	
+
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := a.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("GNN service returned %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	var result map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
-	
+
 	return result, nil
 }
 
 // mapToGNNQueryType maps generic query types to GNN-specific types.
 func (a *GNNAdapter) mapToGNNQueryType(queryType string) string {
 	mapping := map[string]string{
-		"compliance":   "structural-insights",
-		"lineage":      "embeddings",
-		"structural":   "structural-insights",
-		"similarity":   "embeddings",
-		"prediction":   "predict-links",
+		"compliance":     "structural-insights",
+		"lineage":        "embeddings",
+		"structural":     "structural-insights",
+		"similarity":     "embeddings",
+		"prediction":     "predict-links",
 		"classification": "classify",
 	}
-	
+
 	if gnnType, ok := mapping[queryType]; ok {
 		return gnnType
 	}
@@ -190,11 +190,11 @@ func (a *GNNAdapter) extractAnswer(result map[string]interface{}) string {
 			}
 		}
 	}
-	
+
 	if answer, ok := result["answer"].(string); ok {
 		return answer
 	}
-	
+
 	return "GNN structural analysis completed"
 }
 
@@ -212,14 +212,14 @@ func (a *GNNAdapter) extractConfidence(result map[string]interface{}) float64 {
 // extractSources extracts source references from GNN result.
 func (a *GNNAdapter) extractSources(result map[string]interface{}) []string {
 	sources := []string{"GNN:StructuralAnalysis"}
-	
+
 	if nodes, ok := result["nodes"].([]interface{}); ok {
 		sources = append(sources, fmt.Sprintf("GNN:Nodes:%d", len(nodes)))
 	}
 	if edges, ok := result["edges"].([]interface{}); ok {
 		sources = append(sources, fmt.Sprintf("GNN:Edges:%d", len(edges)))
 	}
-	
+
 	return sources
 }
 
@@ -246,7 +246,7 @@ func NewGooseAdapter(gooseServerURL string, logger *log.Logger) *GooseAdapter {
 // Query executes a Goose agent task for compliance.
 func (a *GooseAdapter) Query(ctx context.Context, request ModelQueryRequest) (*ModelQueryResponse, error) {
 	startTime := time.Now()
-	
+
 	// Create Goose task request
 	gooseRequest := map[string]interface{}{
 		"task":    request.Question,
@@ -257,13 +257,13 @@ func (a *GooseAdapter) Query(ctx context.Context, request ModelQueryRequest) (*M
 			"domain":     "regulatory_compliance",
 		},
 	}
-	
+
 	// Execute Goose task
 	result, err := a.callGooseAgent(ctx, gooseRequest)
 	if err != nil {
 		return nil, fmt.Errorf("Goose agent failed: %w", err)
 	}
-	
+
 	response := &ModelQueryResponse{
 		Answer:      a.extractGooseAnswer(result),
 		Confidence:  a.extractGooseConfidence(result),
@@ -272,11 +272,11 @@ func (a *GooseAdapter) Query(ctx context.Context, request ModelQueryRequest) (*M
 		ModelType:   "Goose",
 		ProcessTime: time.Since(startTime),
 	}
-	
+
 	if a.logger != nil {
 		a.logger.Printf("Goose task completed in %v", response.ProcessTime)
 	}
-	
+
 	return response, nil
 }
 
@@ -298,60 +298,26 @@ func (a *GooseAdapter) GetModelType() string {
 	return "Goose"
 }
 
-// callGooseAgent makes HTTP request to Goose server.
-func (a *GooseAdapter) callGooseAgent(ctx context.Context, request map[string]interface{}) (map[string]interface{}, error) {
-	url := a.gooseServerURL + "/api/v1/task"
-	
-	jsonData, err := json.Marshal(request)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-	
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	
-	resp, err := a.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Goose server returned %d: %s", resp.StatusCode, string(body))
-	}
-	
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-	
-	return result, nil
-}
-
 // buildGooseContext constructs context for Goose agent.
 func (a *GooseAdapter) buildGooseContext(request ModelQueryRequest) map[string]interface{} {
 	context := make(map[string]interface{})
-	
+
 	context["framework"] = "BCBS239"
 	context["principle_id"] = request.PrincipleID
 	context["query_type"] = request.QueryType
-	
+
 	// Add graph context if available
 	if request.GraphData != nil {
 		context["graph_nodes"] = len(request.GraphData.Nodes)
 		context["graph_edges"] = len(request.GraphData.Edges)
 		context["graph_facts"] = request.GraphData.Facts
 	}
-	
+
 	// Merge additional context
 	for k, v := range request.Context {
 		context[k] = v
 	}
-	
+
 	return context
 }
 
@@ -377,11 +343,11 @@ func (a *GooseAdapter) extractGooseConfidence(result map[string]interface{}) flo
 // extractGooseSources extracts sources from Goose result.
 func (a *GooseAdapter) extractGooseSources(result map[string]interface{}) []string {
 	sources := []string{"Goose:AutonomousAgent"}
-	
+
 	if steps, ok := result["steps"].([]interface{}); ok {
 		sources = append(sources, fmt.Sprintf("Goose:Steps:%d", len(steps)))
 	}
-	
+
 	return sources
 }
 
@@ -408,7 +374,7 @@ func NewDeepResearchAdapter(deepAgentsURL string, logger *log.Logger) *DeepResea
 // Query executes a deep research query for compliance.
 func (a *DeepResearchAdapter) Query(ctx context.Context, request ModelQueryRequest) (*ModelQueryResponse, error) {
 	startTime := time.Now()
-	
+
 	// Create deep research request
 	researchRequest := map[string]interface{}{
 		"query":     request.Question,
@@ -417,17 +383,17 @@ func (a *DeepResearchAdapter) Query(ctx context.Context, request ModelQueryReque
 		"depth":     "comprehensive", // Can be "quick", "standard", "comprehensive"
 		"context":   request.Context,
 	}
-	
+
 	if request.PrincipleID != "" {
 		researchRequest["principle_id"] = request.PrincipleID
 	}
-	
+
 	// Execute deep research
 	result, err := a.callDeepResearch(ctx, researchRequest)
 	if err != nil {
 		return nil, fmt.Errorf("Deep research failed: %w", err)
 	}
-	
+
 	response := &ModelQueryResponse{
 		Answer:      a.extractResearchAnswer(result),
 		Confidence:  a.extractResearchConfidence(result),
@@ -436,12 +402,12 @@ func (a *DeepResearchAdapter) Query(ctx context.Context, request ModelQueryReque
 		ModelType:   "DeepResearch",
 		ProcessTime: time.Since(startTime),
 	}
-	
+
 	if a.logger != nil {
-		a.logger.Printf("Deep research completed in %v (sources: %d)", 
+		a.logger.Printf("Deep research completed in %v (sources: %d)",
 			response.ProcessTime, len(response.Sources))
 	}
-	
+
 	return response, nil
 }
 
@@ -463,40 +429,6 @@ func (a *DeepResearchAdapter) GetModelType() string {
 	return "DeepResearch"
 }
 
-// callDeepResearch makes HTTP request to Deep Research service.
-func (a *DeepResearchAdapter) callDeepResearch(ctx context.Context, request map[string]interface{}) (map[string]interface{}, error) {
-	url := a.deepAgentsURL + "/api/research"
-	
-	jsonData, err := json.Marshal(request)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-	
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	
-	resp, err := a.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Deep research service returned %d: %s", resp.StatusCode, string(body))
-	}
-	
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-	
-	return result, nil
-}
-
 // extractResearchAnswer extracts answer from research result.
 func (a *DeepResearchAdapter) extractResearchAnswer(result map[string]interface{}) string {
 	if summary, ok := result["summary"].(string); ok {
@@ -513,19 +445,19 @@ func (a *DeepResearchAdapter) extractResearchConfidence(result map[string]interf
 	if conf, ok := result["confidence"].(float64); ok {
 		return conf
 	}
-	
+
 	// High confidence if multiple sources
 	if sources, ok := result["sources"].([]interface{}); ok && len(sources) >= 3 {
 		return 0.95
 	}
-	
+
 	return 0.85
 }
 
 // extractResearchSources extracts sources from research result.
 func (a *DeepResearchAdapter) extractResearchSources(result map[string]interface{}) []string {
 	sources := []string{}
-	
+
 	if sourcesRaw, ok := result["sources"].([]interface{}); ok {
 		for _, s := range sourcesRaw {
 			if source, ok := s.(string); ok {
@@ -537,10 +469,10 @@ func (a *DeepResearchAdapter) extractResearchSources(result map[string]interface
 			}
 		}
 	}
-	
+
 	if len(sources) == 0 {
 		sources = append(sources, "DeepResearch:ComplianceAnalysis")
 	}
-	
+
 	return sources
 }

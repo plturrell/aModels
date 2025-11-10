@@ -211,3 +211,48 @@ export function useKeyboardNavigation(
 }
 
 import * as React from 'react';
+
+/**
+ * High contrast mode detection
+ */
+export function useHighContrast(): boolean {
+  const [prefersHighContrast, setPrefersHighContrast] = React.useState(
+    window.matchMedia('(prefers-contrast: high)').matches
+  );
+
+  React.useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-contrast: high)');
+    const handleChange = (e: MediaQueryListEvent) => {
+      setPrefersHighContrast(e.matches);
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  return prefersHighContrast;
+}
+
+/**
+ * Touch device detection
+ */
+export function useTouchDevice(): boolean {
+  const [isTouchDevice, setIsTouchDevice] = React.useState(false);
+
+  React.useEffect(() => {
+    const checkTouch = () => {
+      setIsTouchDevice(
+        'ontouchstart' in window ||
+        navigator.maxTouchPoints > 0 ||
+        // @ts-ignore
+        navigator.msMaxTouchPoints > 0
+      );
+    };
+
+    checkTouch();
+    window.addEventListener('resize', checkTouch);
+    return () => window.removeEventListener('resize', checkTouch);
+  }, []);
+
+  return isTouchDevice;
+}

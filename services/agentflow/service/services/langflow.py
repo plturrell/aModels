@@ -6,6 +6,10 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import httpx
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 class LangflowError(Exception):
@@ -157,6 +161,15 @@ class LangflowClient:
                 detail = data.get("detail") or data.get("message") or detail
             except ValueError:
                 pass
+            logger.warning(
+                "Langflow request failed",
+                extra={
+                    "method": method,
+                    "path": path,
+                    "status_code": response.status_code,
+                    "detail": (detail or "")[:256],
+                },
+            )
             raise LangflowError(f"Langflow request failed ({response.status_code}): {detail}")
         if response.status_code == 204:
             return None

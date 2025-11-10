@@ -1,0 +1,186 @@
+/**
+ * Accessibility styles
+ * WCAG 2.1 Level AA compliance
+ */
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --contrast-ratio: 7:1;
+  }
+  
+  .sap-card,
+  .MuiPaper-root {
+    border: 2px solid currentColor;
+  }
+  
+  button,
+  a {
+    border: 1px solid currentColor;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Skip link */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: #000;
+  color: #fff;
+  padding: 8px 16px;
+  text-decoration: none;
+  z-index: 1000;
+  border-radius: 0 0 4px 0;
+}
+
+.skip-link:focus {
+  top: 0;
+  outline: 3px solid #fff;
+  outline-offset: -3px;
+}
+
+/* Focus visible styles */
+*:focus-visible {
+  outline: 3px solid var(--sap-primary, #0070f3);
+  outline-offset: 2px;
+}
+
+/* High contrast focus */
+@media (prefers-contrast: high) {
+  *:focus-visible {
+    outline: 4px solid currentColor;
+    outline-offset: 3px;
+  }
+}
+
+/* Touch target sizes (minimum 44x44px) */
+button,
+a,
+input[type="button"],
+input[type="submit"],
+input[type="reset"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Mobile touch gestures */
+@media (hover: none) and (pointer: coarse) {
+  /* Larger touch targets on mobile */
+  button,
+  a {
+    min-height: 48px;
+    min-width: 48px;
+    padding: 12px 16px;
+  }
+  
+  /* Prevent accidental double-tap zoom */
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+}
+
+/* Keyboard navigation indicators */
+.keyboard-navigation *:focus {
+  outline: 2px solid var(--sap-primary, #0070f3);
+  outline-offset: 2px;
+}
+
+/* ARIA live region */
+[role="status"],
+[role="alert"],
+[aria-live] {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* Loading states for screen readers */
+[aria-busy="true"]::before {
+  content: "Loading";
+  position: absolute;
+  left: -10000px;
+}
+
+/* Error states */
+[aria-invalid="true"] {
+  border-color: var(--sap-error-color, #d32f2f);
+  border-width: 2px;
+}
+
+/* Required field indicators */
+[aria-required="true"]::after {
+  content: " *";
+  color: var(--sap-error-color, #d32f2f);
+}
+
+/* Disabled state */
+[aria-disabled="true"],
+:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  /* Stack elements on mobile */
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Larger text on mobile */
+  body {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+  
+  input,
+  select,
+  textarea {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #666;
+  }
+}
+

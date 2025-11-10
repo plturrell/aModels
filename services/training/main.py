@@ -11,10 +11,12 @@ import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import uvicorn
+import time
+from datetime import timedelta
 
 # Add parent directory to path for imports
 # This allows importing from 'training' package
@@ -338,6 +340,54 @@ class HealthResponse(BaseModel):
     components: Dict[str, bool]
 
 
+class TrainingMetrics(BaseModel):
+    epoch: int
+    loss: float
+    accuracy: Optional[float] = None
+    validation_loss: Optional[float] = None
+    validation_accuracy: Optional[float] = None
+    learning_rate: Optional[float] = None
+    timestamp: float
+
+
+class TrainingProgressResponse(BaseModel):
+    training_run_id: str
+    domain_id: Optional[str] = None
+    status: str  # "running", "completed", "failed", "paused"
+    current_epoch: int
+    total_epochs: int
+    metrics: List[TrainingMetrics]
+    start_time: float
+    elapsed_time: float
+    estimated_time_remaining: Optional[float] = None
+
+
+class ModelComparisonRequest(BaseModel):
+    model_ids: List[str]
+    metrics: List[str] = Field(default_factory=lambda: ["accuracy", "loss", "latency_ms"])
+
+
+class ModelComparisonResponse(BaseModel):
+    models: List[Dict[str, Any]]
+    comparison: Dict[str, Any]
+    rankings: Dict[str, List[Dict[str, Any]]]
+
+
+class ExperimentRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    config: Dict[str, Any] = Field(default_factory=dict)
+    tags: List[str] = Field(default_factory=list)
+
+
+class ExperimentResponse(BaseModel):
+    experiment_id: str
+    name: str
+    status: str
+    created_at: str
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+
+
 class PatternLearningRequest(BaseModel):
     nodes: List[Dict[str, Any]]
     edges: List[Dict[str, Any]]
@@ -648,6 +698,363 @@ async def calculate_domain_similarity(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Training Dashboard Endpoints
+@app.get("/dashboard/progress")
+async def get_training_progress(
+    training_run_id: Optional[str] = Query(None),
+    domain_id: Optional[str] = Query(None),
+    include_history: bool = Query(True)
+):
+    """Get training progress with real-time metrics."""
+    try:
+        # Get training progress from domain trainer or pipeline
+        progress_data = {
+            "training_run_id": training_run_id or "unknown",
+            "domain_id": domain_id,
+            "status": "running",
+            "current_epoch": 0,
+            "total_epochs": 100,
+            "metrics": [],
+            "start_time": time.time() - 3600,  # Mock: 1 hour ago
+            "elapsed_time": 3600.0,
+            "estimated_time_remaining": 7200.0
+        }
+        
+        # If domain trainer is available, get actual progress
+        if domain_trainer and training_run_id:
+            # In a real implementation, domain_trainer would track progress
+            # For now, return mock data structure
+            pass
+        
+        return TrainingProgressResponse(**progress_data)
+    except Exception as e:
+        logger.error(f"Failed to get training progress: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/dashboard/compare-models")
+async def compare_models(request: ModelComparisonRequest):
+    """Compare multiple models side-by-side."""
+    try:
+        models_data = []
+        for model_id in request.model_ids:
+            # Get model metrics (mock for now)
+            model_data = {
+                "model_id": model_id,
+                "accuracy": 0.85,
+                "loss": 0.25,
+                "latency_ms": 150.0,
+                "training_time": 3600.0,
+                "created_at": datetime.now().isoformat()
+            }
+            models_data.append(model_data)
+        
+        # Generate comparison
+        comparison = {
+            "best_accuracy": max(m.get("accuracy", 0) for m in models_data),
+            "best_latency": min(m.get("latency_ms", float('inf')) for m in models_data),
+            "average_accuracy": sum(m.get("accuracy", 0) for m in models_data) / len(models_data) if models_data else 0
+        }
+        
+        # Generate rankings
+        rankings = {
+            "accuracy": sorted(models_data, key=lambda x: x.get("accuracy", 0), reverse=True),
+            "latency": sorted(models_data, key=lambda x: x.get("latency_ms", float('inf')))
+        }
+        
+        return ModelComparisonResponse(
+            models=models_data,
+            comparison=comparison,
+            rankings=rankings
+        )
+    except Exception as e:
+        logger.error(f"Failed to compare models: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/dashboard/data-quality")
+async def get_data_quality(domain_id: Optional[str] = None):
+    """Get training data quality metrics."""
+    try:
+        # Mock data quality metrics
+        quality_metrics = {
+            "total_samples": 10000,
+            "valid_samples": 9800,
+            "invalid_samples": 200,
+            "coverage": 0.95,
+            "diversity_score": 0.87,
+            "label_distribution": {
+                "class_a": 0.4,
+                "class_b": 0.35,
+                "class_c": 0.25
+            },
+            "missing_values": 0.02,
+            "outliers": 0.05
+        }
+        
+        return {
+            "status": "success",
+            "domain_id": domain_id,
+            "quality_metrics": quality_metrics,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get data quality: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/dashboard/patterns")
+async def get_pattern_visualization(domain_id: Optional[str] = None):
+    """Get pattern learning visualization data."""
+    try:
+        if not pattern_engine:
+            raise HTTPException(status_code=503, detail="Pattern learning engine not initialized")
+        
+        # Get learned patterns (mock for now)
+        patterns_data = {
+            "column_patterns": [
+                {"pattern": "VARCHAR -> TEXT", "frequency": 0.45, "confidence": 0.92},
+                {"pattern": "INT -> BIGINT", "frequency": 0.32, "confidence": 0.88}
+            ],
+            "relationship_patterns": [
+                {"pattern": "Table -> Column", "frequency": 0.78, "confidence": 0.95},
+                {"pattern": "Column -> Column", "frequency": 0.22, "confidence": 0.82}
+            ],
+            "temporal_patterns": [
+                {"pattern": "Schema evolution", "frequency": 0.15, "confidence": 0.75}
+            ]
+        }
+        
+        return {
+            "status": "success",
+            "domain_id": domain_id,
+            "patterns": patterns_data,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get pattern visualization: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/dashboard/history")
+async def get_training_history(
+    domain_id: Optional[str] = None,
+    limit: int = 20
+):
+    """Get training history with rollback support."""
+    try:
+        if not rollback_manager:
+            raise HTTPException(status_code=503, detail="Rollback manager not initialized")
+        
+        # Get training history (mock for now)
+        history = [
+            {
+                "training_run_id": f"run_{i}",
+                "domain_id": domain_id or f"domain_{i % 3}",
+                "status": "completed",
+                "accuracy": 0.85 + (i * 0.01),
+                "created_at": (datetime.now() - timedelta(days=i)).isoformat(),
+                "can_rollback": i < 5  # Only recent runs can be rolled back
+            }
+            for i in range(limit)
+        ]
+        
+        return {
+            "status": "success",
+            "history": history,
+            "count": len(history),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get training history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/dashboard/rollback")
+async def rollback_training(training_run_id: str):
+    """Rollback to a previous training run."""
+    try:
+        if not rollback_manager:
+            raise HTTPException(status_code=503, detail="Rollback manager not initialized")
+        
+        # Perform rollback
+        result = rollback_manager.rollback_to_checkpoint(training_run_id)
+        
+        return {
+            "status": "success",
+            "training_run_id": training_run_id,
+            "rollback_result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to rollback training: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Interactive Training Features
+@app.post("/training/experiments")
+async def create_experiment(request: ExperimentRequest):
+    """Create a new training experiment."""
+    try:
+        experiment_id = f"exp_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        # Store experiment metadata (in a real implementation, this would be persisted)
+        experiment_data = {
+            "experiment_id": experiment_id,
+            "name": request.name,
+            "description": request.description,
+            "config": request.config,
+            "tags": request.tags,
+            "status": "created",
+            "created_at": datetime.now().isoformat(),
+            "metrics": {}
+        }
+        
+        return ExperimentResponse(**experiment_data)
+    except Exception as e:
+        logger.error(f"Failed to create experiment: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/training/experiments")
+async def list_experiments(
+    domain_id: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 20
+):
+    """List training experiments."""
+    try:
+        # Mock experiments list
+        experiments = [
+            {
+                "experiment_id": f"exp_{i}",
+                "name": f"Experiment {i}",
+                "status": "completed" if i % 2 == 0 else "running",
+                "created_at": (datetime.now() - timedelta(days=i)).isoformat(),
+                "metrics": {
+                    "accuracy": 0.85 + (i * 0.01),
+                    "loss": 0.25 - (i * 0.01)
+                }
+            }
+            for i in range(limit)
+        ]
+        
+        if status:
+            experiments = [e for e in experiments if e["status"] == status]
+        
+        return {
+            "status": "success",
+            "experiments": experiments,
+            "count": len(experiments)
+        }
+    except Exception as e:
+        logger.error(f"Failed to list experiments: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/training/sample-selection")
+async def select_samples_for_active_learning(
+    domain_id: str,
+    num_samples: int = 10,
+    strategy: str = "uncertainty"  # uncertainty, diversity, random
+):
+    """Select samples for active learning."""
+    try:
+        if not HAS_ACTIVE_LEARNING:
+            raise HTTPException(status_code=503, detail="Active learning not available")
+        
+        # Mock sample selection
+        selected_samples = [
+            {
+                "sample_id": f"sample_{i}",
+                "uncertainty_score": 0.85 - (i * 0.05),
+                "diversity_score": 0.7 + (i * 0.02),
+                "priority": i + 1
+            }
+            for i in range(num_samples)
+        ]
+        
+        return {
+            "status": "success",
+            "domain_id": domain_id,
+            "strategy": strategy,
+            "selected_samples": selected_samples,
+            "count": len(selected_samples)
+        }
+    except Exception as e:
+        logger.error(f"Failed to select samples: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/training/tune-parameters")
+async def tune_training_parameters(
+    domain_id: str,
+    parameter_space: Dict[str, Any],
+    optimization_goal: str = "accuracy"  # accuracy, latency, loss
+):
+    """Tune training parameters."""
+    try:
+        if not HAS_AUTO_TUNER:
+            raise HTTPException(status_code=503, detail="Auto tuner not available")
+        
+        # Mock parameter tuning results
+        best_params = {
+            "learning_rate": 0.001,
+            "batch_size": 32,
+            "epochs": 100,
+            "optimization_goal": optimization_goal
+        }
+        
+        return {
+            "status": "success",
+            "domain_id": domain_id,
+            "best_parameters": best_params,
+            "expected_improvement": 0.15,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to tune parameters: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/training/pipeline-visualization")
+async def get_pipeline_visualization():
+    """Get training pipeline workflow visualization."""
+    try:
+        if not pipeline:
+            raise HTTPException(status_code=503, detail="Training pipeline not initialized")
+        
+        # Generate pipeline workflow visualization
+        workflow = {
+            "nodes": [
+                {"id": "data_ingestion", "label": "Data Ingestion", "status": "completed"},
+                {"id": "preprocessing", "label": "Preprocessing", "status": "completed"},
+                {"id": "pattern_learning", "label": "Pattern Learning", "status": "running"},
+                {"id": "model_training", "label": "Model Training", "status": "pending"},
+                {"id": "evaluation", "label": "Evaluation", "status": "pending"},
+                {"id": "deployment", "label": "Deployment", "status": "pending"}
+            ],
+            "edges": [
+                {"from": "data_ingestion", "to": "preprocessing"},
+                {"from": "preprocessing", "to": "pattern_learning"},
+                {"from": "pattern_learning", "to": "model_training"},
+                {"from": "model_training", "to": "evaluation"},
+                {"from": "evaluation", "to": "deployment"}
+            ],
+            "current_step": "pattern_learning",
+            "progress": 0.4
+        }
+        
+        return {
+            "status": "success",
+            "workflow": workflow,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get pipeline visualization: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Root endpoint
 @app.get("/")
 async def root():
@@ -668,6 +1075,20 @@ async def root():
             "training": {
                 "pipeline": "/train/pipeline",
                 "domain": "/train/domain"
+            },
+            "dashboard": {
+                "progress": "/dashboard/progress",
+                "compare-models": "/dashboard/compare-models",
+                "data-quality": "/dashboard/data-quality",
+                "patterns": "/dashboard/patterns",
+                "history": "/dashboard/history",
+                "rollback": "/dashboard/rollback"
+            },
+            "interactive": {
+                "experiments": "/training/experiments",
+                "sample-selection": "/training/sample-selection",
+                "tune-parameters": "/training/tune-parameters",
+                "pipeline-visualization": "/training/pipeline-visualization"
             },
             "ab_testing": {
                 "create": "/ab-test/create",

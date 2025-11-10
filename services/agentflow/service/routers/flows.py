@@ -163,6 +163,7 @@ async def _request_gpu_allocation(
     """Request GPU allocation for LLM-intensive flow (Priority 4)."""
     gpu_orchestrator_url = os.getenv("GPU_ORCHESTRATOR_URL", "http://gpu-orchestrator:8086")
     if not gpu_orchestrator_url:
+        logger.debug("GPU orchestrator URL missing; skipping allocation", extra={"flow_id": flow_id})
         return None
     
     workload_data = {
@@ -191,9 +192,24 @@ async def _request_gpu_allocation(
             if resp.status_code == 200:
                 result = resp.json()
                 return result.get("id")
-    except Exception:
-        pass  # Non-fatal - continue without GPU
-    
+            logger.debug(
+                "GPU allocation request returned non-success status",
+                extra={
+                    "flow_id": flow_id,
+                    "status_code": resp.status_code,
+                    "response_body": resp.text[:256],
+                },
+            )
+    except Exception as exc:
+        logger.debug(
+            "GPU allocation request failed",
+            extra={
+                "flow_id": flow_id,
+                "workflow_id": workflow_id,
+            },
+            exc_info=exc,
+        )
+
     return None
 
 
@@ -201,6 +217,10 @@ async def _release_gpu_allocation(allocation_id: str) -> None:
     """Release a previously acquired GPU allocation."""
     gpu_orchestrator_url = os.getenv("GPU_ORCHESTRATOR_URL", "http://gpu-orchestrator:8086")
     if not gpu_orchestrator_url:
+        logger.debug(
+            "GPU orchestrator URL missing; skipping release",
+            extra={"allocation_id": allocation_id},
+        )
         return
 
     try:
@@ -296,7 +316,22 @@ async def run_flow(
             tweaks=payload.tweaks,
             stream=payload.stream,
         )
-        result = await langflow.run_flow(target_id, run_request)
+
+        try:
+            result = await langflow.run_flow(target_id, run_request)
+        except Exception as exc:  # pragma: no cover - defensive catch, re-raised as HTTP error
+            logger.error(
+                "Langflow run failed",
+                extra={
+                    "flow_id": flow_id,
+                    "target_id": target_id,
+                },
+                exc_info=exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Langflow execution failed",
+            ) from exc
 
         # Optional DeepAgents analysis (if enabled)
         from ..deepagents import analyze_flow_execution

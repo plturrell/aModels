@@ -124,6 +124,15 @@ class SearchRequest(BaseModel):
     query: str
     top_k: int = Field(default=10, ge=1, le=200)
     filters: Dict[str, str] = Field(default_factory=dict)
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=10, ge=1, le=100)
+    date_from: Optional[str] = None  # ISO format date string
+    date_to: Optional[str] = None    # ISO format date string
+    source: Optional[str] = None     # Filter by source
+    doc_type: Optional[str] = None   # Filter by document type
+    facets: List[str] = Field(default_factory=list)  # Faceted search fields
+    include_explanation: bool = Field(default=False)  # Include ranking explanation
+    include_highlighting: bool = Field(default=True)  # Highlight query terms
     
     @field_validator('query')
     @classmethod
@@ -146,6 +155,23 @@ class SearchRequest(BaseModel):
                 raise ValueError(f"Filter value for '{key}' exceeds maximum length")
             sanitized[key.strip()] = value.strip()
         return sanitized
+    
+    @field_validator('date_from', 'date_to')
+    @classmethod
+    def validate_date(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        try:
+            datetime.fromisoformat(v.replace('Z', '+00:00'))
+        except ValueError:
+            raise ValueError(f"Invalid date format: {v}. Use ISO format (YYYY-MM-DDTHH:MM:SS)")
+        return v
+
+
+class RankingExplanation(BaseModel):
+    score: float
+    factors: Dict[str, float] = Field(default_factory=dict)  # e.g., {"semantic_similarity": 0.85, "keyword_match": 0.12}
+    explanation: str = ""  # Human-readable explanation
 
 
 class SearchResult(BaseModel):
@@ -153,11 +179,30 @@ class SearchResult(BaseModel):
     content: str
     similarity: float
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    highlighted_content: Optional[str] = None  # Content with query terms highlighted
+    explanation: Optional[RankingExplanation] = None  # Ranking explanation
+    preview: Optional[str] = None  # Short preview snippet
+
+
+class FacetValue(BaseModel):
+    value: str
+    count: int
+
+
+class Facet(BaseModel):
+    field: str
+    values: List[FacetValue]
 
 
 class SearchResponse(BaseModel):
     backend: str
     results: List[SearchResult]
+    total: int = 0  # Total number of results
+    page: int = 1
+    page_size: int = 10
+    total_pages: int = 0
+    facets: List[Facet] = Field(default_factory=list)  # Faceted search results
+    query_time_ms: float = 0.0  # Query execution time
 
 
 class HealthResponse(BaseModel):
@@ -605,10 +650,48 @@ class AISearchOrchestrator:
         return self.conversation_manager.get_conversation(conversation_id)
 
 
+class SearchHistory:
+    """Manages search history for users"""
+    def __init__(self, max_history: int = 100):
+        self.history: List[Dict[str, Any]] = []
+        self.max_history = max_history
+        self.lock = threading.Lock()
+    
+    def add(self, query: str, filters: Dict[str, str], results_count: int) -> None:
+        with self.lock:
+            entry = {
+                "query": query,
+                "filters": filters,
+                "results_count": results_count,
+                "timestamp": time.time()
+            }
+            self.history.insert(0, entry)
+            if len(self.history) > self.max_history:
+                self.history = self.history[:self.max_history]
+    
+    def get_recent(self, limit: int = 10) -> List[Dict[str, Any]]:
+        with self.lock:
+            return self.history[:limit]
+    
+    def get_suggestions(self, prefix: str, limit: int = 5) -> List[str]:
+        """Get search suggestions based on prefix"""
+        with self.lock:
+            suggestions = set()
+            prefix_lower = prefix.lower()
+            for entry in self.history:
+                query = entry["query"].lower()
+                if query.startswith(prefix_lower) and query != prefix_lower:
+                    suggestions.add(entry["query"])
+                if len(suggestions) >= limit:
+                    break
+            return list(suggestions)[:limit]
+
+
 class SearchOrchestrator:
     def __init__(self) -> None:
         go_url = os.getenv("GO_SEARCH_URL")
         self.go_client = GoSearchClient(go_url) if go_url else None
+        self.search_history = SearchHistory()
 
         es_urls = [u.strip() for u in os.getenv("ELASTICSEARCH_URLS", "").split(",") if u.strip()]
         self.es_index = os.getenv("ELASTICSEARCH_INDEX", "agenticaieth-docs")
@@ -674,9 +757,36 @@ class SearchOrchestrator:
                 logger.warning("Secondary Go search ingest failed for %s: %s", doc.id, exc.detail)
 
     def search(self, request: SearchRequest) -> SearchResponse:
+        # Apply date range filters if provided
+        enhanced_filters = dict(request.filters)
+        if request.date_from or request.date_to:
+            date_filter = {}
+            if request.date_from:
+                date_filter["gte"] = request.date_from
+            if request.date_to:
+                date_filter["lte"] = request.date_to
+            enhanced_filters["date"] = date_filter
+        
+        # Apply source filter
+        if request.source:
+            enhanced_filters["source"] = request.source
+        
+        # Apply document type filter
+        if request.doc_type:
+            enhanced_filters["type"] = request.doc_type
+        
+        # Create modified request with enhanced filters
+        modified_request = SearchRequest(
+            query=request.query,
+            top_k=request.top_k * request.page_size,  # Get more results for pagination
+            filters=enhanced_filters,
+            page=request.page,
+            page_size=request.page_size
+        )
+        
         cache_key = None
         if self.redis.available:
-            cache_key = f"search::{request.query}::{json.dumps(request.filters, sort_keys=True)}::{request.top_k}"
+            cache_key = f"search::{request.query}::{json.dumps(enhanced_filters, sort_keys=True)}::{request.top_k}::{request.page}"
             cached = self.redis.get_cached_search(cache_key)
             if cached is not None:
                 results = [SearchResult(**item) for item in cached.get("results", [])]
@@ -685,9 +795,12 @@ class SearchOrchestrator:
         query_embedding = self._embed_text(request.query)
 
         if self.elasticsearch.available:
-            response = self._search_elasticsearch(request, query_embedding)
+            response = self._search_elasticsearch(modified_request, query_embedding)
         else:
-            response = self._search_in_memory(request, query_embedding)
+            response = self._search_in_memory(modified_request, query_embedding)
+
+        # Record search in history
+        self.search_history.add(request.query, enhanced_filters, len(response.results))
 
         if cache_key and response.results:
             cached_payload = {
@@ -697,6 +810,108 @@ class SearchOrchestrator:
             self.redis.cache_search(cache_key, cached_payload)
 
         return response
+    
+    def highlight_results(self, results: List[SearchResult], query: str) -> List[SearchResult]:
+        """Highlight query terms in search results"""
+        query_terms = query.lower().split()
+        for result in results:
+            content = result.content
+            highlighted = content
+            for term in query_terms:
+                if term:
+                    # Case-insensitive highlighting
+                    pattern = re.compile(re.escape(term), re.IGNORECASE)
+                    highlighted = pattern.sub(lambda m: f"<mark>{m.group()}</mark>", highlighted)
+            result.highlighted_content = highlighted
+        return results
+    
+    def generate_preview(self, content: str, query: str, max_length: int = 200) -> str:
+        """Generate a preview snippet around query terms"""
+        query_terms = query.lower().split()
+        content_lower = content.lower()
+        
+        # Find first occurrence of any query term
+        best_pos = -1
+        for term in query_terms:
+            if term:
+                pos = content_lower.find(term)
+                if pos != -1 and (best_pos == -1 or pos < best_pos):
+                    best_pos = pos
+        
+        if best_pos == -1:
+            # No match found, return beginning
+            return content[:max_length] + ("..." if len(content) > max_length else "")
+        
+        # Extract snippet around match
+        start = max(0, best_pos - max_length // 2)
+        end = min(len(content), start + max_length)
+        
+        preview = content[start:end]
+        if start > 0:
+            preview = "..." + preview
+        if end < len(content):
+            preview = preview + "..."
+        
+        return preview
+    
+    def explain_rankings(self, results: List[SearchResult], query: str) -> List[SearchResult]:
+        """Generate ranking explanations for results"""
+        query_terms = query.lower().split()
+        for result in results:
+            factors = {}
+            explanation_parts = []
+            
+            # Semantic similarity factor
+            if result.similarity > 0.8:
+                factors["semantic_similarity"] = result.similarity
+                explanation_parts.append(f"High semantic similarity ({result.similarity:.2f})")
+            elif result.similarity > 0.5:
+                factors["semantic_similarity"] = result.similarity
+                explanation_parts.append(f"Moderate semantic similarity ({result.similarity:.2f})")
+            
+            # Keyword match factor
+            content_lower = result.content.lower()
+            keyword_matches = sum(1 for term in query_terms if term in content_lower)
+            if keyword_matches > 0:
+                keyword_score = keyword_matches / len(query_terms)
+                factors["keyword_match"] = keyword_score
+                explanation_parts.append(f"Matches {keyword_matches} query term(s)")
+            
+            # Metadata relevance
+            if result.metadata:
+                metadata_score = 0.1  # Small boost for having metadata
+                factors["metadata_presence"] = metadata_score
+                explanation_parts.append("Contains metadata")
+            
+            explanation = RankingExplanation(
+                score=result.similarity,
+                factors=factors,
+                explanation="; ".join(explanation_parts) if explanation_parts else "Relevance score based on content matching"
+            )
+            result.explanation = explanation
+        
+        return results
+    
+    def calculate_facets(self, results: List[SearchResult], facet_fields: List[str]) -> List[Facet]:
+        """Calculate facet counts for specified fields"""
+        facets = {}
+        for field in facet_fields:
+            facet_values = defaultdict(int)
+            for result in results:
+                value = result.metadata.get(field, "Unknown")
+                if isinstance(value, (str, int, float)):
+                    facet_values[str(value)] += 1
+                elif isinstance(value, list):
+                    for v in value:
+                        facet_values[str(v)] += 1
+            
+            facet_values_list = [
+                FacetValue(value=k, count=v)
+                for k, v in sorted(facet_values.items(), key=lambda x: x[1], reverse=True)[:10]
+            ]
+            facets[field] = Facet(field=field, values=facet_values_list)
+        
+        return list(facets.values())
 
     def _embed_text(self, text: str) -> Optional[List[float]]:
         if not text.strip() or self.go_client is None:
@@ -931,7 +1146,157 @@ def add_document(doc: SearchDocument) -> None:
 
 @app.post("/v1/search", response_model=SearchResponse)
 def search_documents(request: SearchRequest) -> SearchResponse:
-    return orchestrator.search(request)
+    import time
+    start_time = time.time()
+    
+    response = orchestrator.search(request)
+    
+    # Calculate pagination
+    total = len(response.results)
+    page = request.page
+    page_size = request.page_size
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    
+    # Apply pagination
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    paginated_results = response.results[start_idx:end_idx]
+    
+    # Add highlighting if requested
+    if request.include_highlighting:
+        paginated_results = orchestrator.highlight_results(paginated_results, request.query)
+    
+    # Add preview snippets
+    for result in paginated_results:
+        if not result.preview:
+            result.preview = orchestrator.generate_preview(result.content, request.query)
+    
+    # Add ranking explanations if requested
+    if request.include_explanation:
+        paginated_results = orchestrator.explain_rankings(paginated_results, request.query)
+    
+    # Calculate facets if requested
+    facets = []
+    if request.facets:
+        facets = orchestrator.calculate_facets(response.results, request.facets)
+    
+    query_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+    
+    return SearchResponse(
+        backend=response.backend,
+        results=paginated_results,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        facets=facets,
+        query_time_ms=query_time
+    )
+
+
+@app.get("/v1/search/history")
+def get_search_history(limit: int = 10) -> Dict[str, Any]:
+    """Get recent search history"""
+    history = orchestrator.search_history.get_recent(limit)
+    return {"history": history, "count": len(history)}
+
+
+@app.get("/v1/search/suggestions")
+def get_search_suggestions(prefix: str, limit: int = 5) -> Dict[str, Any]:
+    """Get search suggestions based on prefix"""
+    suggestions = orchestrator.search_history.get_suggestions(prefix, limit)
+    return {"suggestions": suggestions, "count": len(suggestions)}
+
+
+@app.post("/v1/search/feedback")
+def submit_search_feedback(
+    result_id: str,
+    query: str,
+    helpful: bool,
+    comment: Optional[str] = None
+) -> Dict[str, str]:
+    """Submit feedback on search results (thumbs up/down)"""
+    # Store feedback (could be stored in Redis or database)
+    feedback_entry = {
+        "result_id": result_id,
+        "query": query,
+        "helpful": helpful,
+        "comment": comment,
+        "timestamp": time.time()
+    }
+    
+    # In a real implementation, this would be stored persistently
+    logger.info(f"Search feedback received: {feedback_entry}")
+    
+    return {"status": "success", "message": "Feedback recorded"}
+
+
+@app.get("/v1/search/analytics")
+def get_search_analytics(
+    days: int = 7,
+    limit: int = 20
+) -> Dict[str, Any]:
+    """Get search analytics (trends, popular queries, etc.)"""
+    history = orchestrator.search_history.get_recent(limit * 10)  # Get more for analysis
+    
+    # Calculate popular queries
+    query_counts = defaultdict(int)
+    for entry in history:
+        query_counts[entry["query"]] += 1
+    
+    popular_queries = [
+        {"query": q, "count": c}
+        for q, c in sorted(query_counts.items(), key=lambda x: x[1], reverse=True)[:limit]
+    ]
+    
+    # Calculate average results count
+    avg_results = sum(entry["results_count"] for entry in history) / len(history) if history else 0
+    
+    return {
+        "popular_queries": popular_queries,
+        "total_searches": len(history),
+        "average_results_per_query": avg_results,
+        "period_days": days
+    }
+
+
+@app.post("/v1/search/export")
+def export_search_results(
+    request: SearchRequest,
+    format: str = "json"  # json or csv
+) -> StreamingResponse:
+    """Export search results in various formats"""
+    response = orchestrator.search(request)
+    
+    if format.lower() == "csv":
+        import csv
+        import io
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow(["ID", "Content", "Similarity", "Metadata"])
+        
+        # Write data
+        for result in response.results:
+            metadata_str = json.dumps(result.metadata)
+            writer.writerow([result.id, result.content, result.similarity, metadata_str])
+        
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=search_results_{int(time.time())}.csv"}
+        )
+    else:  # JSON
+        results_data = [result.dict() for result in response.results]
+        json_data = json.dumps(results_data, indent=2)
+        return StreamingResponse(
+            iter([json_data]),
+            media_type="application/json",
+            headers={"Content-Disposition": f"attachment; filename=search_results_{int(time.time())}.json"}
+        )
 
 
 @app.post("/v1/ai-search", response_model=AISearchResponse)

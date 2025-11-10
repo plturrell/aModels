@@ -73,6 +73,21 @@
       </div>
       
       <div id="status" class="sap-message sap-message-info" role="alert" aria-live="assertive"></div>
+      
+      <!-- Analytics Quick View -->
+      <div id="analytics-quickview" class="sap-card" style="display:none;" role="region" aria-label="Analytics Quick View">
+        <div class="sap-card-content">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div class="sap-text-primary" style="font-weight:600;">Analytics</div>
+            <button id="refresh-analytics" class="sap-button sap-button-transparent" aria-label="Refresh analytics">
+              ↻
+            </button>
+          </div>
+          <div id="analytics-preview" style="min-height:60px; display:flex; align-items:center; justify-content:center;">
+            <div class="sap-text-secondary">Loading...</div>
+          </div>
+        </div>
+      </div>
     </div>
     
     <!-- Phase 2: Design System & Enhanced Features -->
@@ -83,6 +98,7 @@
     <script src="connection-manager.js"></script>
     <script src="command-palette.js"></script>
     <script src="tooltips.js"></script>
+    <script src="analytics-quickview.js"></script>
     <script src="popup.js"></script>
   </body>
   </html>

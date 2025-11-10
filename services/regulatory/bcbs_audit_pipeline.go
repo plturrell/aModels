@@ -8,6 +8,16 @@ import (
 	"time"
 )
 
+const (
+	// criticalComplianceThreshold marks the minimum compliance score before an audit result is
+	// flagged as a critical gap. Balances signal sensitivity with false positives during triage.
+	criticalComplianceThreshold = 0.70
+
+	// strengthComplianceThreshold is the score at which a principle is treated as an exemplar
+	// for sharing best practices across the organisation.
+	strengthComplianceThreshold = 0.95
+)
+
 // BCBS239AuditPipeline orchestrates comprehensive BCBS 239 audits using Goose and Deep Research Agent.
 // This pipeline automates: compliance checks, gap analysis, remediation planning, and insight generation.
 type BCBS239AuditPipeline struct {
@@ -16,10 +26,13 @@ type BCBS239AuditPipeline struct {
 	gooseAdapter        *GooseAdapter
 	deepResearchAdapter *DeepResearchAdapter
 	logger              *log.Logger
-	
+
 	// Pipeline state
-	auditResults        map[string]*AuditResult
-	mu                  sync.RWMutex
+	// auditResults keeps the last known audit runs keyed by ID. Callers are expected to
+	// pull results and prune as needed; long-running deployments should enforce retention
+	// policies at the handler layer to avoid unbounded growth.
+	auditResults map[string]*AuditResult
+	mu           sync.RWMutex
 }
 
 // NewBCBS239AuditPipeline creates a new audit pipeline.
@@ -29,101 +42,103 @@ func NewBCBS239AuditPipeline(
 	logger *log.Logger,
 ) *BCBS239AuditPipeline {
 	return &BCBS239AuditPipeline{
-		reasoningAgent: reasoningAgent,
-		graphClient:    graphClient,
-		gooseAdapter:   reasoningAgent.gooseAdapter,
+		reasoningAgent:      reasoningAgent,
+		graphClient:         graphClient,
+		gooseAdapter:        reasoningAgent.gooseAdapter,
 		deepResearchAdapter: reasoningAgent.deepResearchAdapter,
-		logger:         logger,
-		auditResults:   make(map[string]*AuditResult),
+		logger:              logger,
+		auditResults:        make(map[string]*AuditResult),
 	}
 }
 
 // AuditRequest defines parameters for a BCBS239 audit.
 type AuditRequest struct {
 	AuditID          string
-	Principles       []string                 // e.g., ["P3", "P4", "P7"]
-	Scope            string                   // "full", "quick", "targeted"
+	Principles       []string // e.g., ["P3", "P4", "P7"]
+	Scope            string   // "full", "quick", "targeted"
 	ReportPeriod     string
-	UseGoose         bool                     // Enable Goose for autonomous tasks
-	UseDeepResearch  bool                     // Enable Deep Research for comprehensive analysis
-	GenerateInsights bool                     // Generate actionable insights
-	AutoRemediate    bool                     // Let Goose create remediation code/scripts
+	UseGoose         bool // Enable Goose for autonomous tasks
+	UseDeepResearch  bool // Enable Deep Research for comprehensive analysis
+	GenerateInsights bool // Generate actionable insights
+	AutoRemediate    bool // Let Goose create remediation code/scripts
 	Context          map[string]interface{}
 }
 
 // AuditResult contains the complete audit results.
 type AuditResult struct {
-	AuditID              string
-	StartTime            time.Time
-	EndTime              time.Time
-	Status               string // "in_progress", "completed", "failed"
-	
+	AuditID   string
+	StartTime time.Time
+	EndTime   time.Time
+	Status    string // "in_progress", "completed", "failed"
+
 	// Audit findings
-	PrincipleAudits      []*PrincipleAuditResult
-	OverallScore         float64
-	ComplianceStatus     string // "compliant", "partially_compliant", "non_compliant"
-	
+	PrincipleAudits  []*PrincipleAuditResult
+	OverallScore     float64
+	ComplianceStatus string // "compliant", "partially_compliant", "non_compliant"
+
 	// Insights and recommendations
-	Insights             []*ComplianceInsight
-	Recommendations      []*Remediation
-	
+	Insights        []*ComplianceInsight
+	Recommendations []*Remediation
+
 	// Autonomous outputs
 	GooseGeneratedScripts []string // Scripts created by Goose
 	ResearchReports       []*ResearchReport
-	
+
 	// Metadata
-	ModelsUsed           []string
-	ProcessingTime       map[string]time.Duration
-	Errors               []string
+	ModelsUsed     []string
+	ProcessingTime map[string]time.Duration
+	// Errors accumulates non-fatal issues from downstream phases; we log and surface them while
+	// keeping the audit result available to callers for remediation follow-up.
+	Errors []string
 }
 
 // PrincipleAuditResult contains audit results for a single principle.
 type PrincipleAuditResult struct {
-	PrincipleID      string
-	PrincipleName    string
-	ComplianceScore  float64
-	Status           string
-	ControlsCovered  int
-	ControlsMissing  int
-	Gaps             []string
-	Evidence         []string
-	AnalyzedBy       string // "GNN", "DeepResearch", "Goose", etc.
+	PrincipleID     string
+	PrincipleName   string
+	ComplianceScore float64
+	Status          string
+	ControlsCovered int
+	ControlsMissing int
+	Gaps            []string
+	Evidence        []string
+	AnalyzedBy      string // "GNN", "DeepResearch", "Goose", etc.
 }
 
 // ComplianceInsight represents an actionable insight.
 type ComplianceInsight struct {
-	InsightID    string
-	Category     string // "risk", "opportunity", "gap", "strength"
-	Severity     string // "critical", "high", "medium", "low"
-	Title        string
-	Description  string
+	InsightID          string
+	Category           string // "risk", "opportunity", "gap", "strength"
+	Severity           string // "critical", "high", "medium", "low"
+	Title              string
+	Description        string
 	AffectedPrinciples []string
-	Evidence     []string
-	Recommendations []string
-	GeneratedBy  string
+	Evidence           []string
+	Recommendations    []string
+	GeneratedBy        string
 }
 
 // Remediation represents an actionable remediation plan.
 type Remediation struct {
-	RemediationID   string
-	PrincipleID     string
-	Gap             string
-	Recommendation  string
-	Priority        string
-	EstimatedEffort string
-	AutomationScript string // Generated by Goose
+	RemediationID       string
+	PrincipleID         string
+	Gap                 string
+	Recommendation      string
+	Priority            string
+	EstimatedEffort     string
+	AutomationScript    string // Generated by Goose
 	ImplementationSteps []string
 }
 
 // ResearchReport contains comprehensive research findings.
 type ResearchReport struct {
-	ReportID     string
-	Topic        string
-	Summary      string
-	KeyFindings  []string
-	Sources      []string
-	Confidence   float64
-	GeneratedAt  time.Time
+	ReportID    string
+	Topic       string
+	Summary     string
+	KeyFindings []string
+	Sources     []string
+	Confidence  float64
+	GeneratedAt time.Time
 }
 
 // RunAudit executes a comprehensive BCBS239 audit pipeline.
@@ -131,31 +146,31 @@ func (p *BCBS239AuditPipeline) RunAudit(ctx context.Context, request AuditReques
 	if p.logger != nil {
 		p.logger.Printf("Starting BCBS239 audit: %s (scope: %s)", request.AuditID, request.Scope)
 	}
-	
+
 	result := &AuditResult{
-		AuditID:           request.AuditID,
-		StartTime:         time.Now(),
-		Status:            "in_progress",
-		PrincipleAudits:   []*PrincipleAuditResult{},
-		Insights:          []*ComplianceInsight{},
-		Recommendations:   []*Remediation{},
-		ModelsUsed:        []string{},
-		ProcessingTime:    make(map[string]time.Duration),
-		Errors:            []string{},
+		AuditID:         request.AuditID,
+		StartTime:       time.Now(),
+		Status:          "in_progress",
+		PrincipleAudits: []*PrincipleAuditResult{},
+		Insights:        []*ComplianceInsight{},
+		Recommendations: []*Remediation{},
+		ModelsUsed:      []string{},
+		ProcessingTime:  make(map[string]time.Duration),
+		Errors:          []string{},
 	}
-	
+
 	// Store result for tracking
 	p.mu.Lock()
 	p.auditResults[request.AuditID] = result
 	p.mu.Unlock()
-	
+
 	// Phase 1: Audit each principle
 	if err := p.auditPrinciples(ctx, request, result); err != nil {
 		result.Status = "failed"
 		result.Errors = append(result.Errors, fmt.Sprintf("Principle audit failed: %v", err))
 		return result, err
 	}
-	
+
 	// Phase 2: Deep Research for comprehensive analysis (if enabled)
 	if request.UseDeepResearch && p.deepResearchAdapter != nil {
 		if err := p.runDeepResearchAnalysis(ctx, request, result); err != nil {
@@ -165,7 +180,7 @@ func (p *BCBS239AuditPipeline) RunAudit(ctx context.Context, request AuditReques
 			result.Errors = append(result.Errors, fmt.Sprintf("Deep Research: %v", err))
 		}
 	}
-	
+
 	// Phase 3: Generate insights
 	if request.GenerateInsights {
 		if err := p.generateInsights(ctx, request, result); err != nil {
@@ -175,7 +190,7 @@ func (p *BCBS239AuditPipeline) RunAudit(ctx context.Context, request AuditReques
 			result.Errors = append(result.Errors, fmt.Sprintf("Insights: %v", err))
 		}
 	}
-	
+
 	// Phase 4: Goose autonomous remediation (if enabled)
 	if request.AutoRemediate && request.UseGoose && p.gooseAdapter != nil {
 		if err := p.runGooseRemediation(ctx, request, result); err != nil {
@@ -185,18 +200,18 @@ func (p *BCBS239AuditPipeline) RunAudit(ctx context.Context, request AuditReques
 			result.Errors = append(result.Errors, fmt.Sprintf("Goose remediation: %v", err))
 		}
 	}
-	
+
 	// Phase 5: Calculate overall score and status
 	p.calculateOverallScore(result)
-	
+
 	result.EndTime = time.Now()
 	result.Status = "completed"
-	
+
 	if p.logger != nil {
 		p.logger.Printf("Audit completed: %s (score: %.2f, status: %s, duration: %v)",
 			request.AuditID, result.OverallScore, result.ComplianceStatus, result.EndTime.Sub(result.StartTime))
 	}
-	
+
 	return result, nil
 }
 
@@ -208,23 +223,23 @@ func (p *BCBS239AuditPipeline) auditPrinciples(
 ) error {
 	for _, principleID := range request.Principles {
 		startTime := time.Now()
-		
+
 		if p.logger != nil {
 			p.logger.Printf("Auditing principle: %s", principleID)
 		}
-		
+
 		// Get controls for this principle from graph
 		controls, err := p.graphClient.GetPrincipleControls(ctx, principleID)
 		if err != nil {
 			return fmt.Errorf("failed to get controls for %s: %w", principleID, err)
 		}
-		
+
 		// Analyze compliance using graph + GNN
 		complianceScore := p.analyzeCompliance(controls, principleID)
-		
+
 		// Identify gaps
 		gaps := p.identifyGaps(controls, principleID)
-		
+
 		principleAudit := &PrincipleAuditResult{
 			PrincipleID:     principleID,
 			PrincipleName:   p.getPrincipleName(principleID),
@@ -236,11 +251,11 @@ func (p *BCBS239AuditPipeline) auditPrinciples(
 			Evidence:        p.extractEvidence(controls),
 			AnalyzedBy:      "GNN+Graph",
 		}
-		
+
 		result.PrincipleAudits = append(result.PrincipleAudits, principleAudit)
 		result.ProcessingTime[principleID] = time.Since(startTime)
 	}
-	
+
 	return nil
 }
 
@@ -252,13 +267,13 @@ func (p *BCBS239AuditPipeline) runDeepResearchAnalysis(
 ) error {
 	startTime := time.Now()
 	result.ModelsUsed = append(result.ModelsUsed, "DeepResearch")
-	
+
 	for _, principleAudit := range result.PrincipleAudits {
 		// Skip compliant principles for deep dive
 		if principleAudit.Status == "compliant" {
 			continue
 		}
-		
+
 		// Construct research query
 		question := fmt.Sprintf(`Conduct comprehensive research on BCBS 239 %s (%s).
 		
@@ -278,7 +293,7 @@ Provide detailed, actionable recommendations with citations.`,
 			principleAudit.ComplianceScore,
 			principleAudit.Gaps,
 		)
-		
+
 		// Execute deep research
 		modelRequest := ModelQueryRequest{
 			QueryType:   "research",
@@ -290,12 +305,14 @@ Provide detailed, actionable recommendations with citations.`,
 				"gaps":             principleAudit.Gaps,
 			},
 		}
-		
+
 		response, err := p.deepResearchAdapter.Query(ctx, modelRequest)
 		if err != nil {
+			// Surface the error to the caller so the pipeline can record it and continue operating
+			// (partial failure is expected when external agents intermittently fail).
 			return err
 		}
-		
+
 		// Store research report
 		report := &ResearchReport{
 			ReportID:    fmt.Sprintf("research-%s-%s", request.AuditID, principleAudit.PrincipleID),
@@ -306,15 +323,15 @@ Provide detailed, actionable recommendations with citations.`,
 			Confidence:  response.Confidence,
 			GeneratedAt: time.Now(),
 		}
-		
+
 		result.ResearchReports = append(result.ResearchReports, report)
-		
+
 		if p.logger != nil {
 			p.logger.Printf("Deep Research completed for %s (confidence: %.2f, sources: %d)",
 				principleAudit.PrincipleID, response.Confidence, len(response.Sources))
 		}
 	}
-	
+
 	result.ProcessingTime["deep_research"] = time.Since(startTime)
 	return nil
 }
@@ -326,29 +343,29 @@ func (p *BCBS239AuditPipeline) generateInsights(
 	result *AuditResult,
 ) error {
 	startTime := time.Now()
-	
+
 	// Analyze patterns across principles
 	criticalGaps := []string{}
 	strengths := []string{}
-	
+
 	for _, audit := range result.PrincipleAudits {
-		if audit.ComplianceScore < 0.7 {
+		if audit.ComplianceScore < criticalComplianceThreshold {
 			criticalGaps = append(criticalGaps, fmt.Sprintf("%s: %.2f", audit.PrincipleID, audit.ComplianceScore))
-		} else if audit.ComplianceScore >= 0.95 {
+		} else if audit.ComplianceScore >= strengthComplianceThreshold {
 			strengths = append(strengths, audit.PrincipleID)
 		}
 	}
-	
+
 	// Generate critical gap insight
 	if len(criticalGaps) > 0 {
 		insight := &ComplianceInsight{
-			InsightID:   fmt.Sprintf("insight-gaps-%s", request.AuditID),
-			Category:    "risk",
-			Severity:    "critical",
-			Title:       "Critical Compliance Gaps Identified",
-			Description: fmt.Sprintf("Found %d principles with compliance scores below 70%%: %v", len(criticalGaps), criticalGaps),
+			InsightID:          fmt.Sprintf("insight-gaps-%s", request.AuditID),
+			Category:           "risk",
+			Severity:           "critical",
+			Title:              "Critical Compliance Gaps Identified",
+			Description:        fmt.Sprintf("Found %d principles with compliance scores below 70%%: %v", len(criticalGaps), criticalGaps),
 			AffectedPrinciples: p.extractPrincipleIDs(criticalGaps),
-			Evidence:    criticalGaps,
+			Evidence:           criticalGaps,
 			Recommendations: []string{
 				"Prioritize remediation for lowest-scoring principles",
 				"Conduct root cause analysis for control gaps",
@@ -358,17 +375,17 @@ func (p *BCBS239AuditPipeline) generateInsights(
 		}
 		result.Insights = append(result.Insights, insight)
 	}
-	
+
 	// Generate strength insight
 	if len(strengths) > 0 {
 		insight := &ComplianceInsight{
-			InsightID:   fmt.Sprintf("insight-strengths-%s", request.AuditID),
-			Category:    "strength",
-			Severity:    "low",
-			Title:       "Strong Compliance Areas",
-			Description: fmt.Sprintf("Excellent compliance in %d principles: %v", len(strengths), strengths),
+			InsightID:          fmt.Sprintf("insight-strengths-%s", request.AuditID),
+			Category:           "strength",
+			Severity:           "low",
+			Title:              "Strong Compliance Areas",
+			Description:        fmt.Sprintf("Excellent compliance in %d principles: %v", len(strengths), strengths),
 			AffectedPrinciples: strengths,
-			Evidence:    []string{fmt.Sprintf("Principles %v scored >= 95%%", strengths)},
+			Evidence:           []string{fmt.Sprintf("Principles %v scored >= 95%%", strengths)},
 			Recommendations: []string{
 				"Document best practices from these areas",
 				"Share control frameworks with teams managing weaker principles",
@@ -378,7 +395,7 @@ func (p *BCBS239AuditPipeline) generateInsights(
 		}
 		result.Insights = append(result.Insights, insight)
 	}
-	
+
 	result.ProcessingTime["insights"] = time.Since(startTime)
 	return nil
 }
@@ -391,15 +408,15 @@ func (p *BCBS239AuditPipeline) runGooseRemediation(
 ) error {
 	startTime := time.Time{}
 	result.ModelsUsed = append(result.ModelsUsed, "Goose")
-	
+
 	for _, audit := range result.PrincipleAudits {
 		// Only remediate non-compliant areas
 		if audit.Status == "compliant" {
 			continue
 		}
-		
+
 		startTime = time.Now()
-		
+
 		for _, gap := range audit.Gaps {
 			// Construct Goose task
 			task := fmt.Sprintf(`You are a BCBS 239 compliance automation specialist. 
@@ -428,19 +445,19 @@ Generate complete, executable code with inline documentation.`,
 				gap,
 				audit.ComplianceScore,
 			)
-			
+
 			// Execute Goose autonomous task
 			modelRequest := ModelQueryRequest{
 				QueryType:   "automation",
 				Question:    task,
 				PrincipleID: audit.PrincipleID,
 				Context: map[string]interface{}{
-					"audit_id": request.AuditID,
-					"gap":      gap,
+					"audit_id":   request.AuditID,
+					"gap":        gap,
 					"autonomous": true,
 				},
 			}
-			
+
 			response, err := p.gooseAdapter.Query(ctx, modelRequest)
 			if err != nil {
 				if p.logger != nil {
@@ -448,28 +465,28 @@ Generate complete, executable code with inline documentation.`,
 				}
 				continue
 			}
-			
+
 			// Store remediation
 			remediation := &Remediation{
-				RemediationID:   fmt.Sprintf("remedy-%s-%s", audit.PrincipleID, time.Now().Unix()),
-				PrincipleID:     audit.PrincipleID,
-				Gap:             gap,
-				Recommendation:  response.Answer,
-				Priority:        p.getPriority(audit.ComplianceScore),
-				EstimatedEffort: p.estimateEffort(gap),
-				AutomationScript: response.Answer, // Goose-generated code
+				RemediationID:       fmt.Sprintf("remedy-%s-%s", audit.PrincipleID, time.Now().Unix()),
+				PrincipleID:         audit.PrincipleID,
+				Gap:                 gap,
+				Recommendation:      response.Answer,
+				Priority:            p.getPriority(audit.ComplianceScore),
+				EstimatedEffort:     p.estimateEffort(gap),
+				AutomationScript:    response.Answer, // Goose-generated code
 				ImplementationSteps: p.extractSteps(response.Answer),
 			}
-			
+
 			result.Recommendations = append(result.Recommendations, remediation)
 			result.GooseGeneratedScripts = append(result.GooseGeneratedScripts, response.Answer)
-			
+
 			if p.logger != nil {
 				p.logger.Printf("Goose generated remediation script for %s gap: %s", audit.PrincipleID, gap)
 			}
 		}
 	}
-	
+
 	if !startTime.IsZero() {
 		result.ProcessingTime["goose_remediation"] = time.Since(startTime)
 	}
@@ -482,44 +499,44 @@ func (p *BCBS239AuditPipeline) analyzeCompliance(controls []ControlMapping, prin
 	if len(controls) == 0 {
 		return 0.0
 	}
-	
+
 	// Simple scoring: more controls = better compliance
 	// In production, this would analyze control effectiveness
 	baseScore := 0.5
 	controlBonus := float64(len(controls)) * 0.1
-	
+
 	score := baseScore + controlBonus
 	if score > 1.0 {
 		score = 1.0
 	}
-	
+
 	return score
 }
 
 func (p *BCBS239AuditPipeline) identifyGaps(controls []ControlMapping, principleID string) []string {
 	gaps := []string{}
-	
+
 	// Expected controls per principle (simplified)
 	expectedControls := map[string]int{
-		"P3": 5, // Accuracy requires multiple validation controls
-		"P4": 4, // Completeness
-		"P7": 5, // Reporting accuracy
+		"P3":  5, // Accuracy requires multiple validation controls
+		"P4":  4, // Completeness
+		"P7":  5, // Reporting accuracy
 		"P12": 3, // Supervisory reporting
 	}
-	
+
 	expected, exists := expectedControls[principleID]
 	if !exists {
 		expected = 3 // Default
 	}
-	
+
 	if len(controls) < expected {
 		gaps = append(gaps, fmt.Sprintf("Missing %d control(s)", expected-len(controls)))
 	}
-	
+
 	// Check for specific control types
 	hasAutomated := false
 	hasManual := false
-	
+
 	for _, control := range controls {
 		if control.ControlType == "automated" {
 			hasAutomated = true
@@ -528,14 +545,14 @@ func (p *BCBS239AuditPipeline) identifyGaps(controls []ControlMapping, principle
 			hasManual = true
 		}
 	}
-	
+
 	if !hasAutomated {
 		gaps = append(gaps, "No automated controls found")
 	}
 	if !hasManual {
 		gaps = append(gaps, "No manual oversight controls found")
 	}
-	
+
 	return gaps
 }
 
@@ -556,7 +573,7 @@ func (p *BCBS239AuditPipeline) getPrincipleName(principleID string) string {
 		"P7":  "Accuracy (Reporting)",
 		"P12": "Supervisory Reporting",
 	}
-	
+
 	if name, ok := names[principleID]; ok {
 		return name
 	}
@@ -578,12 +595,12 @@ func (p *BCBS239AuditPipeline) calculateOverallScore(result *AuditResult) {
 		result.ComplianceStatus = "non_compliant"
 		return
 	}
-	
+
 	total := 0.0
 	for _, audit := range result.PrincipleAudits {
 		total += audit.ComplianceScore
 	}
-	
+
 	result.OverallScore = total / float64(len(result.PrincipleAudits))
 	result.ComplianceStatus = p.getComplianceStatus(result.OverallScore)
 }
@@ -637,7 +654,7 @@ func (p *BCBS239AuditPipeline) estimateEffort(gap string) string {
 func (p *BCBS239AuditPipeline) GetAuditStatus(auditID string) (*AuditResult, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	
+
 	result, exists := p.auditResults[auditID]
 	return result, exists
 }

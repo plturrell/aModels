@@ -3,7 +3,7 @@
  * Renders charts from dashboard specifications with interactive features
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, lazy, Suspense } from 'react';
 import {
   Box,
   Paper,
@@ -26,8 +26,12 @@ import {
   FormControl,
   InputLabel,
   Select,
-  SelectChangeEvent
+  SelectChangeEvent,
+  CircularProgress
 } from '@mui/material';
+import { useScreenReaderAnnouncement } from '../../hooks/useAccessibility';
+import { useKeyboardShortcuts, DASHBOARD_SHORTCUTS } from '../../hooks/useKeyboardShortcuts';
+import { useDebounce } from '../../hooks/useDebounce';
 import {
   DatePicker,
   LocalizationProvider
@@ -56,8 +60,17 @@ import {
   AreaChart,
   Area,
   Brush,
-  ReferenceLine
+  ReferenceLine,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Treemap
 } from 'recharts';
+import { ResponsiveSankey } from '@nivo/sankey';
+import { ResponsiveNetwork } from '@nivo/network';
+import * as exportUtils from '../../utils/export';
 
 interface DashboardChart {
   type: string;
@@ -140,12 +153,22 @@ export function DashboardRenderer({
 }: DashboardRendererProps) {
   const { title, description, charts = [], metrics = [], insights = [] } = specification;
   
+  // Accessibility
+  const announce = useScreenReaderAnnouncement();
+  
+  // Keyboard shortcuts
+  useKeyboardShortcuts(DASHBOARD_SHORTCUTS);
+  
   // State for interactivity
   const [chartStates, setChartStates] = useState<Record<string, ChartState>>({});
   const [selectedChart, setSelectedChart] = useState<string | null>(null);
   const [metricMenuAnchor, setMetricMenuAnchor] = useState<{ chartId: string; anchor: HTMLElement } | null>(null);
   const [dateRangeDialog, setDateRangeDialog] = useState<{ chartId: string; open: boolean } | null>(null);
   const [detailDialog, setDetailDialog] = useState<{ open: boolean; data: any; title: string } | null>(null);
+  
+  // Debounced search/filter
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   
   // Transform data for charts
   const transformChartData = useCallback((chart: DashboardChart): any[] => {
@@ -318,6 +341,7 @@ export function DashboardRenderer({
     return (
       <Paper 
         key={index} 
+        id={chartId}
         variant="outlined" 
         sx={{ 
           p: 2, 
@@ -357,6 +381,21 @@ export function DashboardRenderer({
                 aria-label="Select metrics"
               >
                 <ZoomInIcon fontSize="small" />
+              </IconButton>
+              <IconButton
+                size="small"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  const chartElement = document.getElementById(chartId);
+                  if (chartElement) {
+                    const filename = chart.title.replace(/\s+/g, '_');
+                    await exportUtils.exportChartToPNG(chartId, `${filename}.png`);
+                  }
+                }}
+                aria-label="Export chart"
+                title="Export chart"
+              >
+                <DownloadIcon fontSize="small" />
               </IconButton>
             </Box>
           )}
@@ -502,10 +541,205 @@ export function DashboardRenderer({
                 ))}
               </ScatterChart>
             )}
+
+            {chartType === 'radar' && (
+              <RadarChart data={chartData}>
+                <PolarGrid />
+                <PolarAngleAxis dataKey={xAxisKey} />
+                <PolarRadiusAxis />
+                {selectedMetrics.map((metric, idx) => (
+                  <Radar
+                    key={metric}
+                    name={metric}
+                    dataKey={metric}
+                    stroke={CHART_COLORS[idx % CHART_COLORS.length]}
+                    fill={CHART_COLORS[idx % CHART_COLORS.length]}
+                    fillOpacity={0.6}
+                  />
+                ))}
+                <Tooltip />
+                <Legend />
+              </RadarChart>
+            )}
+
+            {chartType === 'treemap' && (
+              <Treemap
+                data={chartData}
+                dataKey={yAxisKey}
+                nameKey={xAxisKey}
+                aspectRatio={4/3}
+                fill={CHART_COLORS[0]}
+                onClick={(data) => enableInteractivity && handleChartClick(chartId, data)}
+              />
+            )}
           </ResponsiveContainer>
         </Box>
       </Paper>
     );
+  };
+
+  // Render advanced chart types that require special handling
+  const renderAdvancedChart = (chart: DashboardChart, index: number) => {
+    const chartId = `chart-${index}`;
+    const chartData = getFilteredChartData(chart, chartId);
+    const chartType = chart.type?.toLowerCase() || 'bar';
+
+    if (chartData.length === 0) {
+      return (
+        <Paper key={index} variant="outlined" sx={{ p: 2 }}>
+          <Typography variant="h6" gutterBottom>
+            {chart.title}
+          </Typography>
+          <Alert severity="info">No data available for this chart</Alert>
+        </Paper>
+      );
+    }
+
+    // Sankey diagram
+    if (chartType === 'sankey') {
+      // Transform data for Sankey (expects nodes and links)
+      const sankeyData = chart.config?.sankey || {
+        nodes: chartData.map((item: any, idx: number) => ({
+          id: item.source || item.name || `node-${idx}`,
+          label: item.source || item.name || `Node ${idx}`
+        })),
+        links: chartData.map((item: any) => ({
+          source: item.source || item.name,
+          target: item.target || item.name,
+          value: item.value || 1
+        }))
+      };
+
+      return (
+        <Paper key={index} variant="outlined" sx={{ p: 2, height: '100%' }}>
+          <Typography variant="h6" gutterBottom>
+            {chart.title}
+          </Typography>
+          <Box sx={{ width: '100%', height: 400, mt: 2 }}>
+            <ResponsiveSankey
+              data={sankeyData}
+              margin={{ top: 40, right: 160, bottom: 40, left: 50 }}
+              align="justify"
+              colors={{ scheme: 'category10' }}
+              nodeOpacity={1}
+              nodeHoverOthersOpacity={0.35}
+              nodeThickness={18}
+              nodeSpacing={24}
+              nodeBorderWidth={0}
+              nodeBorderColor={{ from: 'color', modifiers: [['darker', 0.8]] }}
+              linkOpacity={0.5}
+              linkHoverOthersOpacity={0.1}
+              linkContract={3}
+              enableLinkGradient={true}
+              labelPosition="outside"
+              labelOrientation="vertical"
+              labelPadding={16}
+              labelTextColor={{ from: 'color', modifiers: [['darker', 1]] }}
+              animate={true}
+              motionConfig="gentle"
+            />
+          </Box>
+        </Paper>
+      );
+    }
+
+    // Network graph
+    if (chartType === 'network') {
+      const networkData = chart.config?.network || {
+        nodes: chartData.map((item: any, idx: number) => ({
+          id: item.id || item.name || `node-${idx}`,
+          label: item.label || item.name || `Node ${idx}`,
+          size: item.size || item.value || 10
+        })),
+        links: chartData.map((item: any) => ({
+          source: item.source || item.from,
+          target: item.target || item.to,
+          distance: item.distance || item.value || 50
+        }))
+      };
+
+      return (
+        <Paper key={index} variant="outlined" sx={{ p: 2, height: '100%' }}>
+          <Typography variant="h6" gutterBottom>
+            {chart.title}
+          </Typography>
+          <Box sx={{ width: '100%', height: 400, mt: 2 }}>
+            <ResponsiveNetwork
+              data={networkData}
+              margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+              linkDistance={50}
+              centeringStrength={0.3}
+              repulsivity={6}
+              nodeSize={10}
+              activeNodeSize={20}
+              inactiveNodeSize={5}
+              nodeColor={(node: any) => node.color || CHART_COLORS[0]}
+              nodeBorderWidth={2}
+              nodeBorderColor={{ from: 'color', modifiers: [['darker', 0.5]] }}
+              linkThickness={2}
+              linkColor={{ from: 'source.color', modifiers: [] }}
+              motionConfig="gentle"
+            />
+          </Box>
+        </Paper>
+      );
+    }
+
+    // Heatmap (using Recharts with custom rendering)
+    if (chartType === 'heatmap') {
+      return (
+        <Paper key={index} variant="outlined" sx={{ p: 2, height: '100%' }}>
+          <Typography variant="h6" gutterBottom>
+            {chart.title}
+          </Typography>
+          <Box sx={{ width: '100%', height: 300, mt: 2 }}>
+            <ResponsiveContainer>
+              <ScatterChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey={chart.x_axis || 'x'} 
+                  type="category"
+                  allowDuplicatedCategory={false}
+                />
+                <YAxis 
+                  dataKey={chart.y_axis || 'y'} 
+                  type="category"
+                  allowDuplicatedCategory={false}
+                />
+                <Tooltip 
+                  cursor={{ strokeDasharray: '3 3' }}
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      return (
+                        <Box sx={{ bgcolor: 'background.paper', p: 1, border: 1, borderColor: 'divider' }}>
+                          <Typography variant="body2">
+                            {`${chart.x_axis || 'x'}: ${payload[0].payload[chart.x_axis || 'x']}`}
+                          </Typography>
+                          <Typography variant="body2">
+                            {`${chart.y_axis || 'y'}: ${payload[0].payload[chart.y_axis || 'y']}`}
+                          </Typography>
+                          <Typography variant="body2" fontWeight="bold">
+                            Value: {payload[0].payload.value || payload[0].value}
+                          </Typography>
+                        </Box>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Scatter
+                  dataKey="value"
+                  fill={CHART_COLORS[0]}
+                  onClick={(data) => enableInteractivity && handleChartClick(chartId, data)}
+                />
+              </ScatterChart>
+            </ResponsiveContainer>
+          </Box>
+        </Paper>
+      );
+    }
+
+    return null;
   };
 
   const formatMetric = (metric: DashboardMetric): string => {
@@ -526,10 +760,27 @@ export function DashboardRenderer({
     return String(value);
   };
 
+  // Announce dashboard load to screen readers
+  React.useEffect(() => {
+    if (title) {
+      announce(`Dashboard ${title} loaded with ${charts.length} charts`, 'polite');
+    }
+  }, [title, charts.length, announce]);
+
   return (
-    <Box>
+    <Box 
+      role="main"
+      aria-label={title || 'Dashboard'}
+      id="main-content"
+      className="keyboard-navigation"
+    >
       {title && (
-        <Typography variant="h4" gutterBottom>
+        <Typography 
+          variant="h4" 
+          gutterBottom
+          component="h1"
+          id="dashboard-title"
+        >
           {title}
         </Typography>
       )}
@@ -561,11 +812,16 @@ export function DashboardRenderer({
       
       {charts.length > 0 && (
         <Grid container spacing={2}>
-          {charts.map((chart, idx) => (
-            <Grid item xs={12} md={charts.length === 1 ? 12 : 6} key={idx}>
-              {renderChart(chart, idx)}
-            </Grid>
-          ))}
+          {charts.map((chart, idx) => {
+            const chartType = chart.type?.toLowerCase() || 'bar';
+            const isAdvancedChart = ['sankey', 'network', 'heatmap'].includes(chartType);
+            
+            return (
+              <Grid item xs={12} md={charts.length === 1 ? 12 : 6} key={idx}>
+                {isAdvancedChart ? renderAdvancedChart(chart, idx) : renderChart(chart, idx)}
+              </Grid>
+            );
+          })}
         </Grid>
       )}
       
