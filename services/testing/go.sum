@@ -1,0 +1,4 @@
+github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
+github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
+github.com/plturrell/aModels/pkg/localai v0.0.0-20251110082742-7f127d35aa81 h1:hCy1DlYq0C1FUQI6Fe6qpte7RtbuBSdS3/CUXWingqU=
+github.com/plturrell/aModels/pkg/localai v0.0.0-20251110082742-7f127d35aa81/go.mod h1:EXCxpMHO3v39UHWbDNiaveu80TgJB4kBY3VZkf17khc=

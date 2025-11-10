@@ -1,0 +1,92 @@
+# GPU Orchestrator Configuration
+# This is an example configuration file showing all available options
+# Copy to config.yaml and modify as needed
+
+server:
+  port: "8086"
+  read_timeout: 15s
+  write_timeout: 15s
+  idle_timeout: 60s
+
+services:
+  deepagents_url: "http://localhost:9004"
+  graph_service_url: "http://localhost:8081"
+
+scheduler:
+  queue_check_interval: 5s
+  cleanup_interval: 5s
+  max_queue_size: 100
+  default_ttl_multiplier: 2.0
+
+workload_defaults:
+  training:
+    default_gpus: 1
+    default_memory_mb: 8192
+    default_priority: 5
+    max_utilization: 90.0
+    large_batch_size: 64
+    xlarge_batch_size: 128
+    high_concurrency: 10
+    very_high_concurrency: 20
+
+  inference:
+    default_gpus: 1
+    default_memory_mb: 4096
+    default_priority: 7
+    max_utilization: 80.0
+    large_batch_size: 32
+    xlarge_batch_size: 64
+    high_concurrency: 10
+    very_high_concurrency: 20
+
+  embedding:
+    default_gpus: 1
+    default_memory_mb: 2048
+    default_priority: 6
+    max_utilization: 85.0
+    large_batch_size: 32
+    xlarge_batch_size: 64
+    high_concurrency: 10
+    very_high_concurrency: 20
+
+  ocr:
+    default_gpus: 1
+    default_memory_mb: 4096
+    default_priority: 6
+    max_utilization: 80.0
+    large_batch_size: 100
+    xlarge_batch_size: 200
+    high_concurrency: 50
+    very_high_concurrency: 100
+
+  graph_processing:
+    default_gpus: 1
+    default_memory_mb: 4096
+    default_priority: 5
+    max_utilization: 75.0
+    large_batch_size: 1000000
+    xlarge_batch_size: 2000000
+    high_concurrency: 5
+    very_high_concurrency: 10
+
+  generic:
+    default_gpus: 1
+    default_memory_mb: 4096
+    default_priority: 5
+    max_utilization: 80.0
+    large_batch_size: 50
+    xlarge_batch_size: 100
+    high_concurrency: 10
+    very_high_concurrency: 20
+
+monitoring:
+  refresh_interval: 5s
+  metrics_enabled: true
+
+auth:
+  enabled: false
+  header_name: "X-API-Key"
+  api_keys:
+    # Example API keys (key: service_name)
+    # "your-secret-key-1": "training-service"
+    # "your-secret-key-2": "inference-service"

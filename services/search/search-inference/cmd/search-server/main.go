@@ -166,7 +166,7 @@ func main() {
 	http.HandleFunc("/v1/documents", srv.HandleAddDocument)
 	http.HandleFunc("/v1/documents/batch", srv.HandleAddDocuments)
 	http.HandleFunc("/v1/model", srv.HandleModelInfo)
-	http.HandleFunc("/v1/agent-catalog", handleAgentCatalog(searchService))
+	http.HandleFunc("/v1/agent-catalog", handleAgentCatalog(searchService, log.Default()))
 	http.HandleFunc("/v1/agent-catalog/stats", handleAgentCatalogStats(searchService))
 	http.HandleFunc("/", server.ServeStatic("web"))
 
@@ -177,7 +177,7 @@ func main() {
 	}
 }
 
-func handleAgentCatalog(service *search.SearchService) http.HandlerFunc {
+func handleAgentCatalog(service *search.SearchService, logger *log.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if service == nil {
 			http.Error(w, "search service not configured", http.StatusServiceUnavailable)
@@ -186,6 +186,9 @@ func handleAgentCatalog(service *search.SearchService) http.HandlerFunc {
 		// Agent catalog disabled - AgentSDK not available
 		if cached, updated := service.AgentCatalogSnapshot(); cached != nil {
 			sendSearchCatalogResponse(w, cached, updated)
+			if logger != nil {
+				logger.Printf("[catalog] served cached snapshot with %d suites", len(cached.Suites))
+			}
 			return
 		}
 		http.Error(w, "agent catalog not available (AgentSDK dependency removed)", http.StatusServiceUnavailable)

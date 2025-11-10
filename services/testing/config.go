@@ -47,6 +47,16 @@ type Config struct {
 	EnableSearch         bool
 	EnableFKResolution   bool
 	EnableBatchInserts   bool
+	
+	// Signavio settings
+	SignavioEnabled    bool
+	SignavioAPIURL      string
+	SignavioAPIKey      string
+	SignavioTenantID    string
+	SignavioAutoExport  bool
+	SignavioDataset     string
+	SignavioTimeout     time.Duration
+	SignavioMaxRetries  int
 }
 
 // LoadConfig loads configuration from environment variables with defaults.
@@ -91,6 +101,16 @@ func LoadConfig() *Config {
 		EnableSearch:       getEnvBool("ENABLE_SEARCH", true),
 		EnableFKResolution: getEnvBool("ENABLE_FK_RESOLUTION", true),
 		EnableBatchInserts:  getEnvBool("ENABLE_BATCH_INSERTS", true),
+		
+		// Signavio settings
+		SignavioEnabled:    getEnvBool("SIGNAVIO_ENABLED", false),
+		SignavioAPIURL:     getEnv("SIGNAVIO_API_URL", "https://ingestion-eu.signavio.com"),
+		SignavioAPIKey:     getEnv("SIGNAVIO_API_KEY", ""),
+		SignavioTenantID:   getEnv("SIGNAVIO_TENANT_ID", ""),
+		SignavioAutoExport: getEnvBool("SIGNAVIO_AUTO_EXPORT", false),
+		SignavioDataset:    getEnv("SIGNAVIO_DATASET", "test-executions"),
+		SignavioTimeout:    getEnvDuration("SIGNAVIO_TIMEOUT", 30*time.Second),
+		SignavioMaxRetries: getEnvInt("SIGNAVIO_MAX_RETRIES", 3),
 	}
 
 	// If SearchServiceURL is empty, use ExtractServiceURL

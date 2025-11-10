@@ -12,6 +12,7 @@ type ScenarioBuilder struct {
 	generator     *SampleGenerator
 	logger        *log.Logger
 	localaiClient *LocalAIClient
+	execution     *TestExecution // For tracking LLM calls
 }
 
 // NewScenarioBuilder creates a new scenario builder.
@@ -21,6 +22,11 @@ func NewScenarioBuilder(generator *SampleGenerator, localaiClient *LocalAIClient
 		logger:        logger,
 		localaiClient: localaiClient,
 	}
+}
+
+// SetExecution sets the current test execution for telemetry tracking.
+func (sb *ScenarioBuilder) SetExecution(execution *TestExecution) {
+	sb.execution = execution
 }
 
 // BuildScenarioFromPetriNet builds a test scenario from a Petri net.
@@ -199,7 +205,30 @@ func (sb *ScenarioBuilder) buildQualityRules(schema *TableSchema) []QualityRule 
 	// Try LocalAI first if enabled
 	if sb.localaiClient != nil && sb.localaiClient.IsEnabled() {
 		ctx := context.Background()
+		llmStart := time.Now()
 		rules, err := sb.localaiClient.GenerateQualityRules(ctx, schema)
+		llmLatency := time.Since(llmStart)
+		
+		// Record LLM call for quality rule generation
+		if sb.execution != nil {
+			model := "phi-3.5-mini" // Default, would get from client if exposed
+			if sb.localaiClient != nil {
+				model = sb.localaiClient.model
+			}
+			sb.generator.recordLLMCall(
+				sb.execution,
+				model,
+				fmt.Sprintf("Generate quality rules for table %s", schema.Name),
+				fmt.Sprintf("Generated %d rules", len(rules)),
+				0,
+				llmLatency,
+				0.3,
+				"quality_rules",
+				err == nil,
+				err,
+			)
+		}
+		
 		if err == nil && len(rules) > 0 {
 			sb.logger.Printf("Generated %d quality rules using LocalAI for table %s", len(rules), schema.Name)
 			// Merge with basic rules

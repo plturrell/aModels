@@ -87,6 +87,33 @@ func main() {
 	// Create sample generator
 	generator := testing.NewSampleGenerator(db, extractClient, logger)
 
+	// Create Signavio client if enabled
+	if cfg.SignavioEnabled {
+		signavioClient := testing.NewSignavioClient(
+			cfg.SignavioAPIURL,
+			cfg.SignavioAPIKey,
+			cfg.SignavioTenantID,
+			cfg.SignavioEnabled,
+			cfg.SignavioTimeout,
+			cfg.SignavioMaxRetries,
+			logger,
+		)
+		generator.SetSignavioClient(signavioClient, cfg.SignavioDataset)
+		
+		// Test connection if auto-export is enabled
+		if cfg.SignavioAutoExport {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if err := signavioClient.HealthCheck(ctx); err != nil {
+				logger.Printf("Warning: Signavio health check failed: %v", err)
+			} else {
+				logger.Printf("Signavio client initialized and connected (auto-export enabled)")
+			}
+			cancel()
+		} else {
+			logger.Printf("Signavio client initialized (auto-export disabled)")
+		}
+	}
+
 	// Create test service
 	testService := testing.NewTestService(generator, searchClient, logger)
 

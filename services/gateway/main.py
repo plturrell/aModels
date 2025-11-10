@@ -19,6 +19,16 @@ from retry_utils import retry_http_request
 from circuit_breaker import CircuitBreakerManager, CircuitBreakerOpenError, CircuitBreakerConfig
 from rate_limiter import MultiTierRateLimiter
 from logging_config import setup_logging, get_logger, set_correlation_id, get_correlation_id
+from proxy_utils import ServiceProxy, create_proxy_helper
+from cache_manager import CacheManager, CacheStrategy
+from models import (
+    UnifiedSearchRequest, UnifiedSearchResponse, SearchResult, SearchMetadata,
+    ProcessRequest, ProcessResponse, StatusResponse, HistoryRequest, HistoryResponse,
+    BatchRequest, BatchResponse, DataElementRequest, DataProductRequest,
+    SemanticSearchRequest, GraphQueryRequest, ResearchRequest,
+    HealthResponse, ServiceHealth, CircuitBreakerStats, CacheStats,
+    GenericResponse, ErrorDetail
+)
 
 # Setup structured logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -59,6 +69,8 @@ client: httpx.AsyncClient | None = None
 redis_client: aioredis.Redis | None = None
 circuit_breaker_manager: CircuitBreakerManager | None = None
 rate_limiter: MultiTierRateLimiter | None = None
+cache_manager: CacheManager | None = None
+service_proxy: ServiceProxy | None = None
 
 # Prometheus metrics
 request_counter = Counter('gateway_requests_total', 'Total requests', ['method', 'endpoint', 'status'])
@@ -70,9 +82,9 @@ rate_limit_rejections = Counter('gateway_rate_limit_rejections_total', 'Rate lim
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager for startup/shutdown."""
-    global client, redis_client, circuit_breaker_manager, rate_limiter
+    global client, redis_client, circuit_breaker_manager, rate_limiter, cache_manager, service_proxy
     
-    logger.info("Starting aModels Gateway", port=GATEWAY_PORT)
+    logger.info("Starting aModels Gateway v0.2.0", port=GATEWAY_PORT)
     
     # Initialize httpx client with connection pooling and proper timeout
     client = httpx.AsyncClient(
@@ -106,10 +118,24 @@ async def lifespan(app: FastAPI):
                 strict_rate="20 req/min",
                 lenient_rate="300 req/min")
     
+    # Initialize cache manager
+    cache_manager = CacheManager(redis_client)
+    logger.info("Cache manager initialized", 
+                enabled=redis_client is not None,
+                strategies=["SHORT: 60s", "MEDIUM: 5m", "LONG: 1h", "VERY_LONG: 24h"])
+    
+    # Initialize service proxy helper
+    service_proxy = create_proxy_helper(client, circuit_breaker_manager, redis_client)
+    logger.info("Service proxy initialized with circuit breaker and caching support")
+    
     yield
     
     # Shutdown
     logger.info("Shutting down aModels Gateway")
+    
+    if cache_manager:
+        stats = cache_manager.get_stats()
+        logger.info("Cache statistics at shutdown", **stats)
     
     if rate_limiter:
         await rate_limiter.stop_cleanup_task()
@@ -2443,6 +2469,55 @@ async def rate_limit_stats() -> Dict[str, Any]:
     return rate_limiter.get_stats()
 
 
+@app.get("/cache/stats", response_model=CacheStats)
+async def cache_stats() -> CacheStats:
+    """Get cache statistics."""
+    if cache_manager is None:
+        raise HTTPException(status_code=503, detail="Cache manager not initialized")
+    
+    stats = cache_manager.get_stats()
+    return CacheStats(
+        total_keys=stats["hits"] + stats["misses"],
+        hit_rate=stats["hit_rate"],
+        miss_rate=stats["miss_rate"],
+        total_hits=stats["hits"],
+        total_misses=stats["misses"]
+    )
+
+
+@app.post("/cache/invalidate")
+async def invalidate_cache(pattern: str = Query(..., description="Redis key pattern to invalidate")) -> GenericResponse:
+    """Invalidate cache entries matching pattern (admin operation)."""
+    if cache_manager is None:
+        raise HTTPException(status_code=503, detail="Cache manager not initialized")
+    
+    deleted = await cache_manager.invalidate_pattern(pattern)
+    logger.info("Cache invalidated via API", pattern=pattern, deleted_keys=deleted)
+    
+    return GenericResponse(
+        status="success",
+        message=f"Invalidated {deleted} cache entries",
+        data={"pattern": pattern, "deleted_keys": deleted}
+    )
+
+
+@app.post("/cache/clear")
+async def clear_all_cache() -> GenericResponse:
+    """Clear all gateway cache entries (admin operation)."""
+    if cache_manager is None:
+        raise HTTPException(status_code=503, detail="Cache manager not initialized")
+    
+    success = await cache_manager.clear_all()
+    
+    if success:
+        return GenericResponse(
+            status="success",
+            message="All cache entries cleared"
+        )
+    else:
+        raise HTTPException(status_code=500, detail="Failed to clear cache")
+
+
 @app.get("/telemetry/recent")
 async def telemetry_recent() -> Any:
     try:
@@ -2682,6 +2757,168 @@ async def deep_research_healthz() -> Any:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except httpx.RequestError as e:
         raise HTTPException(status_code=502, detail=f"Deep Research service error: {e}")
+
+
+# ============================================================================
+# REFACTORED ENDPOINTS - Examples using new DRY patterns and Pydantic models
+# ============================================================================
+
+@app.post("/v2/catalog/semantic-search", response_model=Dict[str, Any])
+async def catalog_semantic_search_v2(request: SemanticSearchRequest) -> Dict[str, Any]:
+    """
+    Semantic search in catalog (REFACTORED VERSION with caching).
+    Demonstrates: Pydantic validation, ServiceProxy, automatic caching.
+    """
+    if service_proxy is None:
+        raise HTTPException(status_code=503, detail="Service proxy not initialized")
+    
+    # ServiceProxy handles circuit breaker, caching automatically
+    result = await service_proxy.proxy_post(
+        service_name="catalog",
+        service_url=CATALOG_URL,
+        path="/catalog/semantic-search",
+        payload=request.dict(),
+        timeout=30.0
+    )
+    
+    return result
+
+
+@app.post("/v2/catalog/data-elements", response_model=Dict[str, Any])
+async def create_data_element_v2(request: DataElementRequest) -> Dict[str, Any]:
+    """
+    Create data element (REFACTORED VERSION with validation).
+    Demonstrates: Pydantic validation for request body.
+    """
+    if service_proxy is None:
+        raise HTTPException(status_code=503, detail="Service proxy not initialized")
+    
+    result = await service_proxy.proxy_post(
+        service_name="catalog",
+        service_url=CATALOG_URL,
+        path="/catalog/data-elements",
+        payload=request.dict()
+    )
+    
+    # Invalidate catalog cache after write operation
+    if cache_manager:
+        await cache_manager.invalidate_pattern("gateway:cache:*:catalog*")
+    
+    return result
+
+
+@app.get("/v2/catalog/data-elements", response_model=Dict[str, Any])
+async def list_data_elements_v2() -> Dict[str, Any]:
+    """
+    List data elements (REFACTORED VERSION with caching).
+    Demonstrates: ServiceProxy with automatic caching (LONG strategy = 1 hour).
+    """
+    if service_proxy is None:
+        raise HTTPException(status_code=503, detail="Service proxy not initialized")
+    
+    # GET requests with cache_ttl enabled = automatic caching
+    result = await service_proxy.proxy_get(
+        service_name="catalog",
+        service_url=CATALOG_URL,
+        path="/catalog/data-elements",
+        cache_ttl=3600  # 1 hour cache
+    )
+    
+    return result
+
+
+@app.post("/v2/deep-research/research", response_model=Dict[str, Any])
+async def deep_research_v2(request: ResearchRequest) -> Dict[str, Any]:
+    """
+    Deep research (REFACTORED VERSION with validation and caching).
+    Demonstrates: Complex Pydantic model, aggressive caching for expensive operations.
+    """
+    if service_proxy is None:
+        raise HTTPException(status_code=503, detail="Service proxy not initialized")
+    
+    result = await service_proxy.proxy_post(
+        service_name="deep-research",
+        service_url=DEEP_RESEARCH_URL,
+        path="/research",
+        payload=request.dict(),
+        timeout=300.0  # Long timeout for research
+    )
+    
+    return result
+
+
+@app.get("/v2/sap-bdc/data-products", response_model=Dict[str, Any])
+async def sap_bdc_data_products_v2() -> Dict[str, Any]:
+    """
+    List SAP BDC data products (REFACTORED VERSION).
+    Demonstrates: GET with long caching for relatively static data.
+    """
+    if service_proxy is None:
+        raise HTTPException(status_code=503, detail="Service proxy not initialized")
+    
+    result = await service_proxy.proxy_get(
+        service_name="sap-bdc",
+        service_url=SAP_BDC_URL,
+        path="/data-products",
+        cache_ttl=3600  # 1 hour - data products don't change often
+    )
+    
+    return result
+
+
+@app.post("/v2/knowledge-graph/query", response_model=Dict[str, Any])
+async def knowledge_graph_query_v2(request: GraphQueryRequest) -> Dict[str, Any]:
+    """
+    Query knowledge graph (REFACTORED VERSION).
+    Demonstrates: Validated graph query with Pydantic model.
+    """
+    if service_proxy is None:
+        raise HTTPException(status_code=503, detail="Service proxy not initialized")
+    
+    result = await service_proxy.proxy_post(
+        service_name="graph",
+        service_url=GRAPH_SERVICE_URL,
+        path="/knowledge-graph/query",
+        payload=request.dict(),
+        timeout=30.0
+    )
+    
+    return result
+
+
+# ============================================================================
+# Additional Admin/Debug Endpoints
+# ============================================================================
+
+@app.get("/debug/config")
+async def debug_config() -> Dict[str, Any]:
+    """Debug endpoint showing current configuration (admin only)."""
+    return {
+        "version": "0.2.0",
+        "services": {
+            "orchestration": ORCHESTRATION_URL,
+            "hana": HANA_URL,
+            "catalog": CATALOG_URL,
+            "deep_research": DEEP_RESEARCH_URL,
+            "graph": GRAPH_SERVICE_URL,
+            "sap_bdc": SAP_BDC_URL,
+        },
+        "features": {
+            "circuit_breakers": circuit_breaker_manager is not None,
+            "rate_limiting": rate_limiter is not None,
+            "caching": cache_manager is not None and redis_client is not None,
+            "service_proxy": service_proxy is not None,
+            "structured_logging": True,
+            "prometheus_metrics": True,
+        },
+        "configuration": {
+            "http_timeout": "60s",
+            "max_connections": 100,
+            "keepalive_connections": 20,
+            "log_level": LOG_LEVEL,
+            "json_logs": JSON_LOGS,
+        }
+    }
 
 
 if __name__ == "__main__":

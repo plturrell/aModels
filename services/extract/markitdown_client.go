@@ -77,7 +77,7 @@ func NewMarkItDownClient(
 		client = httpclient.NewClient(httpclient.ClientConfig{
 			Timeout:         timeout,
 			MaxRetries:      3,
-			InitialBackoff: 1 * time.Second,
+			InitialBackoff:  1 * time.Second,
 			MaxBackoff:      10 * time.Second,
 			BaseURL:         baseURL,
 			HealthCheckPath: "/healthz",
@@ -206,7 +206,7 @@ func (c *MarkItDownClient) ConvertBytes(ctx context.Context, fileData []byte, fi
 	}
 
 	if c.logger != nil {
-		c.logger.Printf("[%s] MarkItDown conversion successful (format: %s, length: %d)", 
+		c.logger.Printf("[%s] MarkItDown conversion successful (format: %s, length: %d)",
 			correlationID, response.Format, len(response.TextContent))
 	}
 
@@ -219,6 +219,7 @@ func (c *MarkItDownClient) IsFormatSupported(fileExtension string) bool {
 		return false
 	}
 
+	// Keep the allowlist aligned with markitdown's documented built-in converters.
 	supportedFormats := map[string]bool{
 		".pdf":  true,
 		".docx": true,
@@ -229,20 +230,13 @@ func (c *MarkItDownClient) IsFormatSupported(fileExtension string) bool {
 		".ppt":  true,
 		".html": true,
 		".htm":  true,
+		".txt":  true,
+		".md":   true,
+		".rtf":  true,
 		".csv":  true,
 		".json": true,
 		".xml":  true,
 		".epub": true,
-		".jpg":  true,
-		".jpeg": true,
-		".png":  true,
-		".gif":  true,
-		".bmp":  true,
-		".tiff": true,
-		".wav":  true,
-		".mp3":  true,
-		".m4a":  true,
-		".zip":  true,
 	}
 
 	return supportedFormats[fileExtension]
@@ -267,4 +261,3 @@ func (c *MarkItDownClient) HealthCheck(ctx context.Context) (bool, error) {
 
 	return resp.StatusCode == 200, nil
 }
-

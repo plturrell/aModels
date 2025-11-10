@@ -224,45 +224,6 @@ func (o *GPUOrchestrator) parseAllocationFromStructured(
 	}
 }
 
-// parseAllocationStrategy extracts allocation strategy from agent response.
-// Looks for JSON in messages or result containing: required_gpus, min_memory_mb, priority.
-func (o *GPUOrchestrator) parseAllocationStrategy(
-	agentResponse struct {
-		Messages []map[string]interface{} `json:"messages"`
-		Result   interface{}               `json:"result,omitempty"`
-	},
-	serviceName string,
-	workloadType string,
-	workloadData map[string]interface{},
-) *gpu_allocator.AllocationRequest {
-	// Try to extract from Result field first
-	if agentResponse.Result != nil {
-		if req := o.extractAllocationFromData(agentResponse.Result, serviceName); req != nil {
-			return req
-		}
-	}
-
-	// Try to extract from Messages (look for assistant messages with JSON content)
-	for _, msg := range agentResponse.Messages {
-		if role, ok := msg["role"].(string); ok && role == "assistant" {
-			if content, ok := msg["content"].(string); ok {
-				// Try to parse JSON from content
-				var data interface{}
-				if err := json.Unmarshal([]byte(content), &data); err == nil {
-					if req := o.extractAllocationFromData(data, serviceName); req != nil {
-						return req
-					}
-				}
-			}
-			// Also check if message has direct allocation data
-			if req := o.extractAllocationFromData(msg, serviceName); req != nil {
-				return req
-			}
-		}
-	}
-
-	return nil
-}
 
 // extractAllocationFromData extracts allocation request from various data formats.
 func (o *GPUOrchestrator) extractAllocationFromData(data interface{}, serviceName string) *gpu_allocator.AllocationRequest {
