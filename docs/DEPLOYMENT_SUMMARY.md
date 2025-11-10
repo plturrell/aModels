@@ -73,12 +73,15 @@ This deployment includes medium and low priority integration improvements for th
    cd /home/aModels
    docker build -t extract-service:latest -f services/extract/Dockerfile .
    ```
+   **Status**: ⚠️ Build configuration fixed, but compilation errors in `self_healing.go` need to be resolved before successful build.
+   - See `docs/DOCKER_BUILD_ISSUES.md` for details
 
 2. **Build AgentFlow Service**:
    ```bash
    cd /home/aModels
-   docker build -t agentflow-service:latest -f services/agentflow/Dockerfile services/agentflow/
+   docker build -t agentflow-service:latest -f services/agentflow/Dockerfile .
    ```
+   **Status**: ✅ Successfully built (470MB image)
 
 3. **Deploy Services**:
    - Update your docker-compose.yml or Kubernetes manifests
