@@ -2,22 +2,39 @@ module github.com/langchain-ai/langgraph-go
 
 go 1.23
 
+// Core dependencies
 require (
+	github.com/apache/arrow-go/v18 v18.4.1
 	github.com/ethereum/go-ethereum v1.16.5
 	github.com/fsnotify/fsnotify v1.9.0
+	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
-	// Removed agenticAiETH dependencies - these packages don't exist
-	// Postgres dependency removed from require - using replace directive only
-	// github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres v0.0.0
 	github.com/redis/go-redis/v9 v9.16.0
+	google.golang.org/grpc v1.76.0
+	google.golang.org/protobuf v1.36.10
 	gopkg.in/yaml.v3 v3.0.1
 )
 
+// Internal aModels service dependencies (managed via replace directives below)
+require (
+	github.com/plturrell/aModels/services/catalog v0.0.0
+	github.com/plturrell/aModels/services/extract v0.0.0
+	github.com/plturrell/aModels/services/graph v0.0.0
+	github.com/plturrell/aModels/services/orchestration v0.0.0
+	github.com/plturrell/aModels/services/postgres v0.0.0
+	github.com/plturrell/aModels/services/shared v0.0.0
+)
+
+// Third-party dependencies
+require (
+	github.com/SAP/go-hdb v1.14.9
+)
+
+// Transitive dependencies (auto-managed by go mod tidy)
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
-	github.com/SAP/go-hdb v1.14.9 // indirect
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/bits-and-blooms/bitset v1.24.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -58,16 +75,27 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250825161204-c5933d9347a5 // indirect
 )
 
-require (
-	github.com/apache/arrow-go/v18 v18.4.1
-	github.com/google/uuid v1.6.0
-	google.golang.org/grpc v1.76.0
-	google.golang.org/protobuf v1.36.10
-)
+// ============================================================================
+// Replace directives for mono-repo local development
+// ============================================================================
+// These replace directives point to local modules within the aModels mono-repo.
+// For production builds or external consumers, these should be replaced with
+// actual module versions published to a Go module proxy or Git tags.
 
-// Replace directives for local packages
+// Self-reference for internal imports
 replace github.com/plturrell/aModels/services/graph => .
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres => ../postgres
+
+// Internal aModels services (sibling directories)
+replace github.com/plturrell/aModels/services/catalog => ../catalog
+
+replace github.com/plturrell/aModels/services/extract => ../extract
+
+replace github.com/plturrell/aModels/services/orchestration => ../orchestration
+
+replace github.com/plturrell/aModels/services/postgres => ../postgres
+
+replace github.com/plturrell/aModels/services/shared => ../shared
+
+// Third-party forks in infrastructure/third_party
 replace github.com/SAP/go-hdb => ../../infrastructure/third_party/go-hdb
-replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration => ../../infrastructure/third_party/orchestration
 

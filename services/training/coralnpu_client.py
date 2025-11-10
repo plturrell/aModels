@@ -2,12 +2,81 @@
 
 import os
 import logging
+import time
 from typing import Optional, Dict, Any, Callable, Tuple
 from pathlib import Path
+from collections import OrderedDict
 
 from .coralnpu_detection import CoralNPUDetector, detect_coral_npu
 
 logger = logging.getLogger(__name__)
+
+
+class ModelCache:
+    """LRU cache for compiled Edge TPU models."""
+    
+    def __init__(self, max_size: int = 10):
+        """
+        Initialize model cache.
+        
+        Args:
+            max_size: Maximum number of models to cache
+        """
+        self.max_size = max_size
+        self.cache: OrderedDict[str, Dict[str, Any]] = OrderedDict()
+        self.access_times: Dict[str, float] = {}
+    
+    def get(self, model_path: str) -> Optional[Any]:
+        """Get cached interpreter for model.
+        
+        Args:
+            model_path: Path to model
+        
+        Returns:
+            Cached interpreter or None
+        """
+        if model_path in self.cache:
+            # Move to end (most recently used)
+            self.cache.move_to_end(model_path)
+            self.access_times[model_path] = time.time()
+            return self.cache[model_path].get("interpreter")
+        return None
+    
+    def put(self, model_path: str, interpreter: Any):
+        """Cache interpreter for model.
+        
+        Args:
+            model_path: Path to model
+            interpreter: Compiled interpreter to cache
+        """
+        # Remove oldest if at capacity
+        if len(self.cache) >= self.max_size and model_path not in self.cache:
+            # Remove least recently used
+            oldest = next(iter(self.cache))
+            del self.cache[oldest]
+            del self.access_times[oldest]
+        
+        self.cache[model_path] = {"interpreter": interpreter, "cached_at": time.time()}
+        self.access_times[model_path] = time.time()
+        # Move to end (most recently used)
+        self.cache.move_to_end(model_path)
+    
+    def clear(self):
+        """Clear all cached models."""
+        self.cache.clear()
+        self.access_times.clear()
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache statistics.
+        
+        Returns:
+            Dictionary with cache stats
+        """
+        return {
+            "size": len(self.cache),
+            "max_size": self.max_size,
+            "cached_models": list(self.cache.keys())
+        }
 
 
 class CoralNPUClient:
@@ -37,6 +106,11 @@ class CoralNPUClient:
             os.getenv("CORALNPU_FALLBACK_TO_CPU", "true").lower() == "true"
         )
         self.metrics_collector = metrics_collector
+        
+        # Model cache
+        cache_enabled = os.getenv("CORALNPU_CACHE_ENABLED", "true").lower() == "true"
+        cache_size = int(os.getenv("CORALNPU_CACHE_SIZE", "10"))
+        self.cache = ModelCache(max_size=cache_size) if cache_enabled else None
         
         # Runtime imports (optional)
         self._pycoral = None
@@ -208,6 +282,13 @@ class CoralNPUClient:
         """
         fallback = fallback_to_cpu if fallback_to_cpu is not None else self.fallback_to_cpu
         
+        # Check cache first
+        if self.cache:
+            cached_interpreter = self.cache.get(model_path)
+            if cached_interpreter is not None:
+                logger.info(f"Using cached interpreter for {model_path}")
+                return cached_interpreter
+        
         if not self.can_use_npu():
             if fallback:
                 logger.info("Coral NPU not available, using CPU fallback")
@@ -225,6 +306,10 @@ class CoralNPUClient:
             # Create Edge TPU interpreter
             interpreter = self._edgetpu.make_interpreter(model_path)
             interpreter.allocate_tensors()
+            
+            # Cache the interpreter
+            if self.cache:
+                self.cache.put(model_path, interpreter)
             
             logger.info(f"Coral NPU inference engine created for {model_path}")
             return interpreter
@@ -298,6 +383,124 @@ class CoralNPUClient:
         except Exception as e:
             logger.error(f"Inference failed: {e}")
             return None
+    
+    def run_batch_inference(
+        self,
+        interpreter: Any,
+        input_batch: List[Any],
+        batch_size: Optional[int] = None,
+        collect_metrics: bool = True,
+    ) -> Optional[List[Any]]:
+        """
+        Run batch inference using the provided interpreter.
+        
+        Args:
+            interpreter: Inference engine (NPU or CPU)
+            input_batch: List of input data for batch inference
+            batch_size: Batch size (auto-detect if None)
+            collect_metrics: Whether to collect metrics
+        
+        Returns:
+            List of inference results, or None if inference failed
+        """
+        import time
+        import numpy as np
+        
+        if not input_batch:
+            return []
+        
+        # Auto-detect batch size based on NPU memory if not specified
+        if batch_size is None:
+            batch_size = int(os.getenv("CORALNPU_BATCH_SIZE", "1"))
+            # Edge TPU typically supports batch size 1, but we can process multiple sequentially
+            if batch_size <= 0:
+                batch_size = 1
+        
+        start_time = time.time()
+        is_npu = self.can_use_npu()
+        
+        try:
+            # Get input and output details
+            input_details = interpreter.get_input_details()
+            output_details = interpreter.get_output_details()
+            
+            # Determine if model supports native batching
+            input_shape = input_details[0]['shape']
+            supports_native_batch = len(input_shape) > 0 and input_shape[0] is None or input_shape[0] > 1
+            
+            results = []
+            
+            if supports_native_batch and len(input_batch) <= batch_size:
+                # Try native batch inference
+                try:
+                    # Stack inputs into batch
+                    batch_input = np.stack(input_batch, axis=0)
+                    
+                    # Ensure batch dimension matches
+                    if input_shape[0] is not None and batch_input.shape[0] != input_shape[0]:
+                        # Pad or truncate to match
+                        if batch_input.shape[0] < input_shape[0]:
+                            padding = np.zeros((input_shape[0] - batch_input.shape[0],) + batch_input.shape[1:])
+                            batch_input = np.concatenate([batch_input, padding], axis=0)
+                        else:
+                            batch_input = batch_input[:input_shape[0]]
+                    
+                    interpreter.set_tensor(input_details[0]['index'], batch_input)
+                    interpreter.invoke()
+                    batch_output = interpreter.get_tensor(output_details[0]['index'])
+                    
+                    # Split batch output
+                    for i in range(len(input_batch)):
+                        results.append(batch_output[i])
+                    
+                except Exception as e:
+                    logger.warning(f"Native batch inference failed: {e}, falling back to sequential")
+                    supports_native_batch = False
+            
+            if not supports_native_batch:
+                # Sequential batch processing
+                for i in range(0, len(input_batch), batch_size):
+                    batch = input_batch[i:i + batch_size]
+                    
+                    for input_data in batch:
+                        # Ensure input shape matches (remove batch dimension if needed)
+                        if isinstance(input_data, np.ndarray) and len(input_data.shape) > 1:
+                            # Check if first dimension is batch
+                            if input_data.shape[0] == 1:
+                                input_data = input_data[0]
+                        
+                        interpreter.set_tensor(input_details[0]['index'], input_data)
+                        interpreter.invoke()
+                        output_data = interpreter.get_tensor(output_details[0]['index'])
+                        results.append(output_data)
+            
+            latency = time.time() - start_time
+            
+            if collect_metrics and self.metrics_collector:
+                self.metrics_collector("coralnpu", "batch_inference", latency, is_npu)
+            
+            logger.info(f"Batch inference completed: {len(results)} samples in {latency:.3f}s")
+            return results
+        
+        except Exception as e:
+            logger.error(f"Batch inference failed: {e}")
+            return None
+    
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get model cache statistics.
+        
+        Returns:
+            Dictionary with cache statistics
+        """
+        if self.cache:
+            return self.cache.get_stats()
+        return {"enabled": False}
+    
+    def clear_cache(self):
+        """Clear model cache."""
+        if self.cache:
+            self.cache.clear()
+            logger.info("Model cache cleared")
 
 
 def create_coralnpu_client(

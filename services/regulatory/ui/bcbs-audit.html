@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BCBS239 Compliance Audit | aModels</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: radial-gradient(circle at top left, #1f2937 0%, #0f172a 60%);
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: rgba(15, 23, 42, 0.88);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            padding: 30px;
+            border-radius: 18px;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.4);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #f8fafc;
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #cbd5e1;
+            font-size: 16px;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 30px;
+        }
+        
+        .card {
+            background: rgba(15, 23, 42, 0.88);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            padding: 30px;
+            border-radius: 18px;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.4);
+        }
+        
+        .card h2 {
+            color: #f8fafc;
+            margin-bottom: 20px;
+            font-size: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            color: #cbd5e1;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 12px;
+            background: rgba(30, 41, 59, 0.9);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 8px;
+            font-size: 14px;
+            color: #e2e8f0;
+            font-family: 'Inter', system-ui, sans-serif;
+            transition: border-color 0.3s, background 0.3s;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #a5b4fc;
+            background: rgba(30, 41, 59, 1);
+        }
+        
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            color: #cbd5e1;
+            font-size: 14px;
+            padding: 8px;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+        
+        .checkbox-label:hover {
+            background: rgba(30, 41, 59, 0.5);
+        }
+        
+        .checkbox-label input[type="checkbox"] {
+            width: auto;
+            cursor: pointer;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'Inter', system-ui, sans-serif;
+            transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(99, 102, 241, 0.5);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn:disabled {
+            background: rgba(71, 85, 105, 0.5);
+            cursor: not-allowed;
+            transform: none;
+            opacity: 0.6;
+        }
+        
+        .results {
+            display: none;
+        }
+        
+        .results.active {
+            display: block;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .status-compliant {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+        
+        .status-partially {
+            background: #feebc8;
+            color: #7c2d12;
+        }
+        
+        .status-non-compliant {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+        
+        .status-running {
+            background: #bee3f8;
+            color: #2c5282;
+        }
+        
+        .principle-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .principle-card {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 12px;
+            padding: 15px;
+            transition: border-color 0.3s, background 0.3s;
+        }
+        
+        .principle-card:hover {
+            border-color: #a5b4fc;
+            background: rgba(30, 41, 59, 0.8);
+        }
+        
+        .principle-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .principle-id {
+            font-weight: 700;
+            color: #f8fafc;
+            font-size: 16px;
+        }
+        
+        .score-circle {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 18px;
+            margin: 10px auto;
+        }
+        
+        .score-high {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+        
+        .score-medium {
+            background: #feebc8;
+            color: #7c2d12;
+        }
+        
+        .score-low {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+        
+        .insight-card {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-left: 4px solid #a5b4fc;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 8px;
+        }
+        
+        .insight-title {
+            font-weight: 600;
+            color: #f8fafc;
+            margin-bottom: 8px;
+        }
+        
+        .insight-severity {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-right: 10px;
+        }
+        
+        .severity-critical {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+        
+        .severity-high {
+            background: #feebc8;
+            color: #7c2d12;
+        }
+        
+        .severity-medium {
+            background: #fefcbf;
+            color: #744210;
+        }
+        
+        .severity-low {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+        
+        .remediation-list {
+            margin-top: 20px;
+        }
+        
+        .remediation-item {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+        }
+        
+        .remediation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .priority-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .priority-critical {
+            background: #742a2a;
+            color: white;
+        }
+        
+        .priority-high {
+            background: #ed8936;
+            color: white;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #cbd5e1;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(148, 163, 184, 0.2);
+            border-top: 4px solid #a5b4fc;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .model-badges {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+        
+        .model-badge {
+            padding: 6px 12px;
+            background: rgba(59, 130, 246, 0.18);
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #bfdbfe;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+        }
+        
+        .tab {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: #94a3b8;
+            position: relative;
+            font-family: 'Inter', system-ui, sans-serif;
+            transition: color 0.2s;
+        }
+        
+        .tab:hover {
+            color: #cbd5e1;
+        }
+        
+        .tab.active {
+            color: #a5b4fc;
+        }
+        
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: #a5b4fc;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏦 BCBS239 Compliance Audit</h1>
+            <p class="subtitle">Multi-Model AI-Powered Regulatory Compliance Analysis</p>
+        </div>
+        
+        <div class="grid">
+            <!-- Audit Configuration -->
+            <div class="card">
+                <h2>⚙️ Configure Audit</h2>
+                
+                <form id="auditForm">
+                    <div class="form-group">
+                        <label>Audit Scope</label>
+                        <select id="scope">
+                            <option value="full">Full Comprehensive Audit</option>
+                            <option value="quick">Quick Gap Analysis</option>
+                            <option value="targeted">Targeted Assessment</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Reporting Period</label>
+                        <input type="text" id="period" value="2024-Q4" placeholder="e.g., 2024-Q4">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Principles to Audit</label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="principle" value="P3" checked>
+                                P3 - Accuracy & Integrity
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="principle" value="P4" checked>
+                                P4 - Completeness
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="principle" value="P7" checked>
+                                P7 - Reporting Accuracy
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="principle" value="P12" checked>
+                                P12 - Supervisory Reporting
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>AI Models</label>
+                        <div class="checkbox-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="useGoose" checked>
+                                🤖 Goose - Autonomous Remediation
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="useResearch" checked>
+                                🔍 Deep Research - Comprehensive Analysis
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="autoRemediate">
+                                ⚡ Auto-Generate Scripts
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn" id="startBtn">
+                        Start Audit
+                    </button>
+                </form>
+            </div>
+            
+            <!-- Audit Results -->
+            <div class="card results" id="results">
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>Running compliance audit...</p>
+                    <p style="color: #718096; font-size: 14px; margin-top: 10px;">This may take 2-6 minutes</p>
+                </div>
+                
+                <div id="resultsContent" style="display: none;">
+                    <h2>📊 Audit Results</h2>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <div>
+                            <div style="font-size: 14px; color: #718096; margin-bottom: 5px;">Overall Compliance</div>
+                            <div id="overallStatus" class="status-badge status-compliant">COMPLIANT</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 36px; font-weight: 700; color: #2d3748;" id="overallScore">85.0%</div>
+                            <div style="font-size: 14px; color: #718096;">Compliance Score</div>
+                        </div>
+                    </div>
+                    
+                    <div class="model-badges" id="modelsUsed"></div>
+                    
+                    <div class="tabs">
+                        <button class="tab active" onclick="switchTab('principles')">Principles</button>
+                        <button class="tab" onclick="switchTab('insights')">Insights</button>
+                        <button class="tab" onclick="switchTab('remediation')">Remediation</button>
+                        <button class="tab" onclick="switchTab('research')">Research</button>
+                    </div>
+                    
+                    <!-- Principles Tab -->
+                    <div class="tab-content active" id="principlesTab">
+                        <div class="principle-grid" id="principleGrid"></div>
+                    </div>
+                    
+                    <!-- Insights Tab -->
+                    <div class="tab-content" id="insightsTab">
+                        <div id="insightsList"></div>
+                    </div>
+                    
+                    <!-- Remediation Tab -->
+                    <div class="tab-content" id="remediationTab">
+                        <div class="remediation-list" id="remediationList"></div>
+                    </div>
+                    
+                    <!-- Research Tab -->
+                    <div class="tab-content" id="researchTab">
+                        <div id="researchReports"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = 'http://localhost:8099';
+        let currentAuditID = null;
+        
+        document.getElementById('auditForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await startAudit();
+        });
+        
+        async function startAudit() {
+            const principles = Array.from(document.querySelectorAll('input[name="principle"]:checked'))
+                .map(cb => cb.value);
+            
+            if (principles.length === 0) {
+                alert('Please select at least one principle to audit');
+                return;
+            }
+            
+            const request = {
+                audit_id: '',  // Will be generated
+                principles: principles,
+                scope: document.getElementById('scope').value,
+                report_period: document.getElementById('period').value,
+                use_goose: document.getElementById('useGoose').checked,
+                use_deep_research: document.getElementById('useResearch').checked,
+                generate_insights: true,
+                auto_remediate: document.getElementById('autoRemediate').checked
+            };
+            
+            document.getElementById('results').classList.add('active');
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('resultsContent').style.display = 'none';
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('startBtn').textContent = 'Running Audit...';
+            
+            try {
+                const response = await fetch(`${API_URL}/api/compliance/audit/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(request)
+                });
+                
+                const data = await response.json();
+                currentAuditID = data.audit_id;
+                
+                // Poll for results
+                pollAuditStatus(currentAuditID);
+            } catch (error) {
+                alert('Failed to start audit: ' + error.message);
+                resetUI();
+            }
+        }
+        
+        async function pollAuditStatus(auditID) {
+            const interval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_URL}/api/compliance/audit/status?audit_id=${auditID}`);
+                    const result = await response.json();
+                    
+                    if (result.status === 'completed') {
+                        clearInterval(interval);
+                        displayResults(result);
+                    } else if (result.status === 'failed') {
+                        clearInterval(interval);
+                        alert('Audit failed: ' + (result.errors || []).join(', '));
+                        resetUI();
+                    }
+                } catch (error) {
+                    clearInterval(interval);
+                    alert('Error checking audit status: ' + error.message);
+                    resetUI();
+                }
+            }, 2000);  // Poll every 2 seconds
+        }
+        
+        function displayResults(result) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('resultsContent').style.display = 'block';
+            
+            // Overall status
+            const score = (result.overall_score * 100).toFixed(1);
+            document.getElementById('overallScore').textContent = score + '%';
+            
+            const statusBadge = document.getElementById('overallStatus');
+            statusBadge.textContent = result.compliance_status.toUpperCase().replace('_', ' ');
+            statusBadge.className = 'status-badge status-' + result.compliance_status.replace('_', '-');
+            
+            // Models used
+            const modelsDiv = document.getElementById('modelsUsed');
+            modelsDiv.innerHTML = result.models_used.map(model => 
+                `<div class="model-badge">✓ ${model}</div>`
+            ).join('');
+            
+            // Principle cards
+            const principleGrid = document.getElementById('principleGrid');
+            principleGrid.innerHTML = result.principle_audits.map(audit => {
+                const score = (audit.compliance_score * 100).toFixed(0);
+                const scoreClass = score >= 95 ? 'score-high' : score >= 70 ? 'score-medium' : 'score-low';
+                const statusEmoji = audit.status === 'compliant' ? '✅' : 
+                                   audit.status === 'partially_compliant' ? '⚠️' : '❌';
+                
+                return `
+                    <div class="principle-card">
+                        <div class="principle-header">
+                            <span class="principle-id">${audit.principle_id}</span>
+                            <span>${statusEmoji}</span>
+                        </div>
+                        <div style="font-size: 13px; color: #718096; margin-bottom: 10px;">${audit.principle_name}</div>
+                        <div class="score-circle ${scoreClass}">${score}%</div>
+                        <div style="font-size: 13px; color: #4a5568; text-align: center;">
+                            ${audit.controls_covered} controls, ${audit.controls_missing} gaps
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Insights
+            const insightsList = document.getElementById('insightsList');
+            if (result.insights && result.insights.length > 0) {
+                insightsList.innerHTML = result.insights.map(insight => `
+                    <div class="insight-card">
+                        <div class="insight-title">
+                            <span class="insight-severity severity-${insight.severity}">${insight.severity.toUpperCase()}</span>
+                            ${insight.title}
+                        </div>
+                        <div style="color: #4a5568; font-size: 14px; margin-top: 8px;">${insight.description}</div>
+                        ${insight.recommendations ? `
+                            <div style="margin-top: 10px; padding-left: 15px; border-left: 3px solid #e2e8f0;">
+                                ${insight.recommendations.map(rec => `<div style="color: #4a5568; font-size: 13px; margin-top: 5px;">• ${rec}</div>`).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `).join('');
+            } else {
+                insightsList.innerHTML = '<p style="color: #718096;">No insights generated</p>';
+            }
+            
+            // Remediation
+            const remediationList = document.getElementById('remediationList');
+            if (result.recommendations && result.recommendations.length > 0) {
+                remediationList.innerHTML = result.recommendations.map((remedy, idx) => `
+                    <div class="remediation-item">
+                        <div class="remediation-header">
+                            <strong>${idx + 1}. ${remedy.principle_id} - ${remedy.gap}</strong>
+                            <span class="priority-badge priority-${remedy.priority}">${remedy.priority.toUpperCase()}</span>
+                        </div>
+                        <div style="color: #718096; font-size: 13px; margin-bottom: 10px;">
+                            Estimated effort: ${remedy.estimated_effort}
+                        </div>
+                        ${remedy.automation_script ? '<div style="background: #f7fafc; padding: 10px; border-radius: 4px; font-size: 13px;">✓ Automation script generated by Goose</div>' : ''}
+                    </div>
+                `).join('');
+            } else {
+                remediationList.innerHTML = '<p style="color: #718096;">No remediation plans generated</p>';
+            }
+            
+            // Research reports
+            const researchReports = document.getElementById('researchReports');
+            if (result.research_reports && result.research_reports.length > 0) {
+                researchReports.innerHTML = result.research_reports.map(report => `
+                    <div class="insight-card">
+                        <div class="insight-title">${report.topic}</div>
+                        <div style="color: #718096; font-size: 13px; margin: 8px 0;">
+                            Confidence: ${(report.confidence * 100).toFixed(0)}% | Sources: ${report.sources.length}
+                        </div>
+                        <div style="color: #4a5568; font-size: 14px; line-height: 1.6;">${report.summary}</div>
+                    </div>
+                `).join('');
+            } else {
+                researchReports.innerHTML = '<p style="color: #718096;">No research reports available</p>';
+            }
+            
+            resetUI();
+        }
+        
+        function resetUI() {
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('startBtn').textContent = 'Start Audit';
+        }
+        
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(tabName + 'Tab').classList.add('active');
+        }
+    </script>
+</body>
+</html>

@@ -6,7 +6,16 @@ This directory hosts the Go-native port of the LangGraph monorepo. The layout mi
 
 ## Dependencies
 
-- **Go:** Version 1.20 or higher
+- **Go:** Version 1.23 or higher
+
+📚 **For detailed dependency management information, see [DEPENDENCIES.md](./DEPENDENCIES.md)**
+
+This service uses Go modules with replace directives for mono-repo development. See the comprehensive guide for:
+- Dependency categories and management
+- Local development with go.work
+- Docker build strategies
+- Troubleshooting common issues
+- Migration to published modules
 
 ## Getting Started
 

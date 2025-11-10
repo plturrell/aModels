@@ -22,11 +22,15 @@ from .gnn_evaluation import GNNEvaluator
 try:
     import torch
     from torch.cuda.amp import autocast, GradScaler
+    from torch.utils.checkpoint import checkpoint
     HAS_AMP = True
+    HAS_CHECKPOINT = True
 except ImportError:
     HAS_AMP = False
+    HAS_CHECKPOINT = False
     autocast = None
     GradScaler = None
+    checkpoint = None
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +46,8 @@ class GNNTrainer:
         self,
         output_dir: Optional[str] = None,
         device: Optional[str] = None,
-        use_amp: Optional[bool] = None
+        use_amp: Optional[bool] = None,
+        use_gradient_checkpointing: Optional[bool] = None
     ):
         """Initialize GNN trainer.
         
@@ -50,6 +55,7 @@ class GNNTrainer:
             output_dir: Directory for trained models
             device: Device to use ('cuda' or 'cpu')
             use_amp: Whether to use Automatic Mixed Precision (auto-detect if None)
+            use_gradient_checkpointing: Whether to use gradient checkpointing for memory efficiency
         """
         self.output_dir = output_dir or os.getenv("GNN_MODELS_DIR", "./gnn_models")
         os.makedirs(self.output_dir, exist_ok=True)
@@ -72,9 +78,20 @@ class GNNTrainer:
         else:
             logger.info("AMP disabled for GNN training")
         
+        # Gradient checkpointing setup
+        if use_gradient_checkpointing is None:
+            # Auto-enable if checkpointing is available and we're on GPU
+            use_gradient_checkpointing = HAS_CHECKPOINT and torch.cuda.is_available() if HAS_TORCH else False
+        self.use_gradient_checkpointing = use_gradient_checkpointing and HAS_CHECKPOINT
+        
+        if self.use_gradient_checkpointing:
+            logger.info("Gradient checkpointing enabled for memory efficiency")
+        else:
+            logger.info("Gradient checkpointing disabled")
+        
         self.evaluator = GNNEvaluator()
         
-        logger.info(f"Initialized GNN Trainer (output_dir: {self.output_dir}, use_amp: {self.use_amp})")
+        logger.info(f"Initialized GNN Trainer (output_dir: {self.output_dir}, use_amp: {self.use_amp}, use_checkpointing: {self.use_gradient_checkpointing})")
     
     def prepare_training_data_from_graph(
         self,
