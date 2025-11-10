@@ -102,6 +102,37 @@ Please provide:
 
 Be specific and actionable."""
 
+            # Define JSON schema for structured output
+            json_schema = {
+                "type": "object",
+                "properties": {
+                    "quality_assessment": {
+                        "type": "object",
+                        "properties": {
+                            "score": {"type": "number", "minimum": 0, "maximum": 1},
+                            "status": {"type": "string"},
+                        },
+                    },
+                    "issues": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "recommendations": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "optimizations": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "next_steps": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": ["quality_assessment", "issues", "recommendations"],
+            }
+
             request = {
                 "messages": [
                     {
@@ -109,9 +140,13 @@ Be specific and actionable."""
                         "content": prompt,
                     }
                 ],
+                "response_format": {
+                    "type": "json_schema",
+                    "json_schema": json_schema,
+                },
             }
 
-            response = await client.post("/invoke", json=request, timeout=120.0)
+            response = await client.post("/invoke/structured", json=request, timeout=120.0)
             response.raise_for_status()
 
             result = response.json()
@@ -122,6 +157,7 @@ Be specific and actionable."""
 
             return {
                 "analysis": result.get("messages", []),
+                "structured_output": result.get("structured_output"),
                 "result": result.get("result"),
             }
 
@@ -193,6 +229,38 @@ Please provide:
 
 Be specific and actionable."""
 
+        # Define JSON schema for structured output
+        json_schema = {
+            "type": "object",
+            "properties": {
+                "structural_analysis": {
+                    "type": "object",
+                    "properties": {
+                        "node_count": {"type": "integer"},
+                        "edge_count": {"type": "integer"},
+                        "complexity": {"type": "string"},
+                    },
+                },
+                "bottlenecks": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "optimizations": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "additional_nodes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "best_practices": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+            },
+            "required": ["structural_analysis", "bottlenecks", "optimizations"],
+        }
+
         request = {
             "messages": [
                 {
@@ -200,9 +268,13 @@ Be specific and actionable."""
                     "content": prompt,
                 }
             ],
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": json_schema,
+            },
         }
 
-        response = await client.post("/invoke", json=request, timeout=120.0)
+        response = await client.post("/invoke/structured", json=request, timeout=120.0)
         response.raise_for_status()
 
         result = response.json()
@@ -213,6 +285,7 @@ Be specific and actionable."""
 
         return {
             "suggestions": result.get("messages", []),
+            "structured_output": result.get("structured_output"),
             "result": result.get("result"),
         }
 

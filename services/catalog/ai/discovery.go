@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -162,7 +163,9 @@ func (md *MetadataDiscoverer) analyzeSchema(ctx context.Context, source string) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("extract service returned status: %d", resp.StatusCode)
+		// Read response body for better error messages
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("extract service returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var result struct {

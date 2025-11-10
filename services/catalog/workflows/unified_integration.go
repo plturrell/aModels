@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"time"
@@ -54,7 +55,7 @@ func NewUnifiedWorkflowIntegration(
 		agentflowURL:       agentflowURL,
 		localaiURL:         localaiURL,
 		deepResearchURL:    deepResearchURL,
-		httpClient:         &http.Client{Timeout: 60 * time.Second},
+		httpClient:         &http.Client{Timeout: 60 * time.Second}, // TODO: Migrate to httpclient.Client in Phase 2
 		registry:           registry,
 		qualityMonitor:     qualityMonitor,
 		deepResearchClient: deepResearchClient,

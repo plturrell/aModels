@@ -40,6 +40,23 @@ type shellConfig struct {
 	TrainingAPI    string
 	DMSEndpoint    string
 	FlowEndpoint   string
+	RuntimeEndpoint string
+}
+
+func (s *shellServer) handleRuntimeAnalytics(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.RuntimeEndpoint == "" {
+		http.Error(w, "runtime endpoint not configured", http.StatusBadGateway)
+		return
+	}
+
+	endpoint := strings.TrimSuffix(s.cfg.RuntimeEndpoint, "/") + "/analytics/dashboard"
+	payload, err := s.fetchAPIMap(r.Context(), endpoint)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("runtime analytics error: %v", err), http.StatusBadGateway)
+		return
+	}
+
+	respondJSON(w, payload)
 }
 
 type shellServer struct {
@@ -65,13 +82,14 @@ func main() {
 	}
 
 	app := newShellServer()
-	log.Printf("aModels shell server configured with LocalAI base=%q, models dir=%q, SGMI path=%q, DMS endpoint=%q, AgentFlow endpoint=%q", app.cfg.LocalAIBaseURL, app.cfg.ModelsDir, app.cfg.SGMIJSONPath, app.cfg.DMSEndpoint, app.cfg.FlowEndpoint)
+	log.Printf("aModels shell server configured with LocalAI base=%q, models dir=%q, SGMI path=%q, DMS endpoint=%q, AgentFlow endpoint=%q, Runtime endpoint=%q", app.cfg.LocalAIBaseURL, app.cfg.ModelsDir, app.cfg.SGMIJSONPath, app.cfg.DMSEndpoint, app.cfg.FlowEndpoint, app.cfg.RuntimeEndpoint)
 
 	fileServer := http.FileServer(http.FS(distFS))
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/localai/models", app.handleLocalAIModels)
 	mux.HandleFunc("/api/training/dataset", app.handleTrainingDataset)
+	mux.HandleFunc("/api/runtime/analytics/dashboard", app.handleRuntimeAnalytics)
 	mux.HandleFunc("/api/sgmi/raw", app.handleSgmiRaw)
 
 	// Proxy LocalAI chat requests to LocalAI service
@@ -88,6 +106,10 @@ func main() {
 	flowProxy := app.proxyHandler(app.cfg.FlowEndpoint, "/agentflow")
 	mux.Handle("/agentflow/", flowProxy)
 	mux.Handle("/agentflow", flowProxy)
+
+	runtimeProxy := app.proxyHandler(app.cfg.RuntimeEndpoint, "/runtime")
+	mux.Handle("/runtime/", runtimeProxy)
+	mux.Handle("/runtime", runtimeProxy)
 
 	// Proxy search requests to gateway service (unified search endpoints)
 	searchEndpoint := strings.TrimSpace(os.Getenv("SHELL_SEARCH_ENDPOINT"))
@@ -190,6 +212,7 @@ func newShellServer() *shellServer {
 	trainingAPI := strings.TrimSpace(os.Getenv("SHELL_TRAINING_DATA_ENDPOINT"))
 	dmsEndpoint := strings.TrimSpace(os.Getenv("SHELL_DMS_ENDPOINT"))
 	flowEndpoint := strings.TrimSpace(os.Getenv("SHELL_AGENTFLOW_ENDPOINT"))
+	runtimeEndpoint := strings.TrimSpace(os.Getenv("SHELL_RUNTIME_ENDPOINT"))
 
 	if sgmiEndpoint == "" && gatewayURL != "" {
 		sgmiEndpoint = gatewayURL + "/shell/sgmi/raw"
@@ -203,6 +226,9 @@ func newShellServer() *shellServer {
 	if flowEndpoint == "" && gatewayURL != "" {
 		flowEndpoint = gatewayURL + "/agentflow"
 	}
+	if runtimeEndpoint == "" && gatewayURL != "" {
+		runtimeEndpoint = gatewayURL + "/runtime"
+	}
 
 	return &shellServer{
 		cfg: shellConfig{
@@ -213,6 +239,7 @@ func newShellServer() *shellServer {
 			TrainingAPI:    trainingAPI,
 			DMSEndpoint:    strings.TrimSuffix(dmsEndpoint, "/"),
 			FlowEndpoint:   strings.TrimSuffix(flowEndpoint, "/"),
+			RuntimeEndpoint: strings.TrimSuffix(runtimeEndpoint, "/"),
 		},
 		httpClient: &http.Client{Timeout: 15 * time.Second},
 	}

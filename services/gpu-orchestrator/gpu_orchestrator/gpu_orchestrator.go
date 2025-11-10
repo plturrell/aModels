@@ -102,21 +102,49 @@ func (o *GPUOrchestrator) AllocateGPUs(ctx context.Context, serviceName string, 
 
 // allocateViaDeepAgents uses DeepAgents to intelligently allocate GPUs
 func (o *GPUOrchestrator) allocateViaDeepAgents(ctx context.Context, serviceName string, workloadType string, workloadData map[string]interface{}) (*gpu_allocator.Allocation, error) {
-	// Query DeepAgents for allocation strategy
+	// Use analyze_workload tool via DeepAgents with structured output
+	workloadDataJSON, _ := json.Marshal(workloadData)
+	prompt := fmt.Sprintf(
+		"Use the analyze_workload tool to analyze GPU requirements for service '%s' with workload type '%s'.\n\n"+
+			"Workload data: %s\n\n"+
+			"Then use the query_gpu_status tool to check current GPU availability.\n\n"+
+			"Based on the analysis, provide a structured recommendation with required_gpus, min_memory_mb, and priority.",
+		serviceName, workloadType, string(workloadDataJSON))
+
+	// Define JSON schema for structured output
+	jsonSchema := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"required_gpus": map[string]interface{}{
+				"type":    "integer",
+				"minimum": 0,
+			},
+			"min_memory_mb": map[string]interface{}{
+				"type":    "integer",
+				"minimum": 0,
+			},
+			"priority": map[string]interface{}{
+				"type":    "integer",
+				"minimum": 1,
+				"maximum": 10,
+			},
+			"reasoning": map[string]interface{}{
+				"type": "string",
+			},
+		},
+		"required": []string{"required_gpus", "min_memory_mb", "priority"},
+	}
+
 	request := map[string]interface{}{
 		"messages": []map[string]interface{}{
 			{
-				"role": "user",
-				"content": fmt.Sprintf(
-					"Analyze GPU allocation for service '%s' with workload type '%s'. "+
-						"Determine optimal GPU allocation strategy considering: "+
-						"1. Required number of GPUs, 2. Memory requirements, 3. Priority, "+
-						"4. Current GPU utilization. Return JSON with 'required_gpus', 'min_memory_mb', 'priority' fields.",
-					serviceName, workloadType),
+				"role":    "user",
+				"content": prompt,
 			},
 		},
-		"config": map[string]interface{}{
-			"workload_data": workloadData,
+		"response_format": map[string]interface{}{
+			"type":       "json_schema",
+			"json_schema": jsonSchema,
 		},
 	}
 
@@ -125,7 +153,7 @@ func (o *GPUOrchestrator) allocateViaDeepAgents(ctx context.Context, serviceName
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/invoke", o.deepAgentsURL)
+	url := fmt.Sprintf("%s/invoke/structured", o.deepAgentsURL)
 	resp, err := o.httpClient.Post(url, "application/json", bytes.NewReader(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to call DeepAgents: %w", err)
@@ -137,16 +165,17 @@ func (o *GPUOrchestrator) allocateViaDeepAgents(ctx context.Context, serviceName
 	}
 
 	var agentResponse struct {
-		Messages []map[string]interface{} `json:"messages"`
-		Result   interface{}               `json:"result,omitempty"`
+		Messages         []map[string]interface{} `json:"messages"`
+		StructuredOutput map[string]interface{}    `json:"structured_output"`
+		Result           interface{}               `json:"result,omitempty"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&agentResponse); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	// Parse agent response to extract allocation strategy
-	allocationReq := o.parseAllocationStrategy(agentResponse, serviceName, workloadType, workloadData)
+	// Extract allocation strategy from structured output
+	allocationReq := o.parseAllocationFromStructured(agentResponse.StructuredOutput, serviceName, workloadType, workloadData)
 	if allocationReq != nil {
 		// Use parsed allocation strategy
 		return o.allocator.Allocate(allocationReq)
@@ -154,9 +183,45 @@ func (o *GPUOrchestrator) allocateViaDeepAgents(ctx context.Context, serviceName
 
 	// Fall back to standard scheduling if parsing fails
 	if o.logger != nil {
-		o.logger.Printf("Failed to parse allocation strategy from agent response, using standard scheduling")
+		o.logger.Printf("Failed to parse allocation strategy from structured output, using standard scheduling")
 	}
 	return o.scheduler.Schedule(serviceName, workloadType, workloadData)
+}
+
+// parseAllocationFromStructured extracts allocation from structured output.
+func (o *GPUOrchestrator) parseAllocationFromStructured(
+	structuredOutput map[string]interface{},
+	serviceName string,
+	workloadType string,
+	workloadData map[string]interface{},
+) *gpu_allocator.AllocationRequest {
+	if structuredOutput == nil {
+		return nil
+	}
+
+	requiredGPUs := 1
+	if rg, ok := structuredOutput["required_gpus"].(float64); ok {
+		requiredGPUs = int(rg)
+	}
+
+	minMemoryMB := 0
+	if mm, ok := structuredOutput["min_memory_mb"].(float64); ok {
+		minMemoryMB = int(mm)
+	}
+
+	priority := 5
+	if p, ok := structuredOutput["priority"].(float64); ok {
+		priority = int(p)
+	}
+
+	return &gpu_allocator.AllocationRequest{
+		ServiceName:  serviceName,
+		WorkloadType: workloadType,
+		WorkloadData: workloadData,
+		RequiredGPUs: requiredGPUs,
+		MinMemoryMB:  minMemoryMB,
+		Priority:     priority,
+	}
 }
 
 // parseAllocationStrategy extracts allocation strategy from agent response.

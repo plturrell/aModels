@@ -9,11 +9,22 @@ from deepagents import create_deep_agent
 from tools import (
     query_knowledge_graph,
     run_agentflow_flow,
+    optimize_flow,
+    validate_flow,
+    compare_flows,
     run_orchestration_chain,
     allocate_gpu,
     release_gpu,
     query_gpu_status,
     analyze_workload,
+    query_data_elements,
+    check_duplicates,
+    validate_definition,
+    suggest_improvements,
+    find_similar_elements,
+    analyze_workflow_state,
+    suggest_next_steps,
+    optimize_workflow,
 )
 
 # GNN tools (Priority 2)
@@ -67,6 +78,7 @@ Your capabilities include:
 - Executing orchestration chains for analysis and summarization
 - Planning complex multi-step data pipeline tasks
 - Breaking down complex problems into manageable sub-tasks
+- Managing catalog metadata (ISO 11179 data elements, deduplication, validation)
 
 ## Available Tools
 
@@ -90,7 +102,10 @@ Your capabilities include:
 - `reflective_mcts_debate`: Use Reflective-MCTS with multi-agent debate for balanced, robust state evaluations.
 
 ### AgentFlow Execution
-- `run_agentflow_flow`: Run pre-configured LangFlow flows for data pipelines and processing workflows.
+- `run_agentflow_flow`: Run pre-configured LangFlow flows for data pipelines and processing workflows
+- `optimize_flow`: Optimize flow execution based on performance metrics
+- `validate_flow`: Validate flow specification for correctness
+- `compare_flows`: Compare two flows to identify differences and merge opportunities
 
 ### Orchestration Chains
 - `run_orchestration_chain`: Execute orchestration chains for:
@@ -106,6 +121,18 @@ Your capabilities include:
 - `release_gpu`: Release GPU resources back to the orchestrator
 - `query_gpu_status`: Query current GPU availability, utilization, and allocations
 - `analyze_workload`: Analyze workload to determine GPU requirements
+
+### Catalog Management
+- `query_data_elements`: Query catalog for data elements by name, definition, or concept ID
+- `check_duplicates`: Check for duplicate data elements with structured output
+- `validate_definition`: Validate data element definitions against ISO 11179 standards
+- `suggest_improvements`: Suggest improvements to data element metadata
+- `find_similar_elements`: Find similar existing elements in catalog for context
+
+### Workflow Analysis
+- `analyze_workflow_state`: Analyze current workflow state for bottlenecks and progress
+- `suggest_next_steps`: Suggest optimal next steps for workflow execution
+- `optimize_workflow`: Optimize workflow execution based on specification and metrics
 
 ## Planning and Task Decomposition
 
@@ -131,6 +158,7 @@ For specialized tasks, use the built-in `task` tool to spawn sub-agents:
 5. **Leverage Sub-Agents**: Spawn specialized sub-agents for focused tasks.
 6. **Combine Tools**: Use orchestration chains to analyze knowledge graph query results.
 7. **Document Findings**: Use file system tools to save intermediate results and final reports.
+8. **Use Catalog Tools**: When working with metadata registration, use catalog tools for deduplication, validation, and finding similar elements.
 
 ## Example Workflow
 
@@ -198,11 +226,22 @@ def create_amodels_deep_agent(
     tools = [
         query_knowledge_graph,
         run_agentflow_flow,
+        optimize_flow,
+        validate_flow,
+        compare_flows,
         run_orchestration_chain,
         allocate_gpu,
         release_gpu,
         query_gpu_status,
         analyze_workload,
+        query_data_elements,
+        check_duplicates,
+        validate_definition,
+        suggest_improvements,
+        find_similar_elements,
+        analyze_workflow_state,
+        suggest_next_steps,
+        optimize_workflow,
     ]
     
     # Add GNN tools if available

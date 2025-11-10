@@ -33,17 +33,24 @@ type CatalogHandlers struct {
 
 // NewCatalogHandlers creates new catalog handlers.
 func NewCatalogHandlers(registry *iso11179.MetadataRegistry, logger *log.Logger) *CatalogHandlers {
+	// AI features enabled by default (opt-out via CATALOG_AI_DISABLED=true)
+	aiDisabled := os.Getenv("CATALOG_AI_DISABLED") == "true"
+	
 	handlers := &CatalogHandlers{
 		registry: registry,
 		logger:   logger,
-		aiDeduplicationEnabled: os.Getenv("CATALOG_AI_DEDUPLICATION_ENABLED") == "true",
-		aiValidationEnabled:    os.Getenv("CATALOG_AI_VALIDATION_ENABLED") == "true",
-		aiResearchEnabled:      os.Getenv("CATALOG_AI_RESEARCH_ENABLED") == "true",
+		aiDeduplicationEnabled: !aiDisabled && os.Getenv("CATALOG_AI_DEDUPLICATION_DISABLED") != "true",
+		aiValidationEnabled:    !aiDisabled && os.Getenv("CATALOG_AI_VALIDATION_DISABLED") != "true",
+		aiResearchEnabled:      !aiDisabled && os.Getenv("CATALOG_AI_RESEARCH_DISABLED") != "true",
 	}
 
 	// Initialize DeepAgents client if any AI feature is enabled
 	if handlers.aiDeduplicationEnabled || handlers.aiValidationEnabled {
 		handlers.deepAgentsClient = NewDeepAgentsClient(logger)
+		// Set cache if available
+		if handlers.cache != nil {
+			handlers.deepAgentsClient.SetCache(handlers.cache)
+		}
 	}
 
 	// Initialize DeepResearch client if research is enabled

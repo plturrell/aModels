@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"net/http"
@@ -130,7 +131,9 @@ func (qp *QualityPredictor) fetchCurrentQuality(ctx context.Context, elementID s
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("extract service returned status: %d", resp.StatusCode)
+		// Read response body for better error messages
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("extract service returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var metrics quality.QualityMetrics
@@ -161,7 +164,9 @@ func (qp *QualityPredictor) fetchHistoricalQuality(
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("extract service returned status: %d", resp.StatusCode)
+		// Read response body for better error messages
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("extract service returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var history []QualityHistoryPoint

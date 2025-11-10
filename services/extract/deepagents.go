@@ -61,8 +61,20 @@ type Message struct {
 
 // AnalyzeGraphResponse represents the response from DeepAgents.
 type AnalyzeGraphResponse struct {
-	Messages []Message     `json:"messages"`
-	Result   any           `json:"result,omitempty"`
+	Messages         []Message              `json:"messages"`
+	StructuredOutput map[string]interface{}  `json:"structured_output,omitempty"`
+	Result           any                     `json:"result,omitempty"`
+}
+
+// GraphAnalysisResult represents structured analysis results.
+type GraphAnalysisResult struct {
+	KeyFindings      []string `json:"key_findings"`
+	QualityObservations []string `json:"quality_observations"`
+	Recommendations []string `json:"recommendations"`
+	Issues          []string `json:"issues"`
+	Optimizations   []string `json:"optimizations"`
+	SchemaQuality   float64  `json:"schema_quality,omitempty"`
+	LineageInsights []string `json:"lineage_insights,omitempty"`
 }
 
 // AnalyzeKnowledgeGraph analyzes a knowledge graph using DeepAgents.
@@ -98,21 +110,64 @@ Context:
 - Project ID: %s
 - System ID: %s
 
-Please provide:
+Please provide structured analysis with:
 1. Key findings about the graph structure
 2. Data quality observations
 3. Recommendations for improvements
 4. Potential issues or inconsistencies
 5. Suggestions for optimization
+6. Schema quality assessment
+7. Data lineage insights
 
 Be specific and actionable.`, graphSummary, projectID, systemID)
 
-	request := AnalyzeGraphRequest{
-		Messages: []Message{
+	// Define JSON schema for structured output
+	jsonSchema := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"key_findings": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{"type": "string"},
+			},
+			"quality_observations": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{"type": "string"},
+			},
+			"recommendations": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{"type": "string"},
+			},
+			"issues": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{"type": "string"},
+			},
+			"optimizations": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{"type": "string"},
+			},
+			"schema_quality": map[string]interface{}{
+				"type":    "number",
+				"minimum": 0,
+				"maximum": 1,
+			},
+			"lineage_insights": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{"type": "string"},
+			},
+		},
+		"required": []string{"key_findings", "quality_observations", "recommendations", "issues", "optimizations"},
+	}
+
+	request := map[string]interface{}{
+		"messages": []Message{
 			{
 				Role:    "user",
 				Content: prompt,
 			},
+		},
+		"response_format": map[string]interface{}{
+			"type":       "json_schema",
+			"json_schema": jsonSchema,
 		},
 	}
 
@@ -121,7 +176,7 @@ Be specific and actionable.`, graphSummary, projectID, systemID)
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 
-	endpoint := fmt.Sprintf("%s/invoke", c.baseURL)
+	endpoint := fmt.Sprintf("%s/invoke/structured", c.baseURL)
 
 	// Retry logic for resilience
 	var lastErr error
@@ -166,7 +221,11 @@ Be specific and actionable.`, graphSummary, projectID, systemID)
 			return nil, nil // Return nil, nil (non-fatal) instead of error
 		}
 
-		var response AnalyzeGraphResponse
+		var response struct {
+			Messages         []Message             `json:"messages"`
+			StructuredOutput map[string]interface{} `json:"structured_output"`
+			Result           interface{}           `json:"result,omitempty"`
+		}
 		if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 			lastErr = fmt.Errorf("decode response: %w", err)
 			if attempt < maxRetries {
@@ -176,13 +235,225 @@ Be specific and actionable.`, graphSummary, projectID, systemID)
 			return nil, nil // Return nil, nil (non-fatal) instead of error
 		}
 
+		// Convert to AnalyzeGraphResponse
+		result := &AnalyzeGraphResponse{
+			Messages:         response.Messages,
+			StructuredOutput: response.StructuredOutput,
+			Result:           response.Result,
+		}
+
 		c.logger.Printf("DeepAgents analysis completed successfully (attempt %d)", attempt+1)
-		return &response, nil
+		return result, nil
 	}
 
 	// Should not reach here, but handle gracefully
 	c.logger.Printf("DeepAgents analysis failed after all retries: %v", lastErr)
 	return nil, nil
+}
+
+// AnalyzeSchemaQuality analyzes schema quality using DeepAgents.
+func (c *DeepAgentsClient) AnalyzeSchemaQuality(ctx context.Context, schemaInfo string, projectID, systemID string) (map[string]interface{}, error) {
+	if !c.enabled {
+		return nil, nil
+	}
+
+	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if !c.checkHealth(healthCtx) {
+		return nil, nil
+	}
+
+	prompt := fmt.Sprintf(`Analyze schema quality for this system:
+
+%s
+
+Context:
+- Project ID: %s
+- System ID: %s
+
+Provide structured analysis with:
+1. Schema completeness score (0-1)
+2. Naming consistency assessment
+3. Data type appropriateness
+4. Missing constraints or relationships
+5. Recommendations for improvement`, schemaInfo, projectID, systemID)
+
+	jsonSchema := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"completeness_score": map[string]interface{}{"type": "number", "minimum": 0, "maximum": 1},
+			"naming_consistency": map[string]interface{}{"type": "string"},
+			"data_type_issues": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{"type": "string"},
+			},
+			"missing_constraints": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{"type": "string"},
+			},
+			"recommendations": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{"type": "string"},
+			},
+		},
+	}
+
+	return c.callStructuredEndpoint(ctx, prompt, jsonSchema)
+}
+
+// AnalyzeDataLineage analyzes data lineage using DeepAgents.
+func (c *DeepAgentsClient) AnalyzeDataLineage(ctx context.Context, lineageInfo string, projectID, systemID string) (map[string]interface{}, error) {
+	if !c.enabled {
+		return nil, nil
+	}
+
+	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if !c.checkHealth(healthCtx) {
+		return nil, nil
+	}
+
+	prompt := fmt.Sprintf(`Analyze data lineage for this system:
+
+%s
+
+Context:
+- Project ID: %s
+- System ID: %s
+
+Provide structured analysis with:
+1. Lineage completeness
+2. Data flow patterns
+3. Potential bottlenecks
+4. Missing lineage connections
+5. Recommendations`, lineageInfo, projectID, systemID)
+
+	jsonSchema := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"completeness": map[string]interface{}{"type": "number", "minimum": 0, "maximum": 1},
+			"flow_patterns": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{"type": "string"},
+			},
+			"bottlenecks": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{"type": "string"},
+			},
+			"missing_connections": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{"type": "string"},
+			},
+			"recommendations": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{"type": "string"},
+			},
+		},
+	}
+
+	return c.callStructuredEndpoint(ctx, prompt, jsonSchema)
+}
+
+// SuggestCrossSystemMappings suggests cross-system mappings using DeepAgents.
+func (c *DeepAgentsClient) SuggestCrossSystemMappings(ctx context.Context, sourceSchema, targetSchema string, projectID string) (map[string]interface{}, error) {
+	if !c.enabled {
+		return nil, nil
+	}
+
+	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if !c.checkHealth(healthCtx) {
+		return nil, nil
+	}
+
+	prompt := fmt.Sprintf(`Suggest cross-system mappings between source and target schemas:
+
+Source Schema:
+%s
+
+Target Schema:
+%s
+
+Project ID: %s
+
+Provide structured mapping suggestions with:
+1. Field-to-field mappings
+2. Transformation requirements
+3. Data type conversions needed
+4. Confidence scores for each mapping
+5. Potential issues or warnings`, sourceSchema, targetSchema, projectID)
+
+	jsonSchema := map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"mappings": map[string]interface{}{
+				"type": "array",
+				"items": map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{
+						"source_field": map[string]interface{}{"type": "string"},
+						"target_field": map[string]interface{}{"type": "string"},
+						"confidence":   map[string]interface{}{"type": "number", "minimum": 0, "maximum": 1},
+						"transformation": map[string]interface{}{"type": "string"},
+						"warnings": map[string]interface{}{
+							"type": "array",
+							"items": map[string]interface{}{"type": "string"},
+						},
+					},
+				},
+			},
+			"overall_confidence": map[string]interface{}{"type": "number", "minimum": 0, "maximum": 1},
+		},
+	}
+
+	return c.callStructuredEndpoint(ctx, prompt, jsonSchema)
+}
+
+// callStructuredEndpoint is a helper to call the structured endpoint.
+func (c *DeepAgentsClient) callStructuredEndpoint(ctx context.Context, prompt string, jsonSchema map[string]interface{}) (map[string]interface{}, error) {
+	request := map[string]interface{}{
+		"messages": []Message{
+			{Role: "user", Content: prompt},
+		},
+		"response_format": map[string]interface{}{
+			"type":       "json_schema",
+			"json_schema": jsonSchema,
+		},
+	}
+
+	body, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	endpoint := fmt.Sprintf("%s/invoke/structured", c.baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		c.logger.Printf("DeepAgents structured request failed: %v", err)
+		return nil, nil // Non-fatal
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		c.logger.Printf("DeepAgents returned status %d", resp.StatusCode)
+		return nil, nil // Non-fatal
+	}
+
+	var response struct {
+		StructuredOutput map[string]interface{} `json:"structured_output"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		c.logger.Printf("Failed to decode DeepAgents response: %v", err)
+		return nil, nil // Non-fatal
+	}
+
+	return response.StructuredOutput, nil
 }
 
 // checkHealth performs a quick health check on the DeepAgents service.

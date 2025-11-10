@@ -2,6 +2,10 @@ go 1.23
 
 use (
 	.
+	./services/framework
+	./services/plot
+	./services/runtime
+	./services/stdlib
 )
 
 // Removed mono-repo dependencies - not available in standalone aModels repo

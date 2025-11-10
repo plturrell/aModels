@@ -22,13 +22,33 @@ This service provides a Python-based deep agent built on [deepagents](https://py
    - Find tables, columns, relationships
    - Analyze data lineage and quality
 
-2. **AgentFlow Tool** (`run_agentflow_flow`)
-   - Execute pre-configured LangFlow flows
-   - Run data pipeline workflows
+2. **AgentFlow Tools**
+   - `run_agentflow_flow`: Execute pre-configured LangFlow flows
+   - `optimize_flow`: Optimize flow execution based on performance metrics
+   - `validate_flow`: Validate flow specification for correctness
+   - `compare_flows`: Compare two flows to identify differences
 
 3. **Orchestration Tool** (`run_orchestration_chain`)
    - Execute orchestration chains
    - Question answering, summarization, analysis
+
+4. **Catalog Tools**
+   - `query_data_elements`: Query catalog for data elements
+   - `check_duplicates`: Check for duplicate data elements with structured output
+   - `validate_definition`: Validate data element definitions against ISO 11179
+   - `suggest_improvements`: Suggest improvements to data element metadata
+   - `find_similar_elements`: Find similar existing elements in catalog
+
+5. **Workflow Analysis Tools**
+   - `analyze_workflow_state`: Analyze current workflow state for bottlenecks
+   - `suggest_next_steps`: Suggest optimal next steps for workflow execution
+   - `optimize_workflow`: Optimize workflow execution based on specification
+
+6. **GPU Orchestration Tools**
+   - `allocate_gpu`: Request GPU allocation for services
+   - `release_gpu`: Release GPU resources
+   - `query_gpu_status`: Query current GPU availability and utilization
+   - `analyze_workload`: Analyze workload to determine GPU requirements
 
 ### DeepAgents Built-in Tools
 
@@ -58,6 +78,15 @@ DEEPAGENTS_PORT=9004
 ### `GET /healthz`
 Health check endpoint.
 
+**Response:**
+```json
+{
+  "status": "ok",
+  "service": "deepagents",
+  "agent_initialized": true
+}
+```
+
 ### `POST /invoke`
 Invoke the deep agent with a conversation.
 
@@ -68,7 +97,8 @@ Invoke the deep agent with a conversation.
     {"role": "user", "content": "Analyze the SGMI pipeline"}
   ],
   "stream": false,
-  "config": {}
+  "config": {},
+  "response_format": "json"  // Optional: request JSON response
 }
 ```
 
@@ -82,11 +112,70 @@ Invoke the deep agent with a conversation.
 }
 ```
 
+### `POST /invoke/structured`
+Invoke the deep agent with structured JSON output.
+
+**Request:**
+```json
+{
+  "messages": [
+    {"role": "user", "content": "Analyze these data elements for duplicates"}
+  ],
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "type": "object",
+      "properties": {
+        "suggestions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "index": {"type": "integer"},
+              "action": {"type": "string"},
+              "confidence": {"type": "number"}
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "messages": [...],
+  "structured_output": {
+    "suggestions": [...]
+  },
+  "validation_errors": null,
+  "result": {...}
+}
+```
+
 ### `POST /stream`
 Stream agent responses (Server-Sent Events).
 
+### `GET /metrics`
+Get service metrics including request counts, latency, tool usage, and token usage.
+
+**Response:**
+```json
+{
+  "requests": {...},
+  "request_latency": {...},
+  "errors": {...},
+  "tool_usage": {...},
+  "token_usage": {...},
+  "response_quality": {...},
+  "timestamp": "..."
+}
+```
+
 ### `GET /agent/info`
-Get information about the configured agent.
+Get information about the configured agent and available tools.
 
 ## Usage Examples
 
@@ -222,9 +311,45 @@ Deep agents can be part of the unified workflow alongside Knowledge Graph proces
 └─────────────────────┘
 ```
 
+## Integration
+
+DeepAgents is integrated across multiple aModels services:
+
+- **Catalog Service**: Deduplication, validation, research (enabled by default)
+- **Extract Service**: Knowledge graph analysis, schema quality, lineage analysis
+- **Graph Service**: Workflow analysis and optimization
+- **AgentFlow Service**: Flow analysis, optimization, validation
+- **GPU Orchestrator**: Intelligent GPU allocation
+
+See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for detailed integration patterns.
+
+## Monitoring
+
+### Metrics Endpoint
+
+```bash
+GET /metrics
+```
+
+Returns comprehensive metrics including:
+- Request counts and latency
+- Tool usage statistics
+- Token usage tracking
+- Response quality metrics
+
+### Health Check
+
+```bash
+GET /healthz
+```
+
+Returns service status and agent initialization state.
+
 ## References
 
 - [deepagents PyPI](https://pypi.org/project/deepagents/)
 - [LangGraph Documentation](https://langchain-ai.github.io/langgraph/)
 - [aModels Documentation](../README.md)
+- [Integration Guide](INTEGRATION_GUIDE.md)
+- [Setup and Diagnostics](SETUP_AND_DIAGNOSTICS.md)
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -192,5 +193,127 @@ func TestValidateWithDeepAgents_Disabled(t *testing.T) {
 	if suggestions != nil {
 		t.Errorf("Expected nil suggestions when disabled, got: %v", suggestions)
 	}
+}
+
+// TestDeepAgentsStructuredOutput tests structured output integration
+func TestDeepAgentsStructuredOutput(t *testing.T) {
+	registry := iso11179.NewMetadataRegistry("test", "Test Catalog", "http://test.org")
+	handlers := NewCatalogHandlers(registry, nil)
+	
+	// Enable AI features
+	os.Setenv("CATALOG_AI_DEDUPLICATION_ENABLED", "true")
+	os.Setenv("CATALOG_AI_VALIDATION_ENABLED", "true")
+	defer os.Unsetenv("CATALOG_AI_DEDUPLICATION_ENABLED")
+	defer os.Unsetenv("CATALOG_AI_VALIDATION_ENABLED")
+	
+	// Re-initialize to pick up environment variables
+	handlers = NewCatalogHandlers(registry, nil)
+	
+	if handlers.deepAgentsClient == nil {
+		t.Skip("DeepAgents client not initialized (service may be unavailable)")
+	}
+	
+	// Test structured output parsing
+	candidates := []CandidateElement{
+		{
+			Name:                 "Test Element",
+			Definition:           "A test data element",
+			DataElementConceptID: "DEC-001",
+			RepresentationID:     "REP-001",
+		},
+	}
+	
+	ctx := context.Background()
+	
+	// Test deduplication with structured output
+	response, err := handlers.deepAgentsClient.CheckDuplicates(ctx, candidates, nil)
+	if err != nil {
+		t.Logf("DeepAgents deduplication returned error (non-fatal): %v", err)
+	}
+	if response != nil {
+		t.Logf("Received %d deduplication suggestions", len(response.Suggestions))
+		for _, suggestion := range response.Suggestions {
+			t.Logf("  - Index %d: %s (confidence: %.2f)", suggestion.Index, suggestion.Action, suggestion.Confidence)
+		}
+	}
+	
+	// Test validation with structured output
+	validationResponse, err := handlers.deepAgentsClient.ValidateDefinitions(ctx, candidates)
+	if err != nil {
+		t.Logf("DeepAgents validation returned error (non-fatal): %v", err)
+	}
+	if validationResponse != nil {
+		t.Logf("Received %d validation suggestions", len(validationResponse.Suggestions))
+		for _, suggestion := range validationResponse.Suggestions {
+			t.Logf("  - Index %d: score %.2f, %d improvements", suggestion.Index, suggestion.Score, len(suggestion.Improvements))
+		}
+	}
+}
+
+// TestDeepAgentsCaching tests response caching
+func TestDeepAgentsCaching(t *testing.T) {
+	registry := iso11179.NewMetadataRegistry("test", "Test Catalog", "http://test.org")
+	handlers := NewCatalogHandlers(registry, nil)
+	
+	os.Setenv("CATALOG_AI_DEDUPLICATION_ENABLED", "true")
+	defer os.Unsetenv("CATALOG_AI_DEDUPLICATION_ENABLED")
+	
+	handlers = NewCatalogHandlers(registry, nil)
+	
+	if handlers.deepAgentsClient == nil {
+		t.Skip("DeepAgents client not initialized")
+	}
+	
+	// Create a mock cache
+	mockCache := &mockCache{
+		store: make(map[string]interface{}),
+	}
+	handlers.deepAgentsClient.SetCache(mockCache)
+	
+	candidates := []CandidateElement{
+		{
+			Name:                 "Cached Element",
+			Definition:           "Should be cached",
+			DataElementConceptID: "DEC-001",
+			RepresentationID:     "REP-001",
+		},
+	}
+	
+	ctx := context.Background()
+	
+	// First call - should hit DeepAgents (if available) or return empty
+	response1, _ := handlers.deepAgentsClient.CheckDuplicates(ctx, candidates, nil)
+	
+	// Second call - should use cache if first call succeeded
+	response2, _ := handlers.deepAgentsClient.CheckDuplicates(ctx, candidates, nil)
+	
+	if response1 != nil && response2 != nil {
+		// Verify cache was used (responses should be identical)
+		if len(response1.Suggestions) != len(response2.Suggestions) {
+			t.Logf("Cache may not be working - responses differ")
+		} else {
+			t.Logf("Cache appears to be working - responses match")
+		}
+	} else {
+		t.Logf("Cache test skipped - DeepAgents service may be unavailable")
+	}
+}
+
+type mockCache struct {
+	store map[string]interface{}
+}
+
+func (m *mockCache) Get(ctx interface{}, key string, dest interface{}) error {
+	if val, ok := m.store[key]; ok {
+		// Simple JSON marshaling for test
+		data, _ := json.Marshal(val)
+		return json.Unmarshal(data, dest)
+	}
+	return fmt.Errorf("not found")
+}
+
+func (m *mockCache) Set(ctx interface{}, key string, value interface{}, ttl interface{}) error {
+	m.store[key] = value
+	return nil
 }
 

@@ -36,8 +36,10 @@ type Message struct {
 
 // DeepAgentsResponse represents the response from the deep agent.
 type DeepAgentsResponse struct {
-	Messages []Message     `json:"messages"`
-	Result   any           `json:"result,omitempty"`
+	Messages         []Message   `json:"messages"`
+	StructuredOutput map[string]any `json:"structured_output,omitempty"`
+	ValidationErrors []string    `json:"validation_errors,omitempty"`
+	Result           any         `json:"result,omitempty"`
 }
 
 var deepagentsHTTPClient = &http.Client{
@@ -136,7 +138,19 @@ func RunDeepAgentNode(deepagentsServiceURL string) stategraph.NodeFunc {
 			}
 		}
 
-		// Prepare request
+		// Prepare request - check if structured output is requested
+		useStructured := false
+		var responseFormat map[string]any
+		if config, ok := state["deepagents_config"].(map[string]any); ok {
+			if rf, ok := config["response_format"].(map[string]any); ok {
+				useStructured = true
+				responseFormat = rf
+			} else if rfStr, ok := config["response_format"].(string); ok && rfStr == "json" {
+				useStructured = true
+				responseFormat = map[string]any{"type": "json"}
+			}
+		}
+
 		requestBody := map[string]any{
 			"messages": enrichedMessages,
 			"stream":   agentRequest.Stream,
@@ -144,9 +158,17 @@ func RunDeepAgentNode(deepagentsServiceURL string) stategraph.NodeFunc {
 		if agentRequest.Config != nil {
 			requestBody["config"] = agentRequest.Config
 		}
+		if useStructured && responseFormat != nil {
+			requestBody["response_format"] = responseFormat
+		}
 
 		// Call DeepAgents service with retry logic
-		endpoint := strings.TrimRight(deepagentsServiceURL, "/") + "/invoke"
+		endpoint := strings.TrimRight(deepagentsServiceURL, "/")
+		if useStructured {
+			endpoint += "/invoke/structured"
+		} else {
+			endpoint += "/invoke"
+		}
 		
 		var agentResponse DeepAgentsResponse
 		err := integration.RetryWithBackoffResult(
@@ -211,6 +233,11 @@ func RunDeepAgentNode(deepagentsServiceURL string) stategraph.NodeFunc {
 		newState["deepagents_messages"] = agentResponse.Messages
 		newState["deepagents_success"] = true
 		newState["deepagents_executed_at"] = time.Now().Format(time.RFC3339)
+
+		// Extract structured output if available
+		if agentResponse.StructuredOutput != nil {
+			newState["deepagents_structured"] = agentResponse.StructuredOutput
+		}
 
 		// Extract text from last assistant message
 		if len(agentResponse.Messages) > 0 {
