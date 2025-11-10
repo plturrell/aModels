@@ -9,9 +9,41 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
+
+// CorrelationIDKey is the context key for correlation ID.
+const CorrelationIDKey = "correlation_id"
+
+// RequestIDHeader is the HTTP header name for correlation ID.
+const RequestIDHeader = "X-Request-ID"
+
+// TraceIDHeader is the HTTP header name for trace ID.
+const TraceIDHeader = "X-Trace-ID"
+
+// getCorrelationID extracts correlation ID from context or generates a new one.
+func getCorrelationID(ctx context.Context) string {
+	// Try to get from context
+	if correlationID, ok := ctx.Value(CorrelationIDKey).(string); ok && correlationID != "" {
+		return correlationID
+	}
+	// Try to get from request header (if context has request)
+	if req, ok := ctx.Value("http_request").(*http.Request); ok {
+		if correlationID := req.Header.Get(RequestIDHeader); correlationID != "" {
+			return correlationID
+		}
+		if traceID := req.Header.Get(TraceIDHeader); traceID != "" {
+			return traceID
+		}
+	}
+	// Generate new one based on timestamp
+	return fmt.Sprintf("%d", time.Now().UnixNano())
+}
+
+// MetricsCollector is a function that collects metrics for catalog integration calls.
+type MetricsCollector func(service, endpoint string, statusCode int, latency time.Duration, correlationID string)
 
 // CatalogClient provides HTTP client for catalog service integration.
 type CatalogClient struct {
@@ -24,6 +56,7 @@ type CatalogClient struct {
 	circuitBreaker   *CircuitBreaker
 	deepAgentsClient *DeepAgentsClient
 	aiEnrichmentEnabled bool
+	metricsCollector MetricsCollector
 }
 
 // CircuitBreaker implements circuit breaker pattern for resilient service calls.
@@ -121,7 +154,7 @@ func (cb *CircuitBreaker) State() string {
 // We reference it here for the catalog client integration
 
 // NewCatalogClient creates a new catalog service client.
-func NewCatalogClient(baseURL string, logger *log.Logger) *CatalogClient {
+func NewCatalogClient(baseURL string, logger *log.Logger, metricsCollector ...MetricsCollector) *CatalogClient {
 	if baseURL == "" {
 		return &CatalogClient{
 			enabled: false,
@@ -129,6 +162,11 @@ func NewCatalogClient(baseURL string, logger *log.Logger) *CatalogClient {
 		}
 	}
 
+	var collector MetricsCollector
+	if len(metricsCollector) > 0 {
+		collector = metricsCollector[0]
+	}
+	
 	client := &CatalogClient{
 		baseURL:       baseURL,
 		httpClient:    &http.Client{Timeout: 30 * time.Second},
@@ -138,6 +176,7 @@ func NewCatalogClient(baseURL string, logger *log.Logger) *CatalogClient {
 		retryDelay:    1 * time.Second,
 		circuitBreaker: NewCircuitBreaker(5, 30*time.Second, logger), // 5 failures, 30s timeout
 		aiEnrichmentEnabled: os.Getenv("EXTRACT_AI_ENRICHMENT_ENABLED") == "true",
+		metricsCollector: collector,
 	}
 
 	// Initialize DeepAgents client if AI enrichment is enabled
@@ -186,14 +225,38 @@ func (c *CatalogClient) registerWithRetry(ctx context.Context, url string, jsonD
 		}
 
 		// Use circuit breaker
+		startTime := time.Now()
+		correlationID := getCorrelationID(ctx)
+		
 		err := c.circuitBreaker.Call(func() error {
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))
 			if err != nil {
 				return fmt.Errorf("failed to create request: %w", err)
 			}
 			req.Header.Set("Content-Type", "application/json")
+			
+			// Add correlation ID to headers
+			req.Header.Set(RequestIDHeader, correlationID)
+			
+			// Log with correlation ID
+			if c.logger != nil && attempt == 0 {
+				c.logger.Printf("[%s] Catalog service request: POST %s", correlationID, url)
+			}
 
 			resp, err := c.httpClient.Do(req)
+			latency := time.Since(startTime)
+			
+			// Collect metrics
+			if c.metricsCollector != nil {
+				statusCode := 0
+				if resp != nil {
+					statusCode = resp.StatusCode
+				} else if err != nil {
+					statusCode = 500
+				}
+				c.metricsCollector("catalog", url, statusCode, latency, correlationID)
+			}
+			
 			if err != nil {
 				return fmt.Errorf("catalog service request failed: %w", err)
 			}
@@ -219,8 +282,11 @@ func (c *CatalogClient) registerWithRetry(ctx context.Context, url string, jsonD
 		})
 
 		if err == nil {
+			correlationID := getCorrelationID(ctx)
 			if attempt > 0 && c.logger != nil {
-				c.logger.Printf("Catalog service request succeeded after %d attempts", attempt+1)
+				c.logger.Printf("[%s] Catalog service request succeeded after %d attempts", correlationID, attempt+1)
+			} else if c.logger != nil {
+				c.logger.Printf("[%s] Catalog service request succeeded", correlationID)
 			}
 			return nil
 		}
@@ -228,9 +294,10 @@ func (c *CatalogClient) registerWithRetry(ctx context.Context, url string, jsonD
 		lastErr = err
 		
 		// Check if circuit breaker is open
+		correlationID := getCorrelationID(ctx)
 		if err.Error() == "circuit breaker is open (too many failures)" {
 			if c.logger != nil {
-				c.logger.Printf("Catalog service circuit breaker is OPEN, skipping request")
+				c.logger.Printf("[%s] Catalog service circuit breaker is OPEN, skipping request", correlationID)
 			}
 			return err
 		}
@@ -239,14 +306,15 @@ func (c *CatalogClient) registerWithRetry(ctx context.Context, url string, jsonD
 		errorMsg := err.Error()
 		if contains(errorMsg, "client error") || contains(errorMsg, "status 4") {
 			if c.logger != nil {
-				c.logger.Printf("Catalog service returned client error, not retrying: %v", err)
+				c.logger.Printf("[%s] Catalog service returned client error, not retrying: %v", correlationID, err)
 			}
 			return err
 		}
 	}
 
+	correlationID := getCorrelationID(ctx)
 	if c.logger != nil {
-		c.logger.Printf("Warning: Failed to register in catalog service after %d attempts: %v", c.maxRetries+1, lastErr)
+		c.logger.Printf("[%s] Warning: Failed to register in catalog service after %d attempts: %v", correlationID, c.maxRetries+1, lastErr)
 	}
 	return fmt.Errorf("failed after %d attempts: %w", c.maxRetries+1, lastErr)
 }

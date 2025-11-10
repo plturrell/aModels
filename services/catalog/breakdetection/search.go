@@ -9,23 +9,41 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/plturrell/aModels/services/catalog/httpclient"
 )
 
 // BreakSearchService provides semantic search for similar breaks
 type BreakSearchService struct {
 	searchServiceURL string
-	httpClient       *http.Client
+	httpClient       *httpclient.Client
 	logger           *log.Logger
 }
 
 // NewBreakSearchService creates a new break search service
 func NewBreakSearchService(searchServiceURL string, logger *log.Logger) *BreakSearchService {
 	if searchServiceURL == "" {
-		searchServiceURL = "http://localhost:9002" // Default Extract service URL
+		// Should fail explicitly instead of defaulting
+		return &BreakSearchService{
+			searchServiceURL: "",
+			httpClient:       nil,
+			logger:           logger,
+		}
 	}
+	
+	client := httpclient.NewClient(httpclient.ClientConfig{
+		Timeout:         30 * time.Second,
+		MaxRetries:      3,
+		InitialBackoff:  1 * time.Second,
+		MaxBackoff:      5 * time.Second,
+		BaseURL:         searchServiceURL,
+		HealthCheckPath: "/healthz",
+		Logger:          logger,
+	})
+	
 	return &BreakSearchService{
 		searchServiceURL: searchServiceURL,
-		httpClient:       &http.Client{Timeout: 30 * time.Second},
+		httpClient:       client,
 		logger:           logger,
 	}
 }
@@ -58,28 +76,6 @@ func (bss *BreakSearchService) SearchSimilarBreaks(ctx context.Context, breakRec
 	}
 
 	// Call search service
-	searchURL := fmt.Sprintf("%s/knowledge-graph/search", bss.searchServiceURL)
-	jsonData, err := json.Marshal(searchRequest)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal search request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, searchURL, bytes.NewReader(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create search request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := bss.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute search request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("search service returned status %d", resp.StatusCode)
-	}
-
 	var searchResponse struct {
 		Results []struct {
 			ID       string                 `json:"id"`
@@ -88,9 +84,87 @@ func (bss *BreakSearchService) SearchSimilarBreaks(ctx context.Context, breakRec
 			Metadata map[string]interface{} `json:"metadata"`
 		} `json:"results"`
 	}
+	
+	if bss.httpClient != nil {
+		// Use enhanced HTTP client
+		validator := func(data map[string]interface{}) error {
+			if _, ok := data["results"]; !ok {
+				return fmt.Errorf("response missing 'results' field")
+			}
+			return nil
+		}
+		
+		var responseData map[string]interface{}
+		err := bss.httpClient.PostJSON(ctx, "/knowledge-graph/search", searchRequest, &responseData, validator)
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute search request: %w", err)
+		}
+		
+		// Convert response to searchResponse struct
+		if results, ok := responseData["results"].([]interface{}); ok {
+			for _, result := range results {
+				if resultMap, ok := result.(map[string]interface{}); ok {
+					var id, content string
+					var score float64
+					var metadata map[string]interface{}
+					
+					if val, ok := resultMap["id"].(string); ok {
+						id = val
+					}
+					if val, ok := resultMap["content"].(string); ok {
+						content = val
+					}
+					if val, ok := resultMap["score"].(float64); ok {
+						score = val
+					}
+					if val, ok := resultMap["metadata"].(map[string]interface{}); ok {
+						metadata = val
+					} else {
+						metadata = make(map[string]interface{})
+					}
+					
+					searchResponse.Results = append(searchResponse.Results, struct {
+						ID       string                 `json:"id"`
+						Content  string                 `json:"content"`
+						Score    float64                `json:"score"`
+						Metadata map[string]interface{} `json:"metadata"`
+					}{
+						ID:       id,
+						Content:  content,
+						Score:    score,
+						Metadata: metadata,
+					})
+				}
+			}
+		}
+	} else {
+		// Fallback to basic HTTP client
+		searchURL := fmt.Sprintf("%s/knowledge-graph/search", bss.searchServiceURL)
+		jsonData, err := json.Marshal(searchRequest)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal search request: %w", err)
+		}
 
-	if err := json.NewDecoder(resp.Body).Decode(&searchResponse); err != nil {
-		return nil, fmt.Errorf("failed to decode search response: %w", err)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, searchURL, bytes.NewReader(jsonData))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create search request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute search request: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("search service returned status %d", resp.StatusCode)
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&searchResponse); err != nil {
+			return nil, fmt.Errorf("failed to decode search response: %w", err)
+		}
 	}
 
 	// Convert search results to SimilarBreak
@@ -229,26 +303,37 @@ func (bss *BreakSearchService) IndexBreak(ctx context.Context, breakRecord *Brea
 		"artifact_type": "break",
 	}
 
-	indexURL := fmt.Sprintf("%s/knowledge-graph/index", bss.searchServiceURL)
-	jsonData, err := json.Marshal(indexRequest)
-	if err != nil {
-		return fmt.Errorf("failed to marshal index request: %w", err)
-	}
+	if bss.httpClient != nil {
+		// Use enhanced HTTP client
+		var responseData map[string]interface{}
+		err := bss.httpClient.PostJSON(ctx, "/knowledge-graph/index", indexRequest, &responseData)
+		if err != nil {
+			return fmt.Errorf("failed to execute index request: %w", err)
+		}
+	} else {
+		// Fallback to basic HTTP client
+		indexURL := fmt.Sprintf("%s/knowledge-graph/index", bss.searchServiceURL)
+		jsonData, err := json.Marshal(indexRequest)
+		if err != nil {
+			return fmt.Errorf("failed to marshal index request: %w", err)
+		}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, indexURL, bytes.NewReader(jsonData))
-	if err != nil {
-		return fmt.Errorf("failed to create index request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, indexURL, bytes.NewReader(jsonData))
+		if err != nil {
+			return fmt.Errorf("failed to create index request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
 
-	resp, err := bss.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to execute index request: %w", err)
-	}
-	defer resp.Body.Close()
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return fmt.Errorf("failed to execute index request: %w", err)
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("index service returned status %d", resp.StatusCode)
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("index service returned status %d", resp.StatusCode)
+		}
 	}
 
 	if bss.logger != nil {

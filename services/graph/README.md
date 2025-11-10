@@ -100,6 +100,59 @@ go test -tags hana ./pkg/integration/hana -run Live -cover -count=1
 
 The live test is skipped automatically when the environment is not present.
 
+## Third-Party Libraries
+
+### Arrow Flight
+
+The graph service uses **Apache Arrow v18.4.1** for high-performance data transfer via Arrow Flight.
+
+**Usage**:
+- Fetches graph data from extract service via Arrow Flight
+- Fetches operation logs from postgres service via Arrow Flight
+- Uses connection pooling for efficient connection reuse
+
+**Client Usage**:
+```go
+// Extract Flight client with pooling
+extractClient, err := extractflight.NewClient(addr, 10)
+defer extractClient.Close()
+data, err := extractClient.FetchWithPool(ctx)
+
+// Postgres Flight client with pooling
+postgresClient, err := postgresflight.NewClient(addr, 10)
+defer postgresClient.Close()
+ops, err := postgresClient.FetchOperationsWithPool(ctx)
+```
+
+**Configuration**:
+- Extract Flight address: `EXTRACT_FLIGHT_ADDR`
+- Postgres Flight address: `POSTGRES_FLIGHT_ADDR`
+- Pool size: Configurable (default: 10)
+
+**See Also**: `docs/DEPENDENCY_MATRIX.md` for version compatibility information.
+
+### LangChain / LangGraph (Python)
+
+The graph service uses **LangChain** and **LangGraph** for narrative intelligence orchestration.
+
+**Usage**:
+- Narrative intelligence queries via `NarrativeLangGraphAgent`
+- LLM-powered query classification and response generation
+- Connection pooling, rate limiting, and caching enabled by default
+
+**Configuration**:
+- LLM model: `LLM_MODEL` environment variable (default: `openai:gpt-4o-mini`)
+- Rate limit: `LLM_RATE_LIMIT` (default: 100 requests/minute)
+- Cache TTL: `LLM_CACHE_TTL` (default: 300 seconds)
+- Redis URL: `REDIS_URL` (optional, for distributed caching)
+
+**Python Dependencies**:
+- `langchain>=0.3.0`
+- `langchain-core>=0.3.0`
+- `langgraph>=0.2.0`
+
+**See Also**: `services/shared/python/llm_pool.py` for LLM pooling implementation.
+
 ## Contributing
 
 We welcome contributions to the LangGraph-Go port. Please follow these guidelines:

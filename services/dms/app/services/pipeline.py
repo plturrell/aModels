@@ -7,13 +7,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-import httpx
-
 from app.core.config import get_settings
 from app.core.database import get_session_factory
+from app.core.http_client import ResilientHTTPClient
+from app.core.metrics import collect_integration_metric
+from app.core.middleware import get_correlation_id
 from app.models.document import Document
 
 logger = logging.getLogger(__name__)
+
+# Global HTTP clients (initialized on first use)
+_extract_client: Optional[ResilientHTTPClient] = None
+_catalog_client: Optional[ResilientHTTPClient] = None
 
 
 async def orchestrate_document(document_id: str) -> None:
@@ -67,20 +72,28 @@ async def orchestrate_document(document_id: str) -> None:
         summary_text: Optional[str] = None
         catalog_identifier: Optional[str] = None
 
+        # Build context for integration calls
+        context = {
+            "correlation_id": f"dms-{document_id}",
+        }
+        
+        # Try to get correlation ID from request if available
+        # (This would be set by middleware in a real request context)
+        
         if settings.extract_url:
             try:
-                ocr_text = await _run_ocr(document, settings.extract_url)
+                ocr_text = await _run_ocr(document, settings.extract_url, context)
             except Exception as exc:
                 logger.error("ocr failed for %s: %s", document_id, exc)
             try:
-                summary_text = await _run_extraction(document, settings.extract_url, ocr_text)
+                summary_text = await _run_extraction(document, settings.extract_url, ocr_text, context)
             except Exception as exc:
                 logger.error("extraction failed for %s: %s", document_id, exc)
 
         if settings.catalog_url:
             try:
                 payload_summary = summary_text or ocr_text
-                catalog_identifier = await _register_catalog(document, payload_summary, settings.catalog_url)
+                catalog_identifier = await _register_catalog(document, payload_summary, settings.catalog_url, context)
             except Exception as exc:
                 logger.error("catalog registration failed for %s: %s", document_id, exc)
 
@@ -91,7 +104,28 @@ async def orchestrate_document(document_id: str) -> None:
             await session.commit()
 
 
-async def _run_extraction(document: Document, base_url: str, initial_text: Optional[str] = None) -> Optional[str]:
+async def _run_extraction(
+    document: Document,
+    base_url: str,
+    initial_text: Optional[str] = None,
+    context: Optional[dict] = None,
+) -> Optional[str]:
+    """Run text extraction using resilient HTTP client."""
+    global _extract_client
+    
+    if context is None:
+        context = {}
+    
+    # Initialize client if needed
+    if _extract_client is None or _extract_client.base_url != base_url:
+        from app.core.metrics import collect_integration_metric
+        _extract_client = ResilientHTTPClient(
+            base_url=base_url,
+            timeout=30.0,
+            max_retries=3,
+            metrics_collector=collect_integration_metric,
+        )
+    
     path = Path(document.storage_path)
     if initial_text is not None:
         content = initial_text
@@ -110,19 +144,47 @@ async def _run_extraction(document: Document, base_url: str, initial_text: Optio
         "prompt_description": f"Summarise key entities for {document.name}",
         "model_id": ""
     }
+    
+    # Validate response structure
+    def validate_response(data: dict) -> None:
+        if not isinstance(data, dict):
+            raise ValueError("Response is not a dictionary")
+        # Response should have entities or extractions
+        if "entities" not in data and "extractions" not in data:
+            logger.warning("Response missing expected fields: %s", list(data.keys()))
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(_join(base_url, "/extract"), json=payload)
-        response.raise_for_status()
-        data = response.json()
-
-    return _summarise_extraction(data)
+    try:
+        data = await _extract_client.post_json("/extract", payload, context, validate_response)
+        return _summarise_extraction(data)
+    except Exception as e:
+        logger.error("Extraction failed: %s", e)
+        raise
 
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".gif", ".webp"}
 
 
-async def _run_ocr(document: Document, base_url: str) -> Optional[str]:
+async def _run_ocr(
+    document: Document,
+    base_url: str,
+    context: Optional[dict] = None,
+) -> Optional[str]:
+    """Run OCR using resilient HTTP client."""
+    global _extract_client
+    
+    if context is None:
+        context = {}
+    
+    # Initialize client if needed
+    if _extract_client is None or _extract_client.base_url != base_url:
+        from app.core.metrics import collect_integration_metric
+        _extract_client = ResilientHTTPClient(
+            base_url=base_url,
+            timeout=60.0,
+            max_retries=3,
+            metrics_collector=collect_integration_metric,
+        )
+    
     path = Path(document.storage_path)
     suffix = path.suffix.lower()
     if suffix not in IMAGE_EXTENSIONS:
@@ -140,26 +202,34 @@ async def _run_ocr(document: Document, base_url: str) -> Optional[str]:
         "image_base64": base64.b64encode(raw).decode("utf-8"),
         "prompt": f"Convert the document {document.name} to markdown."
     }
+    
+    # Validate response structure
+    def validate_response(data: dict) -> None:
+        if not isinstance(data, dict):
+            raise ValueError("Response is not a dictionary")
+        if "text" not in data:
+            raise ValueError("Response missing 'text' field")
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.post(_join(base_url, "/ocr"), json=payload)
-        response.raise_for_status()
-        payload = response.json()
-
-    text = payload.get("text")
-    if isinstance(text, str) and text.strip():
-        cleaned = text.strip()
-        tables = payload.get("tables")
-        if isinstance(tables, list) and tables:
-            table_summaries = []
-            for table in tables[:3]:
-                headers = table.get("headers")
-                if isinstance(headers, list) and headers:
-                    table_summaries.append(", ".join(headers))
-            if table_summaries:
-                cleaned += "\n\nTables: " + " | ".join(table_summaries)
-        return cleaned
-    return None
+    try:
+        response_data = await _extract_client.post_json("/ocr", payload, context, validate_response)
+        
+        text = response_data.get("text")
+        if isinstance(text, str) and text.strip():
+            cleaned = text.strip()
+            tables = response_data.get("tables")
+            if isinstance(tables, list) and tables:
+                table_summaries = []
+                for table in tables[:3]:
+                    headers = table.get("headers")
+                    if isinstance(headers, list) and headers:
+                        table_summaries.append(", ".join(headers))
+                if table_summaries:
+                    cleaned += "\n\nTables: " + " | ".join(table_summaries)
+            return cleaned
+        return None
+    except Exception as e:
+        logger.error("OCR failed: %s", e)
+        raise
 
 
 def _summarise_extraction(data: dict[str, Any]) -> Optional[str]:
@@ -184,21 +254,52 @@ def _summarise_extraction(data: dict[str, Any]) -> Optional[str]:
     return "\n".join(lines)
 
 
-async def _register_catalog(document: Document, summary: Optional[str], base_url: str) -> Optional[str]:
+async def _register_catalog(
+    document: Document,
+    summary: Optional[str],
+    base_url: str,
+    context: Optional[dict] = None,
+) -> Optional[str]:
+    """Register document in catalog using resilient HTTP client."""
+    global _catalog_client
+    
+    if context is None:
+        context = {}
+    
+    # Initialize client if needed
+    if _catalog_client is None or _catalog_client.base_url != base_url:
+        from app.core.metrics import collect_integration_metric
+        _catalog_client = ResilientHTTPClient(
+            base_url=base_url,
+            timeout=30.0,
+            max_retries=3,
+            metrics_collector=collect_integration_metric,
+        )
+    
     payload = {
         "topic": document.name,
         "customer_need": summary or document.description or "Document ingested via DMS"
     }
+    
+    # Validate response structure
+    def validate_response(data: dict) -> None:
+        if not isinstance(data, dict):
+            raise ValueError("Response is not a dictionary")
+        # Response should have data_product with identifier
+        data_product = data.get("data_product")
+        if not isinstance(data_product, dict):
+            raise ValueError("Response missing 'data_product' field")
+        if "identifier" not in data_product:
+            raise ValueError("Response missing 'identifier' in data_product")
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(_join(base_url, "/catalog/data-products/build"), json=payload)
-        response.raise_for_status()
-        data = response.json()
+    try:
+        data = await _catalog_client.post_json("/catalog/data-products/build", payload, context, validate_response)
+        product = data.get("data_product") if isinstance(data, dict) else None
+        identifier = product.get("identifier") if isinstance(product, dict) else None
+        return identifier
+    except Exception as e:
+        logger.error("Catalog registration failed: %s", e)
+        raise
 
-    product = data.get("data_product") if isinstance(data, dict) else None
-    identifier = product.get("identifier") if isinstance(product, dict) else None
-    return identifier
 
-
-def _join(base: str, path: str) -> str:
-    return f"{base.rstrip('/')}{path}"
+# Removed _join function - using urljoin in ResilientHTTPClient instead

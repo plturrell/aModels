@@ -12,7 +12,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	github.com/plturrell/aModels/services/postgres v0.0.0
-	github.com/pressly/goose/v3 v3.20.0
+	github.com/pressly/goose/v3 v3.21.1
 	github.com/redis/go-redis/v9 v9.16.0
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.8

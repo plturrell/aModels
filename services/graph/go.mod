@@ -59,7 +59,7 @@ require (
 )
 
 require (
-	github.com/apache/arrow/go/v16 v16.0.0
+	github.com/apache/arrow-go/v18 v18.4.1
 	github.com/google/uuid v1.6.0
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.10
@@ -71,11 +71,3 @@ replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Postgres => ../pos
 replace github.com/SAP/go-hdb => ../../infrastructure/third_party/go-hdb
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration => ../../infrastructure/third_party/orchestration
 
-// Removed agenticAiETH replace directives - these packages don't exist
-// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer1_Blockchain => ../agenticAiETH_layer1_Blockchain
-// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA => ../agenticAiETH_layer4_HANA
-// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK => ../agenticAiETH_layer4_AgentSDK
-// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract => ../agenticAiETH_layer4_Extract
-// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths => ../agenticAiETH_layer4_Models/maths
-// replace github.com/redis/go-redis/v9 => ../third_party/go-redis
-// replace github.com/apache/arrow/go/v16 => ../third_party/go-arrow

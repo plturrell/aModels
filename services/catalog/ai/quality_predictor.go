@@ -10,22 +10,36 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/plturrell/aModels/services/catalog/httpclient"
 	"github.com/plturrell/aModels/services/catalog/quality"
 )
 
 // QualityPredictor provides predictive quality monitoring capabilities.
 type QualityPredictor struct {
 	extractServiceURL string
-	httpClient        *http.Client
+	httpClient        *httpclient.Client
 	logger            *log.Logger
 	historicalData    []QualityHistoryPoint
 }
 
 // NewQualityPredictor creates a new quality predictor.
 func NewQualityPredictor(extractServiceURL string, logger *log.Logger) *QualityPredictor {
+	var client *httpclient.Client
+	if extractServiceURL != "" {
+		client = httpclient.NewClient(httpclient.ClientConfig{
+			Timeout:         30 * time.Second,
+			MaxRetries:      3,
+			InitialBackoff:  1 * time.Second,
+			MaxBackoff:      5 * time.Second,
+			BaseURL:         extractServiceURL,
+			HealthCheckPath: "/healthz",
+			Logger:          logger,
+		})
+	}
+	
 	return &QualityPredictor{
 		extractServiceURL: extractServiceURL,
-		httpClient:        &http.Client{Timeout: 30 * time.Second},
+		httpClient:        client,
 		logger:            logger,
 		historicalData:    []QualityHistoryPoint{},
 	}
@@ -117,28 +131,43 @@ func (qp *QualityPredictor) PredictQuality(
 
 // fetchCurrentQuality fetches current quality metrics.
 func (qp *QualityPredictor) fetchCurrentQuality(ctx context.Context, elementID string) (*quality.QualityMetrics, error) {
-	url := fmt.Sprintf("%s/metrics/quality?element_id=%s", qp.extractServiceURL, elementID)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
+	if qp.extractServiceURL == "" {
+		return nil, fmt.Errorf("extract service URL not configured")
 	}
-
-	resp, err := qp.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		// Read response body for better error messages
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("extract service returned status %d: %s", resp.StatusCode, string(body))
-	}
-
+	
 	var metrics quality.QualityMetrics
-	if err := json.NewDecoder(resp.Body).Decode(&metrics); err != nil {
-		return nil, err
+	
+	if qp.httpClient != nil {
+		// Use enhanced HTTP client
+		url := fmt.Sprintf("/metrics/quality?element_id=%s", elementID)
+		err := qp.httpClient.GetJSON(ctx, url, &metrics)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch current quality: %w", err)
+		}
+	} else {
+		// Fallback to basic HTTP client
+		url := fmt.Sprintf("%s/metrics/quality?element_id=%s", qp.extractServiceURL, elementID)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			// Read response body for better error messages
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("extract service returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&metrics); err != nil {
+			return nil, err
+		}
 	}
 
 	return &metrics, nil

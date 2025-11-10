@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/plturrell/aModels/services/catalog/httpclient"
 	"github.com/plturrell/aModels/services/catalog/iso11179"
 	"github.com/plturrell/aModels/services/catalog/research"
 	"github.com/plturrell/aModels/services/catalog/workflows"
@@ -19,7 +20,7 @@ import (
 type MetadataDiscoverer struct {
 	deepResearchClient *research.DeepResearchClient
 	extractServiceURL  string
-	httpClient         *http.Client
+	httpClient         *httpclient.Client
 	logger             *log.Logger
 }
 
@@ -29,10 +30,23 @@ func NewMetadataDiscoverer(
 	extractServiceURL string,
 	logger *log.Logger,
 ) *MetadataDiscoverer {
+	var client *httpclient.Client
+	if extractServiceURL != "" {
+		client = httpclient.NewClient(httpclient.ClientConfig{
+			Timeout:         60 * time.Second,
+			MaxRetries:      3,
+			InitialBackoff:  1 * time.Second,
+			MaxBackoff:      10 * time.Second,
+			BaseURL:         extractServiceURL,
+			HealthCheckPath: "/healthz",
+			Logger:          logger,
+		})
+	}
+	
 	return &MetadataDiscoverer{
 		deepResearchClient: research.NewDeepResearchClient(deepResearchURL, logger),
 		extractServiceURL:  extractServiceURL,
-		httpClient:         &http.Client{Timeout: 60 * time.Second},
+		httpClient:         client,
 		logger:             logger,
 	}
 }
@@ -147,35 +161,80 @@ func (md *MetadataDiscoverer) DiscoverMetadata(ctx context.Context, req Discover
 
 // analyzeSchema analyzes a database schema using the Extract service.
 func (md *MetadataDiscoverer) analyzeSchema(ctx context.Context, source string) ([]SchemaInfo, error) {
-	url := fmt.Sprintf("%s/schema/analyze", md.extractServiceURL)
+	if md.extractServiceURL == "" {
+		return nil, fmt.Errorf("extract service URL not configured")
+	}
+	
 	payload := map[string]interface{}{
 		"source": source,
-	}
-
-	jsonData, _ := json.Marshal(payload)
-	httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := md.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to analyze schema: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		// Read response body for better error messages
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("extract service returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var result struct {
 		Schemas []SchemaInfo `json:"schemas"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	
+	if md.httpClient != nil {
+		// Use enhanced HTTP client
+		validator := func(data map[string]interface{}) error {
+			if _, ok := data["schemas"]; !ok {
+				return fmt.Errorf("response missing 'schemas' field")
+			}
+			return nil
+		}
+		
+		var responseData map[string]interface{}
+		err := md.httpClient.PostJSON(ctx, "/schema/analyze", payload, &responseData, validator)
+		if err != nil {
+			return nil, fmt.Errorf("failed to analyze schema: %w", err)
+		}
+		
+		// Convert response to result struct
+		if schemas, ok := responseData["schemas"].([]interface{}); ok {
+			for _, schema := range schemas {
+				if schemaMap, ok := schema.(map[string]interface{}); ok {
+					// Convert map to SchemaInfo (simplified - would need proper unmarshaling)
+					schemaInfo := SchemaInfo{
+						TableName: getString(schemaMap, "table_name"),
+						Metadata:  schemaMap,
+					}
+					result.Schemas = append(result.Schemas, schemaInfo)
+				}
+			}
+		}
+	} else {
+		// Fallback to basic HTTP client
+		url := fmt.Sprintf("%s/schema/analyze", md.extractServiceURL)
+		jsonData, _ := json.Marshal(payload)
+		httpReq, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))
+		httpReq.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 60 * time.Second}
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			return nil, fmt.Errorf("failed to analyze schema: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			// Read response body for better error messages
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("extract service returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return nil, fmt.Errorf("failed to decode response: %w", err)
+		}
 	}
 
 	return result.Schemas, nil
+}
+
+// getString safely gets a string value from a map.
+func getString(m map[string]interface{}, key string) string {
+	if val, ok := m[key].(string); ok {
+		return val
+	}
+	return ""
 }
 
 // SchemaInfo represents schema information from Extract service.

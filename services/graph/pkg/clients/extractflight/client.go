@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/apache/arrow/go/v16/arrow"
-	"github.com/apache/arrow/go/v16/arrow/array"
-	"github.com/apache/arrow/go/v16/arrow/flight"
-	"github.com/apache/arrow/go/v16/arrow/ipc"
-	"github.com/apache/arrow/go/v16/arrow/memory"
+	"github.com/apache/arrow-go/v18/arrow"
+	"github.com/apache/arrow-go/v18/arrow/array"
+	"github.com/apache/arrow-go/v18/arrow/flight"
+	"github.com/apache/arrow-go/v18/arrow/ipc"
+	"github.com/apache/arrow-go/v18/arrow/memory"
+	"github.com/plturrell/aModels/services/shared/pkg/pools"
+	"github.com/plturrell/aModels/services/shared/pkg/retry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -34,7 +36,74 @@ type GraphRow struct {
 	Raw        map[string]any `json:"-"`
 }
 
+// Client provides a Flight client with connection pooling and retry logic.
+type Client struct {
+	pool *pools.FlightClientPool
+	addr string
+}
+
+// NewClient creates a new Flight client with connection pooling.
+func NewClient(addr string, maxPoolSize int) (*Client, error) {
+	if maxPoolSize <= 0 {
+		maxPoolSize = 10
+	}
+	pool, err := pools.NewFlightClientPoolFromAddr(addr, maxPoolSize)
+	if err != nil {
+		return nil, fmt.Errorf("create flight pool: %w", err)
+	}
+	return &Client{
+		pool: pool,
+		addr: addr,
+	}, nil
+}
+
+// Close closes the client and releases the connection pool.
+func (c *Client) Close() error {
+	if c.pool != nil {
+		return c.pool.Close()
+	}
+	return nil
+}
+
+// FetchWithPool retrieves nodes and edges using the connection pool.
+func (c *Client) FetchWithPool(ctx context.Context) (GraphData, error) {
+	if c.pool == nil {
+		return GraphData{}, fmt.Errorf("client pool not initialized")
+	}
+
+	var result GraphData
+	err := retry.WithRetry(ctx, retry.DefaultConfig(), func() error {
+		client, err := c.pool.Get(ctx)
+		if err != nil {
+			return fmt.Errorf("get flight client: %w", err)
+		}
+		if client == nil {
+			return fmt.Errorf("flight client unavailable")
+		}
+		defer c.pool.Put(client)
+
+		nodes, err := fetchRecords(ctx, client, []string{"graph", "nodes"}, nodesPath)
+		if err != nil {
+			return fmt.Errorf("fetch nodes: %w", err)
+		}
+		edges, err := fetchRecords(ctx, client, []string{"graph", "edges"}, edgesPath)
+		if err != nil {
+			return fmt.Errorf("fetch edges: %w", err)
+		}
+
+		result = GraphData{
+			Nodes: nodes,
+			Edges: edges,
+		}
+		return nil
+	})
+
+	return result, err
+}
+
 // Fetch retrieves nodes and edges from the configured Flight endpoint.
+// This function maintains backward compatibility but does not use connection pooling.
+// For better performance, use NewClient and FetchWithPool instead.
 func Fetch(ctx context.Context, addr string) (GraphData, error) {
 	if addr == "" {
 		return GraphData{}, fmt.Errorf("flight address is required")

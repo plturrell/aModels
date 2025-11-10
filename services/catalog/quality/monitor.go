@@ -9,20 +9,35 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/plturrell/aModels/services/catalog/httpclient"
 )
 
 // QualityMonitor monitors data quality by integrating with Extract service metrics.
 type QualityMonitor struct {
 	extractServiceURL string
-	httpClient        *http.Client
+	httpClient        *httpclient.Client
 	logger            *log.Logger
 }
 
 // NewQualityMonitor creates a new quality monitor.
 func NewQualityMonitor(extractServiceURL string, logger *log.Logger) *QualityMonitor {
+	var client *httpclient.Client
+	if extractServiceURL != "" {
+		client = httpclient.NewClient(httpclient.ClientConfig{
+			Timeout:         30 * time.Second,
+			MaxRetries:      3,
+			InitialBackoff:  1 * time.Second,
+			MaxBackoff:      5 * time.Second,
+			BaseURL:         extractServiceURL,
+			HealthCheckPath: "/healthz",
+			Logger:          logger,
+		})
+	}
+	
 	return &QualityMonitor{
 		extractServiceURL: extractServiceURL,
-		httpClient:        &http.Client{Timeout: 30 * time.Second},
+		httpClient:        client,
 		logger:            logger,
 	}
 }
@@ -41,9 +56,9 @@ type ExtractMetrics struct {
 
 // FetchQualityMetrics fetches quality metrics from the Extract service for a data element.
 func (qm *QualityMonitor) FetchQualityMetrics(ctx context.Context, dataElementID string) (*ExtractMetrics, error) {
-	// Query Extract service for metrics associated with this data element
-	// This would query the knowledge graph or Glean Catalog for metrics
-	url := fmt.Sprintf("%s/knowledge-graph/query", qm.extractServiceURL)
+	if qm.extractServiceURL == "" {
+		return nil, fmt.Errorf("extract service URL not configured")
+	}
 	
 	query := map[string]any{
 		"query": `
@@ -59,34 +74,62 @@ func (qm *QualityMonitor) FetchQualityMetrics(ctx context.Context, dataElementID
 		},
 	}
 	
-	jsonData, err := json.Marshal(query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal query: %w", err)
-	}
-	
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	
-	resp, err := qm.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch metrics: %w", err)
-	}
-	defer resp.Body.Close()
-	
-	if resp.StatusCode != http.StatusOK {
-		// Read response body for better error messages
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("extract service returned status %d: %s", resp.StatusCode, string(body))
-	}
-	
 	var result struct {
 		Data []map[string]any `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	
+	if qm.httpClient != nil {
+		// Use enhanced HTTP client
+		validator := func(data map[string]interface{}) error {
+			if resultData, ok := data["data"].([]interface{}); !ok || len(resultData) == 0 {
+				return fmt.Errorf("response missing or empty 'data' field")
+			}
+			return nil
+		}
+		
+		var responseData map[string]interface{}
+		err := qm.httpClient.PostJSON(ctx, "/knowledge-graph/query", query, &responseData, validator)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch metrics: %w", err)
+		}
+		
+		// Convert response to result struct
+		if data, ok := responseData["data"].([]interface{}); ok {
+			for _, item := range data {
+				if itemMap, ok := item.(map[string]interface{}); ok {
+					result.Data = append(result.Data, itemMap)
+				}
+			}
+		}
+	} else {
+		// Fallback to basic HTTP client
+		jsonData, err := json.Marshal(query)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal query: %w", err)
+		}
+		
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch metrics: %w", err)
+		}
+		defer resp.Body.Close()
+		
+		if resp.StatusCode != http.StatusOK {
+			// Read response body for better error messages
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("extract service returned status %d: %s", resp.StatusCode, string(body))
+		}
+		
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return nil, fmt.Errorf("failed to decode response: %w", err)
+		}
 	}
 	
 	if len(result.Data) == 0 {

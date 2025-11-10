@@ -10,9 +10,14 @@ import (
 	"math"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	elasticsearch "github.com/elastic/go-elasticsearch/v7"
+	"github.com/plturrell/aModels/services/shared/pkg/cache"
+	"github.com/plturrell/aModels/services/shared/pkg/circuitbreaker"
+	"github.com/plturrell/aModels/services/shared/pkg/connectionpool"
+	"github.com/plturrell/aModels/services/shared/pkg/retry"
 )
 
 // ElasticsearchConfig captures connection details for the upstream Elasticsearch cluster.
@@ -27,17 +32,49 @@ type ElasticsearchConfig struct {
 	RequestTimeout   time.Duration
 	SkipIndexBootstr bool
 	AllowMissing     bool
+	// Connection pooling
+	MaxIdleConns        int
+	MaxIdleConnsPerHost int
+	IdleConnTimeout     time.Duration
+	// Index settings
+	IndexShards   int
+	IndexReplicas int
+	// Caching
+	CacheEnabled bool
+	CacheURL     string
+	CacheTTL     time.Duration
+	// Circuit breaker
+	CircuitBreakerEnabled bool
 }
 
 // elasticsearchClient wraps the official Go client and exposes the operations the
 // search service needs. The type stays package-private so the rest of the codebase
 // depends on the narrower interface.
 type elasticsearchClient struct {
-	client       *elasticsearch.Client
-	index        string
-	embeddingDim int
-	timeout      time.Duration
+	client         *elasticsearch.Client
+	index          string
+	embeddingDim   int
+	timeout        time.Duration
+	circuitBreaker *circuitbreaker.CircuitBreaker
+	cache          *cache.Cache
+	batchBuffer    []batchDocument
+	batchMu        sync.Mutex
+	batchSize      int
+	batchTimeout   time.Duration
+	lastBatchTime  time.Time
+	indexShards    int
+	indexReplicas  int
 }
+
+type batchDocument struct {
+	ID     string
+	Body   map[string]interface{}
+	Action string // "index" or "delete"
+}
+
+var (
+	_ sync.Mutex
+)
 
 // elasticsearchHit represents the minimal information the caller requires from a search response.
 type elasticsearchHit struct {
@@ -62,15 +99,26 @@ func newElasticsearchClient(cfg ElasticsearchConfig) (*elasticsearchClient, erro
 		cfg.RequestTimeout = 10 * time.Second
 	}
 
+	// Configure HTTP connection pooling
+	httpPoolConfig := connectionpool.DefaultHTTPPoolConfig()
+	if cfg.MaxIdleConns > 0 {
+		httpPoolConfig.MaxIdleConns = cfg.MaxIdleConns
+	}
+	if cfg.MaxIdleConnsPerHost > 0 {
+		httpPoolConfig.MaxIdleConnsPerHost = cfg.MaxIdleConnsPerHost
+	}
+	if cfg.IdleConnTimeout > 0 {
+		httpPoolConfig.IdleConnTimeout = cfg.IdleConnTimeout
+	}
+	httpPool := connectionpool.NewHTTPPoolManager(httpPoolConfig)
+
 	esCfg := elasticsearch.Config{
 		Addresses: cfg.Addresses,
 		APIKey:    cfg.APIKey,
 		Username:  cfg.Username,
 		Password:  cfg.Password,
 		CloudID:   cfg.CloudID,
-		Transport: &http.Transport{
-			ResponseHeaderTimeout: cfg.RequestTimeout,
-		},
+		Transport: httpPool.GetClient().Transport,
 	}
 
 	client, err := elasticsearch.NewClient(esCfg)
@@ -83,10 +131,30 @@ func newElasticsearchClient(cfg ElasticsearchConfig) (*elasticsearchClient, erro
 	}
 
 	ec := &elasticsearchClient{
-		client:       client,
-		index:        cfg.Index,
-		embeddingDim: cfg.EmbeddingDim,
-		timeout:      cfg.RequestTimeout,
+		client:        client,
+		index:         cfg.Index,
+		embeddingDim:  cfg.EmbeddingDim,
+		timeout:       cfg.RequestTimeout,
+		batchBuffer:   make([]batchDocument, 0),
+		batchSize:     100,
+		batchTimeout:  5 * time.Second,
+		indexShards:   cfg.IndexShards,
+		indexReplicas: cfg.IndexReplicas,
+	}
+
+	// Initialize circuit breaker if enabled
+	if cfg.CircuitBreakerEnabled {
+		ec.circuitBreaker = circuitbreaker.New(circuitbreaker.DefaultConfig("elasticsearch"))
+	}
+
+	// Initialize cache if enabled
+	if cfg.CacheEnabled {
+		cacheConfig := cache.DefaultConfig()
+		cacheConfig.RedisURL = cfg.CacheURL
+		if cfg.CacheTTL > 0 {
+			cacheConfig.DefaultTTL = cfg.CacheTTL
+		}
+		ec.cache, _ = cache.NewMultiLevelCache(cacheConfig)
 	}
 
 	if cfg.SkipIndexBootstr {
@@ -121,10 +189,19 @@ func (c *elasticsearchClient) ensureIndex(ctx context.Context) error {
 		return fmt.Errorf("unexpected status checking index: %s", exists.String())
 	}
 
+	shards := 1
+	replicas := 0
+	if c.indexShards > 0 {
+		shards = c.indexShards
+	}
+	if c.indexReplicas >= 0 {
+		replicas = c.indexReplicas
+	}
+
 	mapping := map[string]interface{}{
 		"settings": map[string]interface{}{
-			"number_of_shards":   1,
-			"number_of_replicas": 0,
+			"number_of_shards":   shards,
+			"number_of_replicas": replicas,
 		},
 		"mappings": map[string]interface{}{
 			"properties": map[string]interface{}{
@@ -179,27 +256,110 @@ func (c *elasticsearchClient) indexDocument(ctx context.Context, docID string, b
 		return errors.New("document id is required")
 	}
 
-	payload, err := json.Marshal(body)
-	if err != nil {
-		return fmt.Errorf("marshal document: %w", err)
+	return retry.WithRetry(ctx, retry.DefaultConfig(), func() error {
+		var res *elasticsearch.Response
+		var err error
+
+		if c.circuitBreaker != nil {
+			result, cbErr := c.circuitBreaker.ExecuteWithContext(ctx, func() (interface{}, error) {
+				payload, err := json.Marshal(body)
+				if err != nil {
+					return nil, fmt.Errorf("marshal document: %w", err)
+				}
+
+				res, err := c.client.Index(
+					c.index,
+					bytes.NewReader(payload),
+					c.client.Index.WithDocumentID(docID),
+					c.client.Index.WithContext(ctx),
+					c.client.Index.WithRefresh("true"),
+				)
+				return res, err
+			})
+			if cbErr != nil {
+				return cbErr
+			}
+			res = result.(*elasticsearch.Response)
+		} else {
+			payload, err := json.Marshal(body)
+			if err != nil {
+				return fmt.Errorf("marshal document: %w", err)
+			}
+
+			res, err = c.client.Index(
+				c.index,
+				bytes.NewReader(payload),
+				c.client.Index.WithDocumentID(docID),
+				c.client.Index.WithContext(ctx),
+				c.client.Index.WithRefresh("true"),
+			)
+			if err != nil {
+				return fmt.Errorf("index document: %w", err)
+			}
+		}
+
+		defer res.Body.Close()
+
+		if res.IsError() {
+			return fmt.Errorf("index document: %s", res.String())
+		}
+		return nil
+	})
+}
+
+// BatchIndexDocuments indexes multiple documents in a single bulk request.
+func (c *elasticsearchClient) BatchIndexDocuments(ctx context.Context, docs []batchDocument) error {
+	if len(docs) == 0 {
+		return nil
 	}
 
-	res, err := c.client.Index(
-		c.index,
-		bytes.NewReader(payload),
-		c.client.Index.WithDocumentID(docID),
-		c.client.Index.WithContext(ctx),
-		c.client.Index.WithRefresh("true"),
-	)
-	if err != nil {
-		return fmt.Errorf("index document: %w", err)
-	}
-	defer res.Body.Close()
+	var buf bytes.Buffer
+	for _, doc := range docs {
+		action := map[string]interface{}{
+			"index": map[string]interface{}{
+				"_index": c.index,
+				"_id":    doc.ID,
+			},
+		}
+		actionBytes, _ := json.Marshal(action)
+		buf.Write(actionBytes)
+		buf.WriteByte('\n')
 
-	if res.IsError() {
-		return fmt.Errorf("index document: %s", res.String())
+		docBytes, err := json.Marshal(doc.Body)
+		if err != nil {
+			return fmt.Errorf("marshal document %s: %w", doc.ID, err)
+		}
+		buf.Write(docBytes)
+		buf.WriteByte('\n')
 	}
-	return nil
+
+	return retry.WithRetry(ctx, retry.DefaultConfig(), func() error {
+		var res *elasticsearch.Response
+		var err error
+
+		if c.circuitBreaker != nil {
+			result, cbErr := c.circuitBreaker.ExecuteWithContext(ctx, func() (interface{}, error) {
+				res, err := c.client.Bulk(bytes.NewReader(buf.Bytes()), c.client.Bulk.WithContext(ctx))
+				return res, err
+			})
+			if cbErr != nil {
+				return cbErr
+			}
+			res = result.(*elasticsearch.Response)
+		} else {
+			res, err = c.client.Bulk(bytes.NewReader(buf.Bytes()), c.client.Bulk.WithContext(ctx))
+			if err != nil {
+				return fmt.Errorf("bulk index: %w", err)
+			}
+		}
+
+		defer res.Body.Close()
+
+		if res.IsError() {
+			return fmt.Errorf("bulk index: %s", res.String())
+		}
+		return nil
+	})
 }
 
 // deleteDocument removes the document from the index when it is deleted from HANA.
@@ -230,11 +390,23 @@ func (c *elasticsearchClient) deleteDocument(ctx context.Context, docID string) 
 }
 
 // searchSimilarDocuments runs a vector KNN search and returns the top hits.
+// Results are cached if caching is enabled.
 func (c *elasticsearchClient) searchSimilarDocuments(ctx context.Context, vector []float64, topK int, filters map[string]string) ([]elasticsearchHit, error) {
 	if topK <= 0 {
 		topK = 10
 	}
 	numCandidates := int(math.Max(float64(topK*4), 50))
+
+	// Generate cache key
+	cacheKey := ""
+	if c.cache != nil {
+		cacheKey = fmt.Sprintf("search:%d:%d:%v", topK, len(filters), vector[:min(10, len(vector))])
+		// Try cache first
+		var cachedHits []elasticsearchHit
+		if err := c.cache.GetJSON(ctx, cacheKey, &cachedHits); err == nil && cachedHits != nil {
+			return cachedHits, nil
+		}
+	}
 
 	body := map[string]interface{}{
 		"size": topK,
@@ -270,45 +442,82 @@ func (c *elasticsearchClient) searchSimilarDocuments(ctx context.Context, vector
 		return nil, fmt.Errorf("marshal search body: %w", err)
 	}
 
-	res, err := c.client.Search(
-		c.client.Search.WithContext(ctx),
-		c.client.Search.WithIndex(c.index),
-		c.client.Search.WithBody(bytes.NewReader(payload)),
-		c.client.Search.WithTrackTotalHits(false),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("execute search: %w", err)
-	}
-	defer res.Body.Close()
+	var hits []elasticsearchHit
+	err = retry.WithRetry(ctx, retry.DefaultConfig(), func() error {
+		var res *elasticsearch.Response
+		var searchErr error
 
-	if res.IsError() {
-		return nil, fmt.Errorf("search error: %s", res.String())
-	}
+		if c.circuitBreaker != nil {
+			result, cbErr := c.circuitBreaker.ExecuteWithContext(ctx, func() (interface{}, error) {
+				res, err := c.client.Search(
+					c.client.Search.WithContext(ctx),
+					c.client.Search.WithIndex(c.index),
+					c.client.Search.WithBody(bytes.NewReader(payload)),
+					c.client.Search.WithTrackTotalHits(false),
+				)
+				return res, err
+			})
+			if cbErr != nil {
+				return cbErr
+			}
+			res = result.(*elasticsearch.Response)
+		} else {
+			res, searchErr = c.client.Search(
+				c.client.Search.WithContext(ctx),
+				c.client.Search.WithIndex(c.index),
+				c.client.Search.WithBody(bytes.NewReader(payload)),
+				c.client.Search.WithTrackTotalHits(false),
+			)
+			if searchErr != nil {
+				return fmt.Errorf("execute search: %w", searchErr)
+			}
+		}
 
-	var parsed struct {
-		Hits struct {
-			Hits []struct {
-				ID     string                 `json:"_id"`
-				Score  float64                `json:"_score"`
-				Source map[string]interface{} `json:"_source"`
+		defer res.Body.Close()
+
+		if res.IsError() {
+			return fmt.Errorf("search error: %s", res.String())
+		}
+
+		var parsed struct {
+			Hits struct {
+				Hits []struct {
+					ID     string                 `json:"_id"`
+					Score  float64                `json:"_score"`
+					Source map[string]interface{} `json:"_source"`
+				} `json:"hits"`
 			} `json:"hits"`
-		} `json:"hits"`
-	}
+		}
 
-	if err := json.NewDecoder(res.Body).Decode(&parsed); err != nil {
-		return nil, fmt.Errorf("decode search response: %w", err)
-	}
+		if err := json.NewDecoder(res.Body).Decode(&parsed); err != nil {
+			return fmt.Errorf("decode search response: %w", err)
+		}
 
-	hits := make([]elasticsearchHit, 0, len(parsed.Hits.Hits))
-	for _, hit := range parsed.Hits.Hits {
-		hits = append(hits, elasticsearchHit{
-			ID:     hit.ID,
-			Score:  hit.Score,
-			Source: hit.Source,
-		})
-	}
+		hits = make([]elasticsearchHit, 0, len(parsed.Hits.Hits))
+		for _, hit := range parsed.Hits.Hits {
+			hits = append(hits, elasticsearchHit{
+				ID:     hit.ID,
+				Score:  hit.Score,
+				Source: hit.Source,
+			})
+		}
 
-	return hits, nil
+		// Cache results
+		if c.cache != nil && cacheKey != "" {
+			_ = c.cache.SetJSON(ctx, cacheKey, hits, 5*time.Minute)
+		}
+
+		return nil
+	})
+
+	return hits, err
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // getDocument retrieves a document by ID from Elasticsearch.

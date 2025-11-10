@@ -42,7 +42,7 @@ require (
 )
 
 require (
-	github.com/apache/arrow/go/v16 v16.0.0
+	github.com/apache/arrow-go/v18 v18.4.1
 	github.com/ethereum/go-ethereum v1.16.5
 	github.com/plturrell/agenticAiETH/agenticAiETH_layer1_Blockchain v0.0.0
 )
@@ -59,5 +59,5 @@ replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/gl
 
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/sentencepiece => ../agenticAiETH_layer4_Training/models/sentencepiece
 
-replace github.com/apache/arrow/go/v16 => ../third_party/go-arrow
+replace github.com/apache/arrow-go/v18 => ../../infrastructure/third_party/go-arrow
 replace github.com/SAP/go-hdb => ../../infrastructure/third_party/go-hdb

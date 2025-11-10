@@ -388,7 +388,16 @@ func main() {
 	if catalogServiceURL == "" {
 		catalogServiceURL = "http://localhost:8084" // Default catalog service URL
 	}
-	server.catalogClient = NewCatalogClient(catalogServiceURL, logger)
+	// Create metrics collector for catalog integration
+	var metricsCollector MetricsCollector
+	// In production, this would integrate with Prometheus or similar
+	metricsCollector = func(service, endpoint string, statusCode int, latency time.Duration, correlationID string) {
+		if logger != nil {
+			logger.Printf("[%s] Catalog integration: %s %s -> %d (latency: %v)", 
+				correlationID, service, endpoint, statusCode, latency)
+		}
+	}
+	server.catalogClient = NewCatalogClient(catalogServiceURL, logger, metricsCollector)
 	if catalogServiceURL != "" {
 		logger.Printf("Catalog service client initialized (url=%s)", catalogServiceURL)
 	}

@@ -14,12 +14,6 @@ require (
 	github.com/stretchr/testify v1.9.0 // indirect
 )
 
-// Removed replace directives for unavailable agenticAiETH dependencies
-// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK => ../../agenticAiETH_layer4_AgentSDK
-// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI => ../../localai
-// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_HANA => ../../agenticAiETH_layer4_HANA
-// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Extract => ../../agenticAiETH_layer4_Extract
-// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models => ../../agenticAiETH_layer4_Models
 
 // Exclude HANA driver - only used with hana build tag, which requires Go 1.24+
 exclude github.com/SAP/go-hdb v1.14.9

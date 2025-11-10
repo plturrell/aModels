@@ -34,3 +34,31 @@ python -m gateway
 ## Integration
 
 The unified browser gateway (`browser/gateway/`) includes an adapter for the Postgres data service, accessible at `/data/sql`. The gateway also aggregates telemetry at `/telemetry/recent`.
+
+## Third-Party Libraries
+
+### Arrow Flight
+
+The postgres service uses **Apache Arrow v18.4.1** for high-performance data transfer via Arrow Flight.
+
+**Usage**:
+- Exposes operation logs via Arrow Flight server
+- Endpoint: `operations/logs`
+- Clients can use connection pooling (see `services/shared/pkg/pools/flight_pool.go`)
+
+**Configuration**:
+- Flight server address: Set via `FLIGHT_ADDR` environment variable
+- Max rows per request: Configurable via `New()` function
+
+**Client Usage**:
+```go
+// With connection pooling (recommended)
+client, err := postgresflight.NewClient(addr, 10)
+defer client.Close()
+rows, err := client.FetchOperationsWithPool(ctx)
+
+// Without pooling (backward compatible)
+rows, err := postgresflight.FetchOperations(ctx, addr)
+```
+
+**See Also**: `docs/DEPENDENCY_MATRIX.md` for version compatibility information.

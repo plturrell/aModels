@@ -4,7 +4,7 @@ go 1.23
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0
-	github.com/apache/arrow/go/v16 v16.0.0
+	github.com/apache/arrow-go/v18 v18.4.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
 	google.golang.org/grpc v1.76.0

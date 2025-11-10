@@ -62,6 +62,7 @@ Environment overrides:
 - `SHELL_TRAINING_DATA_ENDPOINT` – overrides the inferred `SHELL_GATEWAY_URL/shell/training/dataset` endpoint (falls back to derived summaries on failure).
 - `SHELL_DMS_ENDPOINT` – target for Document Management Service requests (defaults to `${SHELL_GATEWAY_URL}/dms`).
 - `SHELL_AGENTFLOW_ENDPOINT` – target for AgentFlow/LangFlow requests (defaults to `${SHELL_GATEWAY_URL}/agentflow`).
+- `SHELL_RUNTIME_ENDPOINT` – base URL for the runtime analytics service (defaults to `${SHELL_GATEWAY_URL}/runtime`).
 
 The Go shell reverse-proxies `/dms/*` and `/agentflow/*` to the configured upstreams so the UI can call those services without CORS changes.
 
@@ -70,6 +71,14 @@ Quick verification once the shell is running:
 ```bash
 curl -s http://localhost:4173/dms/documents | jq .
 curl -s http://localhost:4173/agentflow/flows | jq .
+curl -s http://localhost:4173/api/runtime/analytics/dashboard | jq .
 ```
 
 These requests should return the same JSON payloads your FastAPI services expose on their native ports.
+
+### Runtime analytics dashboard smoke test
+
+1. Start the runtime service (see `services/runtime/README.md`).
+2. Launch the shell with `SHELL_RUNTIME_ENDPOINT` pointing at the runtime service.
+3. Open http://localhost:4173 in the browser and navigate to the analytics dashboard page; confirm charts and metrics render.
+4. Alternatively, run `curl -s http://localhost:4173/api/runtime/analytics/dashboard | jq .` and ensure the response includes `stats` and `templates`.

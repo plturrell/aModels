@@ -198,34 +198,94 @@ func (s *extractFlightService) flightInfos() ([]*flight.FlightInfo, error) {
 }
 
 func (s *extractFlightService) writeNodes(stream flight.FlightService_DoGetServer, nodes []Node) error {
-	record, err := buildNodeRecord(s.allocator, nodes)
-	if err != nil {
-		return err
-	}
-	defer record.Release()
+	// Optimize: Stream large datasets in batches instead of single record
+	const batchSize = 1000
+	if len(nodes) <= batchSize {
+		// Small dataset: single record
+		record, err := buildNodeRecord(s.allocator, nodes)
+		if err != nil {
+			return err
+		}
+		defer record.Release()
 
+		writer := flight.NewRecordWriter(stream, ipc.WithSchema(nodeSchema))
+		defer writer.Close()
+
+		if err := writer.Write(record); err != nil {
+			return status.Errorf(codes.Internal, "write nodes record: %v", err)
+		}
+		return nil
+	}
+
+	// Large dataset: stream in batches
 	writer := flight.NewRecordWriter(stream, ipc.WithSchema(nodeSchema))
 	defer writer.Close()
 
-	if err := writer.Write(record); err != nil {
-		return status.Errorf(codes.Internal, "write nodes record: %v", err)
+	for i := 0; i < len(nodes); i += batchSize {
+		end := i + batchSize
+		if end > len(nodes) {
+			end = len(nodes)
+		}
+		batch := nodes[i:end]
+
+		record, err := buildNodeRecord(s.allocator, batch)
+		if err != nil {
+			return status.Errorf(codes.Internal, "build batch record: %v", err)
+		}
+
+		if err := writer.Write(record); err != nil {
+			record.Release()
+			return status.Errorf(codes.Internal, "write batch record: %v", err)
+		}
+		record.Release()
 	}
+
 	return nil
 }
 
 func (s *extractFlightService) writeEdges(stream flight.FlightService_DoGetServer, edges []Edge) error {
-	record, err := buildEdgeRecord(s.allocator, edges)
-	if err != nil {
-		return err
-	}
-	defer record.Release()
+	// Optimize: Stream large datasets in batches instead of single record
+	const batchSize = 1000
+	if len(edges) <= batchSize {
+		// Small dataset: single record
+		record, err := buildEdgeRecord(s.allocator, edges)
+		if err != nil {
+			return err
+		}
+		defer record.Release()
 
+		writer := flight.NewRecordWriter(stream, ipc.WithSchema(edgeSchema))
+		defer writer.Close()
+
+		if err := writer.Write(record); err != nil {
+			return status.Errorf(codes.Internal, "write edges record: %v", err)
+		}
+		return nil
+	}
+
+	// Large dataset: stream in batches
 	writer := flight.NewRecordWriter(stream, ipc.WithSchema(edgeSchema))
 	defer writer.Close()
 
-	if err := writer.Write(record); err != nil {
-		return status.Errorf(codes.Internal, "write edges record: %v", err)
+	for i := 0; i < len(edges); i += batchSize {
+		end := i + batchSize
+		if end > len(edges) {
+			end = len(edges)
+		}
+		batch := edges[i:end]
+
+		record, err := buildEdgeRecord(s.allocator, batch)
+		if err != nil {
+			return status.Errorf(codes.Internal, "build batch record: %v", err)
+		}
+
+		if err := writer.Write(record); err != nil {
+			record.Release()
+			return status.Errorf(codes.Internal, "write batch record: %v", err)
+		}
+		record.Release()
 	}
+
 	return nil
 }
 
