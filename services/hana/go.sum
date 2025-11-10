@@ -1,6 +1,0 @@
-github.com/SAP/go-hdb v1.9.11 h1:PRIeKgKSZfRDtJAvcaSM8Y3j5+v6Skho0KwPJC4ntS8=
-github.com/SAP/go-hdb v1.9.11/go.mod h1:vxYDca44L2eRudZv5JAI6T+IygOfxb7vOCFh/Kj0pug=
-golang.org/x/crypto v0.25.0 h1:ypSNr+bnYL2YhwoMt2zPxHFmbAN1KZs/njMG3hxUp30=
-golang.org/x/crypto v0.25.0/go.mod h1:T+wALwcMOSE0kXgUAnPAHqTLW+XHgcELELW8VaDgm/M=
-golang.org/x/text v0.16.0 h1:a94ExnEXNtEwYLGJSIUxnWoxoRz/ZcCsV63ROupILh4=
-golang.org/x/text v0.16.0/go.mod h1:GhwF1Be+LQoKShO3cGOHzqOgRrGaYc9AvblQOmPVHnI=
