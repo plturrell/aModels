@@ -277,6 +277,12 @@ func (sg *SampleGenerator) GenerateSampleData(ctx context.Context, config *Table
 	
 	sg.logger.Printf("Generating %d rows for table %s", config.RowCount, config.TableName)
 	
+	// Resolve foreign key dependencies first
+	if err := sg.resolveForeignKeys(ctx, schema); err != nil {
+		sg.logger.Printf("Warning: failed to resolve foreign keys for %s: %v", config.TableName, err)
+		// Continue anyway - FK resolution is best effort
+	}
+	
 	rows := make([]map[string]any, 0, config.RowCount)
 	rand.Seed(time.Now().UnixNano())
 	
@@ -291,6 +297,12 @@ func (sg *SampleGenerator) GenerateSampleData(ctx context.Context, config *Table
 		
 		for _, column := range schema.Columns {
 			value := sg.generateValueForColumn(ctx, column, schema, config, i)
+			
+			// If this is a foreign key, ensure the value exists in referenced table
+			if column.IsForeignKey && column.References != nil {
+				value = sg.resolveForeignKeyValue(ctx, column.References, value)
+			}
+			
 			row[column.Name] = value
 		}
 		
@@ -535,22 +547,44 @@ func (sg *SampleGenerator) insertData(ctx context.Context, tableName string, dat
 		columns = append(columns, col)
 	}
 	
-	// Build INSERT statement
-	placeholders := strings.Repeat("?,", len(columns))
-	placeholders = placeholders[:len(placeholders)-1] // Remove trailing comma
+	// Build INSERT statement with PostgreSQL placeholders ($1, $2, ...)
+	placeholders := make([]string, len(columns))
+	for i := range placeholders {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+	}
 	
-	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
-		tableName, strings.Join(columns, ","), placeholders)
+	// Use batch inserts for better performance (default batch size: 100)
+	batchSize := 100
+	if len(data) < batchSize {
+		batchSize = len(data)
+	}
 	
-	// Execute batch insert
-	for _, row := range data {
-		values := make([]any, 0, len(columns))
-		for _, col := range columns {
-			values = append(values, row[col])
+	// Process in batches
+	for batchStart := 0; batchStart < len(data); batchStart += batchSize {
+		batchEnd := batchStart + batchSize
+		if batchEnd > len(data) {
+			batchEnd = len(data)
 		}
 		
-		if _, err := sg.db.ExecContext(ctx, query, values...); err != nil {
-			return fmt.Errorf("insert row into %s: %w", tableName, err)
+		batch := data[batchStart:batchEnd]
+		values := make([]any, 0, len(batch)*len(columns))
+		valuePlaceholders := make([]string, 0, len(batch))
+		
+		for i, row := range batch {
+			rowPlaceholders := make([]string, len(columns))
+			for j := range columns {
+				paramNum := i*len(columns) + j + 1
+				rowPlaceholders[j] = fmt.Sprintf("$%d", paramNum)
+				values = append(values, row[columns[j]])
+			}
+			valuePlaceholders = append(valuePlaceholders, "("+strings.Join(rowPlaceholders, ",")+")")
+		}
+		
+		batchQuery := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s",
+			tableName, strings.Join(columns, ","), strings.Join(valuePlaceholders, ","))
+		
+		if _, err := sg.db.ExecContext(ctx, batchQuery, values...); err != nil {
+			return fmt.Errorf("batch insert into %s: %w", tableName, err)
 		}
 	}
 	

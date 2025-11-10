@@ -9,15 +9,17 @@ import (
 
 // ScenarioBuilder builds test scenarios from knowledge graph and process definitions.
 type ScenarioBuilder struct {
-	generator *SampleGenerator
-	logger    *log.Logger
+	generator     *SampleGenerator
+	logger        *log.Logger
+	localaiClient *LocalAIClient
 }
 
 // NewScenarioBuilder creates a new scenario builder.
-func NewScenarioBuilder(generator *SampleGenerator, logger *log.Logger) *ScenarioBuilder {
+func NewScenarioBuilder(generator *SampleGenerator, localaiClient *LocalAIClient, logger *log.Logger) *ScenarioBuilder {
 	return &ScenarioBuilder{
-		generator: generator,
-		logger:    logger,
+		generator:     generator,
+		logger:        logger,
+		localaiClient: localaiClient,
 	}
 }
 
@@ -176,7 +178,10 @@ func (sb *ScenarioBuilder) BuildScenarioFromProcessSequence(ctx context.Context)
 }
 
 // determineRowCount determines appropriate row count based on table type.
+// Uses configuration defaults if available, otherwise uses hardcoded defaults.
 func (sb *ScenarioBuilder) determineRowCount(schema *TableSchema) int {
+	// Note: This would ideally use Config, but to avoid circular dependencies,
+	// we use hardcoded defaults. Config can be passed in if needed.
 	switch schema.Type {
 	case "reference":
 		return 50 // Reference tables typically have fewer rows
@@ -191,6 +196,25 @@ func (sb *ScenarioBuilder) determineRowCount(schema *TableSchema) int {
 
 // buildQualityRules builds quality rules from table schema.
 func (sb *ScenarioBuilder) buildQualityRules(schema *TableSchema) []QualityRule {
+	// Try LocalAI first if enabled
+	if sb.localaiClient != nil && sb.localaiClient.IsEnabled() {
+		ctx := context.Background()
+		rules, err := sb.localaiClient.GenerateQualityRules(ctx, schema)
+		if err == nil && len(rules) > 0 {
+			sb.logger.Printf("Generated %d quality rules using LocalAI for table %s", len(rules), schema.Name)
+			// Merge with basic rules
+			basicRules := sb.buildBasicQualityRules(schema)
+			return append(basicRules, rules...)
+		}
+		sb.logger.Printf("LocalAI quality rule generation failed, falling back to basic rules: %v", err)
+	}
+	
+	// Fallback to basic rules
+	return sb.buildBasicQualityRules(schema)
+}
+
+// buildBasicQualityRules builds basic quality rules from table schema.
+func (sb *ScenarioBuilder) buildBasicQualityRules(schema *TableSchema) []QualityRule {
 	rules := []QualityRule{}
 	
 	// Check for non-nullable columns

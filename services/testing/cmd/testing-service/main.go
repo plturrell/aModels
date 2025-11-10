@@ -1,8 +1,3 @@
-//go:build ignore
-// +build ignore
-
-// Package disabled: conflicts with package testing in same directory
-// Move this file to services/testing/cmd/main.go or rename other files
 package main
 
 import (
@@ -37,12 +32,17 @@ func main() {
 		*extractURL = "http://localhost:8081"
 	}
 
-	// Connect to database
+	// Connect to database with connection pooling
 	db, err := sql.Open("postgres", *dbDSN)
 	if err != nil {
 		logger.Fatalf("failed to connect to database: %v", err)
 	}
 	defer db.Close()
+	
+	// Configure connection pool
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
 
 	// Verify database connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -51,14 +51,44 @@ func main() {
 		logger.Fatalf("failed to ping database: %v", err)
 	}
 
+	// Load configuration
+	cfg := testing.LoadConfig()
+	if cfg.DatabaseDSN == "" {
+		cfg.DatabaseDSN = *dbDSN
+	}
+	if cfg.ExtractServiceURL == "" {
+		cfg.ExtractServiceURL = *extractURL
+	}
+	if err := cfg.Validate(); err != nil {
+		logger.Fatalf("Configuration error: %v", err)
+	}
+
 	// Create Extract client
-	extractClient := testing.NewHTTPExtractClient(*extractURL)
+	extractClient := testing.NewHTTPExtractClient(cfg.ExtractServiceURL)
+
+	// Create LocalAI client
+	localaiClient := testing.NewLocalAIClient(
+		cfg.LocalAIURL,
+		cfg.LocalAIModel,
+		cfg.EnableLocalAI && cfg.LocalAIEnabled,
+		cfg.LocalAITimeout,
+		cfg.LocalAIRetryAttempts,
+		logger,
+	)
+
+	// Create search client
+	searchClient := testing.NewSearchClient(
+		cfg.SearchServiceURL,
+		cfg.SearchServiceTimeout,
+		cfg.EnableSearch,
+		logger,
+	)
 
 	// Create sample generator
 	generator := testing.NewSampleGenerator(db, extractClient, logger)
 
 	// Create test service
-	testService := testing.NewTestService(generator, logger)
+	testService := testing.NewTestService(generator, searchClient, logger)
 
 	// Register routes
 	mux := http.NewServeMux()

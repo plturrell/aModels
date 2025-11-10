@@ -12,15 +12,17 @@ import (
 
 // TestService provides HTTP API for test execution.
 type TestService struct {
-	generator *SampleGenerator
-	logger    *log.Logger
+	generator    *SampleGenerator
+	logger       *log.Logger
+	searchClient *SearchClient
 }
 
 // NewTestService creates a new test service.
-func NewTestService(generator *SampleGenerator, logger *log.Logger) *TestService {
+func NewTestService(generator *SampleGenerator, searchClient *SearchClient, logger *log.Logger) *TestService {
 	return &TestService{
-		generator: generator,
-		logger:    logger,
+		generator:    generator,
+		logger:       logger,
+		searchClient: searchClient,
 	}
 }
 
@@ -31,6 +33,9 @@ func (ts *TestService) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/test/load-knowledge-graph", ts.handleLoadKnowledgeGraph)
 	mux.HandleFunc("/test/executions", ts.handleListExecutions)
 	mux.HandleFunc("/test/executions/", ts.handleGetExecution)
+	mux.HandleFunc("/test/search-scenarios", ts.handleSearchScenarios)
+	mux.HandleFunc("/test/search-patterns", ts.handleSearchPatterns)
+	mux.HandleFunc("/test/search-knowledge-graph", ts.handleSearchKnowledgeGraph)
 }
 
 // handleGenerateSample generates sample data for a table.
@@ -181,7 +186,7 @@ func (ts *TestService) handleGetExecution(w http.ResponseWriter, r *http.Request
 	var startTime, endTime time.Time
 	var metricsJSON, issuesJSON, resultsJSON string
 
-	query := "SELECT id, scenario_id, status, start_time, end_time, metrics_json, quality_issues_json, results_json FROM test_executions WHERE id = ?"
+	query := "SELECT id, scenario_id, status, start_time, end_time, metrics_json, quality_issues_json, results_json FROM test_executions WHERE id = $1"
 	err := ts.generator.db.QueryRowContext(r.Context(), query, executionID).Scan(
 		&id, &scenarioID, &status, &startTime, &endTime, &metricsJSON, &issuesJSON, &resultsJSON,
 	)
