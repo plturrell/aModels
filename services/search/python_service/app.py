@@ -1,16 +1,21 @@
 import json
 import logging
 import os
+import re
+import secrets
 import threading
 import time
 import uuid
+from collections import defaultdict
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Path, Request, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, Field, field_validator
 
 try:  # Optional dependency: Elasticsearch Python client
     from elasticsearch import Elasticsearch
@@ -28,16 +33,119 @@ except ImportError:  # pragma: no cover - optional dependency missing
     hdbapi = None  # type: ignore
 
 
+def sanitize_query(query: str) -> str:
+    """Sanitize and validate search query input."""
+    if not query or not isinstance(query, str):
+        raise ValueError("Query must be a non-empty string")
+    
+    # Strip whitespace
+    query = query.strip()
+    
+    # Check length
+    if len(query) < MIN_QUERY_LENGTH:
+        raise ValueError(f"Query must be at least {MIN_QUERY_LENGTH} character(s)")
+    if len(query) > MAX_QUERY_LENGTH:
+        raise ValueError(f"Query must not exceed {MAX_QUERY_LENGTH} characters")
+    
+    # Remove control characters except newlines and tabs
+    query = re.sub(r'[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]', '', query)
+    
+    return query
+
+
+def validate_document_id(doc_id: str) -> str:
+    """Validate document ID format and length."""
+    if not doc_id or not isinstance(doc_id, str):
+        raise ValueError("Document ID must be a non-empty string")
+    
+    doc_id = doc_id.strip()
+    
+    if len(doc_id) > MAX_DOCUMENT_ID_LENGTH:
+        raise ValueError(f"Document ID must not exceed {MAX_DOCUMENT_ID_LENGTH} characters")
+    
+    # Allow alphanumeric, hyphens, underscores, and dots
+    if not re.match(r'^[a-zA-Z0-9._-]+$', doc_id):
+        raise ValueError("Document ID can only contain alphanumeric characters, dots, hyphens, and underscores")
+    
+    return doc_id
+
+
+def validate_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and sanitize metadata dictionary."""
+    if not isinstance(metadata, dict):
+        raise ValueError("Metadata must be a dictionary")
+    
+    if len(metadata) > MAX_METADATA_KEYS:
+        raise ValueError(f"Metadata must not exceed {MAX_METADATA_KEYS} keys")
+    
+    sanitized = {}
+    for key, value in metadata.items():
+        if not isinstance(key, str):
+            raise ValueError("Metadata keys must be strings")
+        if len(key) > MAX_DOCUMENT_ID_LENGTH:
+            raise ValueError(f"Metadata key '{key}' exceeds maximum length")
+        
+        # Convert value to string and validate length
+        str_value = str(value)
+        if len(str_value) > MAX_METADATA_VALUE_LENGTH:
+            raise ValueError(f"Metadata value for '{key}' exceeds maximum length")
+        
+        sanitized[key] = value
+    
+    return sanitized
+
+
 class SearchDocument(BaseModel):
     id: str
     content: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    
+    @field_validator('id')
+    @classmethod
+    def validate_id(cls, v: str) -> str:
+        return validate_document_id(v)
+    
+    @field_validator('content')
+    @classmethod
+    def validate_content(cls, v: str) -> str:
+        if not v or not isinstance(v, str):
+            raise ValueError("Content must be a non-empty string")
+        if len(v) > MAX_DOCUMENT_CONTENT_LENGTH:
+            raise ValueError(f"Content must not exceed {MAX_DOCUMENT_CONTENT_LENGTH} characters")
+        return v.strip()
+    
+    @field_validator('metadata')
+    @classmethod
+    def validate_metadata(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+        return validate_metadata(v)
 
 
 class SearchRequest(BaseModel):
     query: str
     top_k: int = Field(default=10, ge=1, le=200)
     filters: Dict[str, str] = Field(default_factory=dict)
+    
+    @field_validator('query')
+    @classmethod
+    def validate_query(cls, v: str) -> str:
+        return sanitize_query(v)
+    
+    @field_validator('filters')
+    @classmethod
+    def validate_filters(cls, v: Dict[str, str]) -> Dict[str, str]:
+        if not isinstance(v, dict):
+            raise ValueError("Filters must be a dictionary")
+        if len(v) > MAX_METADATA_KEYS:
+            raise ValueError(f"Filters must not exceed {MAX_METADATA_KEYS} keys")
+        # Validate filter values are strings and within length limits
+        sanitized = {}
+        for key, value in v.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                raise ValueError("Filter keys and values must be strings")
+            if len(value) > MAX_METADATA_VALUE_LENGTH:
+                raise ValueError(f"Filter value for '{key}' exceeds maximum length")
+            sanitized[key.strip()] = value.strip()
+        return sanitized
 
 
 class SearchResult(BaseModel):
@@ -60,10 +168,39 @@ class HealthResponse(BaseModel):
     hana: bool
 
 
+def validate_conversation_id(conv_id: Optional[str]) -> Optional[str]:
+    """Validate conversation ID format (UUID)."""
+    if conv_id is None:
+        return None
+    
+    if not isinstance(conv_id, str):
+        raise ValueError("Conversation ID must be a string")
+    
+    conv_id = conv_id.strip()
+    
+    # Validate UUID format
+    try:
+        uuid.UUID(conv_id)
+    except ValueError:
+        raise ValueError("Conversation ID must be a valid UUID")
+    
+    return conv_id
+
+
 class AISearchRequest(BaseModel):
     query: str
     conversation_id: Optional[str] = None
     max_sources: int = Field(default=5, ge=1, le=10)
+    
+    @field_validator('query')
+    @classmethod
+    def validate_query(cls, v: str) -> str:
+        return sanitize_query(v)
+    
+    @field_validator('conversation_id')
+    @classmethod
+    def validate_conversation_id(cls, v: Optional[str]) -> Optional[str]:
+        return validate_conversation_id(v)
 
 
 class AISearchResponse(BaseModel):
@@ -88,6 +225,23 @@ class Conversation(BaseModel):
 
 
 logger = logging.getLogger(__name__)
+
+# Constants
+DEFAULT_CACHE_TTL = 120  # seconds
+CONVERSATION_EXPIRY_TIME = 3600  # 1 hour in seconds
+SOURCE_CONTENT_TRUNCATE_LENGTH = 500  # characters
+CONVERSATION_HISTORY_CONTEXT_MESSAGES = 3  # number of previous messages to include
+LOCALAI_TIMEOUT = 30.0  # seconds
+LOCALAI_MAX_TOKENS = 1000
+FOLLOW_UP_SUGGESTIONS_COUNT = 3
+
+# Input validation constants
+MAX_QUERY_LENGTH = 1000  # characters
+MAX_DOCUMENT_ID_LENGTH = 255  # characters
+MAX_DOCUMENT_CONTENT_LENGTH = 1_000_000  # characters (1MB)
+MIN_QUERY_LENGTH = 1  # characters
+MAX_METADATA_KEYS = 50  # maximum number of metadata keys
+MAX_METADATA_VALUE_LENGTH = 1000  # characters per metadata value
 
 
 class GoSearchClient:
@@ -154,7 +308,11 @@ class ElasticConnector:
             return False
         try:
             return bool(self.client.ping())
-        except Exception:  # pragma: no cover - network failure
+        except (ConnectionError, TimeoutError, OSError) as e:
+            logger.debug(f"Elasticsearch connection check failed: {e}")
+            return False
+        except Exception as e:  # pragma: no cover - unexpected error
+            logger.warning(f"Unexpected error checking Elasticsearch availability: {e}")
             return False
 
     def search(self, index: str, body: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -182,16 +340,22 @@ class RedisConnector:
             return False
         try:
             return bool(self.client.ping())
-        except Exception:  # pragma: no cover - network failure
+        except (ConnectionError, TimeoutError, OSError) as e:
+            logger.debug(f"Redis connection check failed: {e}")
+            return False
+        except Exception as e:  # pragma: no cover - unexpected error
+            logger.warning(f"Unexpected error checking Redis availability: {e}")
             return False
 
-    def cache_search(self, key: str, payload: Dict[str, Any], ttl: int = 120) -> None:
+    def cache_search(self, key: str, payload: Dict[str, Any], ttl: int = DEFAULT_CACHE_TTL) -> None:
         if self.client is None:
             return
         try:
             self.client.setex(key, ttl, json.dumps(payload))
-        except Exception:  # pragma: no cover - serialization failure
-            pass
+        except (redis.RedisError, json.JSONEncodeError, TypeError) as e:
+            logger.debug(f"Redis cache write failed: {e}")
+        except Exception as e:  # pragma: no cover - unexpected error
+            logger.warning(f"Unexpected error caching search result: {e}")
 
     def get_cached_search(self, key: str) -> Optional[Dict[str, Any]]:
         if self.client is None:
@@ -211,7 +375,11 @@ class HANAConnector:
         if dsn and hdbapi is not None:
             try:
                 self._conn = hdbapi.connect(dsn=dsn)
-            except Exception:
+            except (ConnectionError, TimeoutError, OSError) as e:
+                logger.debug(f"HANA connection failed: {e}")
+                self._conn = None
+            except Exception as e:  # pragma: no cover - unexpected error
+                logger.warning(f"Unexpected error connecting to HANA: {e}")
                 self._conn = None
 
     @property
@@ -248,7 +416,7 @@ class ConversationManager:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._conversations: Dict[str, Conversation] = {}
-        self._expiry_time = 3600  # 1 hour
+        self._expiry_time = CONVERSATION_EXPIRY_TIME
 
     def create_conversation(self) -> str:
         conversation_id = str(uuid.uuid4())
@@ -276,14 +444,25 @@ class ConversationManager:
                 conv.last_accessed = time.time()
 
     def cleanup_expired(self) -> None:
+        """Remove expired conversations. Thread-safe."""
         current_time = time.time()
+        expired_ids = []
+        
+        # First pass: identify expired conversations while holding read lock
         with self._lock:
-            expired_ids = [
-                conv_id for conv_id, conv in self._conversations.items()
-                if current_time - conv.last_accessed > self._expiry_time
-            ]
-            for conv_id in expired_ids:
-                del self._conversations[conv_id]
+            for conv_id, conv in self._conversations.items():
+                if current_time - conv.last_accessed > self._expiry_time:
+                    expired_ids.append(conv_id)
+        
+        # Second pass: remove expired conversations (write lock)
+        if expired_ids:
+            with self._lock:
+                # Re-check in case conversations were accessed between passes
+                current_time = time.time()
+                for conv_id in expired_ids[:]:  # Copy list to avoid modification during iteration
+                    conv = self._conversations.get(conv_id)
+                    if conv and current_time - conv.last_accessed > self._expiry_time:
+                        del self._conversations[conv_id]
 
 
 class AISearchOrchestrator:
@@ -300,12 +479,12 @@ class AISearchOrchestrator:
         if sources:
             prompt += "Sources:\n"
             for i, source in enumerate(sources, 1):
-                prompt += f"[{i}] {source.content[:500]}...\n"
+                prompt += f"[{i}] {source.content[:SOURCE_CONTENT_TRUNCATE_LENGTH]}...\n"
             prompt += "\n"
         
         if conversation_history:
             prompt += "Previous conversation:\n"
-            for msg in conversation_history[-3:]:  # Last 3 messages for context
+            for msg in conversation_history[-CONVERSATION_HISTORY_CONTEXT_MESSAGES:]:
                 prompt += f"{msg.role}: {msg.content}\n"
             prompt += "\n"
         
@@ -315,7 +494,7 @@ class AISearchOrchestrator:
     def _stream_llm_response(self, prompt: str) -> str:
         """Stream response from LocalAI"""
         try:
-            client = httpx.Client(timeout=30.0)
+            client = httpx.Client(timeout=LOCALAI_TIMEOUT)
             response = client.post(
                 f"{self.localai_url}/v1/chat/completions",
                 json={
@@ -323,7 +502,7 @@ class AISearchOrchestrator:
                     "messages": [{"role": "user", "content": prompt}],
                     "stream": True,
                     "temperature": 0.7,
-                    "max_tokens": 1000
+                    "max_tokens": LOCALAI_MAX_TOKENS
                 },
                 headers={"Content-Type": "application/json"}
             )
@@ -348,8 +527,14 @@ class AISearchOrchestrator:
                         continue
             
             return full_response
+        except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as e:
+            logger.error(f"Network error streaming LLM response: {e}")
+            return "I'm sorry, I couldn't connect to the AI service. Please try again."
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error streaming LLM response: {e.response.status_code} - {e.response.text}")
+            return "I'm sorry, the AI service returned an error. Please try again."
         except Exception as e:
-            logger.error(f"Error streaming LLM response: {e}")
+            logger.error(f"Unexpected error streaming LLM response: {e}")
             return "I'm sorry, I encountered an error while generating a response."
 
     def _generate_follow_up_suggestions(self, query: str, response: str) -> List[str]:
@@ -361,7 +546,7 @@ class AISearchOrchestrator:
             "What are the next steps?",
             "Are there any exceptions to this rule?"
         ]
-        return suggestions[:3]  # Return top 3 suggestions
+        return suggestions[:FOLLOW_UP_SUGGESTIONS_COUNT]
 
     def search_with_ai(self, request: AISearchRequest) -> AISearchResponse:
         # Get or create conversation
@@ -599,6 +784,140 @@ orchestrator = SearchOrchestrator()
 ai_orchestrator = AISearchOrchestrator(orchestrator)
 app = FastAPI(title="AgenticAiETH Search Gateway", version="0.1.0")
 
+# Authentication setup
+API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+BEARER_SCHEME = HTTPBearer(auto_error=False)
+
+# Rate limiting setup
+class RateLimiter:
+    """Simple in-memory rate limiter. For production, use Redis-based rate limiting."""
+    def __init__(self, requests_per_minute: int = 60):
+        self.requests_per_minute = requests_per_minute
+        self.requests: Dict[str, List[datetime]] = defaultdict(list)
+        self.lock = threading.Lock()
+        self.cleanup_interval = 300  # Clean up old entries every 5 minutes
+        self.last_cleanup = time.time()
+    
+    def is_allowed(self, key: str) -> tuple[bool, Optional[int]]:
+        """Check if request is allowed. Returns (allowed, retry_after_seconds)."""
+        now = datetime.now()
+        cutoff = now - timedelta(minutes=1)
+        
+        with self.lock:
+            # Cleanup old entries periodically
+            if time.time() - self.last_cleanup > self.cleanup_interval:
+                self._cleanup(cutoff)
+                self.last_cleanup = time.time()
+            
+            # Get requests in the last minute
+            recent_requests = [req_time for req_time in self.requests[key] if req_time > cutoff]
+            
+            if len(recent_requests) >= self.requests_per_minute:
+                # Calculate retry after
+                oldest_request = min(recent_requests)
+                retry_after = int((oldest_request + timedelta(minutes=1) - now).total_seconds()) + 1
+                return False, retry_after
+            
+            # Add current request
+            recent_requests.append(now)
+            self.requests[key] = recent_requests
+            return True, None
+    
+    def _cleanup(self, cutoff: datetime):
+        """Remove old entries."""
+        keys_to_remove = []
+        for key, requests in self.requests.items():
+            recent = [req for req in requests if req > cutoff]
+            if recent:
+                self.requests[key] = recent
+            else:
+                keys_to_remove.append(key)
+        
+        for key in keys_to_remove:
+            del self.requests[key]
+
+# Initialize rate limiter
+rate_limiter = RateLimiter(requests_per_minute=int(os.getenv("RATE_LIMIT_PER_MINUTE", "60")))
+
+
+def get_client_identifier(request: Request) -> str:
+    """Get client identifier for rate limiting."""
+    # Try to get from X-Forwarded-For header (if behind proxy)
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        # Take the first IP (original client)
+        return forwarded_for.split(",")[0].strip()
+    
+    # Fall back to direct client IP
+    if request.client:
+        return request.client.host
+    
+    return "unknown"
+
+
+async def verify_api_key(
+    request: Request,
+    api_key: Optional[str] = Depends(API_KEY_HEADER),
+    bearer: Optional[HTTPAuthorizationCredentials] = Depends(BEARER_SCHEME),
+) -> str:
+    """Verify API key from header or Bearer token."""
+    # Check if authentication is enabled
+    auth_enabled = os.getenv("AUTH_ENABLED", "false").lower() == "true"
+    if not auth_enabled:
+        return "anonymous"
+    
+    # Get API key from header or Bearer token
+    provided_key = api_key
+    if not provided_key and bearer:
+        provided_key = bearer.credentials
+    
+    if not provided_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing API key. Provide X-API-Key header or Bearer token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Get valid API keys from environment
+    valid_keys_str = os.getenv("API_KEYS", "")
+    if not valid_keys_str:
+        # If no keys configured, allow all (for development)
+        logger.warning("API_KEYS not configured - allowing all requests")
+        return "anonymous"
+    
+    valid_keys = [key.strip() for key in valid_keys_str.split(",") if key.strip()]
+    
+    # Use constant-time comparison to prevent timing attacks
+    for valid_key in valid_keys:
+        if secrets.compare_digest(provided_key, valid_key):
+            return "authenticated"
+    
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Invalid API key",
+    )
+
+
+async def check_rate_limit(request: Request) -> None:
+    """Check rate limit for the request."""
+    rate_limit_enabled = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
+    if not rate_limit_enabled:
+        return
+    
+    # Skip rate limiting for health endpoint
+    if request.url.path == "/health":
+        return
+    
+    client_id = get_client_identifier(request)
+    allowed, retry_after = rate_limiter.is_allowed(client_id)
+    
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Rate limit exceeded. Please try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
 
 @app.get("/health", response_model=HealthResponse)
 def read_health() -> HealthResponse:
@@ -621,18 +940,35 @@ def ai_search(request: AISearchRequest) -> AISearchResponse:
     return ai_orchestrator.search_with_ai(request)
 
 
-@app.get("/v1/conversation/{conversation_id}", response_model=Conversation)
-def get_conversation(conversation_id: str) -> Conversation:
+@app.get("/v1/conversation/{conversation_id}", response_model=Conversation, dependencies=[Depends(check_rate_limit)])
+def get_conversation(
+    conversation_id: str = Path(..., description="Conversation UUID"),
+    api_key: str = Depends(verify_api_key),
+) -> Conversation:
     """Get conversation history"""
+    # Validate conversation ID format
+    try:
+        conversation_id = validate_conversation_id(conversation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
     conversation = ai_orchestrator.get_conversation(conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
 
 
-@app.get("/v1/sources/{doc_id}")
-def get_source_document(doc_id: str) -> Dict[str, Any]:
+@app.get("/v1/sources/{doc_id}", dependencies=[Depends(check_rate_limit)])
+def get_source_document(
+    doc_id: str = Path(..., description="Document ID"),
+    api_key: str = Depends(verify_api_key),
+) -> Dict[str, Any]:
     """Get full source document by ID"""
+    # Validate document ID format
+    try:
+        doc_id = validate_document_id(doc_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     # Try to get from Elasticsearch first
     if orchestrator.elasticsearch.available:
         try:
@@ -642,7 +978,11 @@ def get_source_document(doc_id: str) -> Dict[str, Any]:
             )
             return response["_source"]
         except Exception as e:
-            logger.warning(f"Failed to get document {doc_id} from Elasticsearch: {e}")
+            # Check if it's a not found error (404)
+            if hasattr(e, 'status_code') and e.status_code == 404:
+                logger.debug(f"Document {doc_id} not found in Elasticsearch")
+            else:
+                logger.warning(f"Failed to get document {doc_id} from Elasticsearch: {e}")
     
     # Fallback to in-memory store
     doc = orchestrator.in_memory.get(doc_id)

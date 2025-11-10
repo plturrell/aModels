@@ -60,6 +60,10 @@ services:
       - REDIS_ADDR=redis:6379
       - REDIS_DB=0
       - SEARCH_PRIVACY_LEVEL=medium
+      - AUTH_ENABLED=${AUTH_ENABLED:-false}
+      - API_KEYS=${API_KEYS:-}
+      - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-true}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
     ports:
       - "8090:8090"
 
@@ -78,6 +82,10 @@ services:
       - ELASTICSEARCH_URLS=http://elasticsearch:9200
       - REDIS_URL=redis://redis:6379/0
       - PORT=8091
+      - AUTH_ENABLED=${AUTH_ENABLED:-false}
+      - API_KEYS=${API_KEYS:-}
+      - RATE_LIMIT_ENABLED=${RATE_LIMIT_ENABLED:-true}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
     ports:
       - "8081:8091"
 

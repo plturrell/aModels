@@ -108,12 +108,49 @@ For detailed information on each component, please see the `README.md` file loca
 
 ## 7. Testing
 
-To run the tests for the platform, use the following command:
+### Unit Tests
 
+**Python Service:**
 ```bash
-# Example test command (replace with actual test command)
+cd python_service
+pytest test_app.py -v
+```
+
+**Go Service:**
+```bash
+cd search-inference
 go test ./...
 ```
+
+### Integration Tests
+
+Integration tests require the services to be running via Docker Compose:
+
+```bash
+# Start services
+docker compose up -d
+
+# Wait for services to be ready (about 30 seconds)
+sleep 30
+
+# Run integration tests
+cd python_service
+export AUTH_ENABLED=false  # Or set to true and provide TEST_API_KEY
+export TEST_API_KEY=your-api-key  # If AUTH_ENABLED=true
+pytest test_integration.py -v
+
+# Stop services
+docker compose down
+```
+
+### Test Configuration
+
+Integration tests can be configured via environment variables:
+
+- `PYTHON_SERVICE_URL`: Python service URL (default: http://localhost:8081)
+- `GO_SERVICE_URL`: Go service URL (default: http://localhost:8090)
+- `AUTH_ENABLED`: Enable authentication in tests (default: false)
+- `TEST_API_KEY`: API key for authenticated tests
 
 ## 8. Contributing
 
