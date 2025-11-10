@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # Install git for go mod download
 RUN apk add --no-cache git
@@ -18,6 +18,13 @@ COPY infrastructure/third_party/go-hdb ./infrastructure/third_party/go-hdb/
 # Copy other module dependencies (matching replace directive paths)
 # From services/extract: ../postgres -> services/postgres
 COPY services/postgres/ ./services/postgres/
+# Copy services/shared for domain package
+COPY services/shared/ ./services/shared/
+# Copy pkg/localai for localai client (only client.go and adapter.go, exclude enhanced_inference.go and calibration.go)
+RUN mkdir -p ./pkg/localai
+COPY pkg/localai/client.go ./pkg/localai/
+COPY pkg/localai/adapter.go ./pkg/localai/
+COPY pkg/localai/go.mod ./pkg/localai/
 # From services/extract: ../../../../agenticAiETH_layer4_Orchestration resolves to root
 # We need to create a symlink or copy to the expected absolute path location
 # Since we can't easily create absolute paths, let's update the replace to use relative path
@@ -31,6 +38,7 @@ WORKDIR /app/services/extract
 
 # Download dependencies (use GOTOOLCHAIN=auto to allow downloading newer Go if needed)
 ENV GOTOOLCHAIN=auto
+# Ensure we use the correct Go version for dependencies
 RUN go mod download
 
 # Copy the rest of the source code (excluding generated protobuf files for now)
@@ -59,6 +67,11 @@ RUN apk add --no-cache protobuf-dev protoc && \
 RUN go mod tidy 2>&1 | grep -v "does not contain package" || true
 
 # Build (protobuf files are now generated and in the same module)
+# Ensure GOTOOLCHAIN is set for build step
+ENV GOTOOLCHAIN=auto
+# Run go mod tidy one more time to ensure everything is in sync before build
+# Don't filter errors this time - we need to see what's wrong
+RUN go mod tidy || (echo "go mod tidy had errors, continuing..." && true)
 RUN go build -o /server .
 
 # Final stage - use Python base image for PyTorch/transformers support

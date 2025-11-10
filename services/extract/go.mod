@@ -1,6 +1,6 @@
 module github.com/plturrell/aModels/services/extract
 
-go 1.24.3
+go 1.23
 
 require (
 	github.com/Chahine-tech/sql-parser-go v0.0.0-20250711162409-da324d384ca3
@@ -25,6 +25,10 @@ replace github.com/SAP/go-hdb => ../../infrastructure/third_party/go-hdb
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration => ../../infrastructure/third_party/orchestration
 
 replace github.com/Chahine-tech/sql-parser-go => ../../infrastructure/third_party/sql-parser-go
+
+replace github.com/plturrell/aModels/pkg/localai => ../../pkg/localai
+
+replace ai_benchmarks/services/shared => ../shared
 
 replace google.golang.org/protobuf => google.golang.org/protobuf v1.34.2
 

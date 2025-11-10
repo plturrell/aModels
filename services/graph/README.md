@@ -1,5 +1,12 @@
 # LangGraph-Go Port
 
+## 📚 Documentation Quick Links
+
+- **[Quick Start Guide](./QUICKSTART.md)** - Get running in 5 minutes
+- **[Dependency Management](./DEPENDENCIES.md)** - Complete dependency guide
+- **[Integration Guide](./INTEGRATION.md)** - API endpoints and workflows
+- **[Dependency Fix Summary](./DEPENDENCY_FIX_SUMMARY.md)** - Recent improvements
+
 ## Overview
 
 This directory hosts the Go-native port of the LangGraph monorepo. The layout mirrors the Python/TypeScript libraries to allow for incremental migration and feature parity with the existing ecosystem. The goal is to provide a high-performance, Go-native implementation of LangGraph that integrates seamlessly with the agenticAiETH project.
