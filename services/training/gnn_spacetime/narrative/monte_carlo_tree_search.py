@@ -101,7 +101,8 @@ class NarrativeMCTS:
         rollout_policy: Optional[Callable] = None,
         exploration_c: float = 1.414,
         max_depth: int = 10,
-        num_rollouts: int = 100
+        num_rollouts: int = 100,
+        discount_factor: float = 0.95
     ):
         """Initialize narrative MCTS.
         
@@ -112,6 +113,8 @@ class NarrativeMCTS:
             exploration_c: Exploration constant for UCB1
             max_depth: Maximum search depth
             num_rollouts: Number of rollouts per search
+            discount_factor: Discount factor γ for Bellman equation (0-1)
+                Higher values (closer to 1) emphasize long-term rewards
         """
         self.state_evaluator = state_evaluator or self._default_evaluator
         self.action_generator = action_generator or self._default_action_generator
@@ -119,6 +122,7 @@ class NarrativeMCTS:
         self.exploration_c = exploration_c
         self.max_depth = max_depth
         self.num_rollouts = num_rollouts
+        self.discount_factor = max(0.0, min(1.0, discount_factor))  # Clamp to [0, 1]
     
     def search(
         self,
@@ -210,16 +214,21 @@ class NarrativeMCTS:
         return child
     
     def _simulate(self, node: MCTSNode) -> float:
-        """Simulation phase: random rollout to terminal state.
+        """Simulation phase: random rollout to terminal state with Bellman discounting.
+        
+        Uses Bellman equation: V(s) = R(s,a) + γ * V(s')
+        where γ is the discount factor.
         
         Args:
             node: Node to simulate from
             
         Returns:
-            Estimated value from rollout
+            Estimated value from rollout (discounted)
         """
         state = node.state
         depth = 0
+        total_discounted_reward = 0.0
+        discount = 1.0  # Start with full discount
         
         while depth < self.max_depth:
             # Check if terminal
@@ -229,23 +238,62 @@ class NarrativeMCTS:
             # Select action using rollout policy
             action = self.rollout_policy(state)
             
-            # Apply action
-            state = self._apply_action(state, action)
+            # Get immediate reward (can be 0 if not provided)
+            immediate_reward = 0.0
+            if hasattr(self, '_get_immediate_reward'):
+                immediate_reward = self._get_immediate_reward(state, action)
+            
+            # Apply action to get next state
+            next_state = self._apply_action(state, action)
+            
+            # Accumulate discounted reward: R + γ * V(s')
+            total_discounted_reward += discount * immediate_reward
+            
+            # Update discount for next step
+            discount *= self.discount_factor
+            state = next_state
             depth += 1
         
-        # Evaluate final state
-        return self.state_evaluator(state)
+        # Evaluate final state and add to discounted reward
+        final_value = self.state_evaluator(state)
+        total_discounted_reward += discount * final_value
+        
+        return total_discounted_reward
     
     def _backpropagate(self, node: MCTSNode, value: float):
-        """Backpropagation phase: update values up the tree.
+        """Backpropagation phase: update values up the tree using Bellman equation.
+        
+        Uses Bellman equation for value updates:
+        V(s) = (1-α) * V(s) + α * [R + γ * V(s')]
+        where α = 1/visits (learning rate) and γ is discount factor.
+        
+        This provides better value estimation than simple averaging, especially
+        for deep trees where future rewards should be discounted.
         
         Args:
             node: Node to start backpropagation from
-            value: Value to propagate
+            value: Value to propagate (already discounted from simulation)
         """
+        discounted_value = value
+        
         while node is not None:
             node.visits += 1
-            node.total_value += value
+            
+            # Bellman update: V(s) = (1-α) * V(s) + α * [R + γ * V(s')]
+            # where α = 1/visits (adaptive learning rate)
+            # For root node, value is already discounted from simulation
+            # For parent nodes, we apply additional discounting
+            
+            if node.visits == 1:
+                # First visit: initialize with value
+                node.total_value = discounted_value
+            else:
+                # Subsequent visits: Bellman update
+                alpha = 1.0 / node.visits
+                node.total_value = (1.0 - alpha) * node.total_value + alpha * discounted_value
+            
+            # Discount value for parent (parent's value considers discounted child value)
+            discounted_value = discounted_value * self.discount_factor
             node = node.parent
     
     def _apply_action(self, state: Any, action: Any) -> Any:
