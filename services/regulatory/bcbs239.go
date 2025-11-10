@@ -15,6 +15,8 @@ type BCBS239Reporting struct {
 	calculationEngine *RegulatoryCalculationEngine
 	validator         *ReportValidator
 	outputTracer      *OutputTracer
+	graphClient       *BCBS239GraphClient       // Neo4j graph client for lineage and compliance analysis
+	reasoningAgent    *ComplianceReasoningAgent // LocalAI-powered reasoning agent
 	logger            *log.Logger
 }
 
@@ -36,6 +38,18 @@ func NewBCBS239Reporting(
 		outputTracer:      outputTracer,
 		logger:            logger,
 	}
+}
+
+// WithGraphClient adds Neo4j graph integration for compliance analysis.
+func (b *BCBS239Reporting) WithGraphClient(graphClient *BCBS239GraphClient) *BCBS239Reporting {
+	b.graphClient = graphClient
+	return b
+}
+
+// WithReasoningAgent adds LocalAI-powered reasoning capabilities.
+func (b *BCBS239Reporting) WithReasoningAgent(agent *ComplianceReasoningAgent) *BCBS239Reporting {
+	b.reasoningAgent = agent
+	return b
 }
 
 // GenerateReport generates a complete BCBS 239 compliance report.
@@ -63,12 +77,44 @@ func (b *BCBS239Reporting) GenerateReport(ctx context.Context, req BCBS239Report
 		Status:       "draft",
 		Calculations: calculations,
 		ComplianceAreas: []BCBS239ComplianceArea{},
+		GraphInsights: []GraphInsight{},
 	}
 
-	// Step 3: Assess compliance areas
+	// Step 3: Retrieve graph-backed compliance insights (if graph client available)
+	if b.graphClient != nil {
+		if err := b.enrichWithGraphInsights(ctx, report, calculations); err != nil {
+			if b.logger != nil {
+				b.logger.Printf("Warning: Failed to retrieve graph insights: %v", err)
+			}
+			// Continue without graph insights
+		}
+	}
+
+	// Step 4: Assess compliance areas with graph-enhanced data
 	b.assessComplianceAreas(report, calculations)
 
-	// Step 4: Validate report
+	// Step 5: Generate AI-powered compliance narrative (if reasoning agent available)
+	if b.reasoningAgent != nil {
+		if err := b.generateComplianceNarrative(ctx, report, calculations); err != nil {
+			if b.logger != nil {
+				b.logger.Printf("Warning: Failed to generate compliance narrative: %v", err)
+			}
+			// Continue without AI narrative
+		}
+	}
+
+	// Step 6: Human checkpoint for critical reports (P3, P4, P7, P12)
+	if req.RequiresApproval || b.isCriticalReport(report) {
+		report.Status = "pending_approval"
+		report.ApprovalRequired = true
+		if b.logger != nil {
+			b.logger.Printf("Report %s paused for human approval", report.ReportID)
+		}
+		// Return report for external approval workflow
+		return report, nil
+	}
+
+	// Step 7: Validate report
 	validationResult, err := b.validator.ValidateBCBS239Report(ctx, report)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate report: %w", err)
@@ -82,7 +128,7 @@ func (b *BCBS239Reporting) GenerateReport(ctx context.Context, req BCBS239Report
 		report.ValidationErrors = validationResult.Errors
 	}
 
-	// Step 5: Trace output
+	// Step 8: Trace output
 	if b.outputTracer != nil {
 		if err := b.outputTracer.TraceReport(ctx, report.ReportID, calculations, report); err != nil {
 			if b.logger != nil {
@@ -100,9 +146,10 @@ func (b *BCBS239Reporting) GenerateReport(ctx context.Context, req BCBS239Report
 
 // BCBS239ReportRequest represents a request to generate a BCBS 239 report.
 type BCBS239ReportRequest struct {
-	ReportPeriod string
-	Metrics      []string
-	GeneratedBy  string
+	ReportPeriod     string
+	Metrics          []string
+	GeneratedBy      string
+	RequiresApproval bool // If true, report will pause for human approval
 }
 
 // BCBS239Report represents a complete BCBS 239 compliance report.
@@ -117,6 +164,17 @@ type BCBS239Report struct {
 	ValidationResult  *ValidationResult
 	ValidationErrors  []string
 	OverallCompliance string // "compliant", "partially_compliant", "non_compliant"
+	
+	// Graph-enhanced fields
+	GraphInsights        []GraphInsight  `json:"graph_insights,omitempty"`
+	AIGeneratedNarrative string          `json:"ai_narrative,omitempty"`
+	
+	// Human approval tracking
+	ApprovalRequired bool      `json:"approval_required"`
+	ApprovalStatus   string    `json:"approval_status,omitempty"` // "pending", "approved", "rejected"
+	ApprovedBy       string    `json:"approved_by,omitempty"`
+	ApprovedAt       time.Time `json:"approved_at,omitempty"`
+	ApprovalComments string    `json:"approval_comments,omitempty"`
 }
 
 // BCBS239ComplianceArea represents a compliance area in BCBS 239.
@@ -182,5 +240,137 @@ func (b *BCBS239Reporting) assessComplianceAreas(report *BCBS239Report, calculat
 // ValidateCompliance validates BCBS 239 compliance.
 func (b *BCBS239Reporting) ValidateCompliance(ctx context.Context, report *BCBS239Report) (*ValidationResult, error) {
 	return b.validator.ValidateBCBS239Report(ctx, report)
+}
+
+// enrichWithGraphInsights retrieves graph-based compliance insights from Neo4j.
+func (b *BCBS239Reporting) enrichWithGraphInsights(
+	ctx context.Context,
+	report *BCBS239Report,
+	calculations []RegulatoryCalculation,
+) error {
+	// Retrieve lineage for each calculation
+	for _, calc := range calculations {
+		lineage, err := b.graphClient.GetCalculationLineage(ctx, calc.CalculationID)
+		if err != nil {
+			if b.logger != nil {
+				b.logger.Printf("Warning: Failed to retrieve lineage for %s: %v", calc.CalculationID, err)
+			}
+			continue
+		}
+		
+		insight := GraphInsight{
+			Type:           "lineage",
+			CalculationID:  calc.CalculationID,
+			Description:    fmt.Sprintf("Lineage traced for %s with %d dependencies", calc.CalculationID, len(lineage)),
+			LineageNodes:   lineage,
+		}
+		report.GraphInsights = append(report.GraphInsights, insight)
+	}
+	
+	// Check for non-compliant areas
+	nonCompliant, err := b.graphClient.GetNonCompliantAreas(ctx)
+	if err == nil && len(nonCompliant) > 0 {
+		for _, area := range nonCompliant {
+			insight := GraphInsight{
+				Type:        "gap",
+				PrincipleID: area.PrincipleID,
+				Description: fmt.Sprintf("Gap identified: %s - %s", area.PrincipleName, area.Issue),
+			}
+			report.GraphInsights = append(report.GraphInsights, insight)
+		}
+	}
+	
+	if b.logger != nil {
+		b.logger.Printf("Enriched report with %d graph insights", len(report.GraphInsights))
+	}
+	
+	return nil
+}
+
+// generateComplianceNarrative uses LocalAI to generate a comprehensive compliance narrative.
+func (b *BCBS239Reporting) generateComplianceNarrative(
+	ctx context.Context,
+	report *BCBS239Report,
+	calculations []RegulatoryCalculation,
+) error {
+	if len(calculations) == 0 {
+		return nil
+	}
+	
+	// Generate narrative for the primary calculation
+	primaryCalc := calculations[0]
+	narrative, err := b.reasoningAgent.GenerateComplianceNarrative(ctx, primaryCalc, "P3") // Focus on Accuracy principle
+	if err != nil {
+		return err
+	}
+	
+	report.AIGeneratedNarrative = narrative
+	
+	if b.logger != nil {
+		b.logger.Printf("Generated AI compliance narrative (%d chars)", len(narrative))
+	}
+	
+	return nil
+}
+
+// isCriticalReport determines if a report requires mandatory human approval.
+func (b *BCBS239Reporting) isCriticalReport(report *BCBS239Report) bool {
+	// Check if any compliance area is non-compliant
+	for _, area := range report.ComplianceAreas {
+		if area.ComplianceLevel == "non_compliant" {
+			return true
+		}
+	}
+	
+	// Check if overall compliance is concerning
+	if report.OverallCompliance == "non_compliant" || report.OverallCompliance == "partially_compliant" {
+		return true
+	}
+	
+	// Check for critical graph insights (gaps)
+	criticalGaps := 0
+	for _, insight := range report.GraphInsights {
+		if insight.Type == "gap" {
+			criticalGaps++
+		}
+	}
+	
+	return criticalGaps > 0
+}
+
+// ApproveReport approves a pending report and continues the workflow.
+func (b *BCBS239Reporting) ApproveReport(
+	ctx context.Context,
+	reportID string,
+	approvedBy string,
+	comments string,
+) error {
+	// In production, this would update the report in persistent storage
+	if b.logger != nil {
+		b.logger.Printf("Report %s approved by %s: %s", reportID, approvedBy, comments)
+	}
+	return nil
+}
+
+// RejectReport rejects a pending report.
+func (b *BCBS239Reporting) RejectReport(
+	ctx context.Context,
+	reportID string,
+	rejectedBy string,
+	reason string,
+) error {
+	if b.logger != nil {
+		b.logger.Printf("Report %s rejected by %s: %s", reportID, rejectedBy, reason)
+	}
+	return nil
+}
+
+// GraphInsight represents an insight derived from the Neo4j knowledge graph.
+type GraphInsight struct {
+	Type          string                   `json:"type"` // "lineage", "gap", "impact"
+	CalculationID string                   `json:"calculation_id,omitempty"`
+	PrincipleID   string                   `json:"principle_id,omitempty"`
+	Description   string                   `json:"description"`
+	LineageNodes  []LineageNode            `json:"lineage_nodes,omitempty"`
 }
 

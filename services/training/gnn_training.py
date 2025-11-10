@@ -18,6 +18,16 @@ from .gnn_anomaly_detector import GNNAnomalyDetector
 from .gnn_schema_matcher import GNNSchemaMatcher
 from .gnn_evaluation import GNNEvaluator
 
+# AMP imports
+try:
+    import torch
+    from torch.cuda.amp import autocast, GradScaler
+    HAS_AMP = True
+except ImportError:
+    HAS_AMP = False
+    autocast = None
+    GradScaler = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,13 +41,15 @@ class GNNTrainer:
     def __init__(
         self,
         output_dir: Optional[str] = None,
-        device: Optional[str] = None
+        device: Optional[str] = None,
+        use_amp: Optional[bool] = None
     ):
         """Initialize GNN trainer.
         
         Args:
             output_dir: Directory for trained models
             device: Device to use ('cuda' or 'cpu')
+            use_amp: Whether to use Automatic Mixed Precision (auto-detect if None)
         """
         self.output_dir = output_dir or os.getenv("GNN_MODELS_DIR", "./gnn_models")
         os.makedirs(self.output_dir, exist_ok=True)
@@ -46,9 +58,23 @@ class GNNTrainer:
         if self.device == "auto":
             self.device = None
         
+        # AMP setup
+        if use_amp is None:
+            # Auto-detect: use AMP if CUDA is available and AMP is supported
+            use_amp = HAS_AMP and HAS_PYG and torch.cuda.is_available() if HAS_PYG else False
+        self.use_amp = use_amp and HAS_AMP
+        
+        # Initialize GradScaler for AMP
+        self.scaler = None
+        if self.use_amp:
+            self.scaler = GradScaler()
+            logger.info("AMP (Automatic Mixed Precision) enabled for GNN training")
+        else:
+            logger.info("AMP disabled for GNN training")
+        
         self.evaluator = GNNEvaluator()
         
-        logger.info(f"Initialized GNN Trainer (output_dir: {self.output_dir})")
+        logger.info(f"Initialized GNN Trainer (output_dir: {self.output_dir}, use_amp: {self.use_amp})")
     
     def prepare_training_data_from_graph(
         self,
@@ -126,13 +152,15 @@ class GNNTrainer:
         # Initialize classifier
         classifier = GNNNodeClassifier(device=self.device)
         
-        # Train
+        # Train with AMP support
         train_result = classifier.train(
             train_nodes,
             train_edges,
             labels=train_labels,
             epochs=epochs,
-            lr=lr
+            lr=lr,
+            use_amp=self.use_amp,
+            scaler=self.scaler
         )
         
         # Evaluate on validation set
@@ -212,13 +240,15 @@ class GNNTrainer:
         # Initialize predictor
         predictor = GNNLinkPredictor(device=self.device)
         
-        # Train
+        # Train with AMP support
         train_result = predictor.train(
             nodes,
             train_edges,
             epochs=epochs,
             lr=lr,
-            neg_samples=neg_samples
+            neg_samples=neg_samples,
+            use_amp=self.use_amp,
+            scaler=self.scaler
         )
         
         # Evaluate on validation set
