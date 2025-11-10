@@ -26,6 +26,21 @@ from .domain_optimizer import DomainOptimizer
 from .digital_twin import DigitalTwinSimulator
 from .langsmith_tracing import LangSmithTracer
 
+# Coral NPU integration
+try:
+    from .coralnpu_client import CoralNPUClient, create_coralnpu_client
+    from .coralnpu_quantization import CoralNPUQuantizer, create_quantizer
+    from .coralnpu_converter import CoralNPUConverter, create_converter
+    HAS_CORALNPU = True
+except ImportError:
+    HAS_CORALNPU = False
+    CoralNPUClient = None
+    CoralNPUQuantizer = None
+    CoralNPUConverter = None
+    create_coralnpu_client = None
+    create_quantizer = None
+    create_converter = None
+
 # Phase 9.1: Auto-tuning
 try:
     from .auto_tuner import AutoTuner
@@ -115,7 +130,10 @@ class TrainingPipeline:
         enable_gnn_link_prediction: Optional[bool] = None,
         enable_gnn_device: Optional[str] = None,
         enable_gnn_training: Optional[bool] = None,
-        gnn_models_dir: Optional[str] = None
+        gnn_models_dir: Optional[str] = None,
+        enable_coralnpu: Optional[bool] = None,
+        coralnpu_quantize: Optional[bool] = None,
+        coralnpu_compile: Optional[bool] = None,
     ):
         self.extract_service_url = extract_service_url or os.getenv("EXTRACT_SERVICE_URL", "http://localhost:19080")
         self.glean_client = GleanTrainingClient(db_name=glean_db_name)
@@ -292,6 +310,55 @@ class TrainingPipeline:
                     logger.info("GNN Inference optimizer initialized (Priority 4: Performance)")
             except Exception as e:
                 logger.warning(f"Failed to initialize GNN inference optimizer: {e}")
+        
+        # Initialize Coral NPU integration
+        self.enable_coralnpu = enable_coralnpu if enable_coralnpu is not None else (
+            os.getenv("CORALNPU_ENABLED", "false").lower() == "true"
+        )
+        self.coralnpu_quantize = coralnpu_quantize if coralnpu_quantize is not None else (
+            os.getenv("CORALNPU_QUANTIZE_MODELS", "false").lower() == "true"
+        )
+        self.coralnpu_compile = coralnpu_compile if coralnpu_compile is not None else (
+            os.getenv("CORALNPU_COMPILE_MODELS", "false").lower() == "true"
+        )
+        
+        self.coralnpu_client = None
+        self.coralnpu_quantizer = None
+        self.coralnpu_converter = None
+        
+        if self.enable_coralnpu and HAS_CORALNPU:
+            try:
+                # Create metrics collector for Coral NPU
+                def coralnpu_metrics_collector(service: str, operation: str, latency: float, is_npu: bool):
+                    device = "npu" if is_npu else "cpu"
+                    logger.info(f"Coral NPU {operation}: {latency:.3f}s on {device}")
+                
+                self.coralnpu_client = create_coralnpu_client(
+                    enabled=self.enable_coralnpu,
+                    fallback_to_cpu=True,
+                    metrics_collector=coralnpu_metrics_collector,
+                )
+                
+                if self.coralnpu_quantize:
+                    self.coralnpu_quantizer = create_quantizer(
+                        client=self.coralnpu_client,
+                        enabled=True,
+                    )
+                
+                self.coralnpu_converter = create_converter(
+                    client=self.coralnpu_client,
+                    quantizer=self.coralnpu_quantizer,
+                )
+                
+                logger.info("Coral NPU integration initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Coral NPU: {e}")
+                self.enable_coralnpu = False
+        else:
+            if not HAS_CORALNPU:
+                logger.info("Coral NPU modules not available")
+            else:
+                logger.info("Coral NPU integration disabled")
     
     def run_full_pipeline(
         self,

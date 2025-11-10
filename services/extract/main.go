@@ -303,6 +303,19 @@ func main() {
 		logger.Printf("Multi-modal extraction enabled (OCR: %v)", os.Getenv("USE_DEEPSEEK_OCR") == "true")
 	}
 
+	// Initialize MarkItDown integration
+	markitdownMetricsCollector := func(service, endpoint string, statusCode int, latency time.Duration, correlationID string) {
+		if logger != nil {
+			logger.Printf("[%s] MarkItDown integration: %s %s -> %d (latency: %v)", 
+				correlationID, service, endpoint, statusCode, latency)
+		}
+	}
+	server.markitdownIntegration = NewMarkItDownIntegration("", logger, markitdownMetricsCollector)
+	if server.markitdownIntegration.enabled {
+		logger.Printf("MarkItDown integration enabled (service URL: %s)", 
+			os.Getenv("MARKITDOWN_SERVICE_URL"))
+	}
+
 	// Phase 8.1: Initialize semantic schema analyzer
 	server.semanticSchemaAnalyzer = NewSemanticSchemaAnalyzer(logger)
 	logger.Println("Semantic schema analyzer initialized (Phase 8.1)")
@@ -523,6 +536,9 @@ type extractServer struct {
 
 	// Multi-modal extractor (for Phase 6 unified integration)
 	multiModalExtractor *MultiModalExtractor
+
+	// MarkItDown integration for document conversion
+	markitdownIntegration *MarkItDownIntegration
 
 	// Agent telemetry client for Signavio exposure
 	agentTelemetry *telemetryclient.Client
@@ -3857,9 +3873,6 @@ func (s *extractServer) generateDocumentExtract(ctx context.Context, input docum
 	if len(input.Inputs) == 0 {
 		return generationResult{}, errors.New("document.inputs is required")
 	}
-	if len(s.ocrCommand) == 0 {
-		return generationResult{}, errors.New("OCR command not configured (set DEEPSEEK_OCR_SCRIPT or OCR_COMMAND)")
-	}
 
 	timestamp := time.Now().UTC().Format("20060102T150405Z")
 	outputDir := input.OutputDir
@@ -3889,6 +3902,31 @@ func (s *extractServer) generateDocumentExtract(ctx context.Context, input docum
 		outPath := filepath.Join(outputDir, base+".md")
 		if format == "json" {
 			outPath = filepath.Join(outputDir, base+".json")
+		}
+
+		// Try markitdown first if enabled and format is supported
+		if s.markitdownIntegration != nil && s.markitdownIntegration.ShouldUseMarkItDown(absInput) {
+			markdownContent, err := s.markitdownIntegration.ConvertDocument(ctx, absInput)
+			if err == nil {
+				// Successfully converted with markitdown, write to output
+				if err := os.WriteFile(outPath, []byte(markdownContent), 0o644); err != nil {
+					return generationResult{}, fmt.Errorf("failed to write markitdown output: %w", err)
+				}
+				outputs = append(outputs, outPath)
+				if s.logger != nil {
+					s.logger.Printf("Converted %s to markdown using MarkItDown", absInput)
+				}
+				continue
+			}
+			// MarkItDown failed, fallback to OCR if enabled
+			if s.markitdownIntegration.fallbackToOCR && s.logger != nil {
+				s.logger.Printf("MarkItDown conversion failed for %s, falling back to OCR", absInput)
+			}
+		}
+
+		// Fallback to OCR command
+		if len(s.ocrCommand) == 0 {
+			return generationResult{}, errors.New("OCR command not configured (set DEEPSEEK_OCR_SCRIPT or OCR_COMMAND) and MarkItDown unavailable")
 		}
 
 		cmdArgs := append([]string{}, s.ocrCommand...)

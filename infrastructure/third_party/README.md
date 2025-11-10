@@ -10,6 +10,7 @@ git submodule update --init --recursive
 
 - `arrow` → apache/arrow
 - `go-arrow` → apache/arrow-go
+- `coralnpu` → google-coral/coralnpu
 - `elasticsearch` → elastic/elasticsearch
 - `Glean` → facebookincubator/Glean
 - `go-hdb` → SAP/go-hdb
@@ -19,6 +20,7 @@ git submodule update --init --recursive
 - `langextract` → google/langextract
 - `langflow` → langflow-ai/langflow
 - `langgraph` → langchain-ai/langgraph
+- `markitdown` → microsoft/markitdown
 - `sql-parser-go` → Chahine-tech/sql-parser-go
 - `orchestration` → plturrell/agenticAiETH_layer4_Orchestration
 
