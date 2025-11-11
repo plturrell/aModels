@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  shell-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shell-server
+    ports:
+      - "0.0.0.0:4173:4173"
+    network_mode: bridge
+    restart: unless-stopped
+    environment:
+      - SHELL_GATEWAY_URL=${SHELL_GATEWAY_URL:-http://localhost:8000}
+      - SHELL_DMS_ENDPOINT=${SHELL_DMS_ENDPOINT:-}
+      - SHELL_AGENTFLOW_ENDPOINT=${SHELL_AGENTFLOW_ENDPOINT:-}
+      - SHELL_LOCALAI_URL=${SHELL_LOCALAI_URL:-}
+    volumes:
+      - /home/aModels/models:/app/models:ro
+      - /home/aModels/data:/app/data:ro
+
