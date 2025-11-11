@@ -349,7 +349,11 @@ func (s *shellServer) buildLocalAIInventory(ctx context.Context) (localAIInvento
 	}
 
 	if len(idSet) == 0 {
-		return localAIInventory{}, errors.New("no models discovered in LocalAI service or models directory")
+		// Return empty inventory instead of error - this is a valid state
+		return localAIInventory{
+			GeneratedAt: time.Now().UTC().Format(time.RFC3339),
+			Models:      []localAIModelEntry{},
+		}, nil
 	}
 
 	ids := make([]string, 0, len(idSet))
