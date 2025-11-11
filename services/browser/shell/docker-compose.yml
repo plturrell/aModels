@@ -15,8 +15,9 @@ services:
       - SHELL_DMS_ENDPOINT=${SHELL_DMS_ENDPOINT:-}
       - SHELL_AGENTFLOW_ENDPOINT=${SHELL_AGENTFLOW_ENDPOINT:-}
       - SHELL_LOCALAI_URL=${SHELL_LOCALAI_URL:-http://localai:8080}
+      - SHELL_MODELS_DIR=/app/models
     volumes:
-      - /home/aModels/models:/home/aModels/models:ro
+      - /home/aModels/models:/app/models:ro
       - /home/aModels/data:/home/aModels/data:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
