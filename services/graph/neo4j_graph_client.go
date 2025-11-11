@@ -15,6 +15,11 @@ type Neo4jGraphClient struct {
 	logger *log.Logger
 }
 
+// Driver returns the Neo4j driver for direct access if needed.
+func (c *Neo4jGraphClient) Driver() neo4j.DriverWithContext {
+	return c.driver
+}
+
 // Neo4jConfig holds configuration for optimized Neo4j connection.
 type Neo4jConfig struct {
 	URI                  string

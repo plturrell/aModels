@@ -1,0 +1,508 @@
+/**
+ * Phase 1.3: Graph Module
+ * 
+ * Interactive graph exploration module for visualizing and exploring knowledge graphs
+ */
+
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Box,
+  Paper,
+  Typography,
+  TextField,
+  Button,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Grid,
+  Card,
+  CardContent,
+  Alert,
+  CircularProgress,
+  Chip,
+  Tabs,
+  Tab,
+} from '@mui/material';
+import { GraphVisualization, LayoutType } from '../../components/GraphVisualization';
+import {
+  visualizeGraph,
+  exploreGraph,
+  getGraphStats,
+  queryGraph,
+  findPaths,
+  GraphNode,
+  GraphEdge,
+  GraphData,
+} from '../../api/graph';
+
+interface GraphModuleProps {
+  projectId?: string;
+  systemId?: string;
+}
+
+export function GraphModule({ projectId, systemId }: GraphModuleProps) {
+  const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedNodes, setSelectedNodes] = useState<string[]>([]);
+  const [stats, setStats] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState(0);
+  const [layout, setLayout] = useState<LayoutType>('force-directed');
+
+  // Form state
+  const [formProjectId, setFormProjectId] = useState(projectId || '');
+  const [formSystemId, setFormSystemId] = useState(systemId || '');
+  const [nodeTypes, setNodeTypes] = useState<string[]>([]);
+  const [edgeTypes, setEdgeTypes] = useState<string[]>([]);
+  const [limit, setLimit] = useState(10000);
+
+  // Explore state
+  const [exploreNodeId, setExploreNodeId] = useState('');
+  const [exploreDepth, setExploreDepth] = useState(2);
+  const [exploreDirection, setExploreDirection] = useState<'outgoing' | 'incoming' | 'both'>('both');
+
+  // Query state
+  const [cypherQuery, setCypherQuery] = useState('MATCH (n:Node) RETURN n LIMIT 10');
+
+  // Path finding state
+  const [sourceNodeId, setSourceNodeId] = useState('');
+  const [targetNodeId, setTargetNodeId] = useState('');
+
+  // Load graph data
+  const loadGraph = useCallback(async () => {
+    if (!formProjectId) {
+      setError('Project ID is required');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await visualizeGraph({
+        project_id: formProjectId,
+        system_id: formSystemId || undefined,
+        node_types: nodeTypes.length > 0 ? nodeTypes : undefined,
+        edge_types: edgeTypes.length > 0 ? edgeTypes : undefined,
+        limit,
+      });
+
+      setGraphData({
+        nodes: response.nodes,
+        edges: response.edges,
+      });
+    } catch (err: any) {
+      setError(err.message || 'Failed to load graph');
+      console.error('Graph load error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [formProjectId, formSystemId, nodeTypes, edgeTypes, limit]);
+
+  // Load stats
+  const loadStats = useCallback(async () => {
+    if (!formProjectId) {
+      return;
+    }
+
+    try {
+      const statsData = await getGraphStats(formProjectId, formSystemId || undefined);
+      setStats(statsData);
+    } catch (err: any) {
+      console.error('Stats load error:', err);
+    }
+  }, [formProjectId, formSystemId]);
+
+  // Load graph on mount if project ID is provided
+  useEffect(() => {
+    if (projectId) {
+      loadGraph();
+      loadStats();
+    }
+  }, [projectId]);
+
+  // Handle node click
+  const handleNodeClick = useCallback((nodeId: string, node: GraphNode) => {
+    setSelectedNodes([nodeId]);
+    setExploreNodeId(nodeId);
+  }, []);
+
+  // Handle explore
+  const handleExplore = useCallback(async () => {
+    if (!exploreNodeId) {
+      setError('Node ID is required for exploration');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await exploreGraph({
+        node_id: exploreNodeId,
+        depth: exploreDepth,
+        direction: exploreDirection,
+        limit: 1000,
+      });
+
+      setGraphData({
+        nodes: response.nodes,
+        edges: response.edges,
+      });
+    } catch (err: any) {
+      setError(err.message || 'Failed to explore graph');
+      console.error('Graph explore error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [exploreNodeId, exploreDepth, exploreDirection]);
+
+  // Handle query
+  const handleQuery = useCallback(async () => {
+    if (!cypherQuery.trim()) {
+      setError('Cypher query is required');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await queryGraph({
+        query: cypherQuery,
+      });
+
+      // Display query results (could be enhanced with a results table)
+      console.log('Query results:', response);
+      alert(`Query executed in ${response.execution_time_ms}ms. Found ${response.data.length} results.`);
+    } catch (err: any) {
+      setError(err.message || 'Failed to execute query');
+      console.error('Graph query error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [cypherQuery]);
+
+  // Handle path finding
+  const handleFindPaths = useCallback(async () => {
+    if (!sourceNodeId || !targetNodeId) {
+      setError('Both source and target node IDs are required');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await findPaths({
+        source_id: sourceNodeId,
+        target_id: targetNodeId,
+        max_depth: 5,
+      });
+
+      if (response.shortest_path) {
+        setSelectedNodes(response.shortest_path.nodes);
+        alert(`Found path with length ${response.shortest_path.length}`);
+      } else {
+        setError('No path found between the specified nodes');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to find paths');
+      console.error('Path finding error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [sourceNodeId, targetNodeId]);
+
+  return (
+    <Box sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Typography variant="h4" gutterBottom>
+        Graph Explorer
+      </Typography>
+
+      <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
+        <Tab label="Visualize" />
+        <Tab label="Explore" />
+        <Tab label="Query" />
+        <Tab label="Paths" />
+        <Tab label="Stats" />
+      </Tabs>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
+      {activeTab === 0 && (
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={3}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                Graph Filters
+              </Typography>
+              <TextField
+                fullWidth
+                label="Project ID"
+                value={formProjectId}
+                onChange={(e) => setFormProjectId(e.target.value)}
+                sx={{ mb: 2 }}
+                required
+              />
+              <TextField
+                fullWidth
+                label="System ID"
+                value={formSystemId}
+                onChange={(e) => setFormSystemId(e.target.value)}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Limit"
+                type="number"
+                value={limit}
+                onChange={(e) => setLimit(parseInt(e.target.value) || 10000)}
+                sx={{ mb: 2 }}
+              />
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Layout</InputLabel>
+                <Select
+                  value={layout}
+                  label="Layout"
+                  onChange={(e) => setLayout(e.target.value as LayoutType)}
+                >
+                  <MenuItem value="force-directed">Force-Directed</MenuItem>
+                  <MenuItem value="hierarchical">Hierarchical</MenuItem>
+                  <MenuItem value="circular">Circular</MenuItem>
+                  <MenuItem value="breadthfirst">Breadth-First</MenuItem>
+                  <MenuItem value="cose-bilkent">COSE-Bilkent</MenuItem>
+                  <MenuItem value="dagre">Dagre</MenuItem>
+                  <MenuItem value="cola">Cola</MenuItem>
+                </Select>
+              </FormControl>
+              <Button
+                fullWidth
+                variant="contained"
+                onClick={loadGraph}
+                disabled={loading || !formProjectId}
+              >
+                {loading ? <CircularProgress size={24} /> : 'Load Graph'}
+              </Button>
+            </Paper>
+          </Grid>
+          <Grid item xs={12} md={9}>
+            <Paper sx={{ p: 2, height: '600px' }}>
+              {loading && graphData.nodes.length === 0 ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                  <CircularProgress />
+                </Box>
+              ) : (
+                <GraphVisualization
+                  graphData={graphData}
+                  layout={layout}
+                  onNodeClick={handleNodeClick}
+                  onNodeSelect={setSelectedNodes}
+                  selectedNodes={selectedNodes}
+                  height={600}
+                />
+              )}
+            </Paper>
+          </Grid>
+        </Grid>
+      )}
+
+      {activeTab === 1 && (
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={3}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                Explore from Node
+              </Typography>
+              <TextField
+                fullWidth
+                label="Node ID"
+                value={exploreNodeId}
+                onChange={(e) => setExploreNodeId(e.target.value)}
+                sx={{ mb: 2 }}
+                required
+              />
+              <TextField
+                fullWidth
+                label="Depth"
+                type="number"
+                value={exploreDepth}
+                onChange={(e) => setExploreDepth(parseInt(e.target.value) || 2)}
+                sx={{ mb: 2 }}
+              />
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Direction</InputLabel>
+                <Select
+                  value={exploreDirection}
+                  label="Direction"
+                  onChange={(e) => setExploreDirection(e.target.value as any)}
+                >
+                  <MenuItem value="outgoing">Outgoing</MenuItem>
+                  <MenuItem value="incoming">Incoming</MenuItem>
+                  <MenuItem value="both">Both</MenuItem>
+                </Select>
+              </FormControl>
+              <Button
+                fullWidth
+                variant="contained"
+                onClick={handleExplore}
+                disabled={loading || !exploreNodeId}
+              >
+                {loading ? <CircularProgress size={24} /> : 'Explore'}
+              </Button>
+            </Paper>
+          </Grid>
+          <Grid item xs={12} md={9}>
+            <Paper sx={{ p: 2, height: '600px' }}>
+              {loading && graphData.nodes.length === 0 ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                  <CircularProgress />
+                </Box>
+              ) : (
+                <GraphVisualization
+                  graphData={graphData}
+                  layout={layout}
+                  onNodeClick={handleNodeClick}
+                  onNodeSelect={setSelectedNodes}
+                  selectedNodes={selectedNodes}
+                  height={600}
+                />
+              )}
+            </Paper>
+          </Grid>
+        </Grid>
+      )}
+
+      {activeTab === 2 && (
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                Cypher Query
+              </Typography>
+              <TextField
+                fullWidth
+                multiline
+                rows={6}
+                value={cypherQuery}
+                onChange={(e) => setCypherQuery(e.target.value)}
+                sx={{ mb: 2 }}
+                placeholder="MATCH (n:Node) RETURN n LIMIT 10"
+              />
+              <Button
+                variant="contained"
+                onClick={handleQuery}
+                disabled={loading || !cypherQuery.trim()}
+              >
+                {loading ? <CircularProgress size={24} /> : 'Execute Query'}
+              </Button>
+            </Paper>
+          </Grid>
+        </Grid>
+      )}
+
+      {activeTab === 3 && (
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                Find Paths
+              </Typography>
+              <TextField
+                fullWidth
+                label="Source Node ID"
+                value={sourceNodeId}
+                onChange={(e) => setSourceNodeId(e.target.value)}
+                sx={{ mb: 2 }}
+                required
+              />
+              <TextField
+                fullWidth
+                label="Target Node ID"
+                value={targetNodeId}
+                onChange={(e) => setTargetNodeId(e.target.value)}
+                sx={{ mb: 2 }}
+                required
+              />
+              <Button
+                fullWidth
+                variant="contained"
+                onClick={handleFindPaths}
+                disabled={loading || !sourceNodeId || !targetNodeId}
+              >
+                {loading ? <CircularProgress size={24} /> : 'Find Paths'}
+              </Button>
+            </Paper>
+          </Grid>
+        </Grid>
+      )}
+
+      {activeTab === 4 && (
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                Graph Statistics
+              </Typography>
+              {stats ? (
+                <Box>
+                  <Card sx={{ mb: 2 }}>
+                    <CardContent>
+                      <Typography variant="h6">Overview</Typography>
+                      <Box sx={{ mt: 2 }}>
+                        <Chip label={`Total Nodes: ${stats.total_nodes}`} sx={{ mr: 1, mb: 1 }} />
+                        <Chip label={`Total Edges: ${stats.total_edges}`} sx={{ mr: 1, mb: 1 }} />
+                        <Chip label={`Density: ${stats.density.toFixed(4)}`} sx={{ mr: 1, mb: 1 }} />
+                        <Chip label={`Avg Degree: ${stats.average_degree.toFixed(2)}`} sx={{ mr: 1, mb: 1 }} />
+                      </Box>
+                    </CardContent>
+                  </Card>
+                  <Card sx={{ mb: 2 }}>
+                    <CardContent>
+                      <Typography variant="h6">Node Types</Typography>
+                      <Box sx={{ mt: 2 }}>
+                        {Object.entries(stats.node_types || {}).map(([type, count]) => (
+                          <Chip
+                            key={type}
+                            label={`${type}: ${count}`}
+                            sx={{ mr: 1, mb: 1 }}
+                          />
+                        ))}
+                      </Box>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent>
+                      <Typography variant="h6">Edge Types</Typography>
+                      <Box sx={{ mt: 2 }}>
+                        {Object.entries(stats.edge_types || {}).map(([type, count]) => (
+                          <Chip
+                            key={type}
+                            label={`${type}: ${count}`}
+                            sx={{ mr: 1, mb: 1 }}
+                          />
+                        ))}
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Box>
+              ) : (
+                <Box>
+                  <Button variant="contained" onClick={loadStats} disabled={!formProjectId}>
+                    Load Statistics
+                  </Button>
+                </Box>
+              )}
+            </Paper>
+          </Grid>
+        </Grid>
+      )}
+    </Box>
+  );
+}
+
