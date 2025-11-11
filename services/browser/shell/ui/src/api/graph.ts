@@ -5,6 +5,7 @@
  */
 
 const API_BASE = import.meta.env.VITE_GATEWAY_URL || 'http://localhost:8000';
+const GRAPH_SERVICE_URL = import.meta.env.VITE_GRAPH_SERVICE_URL || 'http://localhost:8081';
 
 export interface GraphVisualizeRequest {
   project_id: string;

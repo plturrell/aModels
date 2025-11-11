@@ -424,6 +424,16 @@ func (s *shellServer) fetchRemoteModelIDs(ctx context.Context) ([]string, error)
 func (s *shellServer) scanModelReadmes() map[string]bool {
 	results := make(map[string]bool)
 	if s.cfg.ModelsDir == "" {
+		log.Printf("shell: models directory not configured")
+		return results
+	}
+
+	// Check if directory exists and is accessible
+	if info, err := os.Stat(s.cfg.ModelsDir); err != nil {
+		log.Printf("shell: models directory %s does not exist or is not accessible: %v", s.cfg.ModelsDir, err)
+		return results
+	} else if !info.IsDir() {
+		log.Printf("shell: models path %s is not a directory", s.cfg.ModelsDir)
 		return results
 	}
 
@@ -433,6 +443,8 @@ func (s *shellServer) scanModelReadmes() map[string]bool {
 		return results
 	}
 
+	log.Printf("shell: scanning models directory %s, found %d entries", s.cfg.ModelsDir, len(dirEntries))
+	modelCount := 0
 	for _, entry := range dirEntries {
 		if !entry.IsDir() {
 			continue
@@ -441,10 +453,15 @@ func (s *shellServer) scanModelReadmes() map[string]bool {
 		readmePath := filepath.Join(s.cfg.ModelsDir, modelID, "README.md")
 		if _, err := os.Stat(readmePath); err == nil {
 			results[modelID] = true
+			modelCount++
+			log.Printf("shell: found model %s with README", modelID)
 		} else {
 			results[modelID] = false
+			modelCount++
+			log.Printf("shell: found model %s without README", modelID)
 		}
 	}
+	log.Printf("shell: scanned %d models from directory", modelCount)
 	return results
 }
 
