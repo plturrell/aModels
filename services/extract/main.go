@@ -112,6 +112,9 @@ func main() {
 
 		// AgentFlow client for direct integration
 		agentFlowClient: NewAgentFlowClient(logger),
+		
+		// Metrics collector for all improvements
+		metricsCollector: GetMetricsCollector(logger),
 	}
 
 	if cfg.AgentTelemetry.BaseURL != "" {
@@ -468,6 +471,7 @@ func main() {
 	mux.HandleFunc("/catalog/information-systems", server.handleGetInformationSystems)
 	mux.HandleFunc("/catalog/information-systems/add", server.handleAddInformationSystem)
 	mux.HandleFunc("/ui", server.handleWebUI)
+	mux.HandleFunc("/metrics/improvements", server.handleImprovementsMetrics) // Metrics for all 6 improvements
 
 	if *explorer {
 		server.startExplorer()
@@ -522,6 +526,7 @@ type extractServer struct {
 	sapBDCIntegration      *SAPBDCIntegration      // SAP Business Data Cloud integration
 	hanaReplication        *hanaReplication
 	postgresReplication    *postgresReplication
+	metricsCollector       *MetricsCollector // Metrics for all improvements
 
 	telemetry          *telemetryClient
 	telemetryOperation string
@@ -1354,6 +1359,28 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 
 	s.replicateSchema(ctx, nodes, edges)
 
+	// Improvement 3: Add automatic consistency validation
+	if projectID := req.ProjectID; projectID != "" {
+		consistencyStart := time.Now()
+		consistencyResult := ValidateConsistency(ctx, projectID, s.logger)
+		consistencyDuration := time.Since(consistencyStart)
+		
+		// Record consistency metrics
+		if s.metricsCollector != nil {
+			s.metricsCollector.RecordConsistency(consistencyResult, consistencyDuration)
+		}
+		
+		if !consistencyResult.Consistent {
+			s.logger.Printf("WARNING: Consistency validation found %d issues after replication", len(consistencyResult.Issues))
+			for _, issue := range consistencyResult.Issues {
+				s.logger.Printf("  [%s] %s: %s", issue.Severity, issue.Type, issue.Message)
+			}
+		} else {
+			s.logger.Printf("Consistency validation passed: nodes variance=%d, edges variance=%d", 
+				consistencyResult.Metrics.NodeVariance, consistencyResult.Metrics.EdgeVariance)
+		}
+	}
+
 	// Export Petri net to catalog if available
 	if len(allControlMJobs) > 0 {
 		petriNetConverter := NewPetriNetConverter(s.logger)
@@ -1422,8 +1449,11 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	// 1. In root node properties (accessible in Neo4j queries)
 	// 2. In Glean export manifest (via glean_persistence.go)
 	if s.graphPersistence != nil {
-		if err := s.graphPersistence.SaveGraph(nodes, edges); err != nil {
-			s.logger.Printf("failed to save graph: %v", err)
+		// Improvement 2: Add retry logic for Neo4j operations
+		if err := RetryNeo4jOperation(r.Context(), func() error {
+			return s.graphPersistence.SaveGraph(nodes, edges)
+		}, s.logger); err != nil {
+			s.logger.Printf("failed to save graph to Neo4j after retries: %v", err)
 		}
 
 		// Phase 10: Learn terminology from this extraction run (incremental learning)
@@ -4397,4 +4427,22 @@ func (s *extractServer) handleAnalyzeDataLineage(w http.ResponseWriter, r *http.
 	}
 
 	handlers.WriteJSON(w, http.StatusOK, analysis)
+}
+
+// handleImprovementsMetrics returns metrics for all 6 improvements
+func (s *extractServer) handleImprovementsMetrics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		handlers.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	
+	if s.metricsCollector == nil {
+		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "Metrics collector not initialized",
+		})
+		return
+	}
+	
+	metrics := s.metricsCollector.GetMetrics()
+	handlers.WriteJSON(w, http.StatusOK, metrics)
 }

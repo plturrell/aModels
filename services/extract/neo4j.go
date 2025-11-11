@@ -79,15 +79,45 @@ func flattenProperties(props map[string]any) map[string]any {
 }
 
 // SaveGraph saves a graph to Neo4j.
+// Improvement 2: Retry logic is applied at the caller level
+// Improvement 5: Optimized with batch transaction processing
 func (p *Neo4jPersistence) SaveGraph(nodes []Node, edges []Edge) error {
 	ctx := context.Background()
-	session := p.driver.NewSession(ctx, neo4j.SessionConfig{})
-	defer session.Close(ctx)
+	
+	// Improvement 5: Use batch processing for large datasets
+	batchSize := 1000
+	if len(nodes) > 10000 {
+		batchSize = 500 // Smaller batches for very large datasets
+	}
+	
+	// Process nodes in batches
+	if err := p.saveNodesInBatches(ctx, nodes, batchSize); err != nil {
+		return fmt.Errorf("failed to save nodes: %w", err)
+	}
+	
+	// Process edges in batches
+	if err := p.saveEdgesInBatches(ctx, edges, batchSize); err != nil {
+		return fmt.Errorf("failed to save edges: %w", err)
+	}
+	
+	return nil
+}
 
-	_, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-		now := time.Now().UTC().Format(time.RFC3339Nano)
+// saveNodesInBatches saves nodes in batches for better performance
+func (p *Neo4jPersistence) saveNodesInBatches(ctx context.Context, nodes []Node, batchSize int) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	
+	for i := 0; i < len(nodes); i += batchSize {
+		end := i + batchSize
+		if end > len(nodes) {
+			end = len(nodes)
+		}
 		
-		for _, node := range nodes {
+		batch := nodes[i:end]
+		
+		session := p.driver.NewSession(ctx, neo4j.SessionConfig{})
+		_, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+			for _, node := range batch {
 			// Serialize all properties as a single JSON string to avoid nested map issues
 			propsJSON := "{}"
 			if node.Props != nil && len(node.Props) > 0 {
@@ -129,64 +159,94 @@ func (p *Neo4jPersistence) SaveGraph(nodes []Node, edges []Edge) error {
 				params["domain"] = domainID
 			}
 			
-			_, err := tx.Run(ctx, query, params)
-			if err != nil {
-				return nil, fmt.Errorf("failed to save node %s: %w", node.ID, err)
+				_, err := tx.Run(ctx, query, params)
+				if err != nil {
+					return nil, fmt.Errorf("failed to save node %s: %w", node.ID, err)
+				}
 			}
+			return nil, nil
+		})
+		session.Close(ctx)
+		
+		if err != nil {
+			return fmt.Errorf("node batch %d-%d failed: %w", i, end, err)
 		}
+	}
+	
+	return nil
+}
 
-		for _, edge := range edges {
-			// Serialize all edge properties as a single JSON string
-			propsJSON := "{}"
-			if edge.Props != nil && len(edge.Props) > 0 {
-				if jsonBytes, err := json.Marshal(edge.Props); err == nil {
-					propsJSON = string(jsonBytes)
-				}
-			}
-			
-			// Extract agent_id and domain from edge properties (if available)
-			var agentID string
-			var domainID string
-			if edge.Props != nil {
-				if aid, ok := edge.Props["agent_id"].(string); ok {
-					agentID = aid
-				}
-				if did, ok := edge.Props["domain"].(string); ok {
-					domainID = did
-				}
-			}
-			
-			// Add updated_at timestamp to edge for temporal analysis
-			// Store agent_id and domain as separate properties for easier querying
-			query := "MATCH (source:Node {id: $source_id}) MATCH (target:Node {id: $target_id}) MERGE (source)-[r:RELATIONSHIP]->(target) SET r.label = $label, r.properties_json = $props, r.updated_at = $updated_at"
-			params := map[string]any{
-				"source_id":  edge.SourceID,
-				"target_id":  edge.TargetID,
-				"label":      edge.Label,
-				"props":      propsJSON,
-				"updated_at": now,
-			}
-			
-			// Add agent_id and domain as separate properties if available
-			if agentID != "" {
-				query += ", r.agent_id = $agent_id"
-				params["agent_id"] = agentID
-			}
-			if domainID != "" {
-				query += ", r.domain = $domain"
-				params["domain"] = domainID
-			}
-			
-			_, err := tx.Run(ctx, query, params)
-			if err != nil {
-				return nil, fmt.Errorf("failed to save edge %s->%s: %w", edge.SourceID, edge.TargetID, err)
-			}
+// saveEdgesInBatches saves edges in batches for better performance
+func (p *Neo4jPersistence) saveEdgesInBatches(ctx context.Context, edges []Edge, batchSize int) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	
+	for i := 0; i < len(edges); i += batchSize {
+		end := i + batchSize
+		if end > len(edges) {
+			end = len(edges)
 		}
-
-		return nil, nil
-	})
-
-	return err
+		
+		batch := edges[i:end]
+		
+		session := p.driver.NewSession(ctx, neo4j.SessionConfig{})
+		_, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
+			for _, edge := range batch {
+				// Serialize all edge properties as a single JSON string
+				propsJSON := "{}"
+				if edge.Props != nil && len(edge.Props) > 0 {
+					if jsonBytes, err := json.Marshal(edge.Props); err == nil {
+						propsJSON = string(jsonBytes)
+					}
+				}
+				
+				// Extract agent_id and domain from edge properties (if available)
+				var agentID string
+				var domainID string
+				if edge.Props != nil {
+					if aid, ok := edge.Props["agent_id"].(string); ok {
+						agentID = aid
+					}
+					if did, ok := edge.Props["domain"].(string); ok {
+						domainID = did
+					}
+				}
+				
+				// Add updated_at timestamp to edge for temporal analysis
+				// Store agent_id and domain as separate properties for easier querying
+				query := "MATCH (source:Node {id: $source_id}) MATCH (target:Node {id: $target_id}) MERGE (source)-[r:RELATIONSHIP]->(target) SET r.label = $label, r.properties_json = $props, r.updated_at = $updated_at"
+				params := map[string]any{
+					"source_id":  edge.SourceID,
+					"target_id":  edge.TargetID,
+					"label":      edge.Label,
+					"props":      propsJSON,
+					"updated_at": now,
+				}
+				
+				// Add agent_id and domain as separate properties if available
+				if agentID != "" {
+					query += ", r.agent_id = $agent_id"
+					params["agent_id"] = agentID
+				}
+				if domainID != "" {
+					query += ", r.domain = $domain"
+					params["domain"] = domainID
+				}
+				
+				_, err := tx.Run(ctx, query, params)
+				if err != nil {
+					return nil, fmt.Errorf("failed to save edge %s->%s: %w", edge.SourceID, edge.TargetID, err)
+				}
+			}
+			return nil, nil
+		})
+		session.Close(ctx)
+		
+		if err != nil {
+			return fmt.Errorf("edge batch %d-%d failed: %w", i, end, err)
+		}
+	}
+	
+	return nil
 }
 
 // QueryResult represents a single row from a Neo4j query result.

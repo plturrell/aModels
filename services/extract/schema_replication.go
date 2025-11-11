@@ -18,15 +18,60 @@ func (s *extractServer) replicateSchema(ctx context.Context, nodes []Node, edges
 		return
 	}
 
+	// Improvement 1: Add data validation before storage
+	validationStart := time.Now()
+	validationResult := ValidateGraph(nodes, edges, s.logger)
+	validationDuration := time.Since(validationStart)
+	
+	// Record validation metrics
+	if s.metricsCollector != nil {
+		s.metricsCollector.RecordValidation(validationResult, validationDuration)
+	}
+	
+	if !validationResult.Valid {
+		s.logger.Printf("WARNING: Graph validation found %d errors, %d warnings. Filtering invalid data...", 
+			len(validationResult.Errors), len(validationResult.Warnings))
+		
+		// Filter out invalid nodes and edges
+		nodes = FilterValidNodes(nodes, validationResult)
+		edges = FilterValidEdges(edges, validationResult)
+		
+		s.logger.Printf("After filtering: %d nodes, %d edges remain", len(nodes), len(edges))
+	}
+
+	// Store validation metrics for monitoring
+	if validationResult.Metrics.ValidationErrors > 0 {
+		s.logger.Printf("Validation metrics: %d nodes rejected, %d edges rejected", 
+			validationResult.Metrics.NodesRejected, validationResult.Metrics.EdgesRejected)
+	}
+
 	if s.tablePersistence != nil {
-		if err := replicateSchemaToSQLite(s.tablePersistence, nodes, edges); err != nil {
-			s.logger.Printf("failed to replicate schema to sqlite: %v", err)
+		// Improvement 2: Add retry logic for storage operations
+		retryStart := time.Now()
+		retrySuccess := true
+		if err := RetryPostgresOperation(ctx, func() error {
+			return replicateSchemaToSQLite(s.tablePersistence, nodes, edges)
+		}, s.logger); err != nil {
+			retrySuccess = false
+			s.logger.Printf("failed to replicate schema to sqlite after retries: %v", err)
+		}
+		if s.metricsCollector != nil {
+			s.metricsCollector.RecordRetry(retrySuccess, time.Since(retryStart))
 		}
 	}
 
 	if redisStore, ok := s.vectorPersistence.(*RedisPersistence); ok {
-		if err := redisStore.SaveSchema(nodes, edges); err != nil {
-			s.logger.Printf("failed to replicate schema to redis: %v", err)
+		// Improvement 2: Add retry logic for Redis operations
+		retryStart := time.Now()
+		retrySuccess := true
+		if err := RetryRedisOperation(ctx, func() error {
+			return redisStore.SaveSchema(nodes, edges)
+		}, s.logger); err != nil {
+			retrySuccess = false
+			s.logger.Printf("failed to replicate schema to redis after retries: %v", err)
+		}
+		if s.metricsCollector != nil {
+			s.metricsCollector.RecordRetry(retrySuccess, time.Since(retryStart))
 		}
 	}
 
@@ -37,8 +82,11 @@ func (s *extractServer) replicateSchema(ctx context.Context, nodes []Node, edges
 	}
 
 	if s.postgresReplication != nil {
-		if err := s.postgresReplication.Replicate(ctx, nodes, edges); err != nil {
-			s.logger.Printf("failed to replicate schema to postgres: %v", err)
+		// Improvement 2: Add retry logic for Postgres operations
+		if err := RetryPostgresOperation(ctx, func() error {
+			return s.postgresReplication.Replicate(ctx, nodes, edges)
+		}, s.logger); err != nil {
+			s.logger.Printf("failed to replicate schema to postgres after retries: %v", err)
 		}
 	}
 }

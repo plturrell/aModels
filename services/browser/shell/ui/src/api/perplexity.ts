@@ -1,4 +1,5 @@
 import { PERPLEXITY_API_BASE } from "./client";
+import type { GraphData } from "../types/graph";
 
 export interface ProcessingRequest {
   request_id: string;
@@ -43,7 +44,7 @@ export interface ProcessedDocument {
 export interface DocumentIntelligence {
   domain?: string;
   domain_confidence?: number;
-  knowledge_graph?: Record<string, unknown>;
+  knowledge_graph?: GraphData;
   workflow_results?: Record<string, unknown>;
   relationships?: Relationship[];
   learned_patterns?: Pattern[];
@@ -75,6 +76,7 @@ export interface RequestIntelligence {
   knowledge_graph_edges?: number;
   workflow_processed?: boolean;
   summary?: Record<string, unknown>;
+  graph_data?: GraphData;
 }
 
 export interface RequestHistory {

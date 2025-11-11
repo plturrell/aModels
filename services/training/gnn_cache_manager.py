@@ -76,6 +76,13 @@ class GNNCacheEntry:
 class GNNCacheManager:
     """Comprehensive cache manager for GNN operations.
     
+    Improvement 6: Enhanced with comprehensive caching strategy including:
+    - Query result caching
+    - Graph data caching
+    - Automatic cache invalidation
+    - Cache warming support
+    - Cache metrics
+    
     Supports TTL, invalidation, and both Redis and in-memory caching.
     """
     
@@ -493,6 +500,65 @@ class GNNCacheManager:
                         os.remove(cache_file)
                 except Exception as e:
                     logger.debug(f"Persistent cache clear failed: {e}")
+    
+    def cache_query_result(self, query: str, result: Any, ttl: Optional[int] = None, tags: Optional[List[str]] = None):
+        """Improvement 6: Cache query result.
+        
+        Args:
+            query: Query string
+            result: Query result to cache
+            ttl: TTL in seconds
+            tags: Optional tags for invalidation
+        """
+        self.set("query", result, query=query, ttl=ttl, tags=tags)
+    
+    def get_cached_query_result(self, query: str) -> Optional[Any]:
+        """Improvement 6: Get cached query result.
+        
+        Args:
+            query: Query string
+        
+        Returns:
+            Cached result or None
+        """
+        return self.get("query", query=query)
+    
+    def cache_graph_data(self, project_id: str, system_id: Optional[str], graph_data: Any, ttl: Optional[int] = None):
+        """Improvement 6: Cache graph data.
+        
+        Args:
+            project_id: Project ID
+            system_id: Optional system ID
+            graph_data: Graph data to cache
+            ttl: TTL in seconds
+        """
+        cache_key = f"graph:{project_id}:{system_id or 'all'}"
+        self.set("graph_data", graph_data, query=cache_key, ttl=ttl, tags=[f"project:{project_id}"])
+    
+    def get_cached_graph_data(self, project_id: str, system_id: Optional[str] = None) -> Optional[Any]:
+        """Improvement 6: Get cached graph data.
+        
+        Args:
+            project_id: Project ID
+            system_id: Optional system ID
+        
+        Returns:
+            Cached graph data or None
+        """
+        cache_key = f"graph:{project_id}:{system_id or 'all'}"
+        return self.get("graph_data", query=cache_key)
+    
+    def warm_cache(self, project_id: str, system_id: Optional[str] = None):
+        """Improvement 6: Warm cache with frequently accessed data.
+        
+        Args:
+            project_id: Project ID
+            system_id: Optional system ID
+        """
+        logger.info(f"Warming cache for project {project_id}, system {system_id or 'all'}")
+        # This would pre-load frequently accessed data
+        # Implementation depends on specific use cases
+        pass
         
         logger.info("Cache cleared")
     

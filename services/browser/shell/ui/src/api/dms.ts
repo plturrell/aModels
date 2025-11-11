@@ -3,6 +3,7 @@
  */
 
 import { PERPLEXITY_API_BASE } from "./client";
+import type { GraphData } from "../types/graph";
 
 export interface DMSProcessingRequest {
   request_id: string;
@@ -45,7 +46,7 @@ export interface DMSProcessedDocument {
 export interface DMSDocumentIntelligence {
   domain?: string;
   domain_confidence?: number;
-  knowledge_graph?: Record<string, unknown>;
+  knowledge_graph?: GraphData;
   workflow_results?: Record<string, unknown>;
   relationships?: DMSRelationship[];
   learned_patterns?: DMSPattern[];
@@ -64,6 +65,7 @@ export interface DMSRequestIntelligence {
   knowledge_graph_edges: number;
   workflow_processed: boolean;
   summary?: string;
+  graph_data?: GraphData;
 }
 
 export interface DMSRelationship {

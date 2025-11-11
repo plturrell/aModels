@@ -26,6 +26,7 @@ from .domain_optimizer import DomainOptimizer
 from .digital_twin import DigitalTwinSimulator
 from .langsmith_tracing import LangSmithTracer
 from .graph_client import GraphServiceClient
+from .data_access import UnifiedDataAccess
 
 # Coral NPU integration
 try:
@@ -151,6 +152,28 @@ class TrainingPipeline:
             except Exception as e:
                 logger.warning(f"Failed to initialize Graph service client (falling back to Extract service): {e}")
                 self.graph_client = None
+        
+        # Improvement 4: Initialize unified data access layer
+        self.unified_data_access = None
+        if os.getenv("ENABLE_UNIFIED_DATA_ACCESS", "true").lower() == "true":
+            try:
+                from .gnn_cache_manager import GNNCacheManager
+                cache_manager = GNNCacheManager(
+                    redis_url=os.getenv("REDIS_URL"),
+                    default_ttl=int(os.getenv("GNN_CACHE_TTL", "3600"))
+                )
+                self.unified_data_access = UnifiedDataAccess(
+                    postgres_dsn=os.getenv("POSTGRES_DSN"),
+                    redis_url=os.getenv("REDIS_URL"),
+                    neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
+                    neo4j_username=os.getenv("NEO4J_USERNAME", "neo4j"),
+                    neo4j_password=os.getenv("NEO4J_PASSWORD", "amodels123"),
+                    cache_manager=cache_manager
+                )
+                logger.info("Unified data access layer initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize unified data access layer: {e}")
+                self.unified_data_access = None
         
         self.glean_client = GleanTrainingClient(db_name=glean_db_name)
         self.output_dir = output_dir or os.getenv("TRAINING_OUTPUT_DIR", "./training_data")
@@ -1343,10 +1366,33 @@ class TrainingPipeline:
         Phase 1: Uses Graph service client for optimized Neo4j access when available,
         falls back to Extract service for backward compatibility.
         
+        Improvement 4: Uses unified data access layer when available for consistent data access.
+        Improvement 6: Uses cache for graph data retrieval.
+        
         Note: Knowledge graph extraction still uses Extract service endpoint as it processes
         source files. Graph service client is used for subsequent Neo4j queries.
         """
         import httpx
+        
+        # Improvement 4 & 6: Try unified data access with cache first
+        if self.unified_data_access:
+            try:
+                cached_graph = self.unified_data_access.cache_manager.get_cached_graph_data(project_id, system_id)
+                if cached_graph:
+                    logger.info("Using cached graph data from unified data access layer")
+                    return cached_graph
+                
+                # Get from unified data access
+                graph_data = self.unified_data_access.get_graph_data(project_id, system_id, use_cache=True)
+                if graph_data and len(graph_data.nodes) > 0:
+                    # Cache the result
+                    self.unified_data_access.cache_manager.cache_graph_data(project_id, system_id, graph_data)
+                    return {
+                        "nodes": [n.dict() if hasattr(n, 'dict') else n for n in graph_data.nodes],
+                        "edges": [e.dict() if hasattr(e, 'dict') else e for e in graph_data.edges]
+                    }
+            except Exception as e:
+                logger.warning(f"Unified data access failed, falling back to extract service: {e}")
         
         payload = {
             "json_tables": json_tables,

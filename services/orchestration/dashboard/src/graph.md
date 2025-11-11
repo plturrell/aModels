@@ -30,60 +30,94 @@ const requestId = typeof Inputs !== "undefined" && !urlRequestId
 
 ```js
 // Load graph data
-const graphData = await loadGraph(requestId);
+const { graphData, relationships: legacyRelationships } = await loadGraph(requestId);
 const intelligence = await loadIntelligence(requestId);
 ```
 
 ```js
-// Extract nodes and edges from relationships
-const relationships = graphData.relationships || [];
-const nodes = new Map();
-const edges = [];
+// Normalise nodes and edges from unified GraphData format
+const rawNodes = Array.isArray(graphData?.nodes) ? graphData.nodes : [];
+const rawEdges = Array.isArray(graphData?.edges) ? graphData.edges : [];
 
-relationships.forEach((rel, i) => {
-  // Add source node
-  if (!nodes.has(rel.source_id)) {
-    nodes.set(rel.source_id, {
-      id: rel.source_id,
-      label: rel.source_title || rel.source_id,
-      type: rel.source_type || "document",
-      group: 1
-    });
-  }
-  
-  // Add target node
-  if (!nodes.has(rel.target_id)) {
-    nodes.set(rel.target_id, {
-      id: rel.target_id,
-      label: rel.target_title || rel.target_id,
-      type: rel.target_type || "document",
-      group: 2
-    });
-  }
-  
-  // Add edge
-  edges.push({
-    source: rel.source_id,
-    target: rel.target_id,
-    type: rel.relationship_type || "related",
-    strength: rel.confidence || 0.5,
-    value: rel.confidence || 0.5
-  });
+const graphNodes = rawNodes.map((node, index) => {
+  const id = node.id || `node-${index}`;
+  const label = node.label || node.properties?.title || id;
+  const type = node.type || node.properties?.type || "entity";
+  const group = typeof node.properties?.group === "number" ? node.properties.group : 1;
+  return {
+    id,
+    label,
+    type,
+    group,
+    raw: node
+  };
 });
 
-const graphNodes = Array.from(nodes.values());
+const nodeMap = new Map(graphNodes.map(node => [node.id, node]));
+
+const graphEdges = rawEdges
+  .map((edge, index) => {
+    const source = edge.source || edge.source_id;
+    const target = edge.target || edge.target_id;
+    if (!source || !target) {
+      return null;
+    }
+    const confidence = typeof edge.confidence === "number"
+      ? edge.confidence
+      : typeof edge.properties?.confidence === "number"
+        ? edge.properties.confidence
+        : undefined;
+    return {
+      id: edge.id || `edge-${index}`,
+      source,
+      target,
+      type: edge.label || edge.type || "related",
+      strength: confidence ?? 0.5,
+      value: confidence ?? 0.5,
+      raw: edge
+    };
+  })
+  .filter(Boolean);
+
+// Legacy relationship fallback (for older payloads)
+const legacy = Array.isArray(legacyRelationships) ? legacyRelationships : [];
+
+const relationshipEntries = legacy.length > 0
+  ? legacy.map(rel => ({
+      source: rel.source_id || rel.source || rel.sourceId,
+      target: rel.target_id || rel.target || rel.targetId,
+      sourceTitle: rel.source_title || rel.sourceLabel || rel.source_id,
+      targetTitle: rel.target_title || rel.targetLabel || rel.target_id,
+      type: rel.relationship_type || rel.type || "related",
+      confidence: typeof rel.confidence === "number" ? rel.confidence : undefined
+    }))
+  : graphEdges.map(edge => ({
+      source: edge.source,
+      target: edge.target,
+      sourceTitle: nodeMap.get(edge.source)?.label || edge.source,
+      targetTitle: nodeMap.get(edge.target)?.label || edge.target,
+      type: edge.type,
+      confidence: edge.strength
+    }));
 ```
 
 ```js
 // Graph summary statistics
+const avgConfidence = relationshipEntries.length > 0
+  ? relationshipEntries
+      .map(rel => (typeof rel.confidence === "number" ? rel.confidence : null))
+      .filter(conf => conf !== null)
+      .reduce((sum, conf, _, arr) => sum + conf / arr.length, 0)
+  : 0;
+
 const graphStats = {
   nodes: graphNodes.length,
-  edges: edges.length,
-  relationships: relationships.length,
-  avgConfidence: relationships.length > 0
-    ? relationships.reduce((sum, r) => sum + (r.confidence || 0.5), 0) / relationships.length
-    : 0
+  edges: graphEdges.length,
+  relationships: relationshipEntries.length,
+  avgConfidence
 };
+
+const quality = graphData?.quality;
 ```
 
 <div class="stats-grid">
@@ -103,6 +137,12 @@ const graphStats = {
     <div class="stat-value">{(graphStats.avgConfidence * 100).toFixed(1)}%</div>
     <div class="stat-label">Avg Confidence</div>
   </div>
+  {quality ? (
+    <div class="stat-card">
+      <div class="stat-value">{quality.level?.toUpperCase?.() || "N/A"}</div>
+      <div class="stat-label">Quality ({(quality.score * 100).toFixed(1)}%)</div>
+    </div>
+  ) : null}
 </div>
 
 ```js
@@ -111,12 +151,12 @@ import * as Plot from "@observablehq/plot";
 
 ```js
 // Node type distribution
-const nodeTypes = {};
-graphNodes.forEach(node => {
-  nodeTypes[node.type] = (nodeTypes[node.type] || 0) + 1;
-});
+const nodeTypeData = graphNodes.reduce((acc, node) => {
+  acc[node.type] = (acc[node.type] || 0) + 1;
+  return acc;
+}, {});
 
-const nodeTypeData = Object.entries(nodeTypes).map(([type, count]) => ({
+const nodeTypePlotData = Object.entries(nodeTypeData).map(([type, count]) => ({
   type,
   count
 }));
@@ -129,7 +169,7 @@ const nodeTypeData = Object.entries(nodeTypes).map(([type, count]) => ({
     width: 800,
     height: 400,
     marks: [
-      Plot.barY(nodeTypeData, {
+      Plot.barY(nodeTypePlotData, {
         x: "type",
         y: "count",
         fill: "#007AFF",
@@ -151,12 +191,12 @@ const nodeTypeData = Object.entries(nodeTypes).map(([type, count]) => ({
 
 ```js
 // Relationship type distribution
-const relTypes = {};
-edges.forEach(edge => {
-  relTypes[edge.type] = (relTypes[edge.type] || 0) + 1;
-});
+const relTypeData = graphEdges.reduce((acc, edge) => {
+  acc[edge.type] = (acc[edge.type] || 0) + 1;
+  return acc;
+}, {});
 
-const relTypeData = Object.entries(relTypes).map(([type, count]) => ({
+const relTypePlotData = Object.entries(relTypeData).map(([type, count]) => ({
   type,
   count
 }));
@@ -169,7 +209,7 @@ const relTypeData = Object.entries(relTypes).map(([type, count]) => ({
     width: 800,
     height: 400,
     marks: [
-      Plot.barY(relTypeData, {
+      Plot.barY(relTypePlotData, {
         x: "type",
         y: "count",
         fill: "#34C759",
@@ -191,9 +231,9 @@ const relTypeData = Object.entries(relTypes).map(([type, count]) => ({
 
 ```js
 // Confidence distribution
-const confidenceData = relationships
-  .map(r => r.confidence || 0.5)
-  .filter(c => c > 0);
+const confidenceData = relationshipEntries
+  .map(r => (typeof r.confidence === "number" ? r.confidence : null))
+  .filter(conf => conf !== null && conf >= 0 && conf <= 1);
 ```
 
 <div class="chart-container">
@@ -227,18 +267,18 @@ const confidenceData = relationships
 <div class="relationships-list">
   <h2>Relationships</h2>
   <div class="relationships-grid">
-    {relationships.slice(0, 20).map((rel, i) => html`
+    {relationshipEntries.slice(0, 20).map((rel, i) => html`
       <div class="relationship-card">
         <div class="relationship-source">
-          <strong>${rel.source_title || rel.source_id}</strong>
-          <span class="relationship-type">${rel.relationship_type || "related"}</span>
+          <strong>${rel.sourceTitle || rel.source || "Unknown"}</strong>
+          <span class="relationship-type">${rel.type || "related"}</span>
         </div>
         <div class="relationship-arrow">→</div>
         <div class="relationship-target">
-          <strong>${rel.target_title || rel.target_id}</strong>
+          <strong>${rel.targetTitle || rel.target || "Unknown"}</strong>
         </div>
         <div class="relationship-confidence">
-          ${((rel.confidence || 0.5) * 100).toFixed(1)}% confidence
+          ${(((typeof rel.confidence === "number" ? rel.confidence : 0.5)) * 100).toFixed(1)}% confidence
         </div>
       </div>
     `)}
