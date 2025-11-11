@@ -15,6 +15,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -175,8 +176,24 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	// Ensure we listen on IPv4 if address is 0.0.0.0
+	var listener net.Listener
+	if strings.HasPrefix(*addr, "0.0.0.0:") {
+		var listenErr error
+		listener, listenErr = net.Listen("tcp4", *addr)
+		if listenErr != nil {
+			log.Fatalf("Failed to listen on IPv4: %v", listenErr)
+		}
+	} else {
+		var listenErr error
+		listener, listenErr = net.Listen("tcp", *addr)
+		if listenErr != nil {
+			log.Fatalf("Failed to listen: %v", listenErr)
+		}
+	}
+
 	log.Printf("aModels shell server listening on http://%s", server.Addr)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("HTTP server error: %v", err)
 	}
 }

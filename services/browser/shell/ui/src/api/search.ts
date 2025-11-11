@@ -205,6 +205,31 @@ export async function searchDocuments(request: SearchRequest): Promise<SearchRes
   }
 }
 
+// Stub functions for narrative and dashboard generation
+export async function generateNarrative(requestIdOrQuery: string, searchResponse?: UnifiedSearchResponse): Promise<{ narrative: Narrative }> {
+  throw new Error("generateNarrative not implemented");
+}
+
+export async function generateDashboard(requestIdOrQuery: string, searchResponse?: UnifiedSearchResponse): Promise<{ dashboard: Dashboard }> {
+  throw new Error("generateDashboard not implemented");
+}
+
+export async function generateNarrativeAndDashboard(requestIdOrQuery: string, searchResponse?: UnifiedSearchResponse): Promise<{ narrative: Narrative; dashboard: Dashboard; search_metadata?: any }> {
+  throw new Error("generateNarrativeAndDashboard not implemented");
+}
+
+export async function exportNarrativeToPowerPoint(requestIdOrQuery: string, narrative?: string, metadata?: any): Promise<Blob> {
+  throw new Error("exportNarrativeToPowerPoint not implemented");
+}
+
+export async function exportDashboardToPowerPoint(requestIdOrQuery: string, dashboard?: any, metadata?: any): Promise<Blob> {
+  throw new Error("exportDashboardToPowerPoint not implemented");
+}
+
+export async function exportNarrativeAndDashboardToPowerPoint(requestIdOrQuery: string, narrative?: string, dashboard?: any, metadata?: any): Promise<Blob> {
+  throw new Error("exportNarrativeAndDashboardToPowerPoint not implemented");
+}
+
 export async function unifiedSearch(request: UnifiedSearchRequest): Promise<UnifiedSearchResponse> {
   const url = `${API_BASE}/search/unified`;
   

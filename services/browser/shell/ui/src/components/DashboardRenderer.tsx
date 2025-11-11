@@ -8,7 +8,6 @@ import {
   Box,
   Paper,
   Typography,
-  Grid,
   Stack,
   Card,
   CardContent,
@@ -27,8 +26,9 @@ import {
   InputLabel,
   Select,
   SelectChangeEvent,
-  CircularProgress
+  CircularProgress,
 } from '@mui/material';
+import { GridLegacy as Grid } from '@mui/material';
 import { useScreenReaderAnnouncement } from '../../hooks/useAccessibility';
 import { useKeyboardShortcuts, DASHBOARD_SHORTCUTS } from '../../hooks/useKeyboardShortcuts';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -70,6 +70,7 @@ import {
 } from 'recharts';
 import { ResponsiveSankey } from '@nivo/sankey';
 import { ResponsiveNetwork } from '@nivo/network';
+// @ts-ignore - Module resolution issue
 import * as exportUtils from '../../utils/export';
 
 interface DashboardChart {
@@ -402,6 +403,7 @@ export function DashboardRenderer({
         </Box>
         <Box sx={{ width: '100%', height: 300, mt: 2 }}>
           <ResponsiveContainer>
+            <>
             {chartType === 'pie' && (
               <PieChart
                 onClick={(data) => enableInteractivity && handleChartClick(chartId, data)}
@@ -428,7 +430,6 @@ export function DashboardRenderer({
                 <Legend />
               </PieChart>
             )}
-            
             {chartType === 'bar' && (
               <BarChart 
                 data={chartData}
@@ -452,12 +453,15 @@ export function DashboardRenderer({
                   <Brush 
                     dataKey={xAxisKey}
                     height={30}
-                    onChange={(domain) => handleBrushChange(chartId, domain)}
+                    onChange={(domain: { startIndex?: number; endIndex?: number } | null) => {
+                      if (domain && domain.startIndex !== undefined && domain.endIndex !== undefined) {
+                        handleBrushChange(chartId, { startIndex: domain.startIndex, endIndex: domain.endIndex });
+                      }
+                    }}
                   />
                 )}
               </BarChart>
             )}
-            
             {chartType === 'line' && (
               <LineChart 
                 data={chartData}
@@ -482,12 +486,15 @@ export function DashboardRenderer({
                   <Brush 
                     dataKey={xAxisKey}
                     height={30}
-                    onChange={(domain) => handleBrushChange(chartId, domain)}
+                    onChange={(domain: { startIndex?: number; endIndex?: number } | null) => {
+                      if (domain && domain.startIndex !== undefined && domain.endIndex !== undefined) {
+                        handleBrushChange(chartId, { startIndex: domain.startIndex, endIndex: domain.endIndex });
+                      }
+                    }}
                   />
                 )}
               </LineChart>
             )}
-            
             {chartType === 'area' && (
               <AreaChart 
                 data={chartData}
@@ -514,12 +521,15 @@ export function DashboardRenderer({
                   <Brush 
                     dataKey={xAxisKey}
                     height={30}
-                    onChange={(domain) => handleBrushChange(chartId, domain)}
+                    onChange={(domain: { startIndex?: number; endIndex?: number } | null) => {
+                      if (domain && domain.startIndex !== undefined && domain.endIndex !== undefined) {
+                        handleBrushChange(chartId, { startIndex: domain.startIndex, endIndex: domain.endIndex });
+                      }
+                    }}
                   />
                 )}
               </AreaChart>
             )}
-            
             {chartType === 'scatter' && (
               <ScatterChart 
                 data={chartData}
@@ -541,7 +551,6 @@ export function DashboardRenderer({
                 ))}
               </ScatterChart>
             )}
-
             {chartType === 'radar' && (
               <RadarChart data={chartData}>
                 <PolarGrid />
@@ -561,7 +570,6 @@ export function DashboardRenderer({
                 <Legend />
               </RadarChart>
             )}
-
             {chartType === 'treemap' && (
               <Treemap
                 data={chartData}
@@ -572,6 +580,7 @@ export function DashboardRenderer({
                 onClick={(data) => enableInteractivity && handleChartClick(chartId, data)}
               />
             )}
+            </>
           </ResponsiveContainer>
         </Box>
       </Paper>
@@ -598,7 +607,7 @@ export function DashboardRenderer({
     // Sankey diagram
     if (chartType === 'sankey') {
       // Transform data for Sankey (expects nodes and links)
-      const sankeyData = chart.config?.sankey || {
+      const sankeyData = chart.config?.sankey || (chartData.length > 0 ? {
         nodes: chartData.map((item: any, idx: number) => ({
           id: item.source || item.name || `node-${idx}`,
           label: item.source || item.name || `Node ${idx}`
@@ -608,7 +617,7 @@ export function DashboardRenderer({
           target: item.target || item.name,
           value: item.value || 1
         }))
-      };
+      } : { nodes: [] as readonly any[], links: [] as readonly any[] });
 
       return (
         <Paper key={index} variant="outlined" sx={{ p: 2, height: '100%' }}>
@@ -645,7 +654,7 @@ export function DashboardRenderer({
 
     // Network graph
     if (chartType === 'network') {
-      const networkData = chart.config?.network || {
+      const networkData: { nodes: Array<{ id: string; label: string; size: number }>; links: Array<{ source: string; target: string; distance: number }> } = (chart.config?.network as any) || (chartData.length > 0 ? {
         nodes: chartData.map((item: any, idx: number) => ({
           id: item.id || item.name || `node-${idx}`,
           label: item.label || item.name || `Node ${idx}`,
@@ -656,7 +665,7 @@ export function DashboardRenderer({
           target: item.target || item.to,
           distance: item.distance || item.value || 50
         }))
-      };
+      } : { nodes: [] as readonly any[], links: [] as readonly any[] });
 
       return (
         <Paper key={index} variant="outlined" sx={{ p: 2, height: '100%' }}>
@@ -805,9 +814,9 @@ export function DashboardRenderer({
                   </Typography>
                 </CardContent>
               </Card>
-            </Grid>
+                </Grid>
           ))}
-        </Grid>
+                </Grid>
       )}
       
       {charts.length > 0 && (
@@ -819,10 +828,10 @@ export function DashboardRenderer({
             return (
               <Grid item xs={12} md={charts.length === 1 ? 12 : 6} key={idx}>
                 {isAdvancedChart ? renderAdvancedChart(chart, idx) : renderChart(chart, idx)}
-              </Grid>
+                </Grid>
             );
           })}
-        </Grid>
+                </Grid>
       )}
       
       {insights.length > 0 && (
@@ -860,7 +869,7 @@ export function DashboardRenderer({
                 <DatePicker
                   label="Start Date"
                   value={chartStates[dateRangeDialog.chartId]?.dateRange?.[0] || null}
-                  onChange={(date) => {
+                  onChange={(date: Date | null) => {
                     const currentRange = chartStates[dateRangeDialog.chartId]?.dateRange || [null, null];
                     handleDateRangeChange(dateRangeDialog.chartId, [date, currentRange[1]]);
                   }}
@@ -869,7 +878,7 @@ export function DashboardRenderer({
                 <DatePicker
                   label="End Date"
                   value={chartStates[dateRangeDialog.chartId]?.dateRange?.[1] || null}
-                  onChange={(date) => {
+                  onChange={(date: Date | null) => {
                     const currentRange = chartStates[dateRangeDialog.chartId]?.dateRange || [null, null];
                     handleDateRangeChange(dateRangeDialog.chartId, [currentRange[0], date]);
                   }}

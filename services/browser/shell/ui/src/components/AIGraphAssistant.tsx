@@ -167,7 +167,7 @@ Be conversational, helpful, and suggest specific actions when appropriate.`,
         timestamp: new Date(),
         graphContext: {
           query: cypherMatch?.[0],
-          nodes: nodeMatches?.map(m => m.split(/[: ]+/).pop() || '').filter(Boolean),
+          nodes: nodeMatches?.map((m: string) => m.split(/[: ]+/).pop() || '').filter(Boolean),
         },
       };
 

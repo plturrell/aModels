@@ -14,7 +14,11 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper as MuiPaper
+  Paper as MuiPaper,
+  Paper,
+  TextField,
+  FormControlLabel,
+  Switch,
 } from '@mui/material';
 import {
   LineChart,
@@ -34,6 +38,7 @@ import {
 import { Panel } from "../../../components/Panel";
 import { AnalyticsAIAssistant } from "../../../components/AnalyticsAIAssistant";
 import { PredictiveAnalytics } from "../../../components/PredictiveAnalytics";
+import { useAnalyticsWebSocket } from "../../../api/websocket";
 import type { ProcessingRequest } from "../../../api/perplexity";
 
 interface AnalyticsViewProps {

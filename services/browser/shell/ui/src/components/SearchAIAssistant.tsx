@@ -112,7 +112,7 @@ export function SearchAIAssistant({
 
       const resultsContext = searchResults
         .slice(0, 10)
-        .map((r, idx) => `${idx + 1}. ${r.title || r.content?.substring(0, 100)}...`)
+        .map((r, idx) => `${idx + 1}. ${(r as any).title || r.content?.substring(0, 100)}...`)
         .join('\n');
 
       const prompt = `Summarize the following search results for the query "${query}":\n\n${resultsContext}\n\n${crossServiceContext ? `Additional Context:\n${crossServiceContext}\n\n` : ''}Provide a concise summary highlighting key findings and patterns.`;

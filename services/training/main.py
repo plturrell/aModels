@@ -73,6 +73,19 @@ try:
 except ImportError:
     HAS_GNN_API_MODELS = False
 
+# Import Narrative API models
+try:
+    from training.api.narrative_models import (
+        NarrativeExplainRequest,
+        NarrativePredictRequest,
+        NarrativeAnomalyRequest,
+        NarrativeMCTSRequest,
+        NarrativeStorylineRequest
+    )
+    HAS_NARRATIVE_API_MODELS = True
+except ImportError:
+    HAS_NARRATIVE_API_MODELS = False
+
 try:
     from training.meta_pattern_learner import MetaPatternLearner
     HAS_META_PATTERNS = True
@@ -169,6 +182,7 @@ gnn_classifier = None
 gnn_link_predictor = None
 gnn_anomaly_detector = None
 gnn_schema_matcher = None
+narrative_gnn = None
 
 # Priority 6: GNN domain registry and router
 gnn_domain_registry = None
@@ -183,7 +197,7 @@ async def startup_event():
     """Initialize service components on startup."""
     global pipeline, pattern_engine, domain_trainer, metrics_collector
     global ab_test_manager, rollback_manager, routing_optimizer, domain_optimizer, domain_filter
-    global gnn_embedder, gnn_classifier, gnn_link_predictor, gnn_anomaly_detector, gnn_schema_matcher
+    global gnn_embedder, gnn_classifier, gnn_link_predictor, gnn_anomaly_detector, gnn_schema_matcher, narrative_gnn
     global gnn_domain_registry, gnn_domain_router, gnn_cache_manager
     
     logger.info("Initializing Training Service components...")
@@ -324,6 +338,30 @@ async def startup_event():
                 
             except Exception as e:
                 logger.warning(f"⚠️  Failed to initialize GNN modules for API: {e}")
+        
+        # Initialize Narrative GNN if available
+        narrative_gnn = None
+        try:
+            from gnn_spacetime.narrative import (
+                NarrativeGraph, MultiPurposeNarrativeGNN,
+                EnhancedNarrativeGNN, HAS_ENHANCED
+            )
+            if HAS_ENHANCED:
+                narrative_gnn = EnhancedNarrativeGNN(
+                    use_lnn=True,
+                    use_mcts=True,
+                    mcts_rollouts=int(os.getenv("NARRATIVE_MCTS_ROLLOUTS", "100"))
+                )
+                logger.info("✅ Enhanced Narrative GNN initialized (with LNN and MCTS)")
+            else:
+                narrative_gnn = MultiPurposeNarrativeGNN()
+                logger.info("✅ Narrative GNN initialized")
+        except ImportError as e:
+            logger.debug(f"Narrative GNN not available: {e}")
+            narrative_gnn = None
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to initialize Narrative GNN: {e}")
+            narrative_gnn = None
         
         logger.info("✅ Training Service initialized successfully")
         
@@ -1818,6 +1856,336 @@ async def clear_cache():
         }
     except Exception as e:
         logger.error(f"Failed to clear cache: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Narrative GNN API Endpoints
+# ============================================================================
+
+@app.post("/narrative/explain")
+async def narrative_explain(request: NarrativeExplainRequest):
+    """Generate human-readable narrative explanation for a graph/storyline.
+    
+    Uses ExplanationGenerator to create explanations that identify key actors,
+    turning points, and causal chains.
+    """
+    if not narrative_gnn:
+        raise HTTPException(
+            status_code=503,
+            detail="Narrative GNN not available. Ensure gnn_spacetime is installed."
+        )
+    
+    if not HAS_NARRATIVE_API_MODELS:
+        raise HTTPException(
+            status_code=503,
+            detail="Narrative API models not available."
+        )
+    
+    try:
+        from gnn_spacetime.narrative import NarrativeGraph, NarrativeNode, NarrativeEdge
+        from gnn_spacetime.data.narrative_data_loader import NarrativeDataLoader
+        
+        # Convert nodes/edges to NarrativeGraph
+        loader = NarrativeDataLoader()
+        narrative_graph = loader.convert_raw_events_to_narrative_graph(
+            nodes=request.nodes,
+            edges=request.edges
+        )
+        
+        # Set narrative graph
+        narrative_gnn.narrative_graph = narrative_graph
+        
+        # Generate explanation
+        current_time = request.current_time or 0.0
+        result = narrative_gnn.forward(
+            graph=narrative_graph,
+            current_time=current_time,
+            task_mode="explain",
+            storyline_id=request.storyline_id
+        )
+        
+        return {
+            "status": "success",
+            "explanation": result.get("explanation", ""),
+            "key_actors": result.get("key_actors", []),
+            "turning_points": result.get("turning_points", []),
+            "causal_chain": result.get("causal_chain", []),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Narrative explanation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/narrative/predict")
+async def narrative_predict(request: NarrativePredictRequest):
+    """Predict future narrative states using NarrativePredictor.
+    
+    Generates plausible trajectory candidates and scores them by coherence
+    and causal plausibility.
+    """
+    if not narrative_gnn:
+        raise HTTPException(
+            status_code=503,
+            detail="Narrative GNN not available."
+        )
+    
+    if not HAS_NARRATIVE_API_MODELS:
+        raise HTTPException(
+            status_code=503,
+            detail="Narrative API models not available."
+        )
+    
+    try:
+        from gnn_spacetime.narrative import NarrativeGraph
+        from gnn_spacetime.data.narrative_data_loader import NarrativeDataLoader
+        
+        # Convert to NarrativeGraph
+        loader = NarrativeDataLoader()
+        narrative_graph = loader.convert_raw_events_to_narrative_graph(
+            nodes=request.nodes,
+            edges=request.edges
+        )
+        
+        narrative_gnn.narrative_graph = narrative_graph
+        
+        # Predict future
+        result = narrative_gnn.forward(
+            graph=narrative_graph,
+            current_time=request.current_time,
+            task_mode="predict",
+            storyline_id=request.storyline_id
+        )
+        
+        return {
+            "status": "success",
+            "predictions": result.get("predictions", []),
+            "trajectories": result.get("trajectories", []),
+            "scores": result.get("scores", []),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Narrative prediction failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/narrative/detect-anomalies")
+async def narrative_detect_anomalies(request: NarrativeAnomalyRequest):
+    """Detect narrative violations and anomalies.
+    
+    Uses NarrativeAnomalyDetector to check for:
+    - Narrative violations
+    - Character arc consistency
+    - Causal chain validation
+    """
+    if not narrative_gnn:
+        raise HTTPException(
+            status_code=503,
+            detail="Narrative GNN not available."
+        )
+    
+    if not HAS_NARRATIVE_API_MODELS:
+        raise HTTPException(
+            status_code=503,
+            detail="Narrative API models not available."
+        )
+    
+    try:
+        from gnn_spacetime.narrative import NarrativeGraph
+        from gnn_spacetime.data.narrative_data_loader import NarrativeDataLoader
+        
+        # Convert to NarrativeGraph
+        loader = NarrativeDataLoader()
+        narrative_graph = loader.convert_raw_events_to_narrative_graph(
+            nodes=request.nodes,
+            edges=request.edges
+        )
+        
+        narrative_gnn.narrative_graph = narrative_graph
+        
+        # Detect anomalies
+        current_time = request.current_time or 0.0
+        result = narrative_gnn.forward(
+            graph=narrative_graph,
+            current_time=current_time,
+            task_mode="detect_anomalies",
+            storyline_id=request.storyline_id
+        )
+        
+        return {
+            "status": "success",
+            "anomalies": result.get("anomalies", []),
+            "violations": result.get("violations", []),
+            "inconsistencies": result.get("inconsistencies", []),
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Narrative anomaly detection failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/narrative/mcts")
+async def narrative_mcts(request: NarrativeMCTSRequest):
+    """Perform MCTS what-if analysis for narrative planning.
+    
+    Uses Monte Carlo Tree Search to explore counterfactual scenarios
+    and plan narrative paths.
+    """
+    if not narrative_gnn:
+        raise HTTPException(
+            status_code=503,
+            detail="Narrative GNN not available."
+        )
+    
+    if not HAS_NARRATIVE_API_MODELS:
+        raise HTTPException(
+            status_code=503,
+            detail="Narrative API models not available."
+        )
+    
+    try:
+        from gnn_spacetime.narrative import NarrativeGraph, EnhancedNarrativeGNN
+        from gnn_spacetime.data.narrative_data_loader import NarrativeDataLoader
+        
+        # Check if enhanced MCTS is available
+        if not isinstance(narrative_gnn, EnhancedNarrativeGNN) or not narrative_gnn.use_mcts:
+            raise HTTPException(
+                status_code=503,
+                detail="MCTS not available. Enhanced Narrative GNN with MCTS required."
+            )
+        
+        # Convert to NarrativeGraph
+        loader = NarrativeDataLoader()
+        narrative_graph = loader.convert_raw_events_to_narrative_graph(
+            nodes=request.nodes,
+            edges=request.edges
+        )
+        
+        narrative_gnn.narrative_graph = narrative_graph
+        
+        # Run MCTS
+        if hasattr(narrative_gnn, 'path_mcts') and narrative_gnn.path_mcts:
+            mcts_result = narrative_gnn.path_mcts.search(
+                initial_state=narrative_graph,
+                num_rollouts=request.num_rollouts,
+                max_depth=request.max_depth,
+                exploration_c=request.exploration_c
+            )
+        else:
+            raise HTTPException(
+                status_code=503,
+                detail="MCTS path planner not initialized."
+            )
+        
+        return {
+            "status": "success",
+            "best_path": mcts_result.get("best_path", []),
+            "path_value": mcts_result.get("value", 0.0),
+            "explored_paths": mcts_result.get("explored_paths", []),
+            "rollouts": mcts_result.get("rollouts", 0),
+            "timestamp": datetime.now().isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"MCTS analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/narrative/storyline")
+async def narrative_storyline(request: NarrativeStorylineRequest):
+    """Perform storyline operations (list, get, key_actors, turning_points, causal_chain)."""
+    if not narrative_gnn:
+        raise HTTPException(
+            status_code=503,
+            detail="Narrative GNN not available."
+        )
+    
+    if not HAS_NARRATIVE_API_MODELS:
+        raise HTTPException(
+            status_code=503,
+            detail="Narrative API models not available."
+        )
+    
+    try:
+        from gnn_spacetime.narrative import NarrativeGraph
+        from gnn_spacetime.data.narrative_data_loader import NarrativeDataLoader
+        
+        # Convert to NarrativeGraph
+        loader = NarrativeDataLoader()
+        narrative_graph = loader.convert_raw_events_to_narrative_graph(
+            nodes=request.nodes,
+            edges=request.edges
+        )
+        
+        narrative_gnn.narrative_graph = narrative_graph
+        
+        operation = request.operation.lower()
+        result = {}
+        
+        if operation == "list":
+            result["storylines"] = list(narrative_graph.storylines.keys()) if narrative_graph.storylines else []
+        
+        elif operation == "get":
+            if request.storyline_id:
+                storyline = narrative_graph.get_storyline(request.storyline_id)
+                if storyline:
+                    result["storyline"] = {
+                        "storyline_id": storyline.storyline_id,
+                        "theme": storyline.theme,
+                        "narrative_type": storyline.narrative_type.value if hasattr(storyline.narrative_type, 'value') else str(storyline.narrative_type),
+                        "nodes": storyline.node_ids
+                    }
+                else:
+                    raise HTTPException(status_code=404, detail=f"Storyline {request.storyline_id} not found")
+            else:
+                result["storylines"] = {
+                    sid: {
+                        "theme": s.theme,
+                        "narrative_type": s.narrative_type.value if hasattr(s.narrative_type, 'value') else str(s.narrative_type),
+                        "nodes": s.node_ids
+                    }
+                    for sid, s in narrative_graph.storylines.items()
+                }
+        
+        elif operation == "key_actors":
+            if request.storyline_id:
+                actors = narrative_graph.identify_key_actors(request.storyline_id)
+                result["key_actors"] = [{"node_id": n.node_id, "influence": inf} for n, inf in actors]
+            else:
+                raise HTTPException(status_code=400, detail="storyline_id required for key_actors operation")
+        
+        elif operation == "turning_points":
+            if request.storyline_id:
+                points = narrative_graph.find_narrative_turning_points(request.storyline_id)
+                result["turning_points"] = [{"node_id": n.node_id, "significance": sig} for n, sig in points]
+            else:
+                raise HTTPException(status_code=400, detail="storyline_id required for turning_points operation")
+        
+        elif operation == "causal_chain":
+            if request.storyline_id:
+                chain = narrative_graph.build_causal_chain(request.storyline_id)
+                result["causal_chain"] = [{"source": e.source_id, "target": e.target_id, "label": e.label} for e in chain]
+            else:
+                raise HTTPException(status_code=400, detail="storyline_id required for causal_chain operation")
+        
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown operation: {operation}. Supported: list, get, key_actors, turning_points, causal_chain"
+            )
+        
+        return {
+            "status": "success",
+            "operation": operation,
+            **result,
+            "timestamp": datetime.now().isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Storyline operation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

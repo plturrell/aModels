@@ -13,14 +13,33 @@ import {
   CircularProgress,
   Card,
   CardContent,
-  Grid
+  Alert,
+  Tabs,
+  Tab
 } from "@mui/material";
+import { Grid } from "@mui/material";
+import TimelineIcon from "@mui/icons-material/Timeline";
+import DashboardIcon from "@mui/icons-material/Dashboard";
+import BarChartIcon from "@mui/icons-material/BarChart";
+import DescriptionIcon from "@mui/icons-material/Description";
 import SendIcon from "@mui/icons-material/Send";
 import { Panel } from "../../components/Panel";
+import { ProcessingView } from "./views/ProcessingView";
+import { ResultsView } from "./views/ResultsView";
+import { AnalyticsView } from "./views/AnalyticsView";
+import { DocumentsView } from "./views/DocumentsView";
 import {
   getDMSResults,
   processDMSDocuments,
-  type DMSProcessedDocument
+  getDMSStatus,
+  getDMSIntelligence,
+  getDMSHistory,
+  listDMSDocuments,
+  type DMSProcessedDocument,
+  type DMSProcessingRequest,
+  type DMSRequestIntelligence,
+  type DMSRequestHistory,
+  type DMSDocument
 } from "../../api/dms";
 
 interface TabPanelProps {

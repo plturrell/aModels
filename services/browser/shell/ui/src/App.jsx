@@ -348,6 +348,39 @@ export default function App() {
         group: 'Gateway',
       },
       {
+        key: 'sap-data-products',
+        title: 'SAP Data Products',
+        description: 'List SAP BDC data products.',
+        handler: () =>
+          callGateway('/v2/sap-bdc/data-products', {
+            label: 'SAP data products',
+            truncate: 800,
+          }),
+        group: 'SAP',
+      },
+      {
+        key: 'sap-formation',
+        title: 'SAP Formation',
+        description: 'Get SAP BDC formation details.',
+        handler: () =>
+          callGateway('/sap-bdc/formation', {
+            label: 'SAP formation',
+            truncate: 800,
+          }),
+        group: 'SAP',
+      },
+      {
+        key: 'sap-intelligent-apps',
+        title: 'SAP Intelligent Applications',
+        description: 'List SAP intelligent applications.',
+        handler: () =>
+          callGateway('/sap-bdc/intelligent-applications', {
+            label: 'SAP intelligent applications',
+            truncate: 800,
+          }),
+        group: 'SAP',
+      },
+      {
         key: 'redis',
         title: 'Redis Roundtrip',
         description: 'Set/get demo key via gateway cache endpoints.',

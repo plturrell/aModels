@@ -12,7 +12,6 @@ import {
   Button,
   Tabs,
   Tab,
-  Grid,
   Card,
   CardContent,
   Alert,
@@ -28,6 +27,7 @@ import {
   Chip,
   LinearProgress,
 } from '@mui/material';
+import { GridLegacy as Grid } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import PeopleIcon from '@mui/icons-material/People';

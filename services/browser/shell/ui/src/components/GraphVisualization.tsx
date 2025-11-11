@@ -11,8 +11,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import CytoscapeComponent from 'react-cytoscapejs';
 import cytoscape from 'cytoscape';
+// @ts-ignore - cytoscape extensions don't have types
 import dagre from 'cytoscape-dagre';
+// @ts-ignore
 import cola from 'cytoscape-cola';
+// @ts-ignore
 import coseBilkent from 'cytoscape-cose-bilkent';
 import { Box, Paper, Typography, Select, MenuItem, FormControl, InputLabel, Button, IconButton, Tooltip, Slider } from '@mui/material';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
@@ -22,9 +25,16 @@ import CenterFocusStrongIcon from '@mui/icons-material/CenterFocusStrong';
 import { GraphNode, GraphEdge, GraphData } from '../types/graph';
 
 // Register Cytoscape extensions
-cytoscape.use(dagre);
-cytoscape.use(cola);
-cytoscape.use(coseBilkent);
+try {
+  // @ts-ignore - extension registration
+  dagre(cytoscape);
+  // @ts-ignore
+  cola(cytoscape);
+  // @ts-ignore
+  coseBilkent(cytoscape);
+} catch (e) {
+  console.warn('Failed to register some cytoscape extensions:', e);
+}
 
 export type LayoutType = 'force-directed' | 'hierarchical' | 'circular' | 'breadthfirst' | 'cose-bilkent' | 'dagre' | 'cola';
 
@@ -242,12 +252,12 @@ export function GraphVisualization({
   }, [graphData, maxNodes]);
 
   // Handle graph initialization
-  const handleCyInit = useCallback((cy: cytoscape.Core) => {
+  const handleCyInit = useCallback((cy: cytoscape.Core | any) => {
     cyRef.current = cy;
 
     // Set up event handlers
     if (enableInteractions) {
-      cy.on('tap', 'node', (evt) => {
+      cy.on('tap', 'node', (evt: cytoscape.EventObject) => {
         const node = evt.target;
         const nodeData = node.data();
         if (onNodeClick) {
@@ -258,7 +268,7 @@ export function GraphVisualization({
         }
       });
 
-      cy.on('tap', 'edge', (evt) => {
+      cy.on('tap', 'edge', (evt: cytoscape.EventObject) => {
         const edge = evt.target;
         const edgeData = edge.data();
         if (onEdgeClick) {
@@ -274,7 +284,7 @@ export function GraphVisualization({
 
       cy.on('select', 'node', () => {
         if (onNodeSelect) {
-          const selected = cy.$('node:selected').map(node => node.id());
+          const selected = cy.$('node:selected').map((node: cytoscape.NodeSingular) => node.id());
           onNodeSelect(selected);
         }
       });

@@ -84,7 +84,7 @@ export async function exportChartToPNG(
       logging: false,
     });
 
-    canvas.toBlob((blob) => {
+    canvas.toBlob((blob: Blob | null) => {
       if (!blob) {
         console.error('Failed to create blob');
         return;
@@ -186,7 +186,8 @@ export async function exportToPDF(
 ): Promise<void> {
   try {
     const html2canvas = (await import('html2canvas')).default;
-    const jsPDF = (await import('jspdf')).default;
+    const jsPDFModule = await import('jspdf');
+    const jsPDF = (jsPDFModule.default || jsPDFModule.jsPDF || jsPDFModule) as any;
 
     const element = document.getElementById(elementId);
     if (!element) {
@@ -200,7 +201,7 @@ export async function exportToPDF(
     });
 
     const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF.jsPDF('p', 'mm', 'a4');
+    const pdf = new jsPDF('p', 'mm', 'a4');
     
     if (title) {
       pdf.setFontSize(16);

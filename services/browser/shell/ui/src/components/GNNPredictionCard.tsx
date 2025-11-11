@@ -172,7 +172,7 @@ export function GNNPredictionCard({
               Explanation:
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              {prediction.reason}
+              {String(prediction.reason)}
             </Typography>
           </Box>
         )}

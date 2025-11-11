@@ -54,7 +54,12 @@ export function SAPGraphView({ schema, projectId, systemId }: SAPGraphViewProps)
       const graph = convertSAPSchemaToGraph(schema);
       setGraphData({
         nodes: graph.nodes,
-        edges: graph.edges,
+        edges: graph.edges.map(e => ({
+          source_id: e.source,
+          target_id: e.target,
+          type: e.type,
+          properties: e.properties
+        })),
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to convert schema to graph');

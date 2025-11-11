@@ -10,8 +10,8 @@ import {
   Typography,
   Card,
   CardContent,
-  Grid
 } from "@mui/material";
+import { GridLegacy as Grid } from "@mui/material";
 
 export function TelemetryModule() {
   const [metrics, setMetrics] = useState({

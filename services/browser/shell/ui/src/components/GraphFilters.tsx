@@ -19,8 +19,8 @@ import {
   Stack,
   Checkbox,
   FormControlLabel,
-  DatePicker,
 } from '@mui/material';
+import { DatePicker } from '@mui/x-date-pickers';
 import ClearIcon from '@mui/icons-material/Clear';
 import FilterListIcon from '@mui/icons-material/FilterList';
 

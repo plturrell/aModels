@@ -14,8 +14,8 @@ import {
   Stack,
   Card,
   CardContent,
-  Grid,
 } from '@mui/material';
+import { GridLegacy as Grid } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { ExtractResponse, KnowledgeGraphResponse } from '../../api/extract';
 

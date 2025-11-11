@@ -183,7 +183,7 @@ export function MurexModule() {
   };
 
   return (
-    <Panel>
+    <Panel title="Murex Trade Processing">
       <Box sx={{ width: "100%" }}>
         <Typography variant="h4" gutterBottom>
           Murex Trade Processing & ETL to SAP

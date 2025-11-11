@@ -40,8 +40,8 @@ export function RelationalModule() {
 
     try {
       const result = await processRelationalTables({
-        table_name: "query_result",
-        schema_name: "public",
+        table: "query_result",
+        schema: "public",
         database_url: "postgresql://localhost:5432/amodels",
         database_type: "postgres",
         async: true
@@ -51,7 +51,7 @@ export function RelationalModule() {
       setTimeout(async () => {
         try {
           const data = await getRelationalProcessingResults(result.request_id);
-          setResults(data.tables || []);
+          setResults(data.documents || []);
         } catch (err) {
           setError("Failed to fetch results");
         } finally {
@@ -132,29 +132,23 @@ export function RelationalModule() {
           {results.map((table, tableIndex) => (
             <Box key={tableIndex} sx={{ mb: 4 }}>
               <Typography variant="h6" sx={{ mb: 2 }}>
-                {table.table_name}
+                {table.title || table.id}
               </Typography>
 
-              {table.rows && table.rows.length > 0 && (
+              {table.metadata && Object.keys(table.metadata).length > 0 && (
                 <TableContainer component={Paper} sx={{ borderRadius: 3 }}>
                   <Table>
                     <TableHead>
                       <TableRow sx={{ bgcolor: "grey.100" }}>
-                        {Object.keys(table.rows[0]).map((column) => (
-                          <TableCell key={column} sx={{ fontWeight: 600 }}>
-                            {column}
-                          </TableCell>
-                        ))}
+                        <TableCell sx={{ fontWeight: 600 }}>Key</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Value</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {table.rows.map((row, rowIndex) => (
+                      {Object.entries(table.metadata || {}).map(([key, value], rowIndex) => (
                         <TableRow key={rowIndex}>
-                          {Object.values(row).map((value, cellIndex) => (
-                            <TableCell key={cellIndex}>
-                              {String(value)}
-                            </TableCell>
-                          ))}
+                          <TableCell>{key}</TableCell>
+                          <TableCell>{String(value)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

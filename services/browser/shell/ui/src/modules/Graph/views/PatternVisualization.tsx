@@ -10,7 +10,6 @@ import {
   Paper,
   Typography,
   Button,
-  Grid,
   Alert,
   CircularProgress,
   FormControl,
@@ -20,6 +19,7 @@ import {
   Chip,
   Stack,
 } from '@mui/material';
+import { GridLegacy as Grid } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { GraphVisualization, LayoutType } from '../../../components/GraphVisualization';
 import { GraphNode, GraphEdge, GraphData } from '../../../types/graph';
@@ -65,7 +65,7 @@ export function PatternVisualization({
 
       // Get GNN patterns
       const insightsResult = await getStructuralInsights({
-        nodes: nodes.map(n => ({
+        nodes: nodes.map((n: GraphNode) => ({
           id: n.id,
           type: n.type,
           label: n.label,

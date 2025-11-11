@@ -12,7 +12,6 @@ import {
   Button,
   Tabs,
   Tab,
-  Grid,
   Alert,
   CircularProgress,
   FormControl,
@@ -22,6 +21,7 @@ import {
   TextField,
   Stack,
 } from '@mui/material';
+import { GridLegacy as Grid } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { GNNPredictionCard } from '../../../components/GNNPredictionCard';
 import { GNNExplanation } from '../../../components/GNNExplanation';
@@ -81,7 +81,7 @@ export function GNNInsights({
 
     try {
       const request: GNNClassifyRequest = {
-        nodes: nodes.map(n => ({
+        nodes: nodes.map((n: GraphNode) => ({
           id: n.id,
           type: n.type,
           label: n.label,
@@ -125,7 +125,7 @@ export function GNNInsights({
 
     try {
       const request: GNNPredictLinksRequest = {
-        nodes: nodes.map(n => ({
+        nodes: nodes.map((n: GraphNode) => ({
           id: n.id,
           type: n.type,
           label: n.label,
@@ -164,7 +164,7 @@ export function GNNInsights({
 
     try {
       const request: GNNStructuralInsightsRequest = {
-        nodes: nodes.map(n => ({
+        nodes: nodes.map((n: GraphNode) => ({
           id: n.id,
           type: n.type,
           label: n.label,
@@ -204,7 +204,7 @@ export function GNNInsights({
 
     try {
       const request: GNNEmbeddingsRequest = {
-        nodes: nodes.map(n => ({
+        nodes: nodes.map((n: GraphNode) => ({
           id: n.id,
           type: n.type,
           label: n.label,

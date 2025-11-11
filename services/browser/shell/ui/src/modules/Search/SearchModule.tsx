@@ -17,8 +17,8 @@ import {
   Checkbox,
   Tabs,
   Tab,
-  Grid
 } from '@mui/material';
+import { GridLegacy as Grid } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -60,6 +60,8 @@ export function SearchModule() {
   const [usePerplexity, setUsePerplexity] = useState<boolean>(false);
   const [enableFramework, setEnableFramework] = useState<boolean>(false);
   const [enablePlot, setEnablePlot] = useState<boolean>(false);
+  const [enableDashboard, setEnableDashboard] = useState<boolean>(false);
+  const [enableNarrative, setEnableNarrative] = useState<boolean>(false);
   const [selectedTab, setSelectedTab] = useState<number>(0);
   const [narrative, setNarrative] = useState<string | null>(null);
   const [dashboard, setDashboard] = useState<Record<string, unknown> | null>(null);
@@ -141,7 +143,7 @@ export function SearchModule() {
     try {
       const response = await generateDashboard(query, searchResponse);
       if (response.dashboard.enriched && response.dashboard.specification) {
-        setDashboard(response.dashboard.specification);
+        setDashboard(response.dashboard.specification as Record<string, unknown>);
         setDashboardResponse(response);
         setSelectedTab(4); // Switch to dashboard tab
       } else {
@@ -166,7 +168,7 @@ export function SearchModule() {
         setNarrative(response.narrative.markdown);
       }
       if (response.dashboard.enriched && response.dashboard.specification) {
-        setDashboard(response.dashboard.specification);
+        setDashboard(response.dashboard.specification as Record<string, unknown>);
       }
       setNarrativeResponse({ narrative: response.narrative, search_metadata: response.search_metadata });
       setDashboardResponse({ dashboard: response.dashboard, search_metadata: response.search_metadata });

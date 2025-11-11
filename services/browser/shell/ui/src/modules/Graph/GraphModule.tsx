@@ -15,7 +15,6 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Grid,
   Card,
   CardContent,
   Alert,
@@ -25,6 +24,7 @@ import {
   Tab,
   Stack,
 } from '@mui/material';
+import { GridLegacy as Grid } from '@mui/material';
 import { GraphVisualization, LayoutType } from '../../components/GraphVisualization';
 import { GraphExplorer } from '../../components/GraphExplorer';
 import { GraphFilters, GraphFilterState } from '../../components/GraphFilters';
@@ -44,8 +44,8 @@ import {
   findPaths,
   GraphNode,
   GraphEdge,
-  GraphData,
 } from '../../api/graph';
+import { GraphData } from '../../types/graph';
 
 interface GraphModuleProps {
   projectId?: string;

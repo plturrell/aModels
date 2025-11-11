@@ -102,6 +102,11 @@ export interface GraphEdge {
   properties?: Record<string, any>;
 }
 
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
 /**
  * Get graph data for visualization
  */
