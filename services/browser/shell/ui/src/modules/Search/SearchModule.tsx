@@ -16,7 +16,8 @@ import {
   FormControlLabel,
   Checkbox,
   Tabs,
-  Tab
+  Tab,
+  Grid
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -26,6 +27,7 @@ import { Panel } from "../../components/Panel";
 import { DashboardRenderer } from "../../components/DashboardRenderer";
 import { ServiceHealthPanel } from "../../components/ServiceHealthPanel";
 import { SearchAIAssistant } from "../../components/SearchAIAssistant";
+import { GraphContextPanel } from "../../components/GraphContextPanel";
 import { 
   unifiedSearch, 
   generateNarrative, 
@@ -65,6 +67,8 @@ export function SearchModule() {
   const [narrativeResponse, setNarrativeResponse] = useState<any>(null);
   const [dashboardResponse, setDashboardResponse] = useState<any>(null);
   const [exporting, setExporting] = useState<boolean>(false);
+  const [selectedEntityId, setSelectedEntityId] = useState<string | undefined>();
+  const [selectedEntityLabel, setSelectedEntityLabel] = useState<string | undefined>();
 
   const handleSearch = async () => {
     const trimmedQuery = query.trim();
@@ -421,60 +425,93 @@ export function SearchModule() {
           </Box>
           
           {selectedTab === 0 && (
-            <List>
-              {results.map((result, index) => (
-                <Box key={`${result.source}-${result.id}-${index}`}>
-                  <ListItem alignItems="flex-start" sx={{ py: 2 }}>
-                    <ListItemText
-                      primary={
-                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap">
-                          <Typography variant="body2" fontWeight={500}>
-                            Result #{index + 1}
-                          </Typography>
-                          <Chip
-                            label={result.source}
-                            size="small"
-                            color="secondary"
-                            variant="outlined"
-                          />
-                          <Chip
-                            label={formatSimilarity(result.similarity)}
-                            size="small"
-                            color="primary"
-                            variant="outlined"
-                          />
-                          <Typography variant="caption" color="text.secondary">
-                            ID: {result.id}
-                          </Typography>
-                        </Stack>
-                      }
-                      secondary={
-                        <>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              mt: 1,
-                              whiteSpace: 'pre-wrap',
-                              wordBreak: 'break-word'
-                            }}
-                          >
-                            {truncateContent(result.content)}
-                          </Typography>
-                          {result.citations && result.citations.length > 0 && (
-                            <Box sx={{ mt: 1 }}>
-                              <Typography variant="caption" color="text.secondary">
-                                Citations: {result.citations.join(", ")}
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={selectedEntityId ? 8 : 12}>
+                <List>
+                  {results.map((result, index) => (
+                    <Box key={`${result.source}-${result.id}-${index}`}>
+                      <ListItem alignItems="flex-start" sx={{ py: 2 }}>
+                        <ListItemText
+                          primary={
+                            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }} flexWrap="wrap">
+                              <Typography variant="body2" fontWeight={500}>
+                                Result #{index + 1}
                               </Typography>
-                            </Box>
-                          )}
-                        </>
-                      }
-                    />
-                  </ListItem>
-                  {index < results.length - 1 && <Divider />}
-                </Box>
-              ))}
-            </List>
+                              <Chip
+                                label={result.source}
+                                size="small"
+                                color="secondary"
+                                variant="outlined"
+                              />
+                              <Chip
+                                label={formatSimilarity(result.similarity)}
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                              />
+                              <Typography variant="caption" color="text.secondary">
+                                ID: {result.id}
+                              </Typography>
+                              {result.source === 'knowledge_graph' && (
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  onClick={() => {
+                                    setSelectedEntityId(result.id);
+                                    setSelectedEntityLabel(result.content?.slice(0, 50) || result.id);
+                                  }}
+                                >
+                                  View Graph
+                                </Button>
+                              )}
+                            </Stack>
+                          }
+                          secondary={
+                            <>
+                              <Typography
+                                variant="body2"
+                                sx={{
+                                  mt: 1,
+                                  whiteSpace: 'pre-wrap',
+                                  wordBreak: 'break-word'
+                                }}
+                              >
+                                {truncateContent(result.content)}
+                              </Typography>
+                              {result.citations && result.citations.length > 0 && (
+                                <Box sx={{ mt: 1 }}>
+                                  <Typography variant="caption" color="text.secondary">
+                                    Citations: {result.citations.join(", ")}
+                                  </Typography>
+                                </Box>
+                              )}
+                            </>
+                          }
+                        />
+                      </ListItem>
+                      {index < results.length - 1 && <Divider />}
+                    </Box>
+                  ))}
+                </List>
+              </Grid>
+              {selectedEntityId && (
+                <Grid item xs={12} md={4}>
+                  <GraphContextPanel
+                    entityId={selectedEntityId}
+                    entityLabel={selectedEntityLabel}
+                    projectId={searchResponse?.metadata?.project_id}
+                    onNodeClick={(nodeId) => {
+                      // Could navigate to graph module or show details
+                      console.log('Node clicked:', nodeId);
+                    }}
+                    onExploreInGraph={(nodeId) => {
+                      // Navigate to graph module with this node focused
+                      console.log('Explore in graph:', nodeId);
+                    }}
+                  />
+                </Grid>
+              )}
+            </Grid>
           )}
           
           {selectedTab === 1 && (

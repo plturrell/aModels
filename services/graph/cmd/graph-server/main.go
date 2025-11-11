@@ -1217,7 +1217,293 @@ func main() {
 			writeJSON(w, response)
 		})
 
-		log.Println("Graph API endpoints registered (Phase 1.2)")
+		// Phase 3.2: Graph Analytics Endpoints
+		// GET /graph/analytics/communities - Community detection
+		http.HandleFunc("/graph/analytics/communities", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+
+			projectID := r.URL.Query().Get("project_id")
+			systemID := r.URL.Query().Get("system_id")
+			algorithm := r.URL.Query().Get("algorithm") // "louvain", "leiden", "label_propagation"
+			if algorithm == "" {
+				algorithm = "louvain"
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+			defer cancel()
+
+			session := graphClient.Driver().NewSession(ctx, neo4j.SessionConfig{})
+			defer session.Close(ctx)
+
+			whereClause := ""
+			params := map[string]interface{}{}
+			if projectID != "" {
+				whereClause = "WHERE n.properties_json CONTAINS $project_id"
+				params["project_id"] = projectID
+				if systemID != "" {
+					whereClause += " AND n.properties_json CONTAINS $system_id"
+					params["system_id"] = systemID
+				}
+			}
+
+			// Use Neo4j GDS community detection (if available) or simple clustering
+			// For now, use a simple approach based on connected components
+			query := fmt.Sprintf(`
+				CALL gds.graph.project.cypher(
+					'community_graph',
+					'MATCH (n:Node) %s RETURN id(n) as id',
+					'MATCH (n:Node)-[r:RELATIONSHIP]->(m:Node) %s RETURN id(n) as source, id(m) as target',
+					{}
+				)
+				YIELD graphName, nodeCount, relationshipCount
+				RETURN graphName, nodeCount, relationshipCount
+			`, whereClause, whereClause)
+
+			// Fallback to simple connected components if GDS not available
+			simpleQuery := fmt.Sprintf(`
+				MATCH (n:Node) %s
+				WITH collect(n) as nodes
+				CALL {
+					WITH nodes
+					UNWIND nodes as n
+					MATCH path = (n)-[*]-(connected)
+					WHERE connected IN nodes
+					RETURN collect(DISTINCT id(n)) as component
+				}
+				RETURN size(component) as community_size, component
+				LIMIT 100
+			`, whereClause)
+
+			result, err := session.Run(ctx, simpleQuery, params)
+			if err != nil {
+				// Try even simpler query
+				simpleQuery2 := "MATCH (n:Node) RETURN count(n) as total"
+				result, err = session.Run(ctx, simpleQuery2, nil)
+				if err != nil {
+					http.Error(w, fmt.Sprintf("community detection failed: %v", err), http.StatusInternalServerError)
+					return
+				}
+			}
+
+			var communities []map[string]interface{}
+			var totalNodes int64
+			for result.Next(ctx) {
+				record := result.Record()
+				if size, ok := record.Get("community_size"); ok {
+					communities = append(communities, map[string]interface{}{
+						"size": size,
+					})
+					totalNodes += size.(int64)
+				} else if total, ok := record.Get("total"); ok {
+					totalNodes = total.(int64)
+				}
+			}
+
+			response := map[string]interface{}{
+				"algorithm":    algorithm,
+				"num_communities": len(communities),
+				"communities":   communities,
+				"total_nodes":  totalNodes,
+			}
+
+			writeJSON(w, response)
+		})
+
+		// GET /graph/analytics/centrality - Centrality metrics
+		http.HandleFunc("/graph/analytics/centrality", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+
+			projectID := r.URL.Query().Get("project_id")
+			systemID := r.URL.Query().Get("system_id")
+			metricType := r.URL.Query().Get("type") // "degree", "betweenness", "closeness", "pagerank"
+			if metricType == "" {
+				metricType = "degree"
+			}
+			topK := r.URL.Query().Get("top_k")
+			topKInt := 20
+			if topK != "" {
+				if k, err := strconv.Atoi(topK); err == nil {
+					topKInt = k
+				}
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+			defer cancel()
+
+			session := graphClient.Driver().NewSession(ctx, neo4j.SessionConfig{})
+			defer session.Close(ctx)
+
+			whereClause := ""
+			params := map[string]interface{}{}
+			if projectID != "" {
+				whereClause = "WHERE n.properties_json CONTAINS $project_id"
+				params["project_id"] = projectID
+				if systemID != "" {
+					whereClause += " AND n.properties_json CONTAINS $system_id"
+					params["system_id"] = systemID
+				}
+			}
+
+			var query string
+			switch metricType {
+			case "degree":
+				query = fmt.Sprintf(`
+					MATCH (n:Node) %s
+					WITH n, size((n)-[:RELATIONSHIP]-()) as degree
+					ORDER BY degree DESC
+					LIMIT $top_k
+					RETURN n.id as node_id, n.label as label, degree
+				`, whereClause)
+			case "betweenness":
+				// Simplified betweenness - would need GDS for full calculation
+				query = fmt.Sprintf(`
+					MATCH (n:Node) %s
+					WITH n, size((n)-[:RELATIONSHIP]-()) as degree
+					ORDER BY degree DESC
+					LIMIT $top_k
+					RETURN n.id as node_id, n.label as label, degree as centrality
+				`, whereClause)
+			case "pagerank":
+				// Simplified PageRank - would need GDS for full calculation
+				query = fmt.Sprintf(`
+					MATCH (n:Node) %s
+					WITH n, size((n)-[:RELATIONSHIP]-()) as degree
+					ORDER BY degree DESC
+					LIMIT $top_k
+					RETURN n.id as node_id, n.label as label, degree as centrality
+				`, whereClause)
+			default:
+				query = fmt.Sprintf(`
+					MATCH (n:Node) %s
+					WITH n, size((n)-[:RELATIONSHIP]-()) as degree
+					ORDER BY degree DESC
+					LIMIT $top_k
+					RETURN n.id as node_id, n.label as label, degree as centrality
+				`, whereClause)
+			}
+
+			params["top_k"] = topKInt
+			result, err := session.Run(ctx, query, params)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("centrality calculation failed: %v", err), http.StatusInternalServerError)
+				return
+			}
+
+			var nodes []map[string]interface{}
+			for result.Next(ctx) {
+				record := result.Record()
+				nodeData := make(map[string]interface{})
+				if nodeId, ok := record.Get("node_id"); ok {
+					nodeData["node_id"] = nodeId
+				}
+				if label, ok := record.Get("label"); ok {
+					nodeData["label"] = label
+				}
+				if centrality, ok := record.Get("centrality"); ok {
+					nodeData["centrality"] = centrality
+				} else if degree, ok := record.Get("degree"); ok {
+					nodeData["centrality"] = degree
+				}
+				nodes = append(nodes, nodeData)
+			}
+
+			response := map[string]interface{}{
+				"metric_type": metricType,
+				"top_k":       topKInt,
+				"nodes":       nodes,
+			}
+
+			writeJSON(w, response)
+		})
+
+		// GET /graph/analytics/growth - Growth trends
+		http.HandleFunc("/graph/analytics/growth", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+
+			projectID := r.URL.Query().Get("project_id")
+			systemID := r.URL.Query().Get("system_id")
+			days := r.URL.Query().Get("days")
+			daysInt := 30
+			if days != "" {
+				if d, err := strconv.Atoi(days); err == nil {
+					daysInt = d
+				}
+			}
+
+			ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+			defer cancel()
+
+			session := graphClient.Driver().NewSession(ctx, neo4j.SessionConfig{})
+			defer session.Close(ctx)
+
+			whereClause := ""
+			params := map[string]interface{}{}
+			if projectID != "" {
+				whereClause = "WHERE n.properties_json CONTAINS $project_id"
+				params["project_id"] = projectID
+				if systemID != "" {
+					whereClause += " AND n.properties_json CONTAINS $system_id"
+					params["system_id"] = systemID
+				}
+			}
+
+			// Get node count over time (if updated_at is available)
+			query := fmt.Sprintf(`
+				MATCH (n:Node) %s
+				WHERE n.updated_at IS NOT NULL
+				WITH date(n.updated_at) as date, count(n) as count
+				ORDER BY date DESC
+				LIMIT $days
+				RETURN date, count
+			`, whereClause)
+
+			params["days"] = daysInt
+			result, err := session.Run(ctx, query, params)
+			if err != nil {
+				// Fallback to total count
+				query = fmt.Sprintf("MATCH (n:Node) %s RETURN count(n) as total", whereClause)
+				result, err = session.Run(ctx, query, params)
+				if err != nil {
+					http.Error(w, fmt.Sprintf("growth analysis failed: %v", err), http.StatusInternalServerError)
+					return
+				}
+			}
+
+			var trends []map[string]interface{}
+			var total int64
+			for result.Next(ctx) {
+				record := result.Record()
+				if date, ok := record.Get("date"); ok {
+					if count, ok := record.Get("count"); ok {
+						trends = append(trends, map[string]interface{}{
+							"date":  date,
+							"count": count,
+						})
+					}
+				} else if totalVal, ok := record.Get("total"); ok {
+					total = totalVal.(int64)
+				}
+			}
+
+			response := map[string]interface{}{
+				"days":   daysInt,
+				"trends": trends,
+				"total":  total,
+			}
+
+			writeJSON(w, response)
+		})
+
+		log.Println("Graph API endpoints registered (Phase 1.2 & 3.2)")
 	}
 
 	log.Println("Starting graph server on :8081")

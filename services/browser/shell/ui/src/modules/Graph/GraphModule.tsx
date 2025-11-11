@@ -23,8 +23,15 @@ import {
   Chip,
   Tabs,
   Tab,
+  Stack,
 } from '@mui/material';
 import { GraphVisualization, LayoutType } from '../../components/GraphVisualization';
+import { GraphExplorer } from '../../components/GraphExplorer';
+import { GraphFilters, GraphFilterState } from '../../components/GraphFilters';
+import { NaturalLanguageGraphQuery } from '../../components/NaturalLanguageGraphQuery';
+import { GNNInsights } from './views/GNNInsights';
+import { Analytics } from './views/Analytics';
+import { PatternVisualization } from './views/PatternVisualization';
 import {
   visualizeGraph,
   exploreGraph,
@@ -49,6 +56,12 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
   const [stats, setStats] = useState<any>(null);
   const [activeTab, setActiveTab] = useState(0);
   const [layout, setLayout] = useState<LayoutType>('force-directed');
+  const [focusedNodeId, setFocusedNodeId] = useState<string>('');
+  const [filters, setFilters] = useState<GraphFilterState>({
+    nodeTypes: [],
+    edgeTypes: [],
+    propertyFilters: {},
+  });
 
   // Form state
   const [formProjectId, setFormProjectId] = useState(projectId || '');
@@ -224,6 +237,10 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
       <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
         <Tab label="Visualize" />
         <Tab label="Explore" />
+        <Tab label="Natural Language" />
+        <Tab label="GNN Insights" />
+        <Tab label="Analytics" />
+        <Tab label="Patterns" />
         <Tab label="Query" />
         <Tab label="Paths" />
         <Tab label="Stats" />
@@ -237,61 +254,83 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
 
       {activeTab === 0 && (
         <Grid container spacing={2}>
-          <Grid item xs={12} md={3}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                Graph Filters
-              </Typography>
-              <TextField
-                fullWidth
-                label="Project ID"
-                value={formProjectId}
-                onChange={(e) => setFormProjectId(e.target.value)}
-                sx={{ mb: 2 }}
-                required
-              />
-              <TextField
-                fullWidth
-                label="System ID"
-                value={formSystemId}
-                onChange={(e) => setFormSystemId(e.target.value)}
-                sx={{ mb: 2 }}
-              />
-              <TextField
-                fullWidth
-                label="Limit"
-                type="number"
-                value={limit}
-                onChange={(e) => setLimit(parseInt(e.target.value) || 10000)}
-                sx={{ mb: 2 }}
-              />
-              <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel>Layout</InputLabel>
-                <Select
-                  value={layout}
-                  label="Layout"
-                  onChange={(e) => setLayout(e.target.value as LayoutType)}
+          <Grid item xs={12} md={2}>
+            <Stack spacing={2}>
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Load Graph
+                </Typography>
+                <TextField
+                  fullWidth
+                  label="Project ID"
+                  value={formProjectId}
+                  onChange={(e) => setFormProjectId(e.target.value)}
+                  sx={{ mb: 2 }}
+                  required
+                  size="small"
+                />
+                <TextField
+                  fullWidth
+                  label="System ID"
+                  value={formSystemId}
+                  onChange={(e) => setFormSystemId(e.target.value)}
+                  sx={{ mb: 2 }}
+                  size="small"
+                />
+                <TextField
+                  fullWidth
+                  label="Limit"
+                  type="number"
+                  value={limit}
+                  onChange={(e) => setLimit(parseInt(e.target.value) || 10000)}
+                  sx={{ mb: 2 }}
+                  size="small"
+                />
+                <FormControl fullWidth sx={{ mb: 2 }}>
+                  <InputLabel>Layout</InputLabel>
+                  <Select
+                    value={layout}
+                    label="Layout"
+                    onChange={(e) => setLayout(e.target.value as LayoutType)}
+                    size="small"
+                  >
+                    <MenuItem value="force-directed">Force-Directed</MenuItem>
+                    <MenuItem value="hierarchical">Hierarchical</MenuItem>
+                    <MenuItem value="circular">Circular</MenuItem>
+                    <MenuItem value="breadthfirst">Breadth-First</MenuItem>
+                    <MenuItem value="cose-bilkent">COSE-Bilkent</MenuItem>
+                    <MenuItem value="dagre">Dagre</MenuItem>
+                    <MenuItem value="cola">Cola</MenuItem>
+                  </Select>
+                </FormControl>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  onClick={loadGraph}
+                  disabled={loading || !formProjectId}
+                  size="small"
                 >
-                  <MenuItem value="force-directed">Force-Directed</MenuItem>
-                  <MenuItem value="hierarchical">Hierarchical</MenuItem>
-                  <MenuItem value="circular">Circular</MenuItem>
-                  <MenuItem value="breadthfirst">Breadth-First</MenuItem>
-                  <MenuItem value="cose-bilkent">COSE-Bilkent</MenuItem>
-                  <MenuItem value="dagre">Dagre</MenuItem>
-                  <MenuItem value="cola">Cola</MenuItem>
-                </Select>
-              </FormControl>
-              <Button
-                fullWidth
-                variant="contained"
-                onClick={loadGraph}
-                disabled={loading || !formProjectId}
-              >
-                {loading ? <CircularProgress size={24} /> : 'Load Graph'}
-              </Button>
-            </Paper>
+                  {loading ? <CircularProgress size={20} /> : 'Load Graph'}
+                </Button>
+              </Paper>
+              {stats && (
+                <GraphFilters
+                  availableNodeTypes={Object.keys(stats.node_types || {})}
+                  availableEdgeTypes={Object.keys(stats.edge_types || {})}
+                  onFilterChange={(newFilters) => {
+                    setFilters(newFilters);
+                    // Apply filters to graph data
+                    if (newFilters.nodeTypes.length > 0 || newFilters.edgeTypes.length > 0) {
+                      setNodeTypes(newFilters.nodeTypes);
+                      setEdgeTypes(newFilters.edgeTypes);
+                    }
+                  }}
+                  initialFilters={filters}
+                />
+              )}
+            </Stack>
           </Grid>
-          <Grid item xs={12} md={9}>
+          <Grid item xs={12} md={7}>
             <Paper sx={{ p: 2, height: '600px' }}>
               {loading && graphData.nodes.length === 0 ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
@@ -308,6 +347,19 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
                 />
               )}
             </Paper>
+          </Grid>
+          <Grid item xs={12} md={3}>
+            <GraphExplorer
+              nodes={graphData.nodes}
+              edges={graphData.edges}
+              onNodeSelect={(nodeId) => {
+                setSelectedNodes([nodeId]);
+                handleNodeClick(nodeId, graphData.nodes.find(n => n.id === nodeId)!);
+              }}
+              onNodeFocus={setFocusedNodeId}
+              selectedNodeId={selectedNodes[0]}
+              focusedNodeId={focusedNodeId}
+            />
           </Grid>
         </Grid>
       )}
@@ -381,6 +433,53 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
       {activeTab === 2 && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
+            <NaturalLanguageGraphQuery
+              onQueryGenerated={(cypher, results) => {
+                setCypherQuery(cypher);
+                // Could update graph visualization with results
+                console.log('Query generated:', cypher, results);
+              }}
+              onError={(err) => setError(err)}
+            />
+          </Grid>
+        </Grid>
+      )}
+
+      {activeTab === 3 && (
+        <GNNInsights
+          nodes={graphData.nodes}
+          edges={graphData.edges}
+          projectId={formProjectId}
+          onNodeClick={(nodeId) => {
+            setSelectedNodes([nodeId]);
+            handleNodeClick(nodeId, graphData.nodes.find(n => n.id === nodeId)!);
+          }}
+        />
+      )}
+
+      {activeTab === 4 && (
+        <Analytics
+          projectId={formProjectId}
+          systemId={formSystemId || undefined}
+        />
+      )}
+
+      {activeTab === 5 && (
+        <PatternVisualization
+          nodes={graphData.nodes}
+          edges={graphData.edges}
+          projectId={formProjectId}
+          systemId={formSystemId || undefined}
+          onNodeClick={(nodeId) => {
+            setSelectedNodes([nodeId]);
+            handleNodeClick(nodeId, graphData.nodes.find(n => n.id === nodeId)!);
+          }}
+        />
+      )}
+
+      {activeTab === 6 && (
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
             <Paper sx={{ p: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Cypher Query
@@ -406,7 +505,7 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
         </Grid>
       )}
 
-      {activeTab === 3 && (
+      {activeTab === 7 && (
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <Paper sx={{ p: 2 }}>
@@ -442,7 +541,7 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
         </Grid>
       )}
 
-      {activeTab === 4 && (
+      {activeTab === 5 && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <Paper sx={{ p: 2 }}>

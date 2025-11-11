@@ -108,7 +108,7 @@ const defaultStylesheet = [
   {
     selector: 'node',
     style: {
-      'background-color': '#619BD6',
+      'background-color': 'data(color)',
       'label': 'data(label)',
       'width': 30,
       'height': 30,
@@ -222,6 +222,7 @@ export function GraphVisualization({
         id: node.id,
         label: node.label || node.id,
         type: node.type,
+        color: node.properties?.color || '#619BD6', // Use color from properties if available
         ...(node.properties || {}),
       },
       classes: node.type ? `type-${node.type}` : '',
