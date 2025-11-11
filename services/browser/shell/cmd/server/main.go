@@ -151,6 +151,8 @@ func main() {
 
 	mux.Handle("/assets/", http.StripPrefix("/assets/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		// Prepend "assets/" to the path since files are in assets/ subdirectory
+		r.URL.Path = "/assets/" + strings.TrimPrefix(r.URL.Path, "/")
 		fileServer.ServeHTTP(w, r)
 	})))
 
@@ -176,20 +178,18 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	// Ensure we listen on IPv4 if address is 0.0.0.0
+	// Ensure we listen on IPv4 for all interfaces to support external connections
 	var listener net.Listener
-	if strings.HasPrefix(*addr, "0.0.0.0:") {
-		var listenErr error
-		listener, listenErr = net.Listen("tcp4", *addr)
-		if listenErr != nil {
-			log.Fatalf("Failed to listen on IPv4: %v", listenErr)
-		}
-	} else {
-		var listenErr error
-		listener, listenErr = net.Listen("tcp", *addr)
-		if listenErr != nil {
-			log.Fatalf("Failed to listen: %v", listenErr)
-		}
+	// Normalize address: if it's just a port (starts with :), bind to 0.0.0.0 for IPv4
+	bindAddr := *addr
+	if strings.HasPrefix(bindAddr, ":") {
+		bindAddr = "0.0.0.0" + bindAddr
+	}
+	// Always use IPv4 to ensure external connectivity
+	var listenErr error
+	listener, listenErr = net.Listen("tcp4", bindAddr)
+	if listenErr != nil {
+		log.Fatalf("Failed to listen on IPv4 (%s): %v", bindAddr, listenErr)
 	}
 
 	log.Printf("aModels shell server listening on http://%s", server.Addr)
