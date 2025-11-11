@@ -35,6 +35,7 @@ import { PatternVisualization } from './views/PatternVisualization';
 import { AIGraphAssistant } from '../../components/AIGraphAssistant';
 import { GraphRecommendations } from '../../components/GraphRecommendations';
 import { VisualQueryBuilder } from '../../components/VisualQueryBuilder';
+import { NarrativeInsights } from './views/NarrativeInsights';
 import {
   visualizeGraph,
   exploreGraph,
@@ -244,12 +245,14 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
         <Tab label="GNN Insights" />
         <Tab label="Analytics" />
         <Tab label="Patterns" />
+        <Tab label="Narrative" />
         <Tab label="AI Assistant" />
         <Tab label="Recommendations" />
         <Tab label="Query Builder" />
         <Tab label="Query" />
         <Tab label="Paths" />
         <Tab label="Stats" />
+        <Tab label="From Extraction" />
       </Tabs>
 
       {error && (
@@ -315,8 +318,20 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
                   onClick={loadGraph}
                   disabled={loading || !formProjectId}
                   size="small"
+                  sx={{ mb: 1 }}
                 >
                   {loading ? <CircularProgress size={20} /> : 'Load Graph'}
+                </Button>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  size="small"
+                  onClick={() => {
+                    // Navigate to Extract module's Extract & Visualize workflow
+                    window.location.hash = '#extract-graph-workflow';
+                  }}
+                >
+                  Extract & Visualize
                 </Button>
               </Paper>
               {stats && (
@@ -484,6 +499,19 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
       )}
 
       {activeTab === 6 && (
+        <NarrativeInsights
+          nodes={graphData.nodes}
+          edges={graphData.edges}
+          projectId={formProjectId}
+          systemId={formSystemId || undefined}
+          onNodeClick={(nodeId) => {
+            setSelectedNodes([nodeId]);
+            handleNodeClick(nodeId, graphData.nodes.find(n => n.id === nodeId)!);
+          }}
+        />
+      )}
+
+      {activeTab === 8 && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <AIGraphAssistant
@@ -496,14 +524,14 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
               }}
               onQueryGenerated={(query) => {
                 setCypherQuery(query);
-                setActiveTab(9); // Switch to Query tab
+                setActiveTab(11); // Switch to Query tab
               }}
             />
           </Grid>
         </Grid>
       )}
 
-      {activeTab === 7 && (
+      {activeTab === 9 && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <GraphRecommendations
@@ -522,7 +550,7 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
         </Grid>
       )}
 
-      {activeTab === 8 && (
+      {activeTab === 10 && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <VisualQueryBuilder
@@ -530,7 +558,7 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
               edges={graphData.edges}
               onQueryGenerated={(query) => {
                 setCypherQuery(query);
-                setActiveTab(9); // Switch to Query tab
+                setActiveTab(11); // Switch to Query tab
               }}
               onQueryExecute={async (query) => {
                 return await queryGraph({ query });
@@ -540,7 +568,7 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
         </Grid>
       )}
 
-      {activeTab === 9 && (
+      {activeTab === 11 && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <Paper sx={{ p: 2 }}>
@@ -568,7 +596,7 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
         </Grid>
       )}
 
-      {activeTab === 10 && (
+      {activeTab === 12 && (
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <Paper sx={{ p: 2 }}>
@@ -604,7 +632,7 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
         </Grid>
       )}
 
-      {activeTab === 11 && (
+      {activeTab === 13 && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <Paper sx={{ p: 2 }}>
@@ -660,6 +688,33 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
                   </Button>
                 </Box>
               )}
+            </Paper>
+          </Grid>
+        </Grid>
+      )}
+
+      {activeTab === 13 && (
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Graphs from Extractions
+              </Typography>
+              <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+                View and explore graphs generated from extraction jobs
+              </Typography>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Use the Extract module to create extractions and generate graphs. 
+                Graphs generated from extractions will appear here.
+              </Alert>
+              <Button
+                variant="contained"
+                onClick={() => {
+                  window.location.hash = '#extract';
+                }}
+              >
+                Go to Extract Module
+              </Button>
             </Paper>
           </Grid>
         </Grid>
