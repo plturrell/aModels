@@ -3,16 +3,21 @@ version: "3.9"
 services:
   dms:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: services/dms/Dockerfile
     image: amodels-dms:dev
+    env_file:
+      - .env
     environment:
-      DMS_POSTGRES_DSN: postgresql+psycopg://postgres:postgres@postgres:5432/dms
-      DMS_REDIS_URL: redis://redis:6379/0
-      DMS_NEO4J_URI: neo4j://neo4j:7687
-      DMS_NEO4J_USER: neo4j
-      DMS_NEO4J_PASSWORD: neo4j
-      DMS_STORAGE_ROOT: /data/documents
+      DMS_POSTGRES_DSN: ${DMS_POSTGRES_DSN}
+      DMS_REDIS_URL: ${DMS_REDIS_URL:-redis://redis:6379/0}
+      DMS_NEO4J_URI: ${DMS_NEO4J_URI:-neo4j://neo4j:7687}
+      DMS_NEO4J_USER: ${DMS_NEO4J_USER:-neo4j}
+      DMS_NEO4J_PASSWORD: ${DMS_NEO4J_PASSWORD}
+      DMS_STORAGE_ROOT: ${DMS_STORAGE_ROOT:-/data/documents}
+      DMS_REQUIRE_AUTH: ${DMS_REQUIRE_AUTH:-false}
+      DMS_JWT_SECRET: ${DMS_JWT_SECRET}
+      DMS_API_KEYS: ${DMS_API_KEYS}
     ports:
       - "8080:8080"
     volumes:
@@ -21,32 +26,53 @@ services:
       - postgres
       - redis
       - neo4j
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   postgres:
     image: postgres:15
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: dms
+      POSTGRES_USER: ${POSTGRES_USER:-dms_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-dms}
     ports:
       - "5432:5432"
     volumes:
       - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dms_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   neo4j:
     image: neo4j:5.20
     environment:
-      NEO4J_AUTH: neo4j/neo4j
+      NEO4J_AUTH: ${NEO4J_AUTH}
     ports:
       - "7474:7474"
       - "7687:7687"
     volumes:
       - neo4j-data:/data
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${NEO4J_AUTH##*/}", "RETURN 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   dms-storage:

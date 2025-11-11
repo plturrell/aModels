@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import httpx
+import os
 from typing import List
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_db_session
 from app.models.document import Document
@@ -68,16 +70,10 @@ async def get_document_status(
     Get processing status for a document.
     This endpoint calls the orchestration service to get status.
     """
-    import httpx
-    import os
-    
-    orchestration_url = os.getenv("ORCHESTRATION_URL", "http://localhost:8080")
-    
     # Try to find request_id for this document
     # For now, return basic status - in production, this would query orchestration service
     document = await db.get(Document, document_id)
     if not document:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Document not found")
     
     # Check if document has been processed
@@ -106,14 +102,8 @@ async def get_document_results(
     Get processing results for a document.
     This endpoint calls the orchestration service to get results.
     """
-    import httpx
-    import os
-    
-    orchestration_url = os.getenv("ORCHESTRATION_URL", "http://localhost:8080")
-    
     document = await db.get(Document, document_id)
     if not document:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Document not found")
     
     return {
@@ -137,14 +127,8 @@ async def get_document_intelligence(
     Get intelligence data for a document.
     This endpoint calls the orchestration service to get intelligence.
     """
-    import httpx
-    import os
-    
-    orchestration_url = os.getenv("ORCHESTRATION_URL", "http://localhost:8080")
-    
     document = await db.get(Document, document_id)
     if not document:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Document not found")
     
     # Try to get intelligence from orchestration service

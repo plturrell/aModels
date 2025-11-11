@@ -657,6 +657,15 @@ func (s *extractServer) handleExtract(w http.ResponseWriter, r *http.Request) {
 
 func (s *extractServer) recordTelemetry(ctx context.Context, sessionID string, input map[string]any, output map[string]any, runErr error, started time.Time, latency time.Duration) error {
 	if s.telemetry == nil {
+		if s.logger != nil {
+			s.logger.Printf(
+				"telemetry disabled, event dropped: op=%s session=%s latency=%s err=%v",
+				s.telemetryOperation,
+				sessionID,
+				latency,
+				runErr,
+			)
+		}
 		return nil
 	}
 

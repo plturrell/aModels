@@ -39,15 +39,28 @@ class Settings(BaseSettings):
     @field_validator("postgres_dsn")
     @classmethod
     def validate_postgres_dsn(cls, v: str) -> str:
-        """Validate PostgreSQL DSN does not contain default credentials."""
+        """Validate PostgreSQL DSN does not contain default/weak credentials."""
         if not v or v.strip() == "":
             raise ValueError("DMS_POSTGRES_DSN must be set and cannot be empty")
-        # Check for common default credentials in DSN
-        if "postgres:postgres@" in v or ":postgres@" in v:
-            raise ValueError(
-                "DMS_POSTGRES_DSN contains default credentials. "
-                "Please use a secure password and set via environment variable."
-            )
+        
+        # Check for common default credentials patterns
+        weak_passwords = [
+            "postgres:postgres@",
+            "postgres:password@",
+            "postgres:admin@",
+            "postgres:root@",
+            ":postgres@",
+            ":password@",
+            ":admin@",
+            ":123456@",
+        ]
+        v_lower = v.lower()
+        for weak_pass in weak_passwords:
+            if weak_pass in v_lower:
+                raise ValueError(
+                    f"DMS_POSTGRES_DSN contains weak/default credentials ({weak_pass.split(':')[1].split('@')[0]}). "
+                    "Please use a secure password with at least 12 characters."
+                )
         return v
 
     @field_validator("neo4j_password")

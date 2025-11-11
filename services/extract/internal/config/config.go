@@ -151,7 +151,20 @@ func (c *Config) Validate() error {
 	if c.Langextract.APIKey == "" {
 		errors = append(errors, "LANGEXTRACT_API_KEY is required")
 	}
-	
+
+	// Required: Core persistence
+	if strings.TrimSpace(c.Persistence.SQLitePath) == "" {
+		errors = append(errors, "SQLITE_PATH is required for table persistence")
+	}
+	if strings.TrimSpace(c.Persistence.DocStorePath) == "" {
+		errors = append(errors, "DOCUMENT_STORE_PATH is required for document persistence")
+	}
+
+	// Required: Telemetry configuration when enabled
+	if c.Telemetry.Enabled && strings.TrimSpace(c.Telemetry.Address) == "" {
+		errors = append(errors, "POSTGRES_LANG_SERVICE_ADDR is required when telemetry is enabled")
+	}
+
 	// Required: Neo4j configuration (if Neo4j is being used)
 	// Check if any Neo4j fields are set, indicating Neo4j is being used
 	usingNeo4j := c.Persistence.Neo4jURI != "" || 

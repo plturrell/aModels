@@ -2,6 +2,16 @@
 
 This service provides document ingestion, metadata management, and relationship modelling. It exposes a FastAPI application backed by PostgreSQL, Redis, and Neo4j.
 
+## Features
+
+- **Document Upload & Storage**: Multipart file upload with versioning support
+- **Multi-database Architecture**: PostgreSQL (metadata), Redis (queuing), Neo4j (relationships)
+- **Authentication**: JWT and API key authentication support
+- **Health Checks**: `/healthz`, `/healthz/detailed`, `/readyz`, `/livez` endpoints
+- **Resilient Integrations**: Circuit breaker, retry logic, correlation IDs
+- **Background Processing**: Async OCR, extraction, and catalog registration
+- **Database Migrations**: Alembic migrations for schema versioning
+
 ## Local setup
 
 ### Local Venv
@@ -38,10 +48,20 @@ docker run --rm \
 
 ```bash
 cd services/dms
+
+# Copy example environment file and update with secure credentials
+cp .env.example .env
+# Edit .env and set secure passwords!
+
+# Run migrations
+export DMS_POSTGRES_DSN="postgresql+psycopg://dms_user:YOUR_PASSWORD@localhost:5432/dms"
+alembic upgrade head
+
+# Start services
 docker compose up --build
 ```
 
-Environment variables (see `app/core/config.py`) control database connections and storage paths. Ensure the service runs on the same Docker network as Postgres/Redis/Neo4j containers so hostnames resolve.
+**IMPORTANT**: Before running docker-compose, update `.env` with secure passwords. The service validates credentials and will refuse to start with default passwords.
 
 Key environment variables:
 
@@ -53,9 +73,69 @@ Key environment variables:
 - `DMS_CATALOG_URL` (HTTP base for the Catalog service, e.g., `http://catalog:8084`)
 - When `DMS_EXTRACT_URL` is provided the service will first attempt DeepSeek OCR for image uploads before running text extraction and catalog registration.
 
-### Tests
+## Authentication
+
+The service supports two authentication modes:
+
+### JWT Authentication
+```bash
+# Enable JWT auth
+export DMS_REQUIRE_AUTH=true
+export DMS_JWT_SECRET="your-secret-key-here"
+
+# Make authenticated request
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" http://localhost:8080/documents/
+```
+
+### API Key Authentication
+```bash
+# Set valid API keys (comma-separated)
+export DMS_API_KEYS="key1,key2,key3"
+
+# Make authenticated request
+curl -H "X-API-Key: key1" http://localhost:8080/documents/
+```
+
+### Development Mode
+By default, authentication is optional (`DMS_REQUIRE_AUTH=false`). Set to `true` in production.
+
+## Database Migrations
+
+The service uses Alembic for database schema versioning:
+
+```bash
+# Run all pending migrations
+alembic upgrade head
+
+# Create a new migration
+alembic revision --autogenerate -m "description"
+
+# Rollback one migration
+alembic downgrade -1
+
+# View migration history
+alembic history
+```
+
+## Health Checks
+
+- **`GET /healthz`**: Basic liveness check (always returns 200 if service is running)
+- **`GET /healthz/detailed`**: Full dependency health check (Postgres, Redis, Neo4j)
+- **`GET /readyz`**: Kubernetes readiness probe (checks critical dependencies)
+- **`GET /livez`**: Kubernetes liveness probe
+
+## Tests
 
 ```bash
 cd services/dms
 PYTHONPATH=$(pwd) pytest
 ```
+
+## API Endpoints
+
+- `POST /documents/`: Upload a document
+- `GET /documents/`: List all documents (paginated)
+- `GET /documents/{id}`: Get document details
+- `GET /documents/{id}/status`: Get processing status
+- `GET /documents/{id}/results`: Get extraction results
+- `GET /documents/{id}/intelligence`: Get AI-generated intelligence

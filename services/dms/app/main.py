@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import logging
+import os
 
 from fastapi import FastAPI
 
-from app.api.routers import documents
+from app.api.routers import documents, health
+from app.core.auth import AuthMiddleware
 from app.core.config import get_settings
 from app.core.middleware import CorrelationIDMiddleware
 from app.core.neo4j import get_neo4j_driver
@@ -23,6 +25,17 @@ def create_app() -> FastAPI:
     # Add correlation ID middleware
     app.add_middleware(CorrelationIDMiddleware)
     
+    # Add authentication middleware if enabled
+    require_auth = os.getenv("DMS_REQUIRE_AUTH", "false").lower() == "true"
+    if require_auth:
+        logger.info("Authentication enabled - all requests require valid credentials")
+        app.add_middleware(AuthMiddleware, require_auth=True)
+    else:
+        logger.info("Authentication optional - running in development mode")
+        app.add_middleware(AuthMiddleware, require_auth=False)
+    
+    # Register routers
+    app.include_router(health.router)
     app.include_router(documents.router)
 
     @app.on_event("startup")

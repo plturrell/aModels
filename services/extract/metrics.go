@@ -168,16 +168,16 @@ func (m *MetricsCollector) GetMetrics() map[string]interface{} {
 			"total_retries":       m.RetryMetrics.TotalRetries,
 			"successful_retries":  m.RetryMetrics.SuccessfulRetries,
 			"failed_retries":     m.RetryMetrics.FailedRetries,
-			"success_rate":        float64(m.RetryMetrics.SuccessfulRetries) / float64(m.RetryMetrics.TotalRetries) * 100,
+			"success_rate":        safeRate(m.RetryMetrics.SuccessfulRetries, m.RetryMetrics.TotalRetries),
 			"avg_retry_time":      m.RetryMetrics.AvgRetryTime.String(),
 		},
 		"consistency": map[string]interface{}{
 			"total_checks":        m.ConsistencyMetrics.TotalChecks,
 			"consistent_checks":   m.ConsistencyMetrics.ConsistentChecks,
 			"inconsistent_checks": m.ConsistencyMetrics.InconsistentChecks,
-			"consistency_rate":    float64(m.ConsistencyMetrics.ConsistentChecks) / float64(m.ConsistencyMetrics.TotalChecks) * 100,
-			"avg_node_variance":   float64(m.ConsistencyMetrics.NodeVariance) / float64(m.ConsistencyMetrics.TotalChecks),
-			"avg_edge_variance":   float64(m.ConsistencyMetrics.EdgeVariance) / float64(m.ConsistencyMetrics.TotalChecks),
+			"consistency_rate":    safeRate(m.ConsistencyMetrics.ConsistentChecks, m.ConsistencyMetrics.TotalChecks),
+			"avg_node_variance":   safeAverage(m.ConsistencyMetrics.NodeVariance, m.ConsistencyMetrics.TotalChecks),
+			"avg_edge_variance":   safeAverage(m.ConsistencyMetrics.EdgeVariance, m.ConsistencyMetrics.TotalChecks),
 			"avg_check_time":      m.ConsistencyMetrics.AvgCheckTime.String(),
 		},
 		"neo4j_batch": map[string]interface{}{
@@ -187,9 +187,23 @@ func (m *MetricsCollector) GetMetrics() map[string]interface{} {
 			"avg_batch_size":     m.Neo4jBatchMetrics.AvgBatchSize,
 			"avg_batch_time":     m.Neo4jBatchMetrics.AvgBatchTime.String(),
 			"batch_errors":       m.Neo4jBatchMetrics.BatchErrors,
-			"error_rate":         float64(m.Neo4jBatchMetrics.BatchErrors) / float64(m.Neo4jBatchMetrics.TotalBatches) * 100,
+			"error_rate":         safeRate(m.Neo4jBatchMetrics.BatchErrors, m.Neo4jBatchMetrics.TotalBatches),
 		},
 	}
+}
+
+func safeRate(num, denom int64) float64 {
+	if denom == 0 {
+		return 0
+	}
+	return float64(num) / float64(denom) * 100
+}
+
+func safeAverage(sum int64, count int64) float64 {
+	if count == 0 {
+		return 0
+	}
+	return float64(sum) / float64(count)
 }
 
 // Reset resets all metrics

@@ -1,4 +1,5 @@
 import { API_BASE } from "./client";
+import type { GraphData } from "../types/graph";
 
 export interface MurexTrade {
   id: string;
@@ -40,6 +41,7 @@ export interface MurexTradeIntelligence {
   domain_confidence?: number;
   relationships?: MurexRelationship[];
   learned_patterns?: MurexPattern[];
+  graph_data?: GraphData;
 }
 
 export interface MurexRelationship {
@@ -63,6 +65,7 @@ export interface MurexRequestIntelligence {
   knowledge_graph_edges?: number;
   workflow_processed?: boolean;
   summary?: string;
+  graph_data?: GraphData;
 }
 
 export interface MurexRequestHistory {

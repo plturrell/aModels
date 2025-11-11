@@ -32,6 +32,9 @@ import { NaturalLanguageGraphQuery } from '../../components/NaturalLanguageGraph
 import { GNNInsights } from './views/GNNInsights';
 import { Analytics } from './views/Analytics';
 import { PatternVisualization } from './views/PatternVisualization';
+import { AIGraphAssistant } from '../../components/AIGraphAssistant';
+import { GraphRecommendations } from '../../components/GraphRecommendations';
+import { VisualQueryBuilder } from '../../components/VisualQueryBuilder';
 import {
   visualizeGraph,
   exploreGraph,
@@ -241,6 +244,9 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
         <Tab label="GNN Insights" />
         <Tab label="Analytics" />
         <Tab label="Patterns" />
+        <Tab label="AI Assistant" />
+        <Tab label="Recommendations" />
+        <Tab label="Query Builder" />
         <Tab label="Query" />
         <Tab label="Paths" />
         <Tab label="Stats" />
@@ -480,6 +486,63 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
       {activeTab === 6 && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
+            <AIGraphAssistant
+              nodes={graphData.nodes}
+              edges={graphData.edges}
+              projectId={formProjectId}
+              onNodeClick={(nodeId) => {
+                setSelectedNodes([nodeId]);
+                handleNodeClick(nodeId, graphData.nodes.find(n => n.id === nodeId)!);
+              }}
+              onQueryGenerated={(query) => {
+                setCypherQuery(query);
+                setActiveTab(9); // Switch to Query tab
+              }}
+            />
+          </Grid>
+        </Grid>
+      )}
+
+      {activeTab === 7 && (
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <GraphRecommendations
+              nodes={graphData.nodes}
+              edges={graphData.edges}
+              selectedNodeId={selectedNodes[0]}
+              onNodeClick={(nodeId) => {
+                setSelectedNodes([nodeId]);
+                handleNodeClick(nodeId, graphData.nodes.find(n => n.id === nodeId)!);
+              }}
+              onPathClick={(path) => {
+                setSelectedNodes(path);
+              }}
+            />
+          </Grid>
+        </Grid>
+      )}
+
+      {activeTab === 8 && (
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <VisualQueryBuilder
+              nodes={graphData.nodes}
+              edges={graphData.edges}
+              onQueryGenerated={(query) => {
+                setCypherQuery(query);
+                setActiveTab(9); // Switch to Query tab
+              }}
+              onQueryExecute={async (query) => {
+                return await queryGraph({ query });
+              }}
+            />
+          </Grid>
+        </Grid>
+      )}
+
+      {activeTab === 9 && (
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
             <Paper sx={{ p: 2 }}>
               <Typography variant="h6" gutterBottom>
                 Cypher Query
@@ -505,7 +568,7 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
         </Grid>
       )}
 
-      {activeTab === 7 && (
+      {activeTab === 10 && (
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             <Paper sx={{ p: 2 }}>
@@ -541,7 +604,7 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
         </Grid>
       )}
 
-      {activeTab === 5 && (
+      {activeTab === 11 && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <Paper sx={{ p: 2 }}>
