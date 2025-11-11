@@ -45,7 +45,16 @@ Each refresh is also logged (look for `catalog:` entries in service logs) so tel
 
 For dashboards/alerting systems, `GET /v1/agent-catalog/stats` returns a compact JSON payload containing just the enrichment metadata and latest timestamp.
 
-## 5. HANA Integration
+## 5. Elasticsearch Client Version
+
+The search-inference service uses Elasticsearch Go client v7 (`github.com/elastic/go-elasticsearch/v7`), while the Python service uses Elasticsearch v8. This version difference is intentional:
+
+- **Go Service (v7)**: Compatible with Go 1.18, which is required for the search-inference service. The v7 client provides all necessary features for vector search and document indexing.
+- **Python Service (v8)**: Uses the latest Elasticsearch Python client for compatibility with modern Python libraries and features.
+
+Both clients are compatible with Elasticsearch clusters v7.x and v8.x, as the Elasticsearch API maintains backward compatibility. The version difference is in the client libraries only, not the cluster version.
+
+## 6. HANA Integration
 
 The storage layer can persist documents, embeddings, and search telemetry in SAP HANA.
 The HANA-backed implementations are protected by the `hana` build tag so the service

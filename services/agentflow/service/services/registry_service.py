@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -23,10 +24,17 @@ except ImportError:  # pragma: no cover - optional dependency
 class FlowRegistryService:
     """Coordinates persistence across SQLite and optional Redis caches."""
 
-    def __init__(self, repository: FlowRegistryRepository, redis_client: Optional["Redis"] = None):
+    def __init__(
+        self,
+        repository: FlowRegistryRepository,
+        redis_client: Optional["Redis"] = None,
+        *,
+        logger: Optional[logging.Logger] = None,
+    ):
         self._repo = repository
         self._redis = redis_client
         self._settings = get_settings()
+        self._logger = logger or logging.getLogger(__name__)
 
     async def list(self) -> list[FlowMapping]:
         return await run_in_threadpool(lambda: list(self._repo.list()))
@@ -34,10 +42,14 @@ class FlowRegistryService:
     async def get(self, local_id: str) -> Optional[FlowMapping]:
         cached = await self._get_cached(local_id)
         if cached:
+            if self._logger:
+                self._logger.debug("flow mapping served from cache", extra={"local_id": local_id})
             return cached
         record = await run_in_threadpool(lambda: self._repo.get(local_id))
         if record:
             await self._cache_mapping(record)
+        elif self._logger:
+            self._logger.debug("flow mapping missing from repository", extra={"local_id": local_id})
         return record
 
     async def upsert_from_flow(
@@ -68,6 +80,15 @@ class FlowRegistryService:
 
         await self._cache_mapping(mapping)
 
+        if self._logger:
+            self._logger.info(
+                "flow mapping upserted",
+                extra={
+                    "local_id": mapping.local_id,
+                    "remote_id": mapping.remote_id,
+                },
+            )
+
         return mapping
 
     async def _cache_mapping(self, mapping: FlowMapping) -> None:
@@ -87,8 +108,12 @@ class FlowRegistryService:
         )
         try:
             await self._redis.set(self._redis_key(mapping.local_id), payload, ex=3600)
-        except RedisError:
-            # Redis unavailable – treat as cache miss and continue.
+        except RedisError as exc:
+            if self._logger:
+                self._logger.debug(
+                    "failed to write flow mapping to redis",
+                    extra={"local_id": mapping.local_id, "error": str(exc)},
+                )
             return
 
     async def _get_cached(self, local_id: str) -> Optional[FlowMapping]:
@@ -96,7 +121,12 @@ class FlowRegistryService:
             return None
         try:
             payload = await self._redis.get(self._redis_key(local_id))
-        except RedisError:
+        except RedisError as exc:
+            if self._logger:
+                self._logger.debug(
+                    "failed to read flow mapping from redis",
+                    extra={"local_id": local_id, "error": str(exc)},
+                )
             return None
         if not payload:
             return None

@@ -5,6 +5,7 @@ use (
 	./services/framework
 	./services/plot
 	./services/runtime
+	./services/search/search-inference
 	./services/stdlib
 )
 

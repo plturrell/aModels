@@ -1,16 +1,21 @@
 import json
 import logging
 import os
+import re
+import secrets
 import threading
 import time
 import uuid
+from collections import defaultdict
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Path, Request, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, Field, field_validator
 
 try:  # Optional dependency: Elasticsearch Python client
     from elasticsearch import Elasticsearch
@@ -28,16 +33,145 @@ except ImportError:  # pragma: no cover - optional dependency missing
     hdbapi = None  # type: ignore
 
 
+def sanitize_query(query: str) -> str:
+    """Sanitize and validate search query input."""
+    if not query or not isinstance(query, str):
+        raise ValueError("Query must be a non-empty string")
+    
+    # Strip whitespace
+    query = query.strip()
+    
+    # Check length
+    if len(query) < MIN_QUERY_LENGTH:
+        raise ValueError(f"Query must be at least {MIN_QUERY_LENGTH} character(s)")
+    if len(query) > MAX_QUERY_LENGTH:
+        raise ValueError(f"Query must not exceed {MAX_QUERY_LENGTH} characters")
+    
+    # Remove control characters except newlines and tabs
+    query = re.sub(r'[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]', '', query)
+    
+    return query
+
+
+def validate_document_id(doc_id: str) -> str:
+    """Validate document ID format and length."""
+    if not doc_id or not isinstance(doc_id, str):
+        raise ValueError("Document ID must be a non-empty string")
+    
+    doc_id = doc_id.strip()
+    
+    if len(doc_id) > MAX_DOCUMENT_ID_LENGTH:
+        raise ValueError(f"Document ID must not exceed {MAX_DOCUMENT_ID_LENGTH} characters")
+    
+    # Allow alphanumeric, hyphens, underscores, and dots
+    if not re.match(r'^[a-zA-Z0-9._-]+$', doc_id):
+        raise ValueError("Document ID can only contain alphanumeric characters, dots, hyphens, and underscores")
+    
+    return doc_id
+
+
+def validate_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and sanitize metadata dictionary."""
+    if not isinstance(metadata, dict):
+        raise ValueError("Metadata must be a dictionary")
+    
+    if len(metadata) > MAX_METADATA_KEYS:
+        raise ValueError(f"Metadata must not exceed {MAX_METADATA_KEYS} keys")
+    
+    sanitized = {}
+    for key, value in metadata.items():
+        if not isinstance(key, str):
+            raise ValueError("Metadata keys must be strings")
+        if len(key) > MAX_DOCUMENT_ID_LENGTH:
+            raise ValueError(f"Metadata key '{key}' exceeds maximum length")
+        
+        # Convert value to string and validate length
+        str_value = str(value)
+        if len(str_value) > MAX_METADATA_VALUE_LENGTH:
+            raise ValueError(f"Metadata value for '{key}' exceeds maximum length")
+        
+        sanitized[key] = value
+    
+    return sanitized
+
+
 class SearchDocument(BaseModel):
     id: str
     content: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    
+    @field_validator('id')
+    @classmethod
+    def validate_id(cls, v: str) -> str:
+        return validate_document_id(v)
+    
+    @field_validator('content')
+    @classmethod
+    def validate_content(cls, v: str) -> str:
+        if not v or not isinstance(v, str):
+            raise ValueError("Content must be a non-empty string")
+        if len(v) > MAX_DOCUMENT_CONTENT_LENGTH:
+            raise ValueError(f"Content must not exceed {MAX_DOCUMENT_CONTENT_LENGTH} characters")
+        return v.strip()
+    
+    @field_validator('metadata')
+    @classmethod
+    def validate_metadata(cls, v: Dict[str, Any]) -> Dict[str, Any]:
+        return validate_metadata(v)
 
 
 class SearchRequest(BaseModel):
     query: str
     top_k: int = Field(default=10, ge=1, le=200)
     filters: Dict[str, str] = Field(default_factory=dict)
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=10, ge=1, le=100)
+    date_from: Optional[str] = None  # ISO format date string
+    date_to: Optional[str] = None    # ISO format date string
+    source: Optional[str] = None     # Filter by source
+    doc_type: Optional[str] = None   # Filter by document type
+    facets: List[str] = Field(default_factory=list)  # Faceted search fields
+    include_explanation: bool = Field(default=False)  # Include ranking explanation
+    include_highlighting: bool = Field(default=True)  # Highlight query terms
+    
+    @field_validator('query')
+    @classmethod
+    def validate_query(cls, v: str) -> str:
+        return sanitize_query(v)
+    
+    @field_validator('filters')
+    @classmethod
+    def validate_filters(cls, v: Dict[str, str]) -> Dict[str, str]:
+        if not isinstance(v, dict):
+            raise ValueError("Filters must be a dictionary")
+        if len(v) > MAX_METADATA_KEYS:
+            raise ValueError(f"Filters must not exceed {MAX_METADATA_KEYS} keys")
+        # Validate filter values are strings and within length limits
+        sanitized = {}
+        for key, value in v.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                raise ValueError("Filter keys and values must be strings")
+            if len(value) > MAX_METADATA_VALUE_LENGTH:
+                raise ValueError(f"Filter value for '{key}' exceeds maximum length")
+            sanitized[key.strip()] = value.strip()
+        return sanitized
+    
+    @field_validator('date_from', 'date_to')
+    @classmethod
+    def validate_date(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        try:
+            datetime.fromisoformat(v.replace('Z', '+00:00'))
+        except ValueError:
+            raise ValueError(f"Invalid date format: {v}. Use ISO format (YYYY-MM-DDTHH:MM:SS)")
+        return v
+
+
+class RankingExplanation(BaseModel):
+    score: float
+    factors: Dict[str, float] = Field(default_factory=dict)  # e.g., {"semantic_similarity": 0.85, "keyword_match": 0.12}
+    explanation: str = ""  # Human-readable explanation
 
 
 class SearchResult(BaseModel):
@@ -45,11 +179,30 @@ class SearchResult(BaseModel):
     content: str
     similarity: float
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    highlighted_content: Optional[str] = None  # Content with query terms highlighted
+    explanation: Optional[RankingExplanation] = None  # Ranking explanation
+    preview: Optional[str] = None  # Short preview snippet
+
+
+class FacetValue(BaseModel):
+    value: str
+    count: int
+
+
+class Facet(BaseModel):
+    field: str
+    values: List[FacetValue]
 
 
 class SearchResponse(BaseModel):
     backend: str
     results: List[SearchResult]
+    total: int = 0  # Total number of results
+    page: int = 1
+    page_size: int = 10
+    total_pages: int = 0
+    facets: List[Facet] = Field(default_factory=list)  # Faceted search results
+    query_time_ms: float = 0.0  # Query execution time
 
 
 class HealthResponse(BaseModel):
@@ -60,10 +213,39 @@ class HealthResponse(BaseModel):
     hana: bool
 
 
+def validate_conversation_id(conv_id: Optional[str]) -> Optional[str]:
+    """Validate conversation ID format (UUID)."""
+    if conv_id is None:
+        return None
+    
+    if not isinstance(conv_id, str):
+        raise ValueError("Conversation ID must be a string")
+    
+    conv_id = conv_id.strip()
+    
+    # Validate UUID format
+    try:
+        uuid.UUID(conv_id)
+    except ValueError:
+        raise ValueError("Conversation ID must be a valid UUID")
+    
+    return conv_id
+
+
 class AISearchRequest(BaseModel):
     query: str
     conversation_id: Optional[str] = None
     max_sources: int = Field(default=5, ge=1, le=10)
+    
+    @field_validator('query')
+    @classmethod
+    def validate_query(cls, v: str) -> str:
+        return sanitize_query(v)
+    
+    @field_validator('conversation_id')
+    @classmethod
+    def validate_conversation_id(cls, v: Optional[str]) -> Optional[str]:
+        return validate_conversation_id(v)
 
 
 class AISearchResponse(BaseModel):
@@ -88,6 +270,23 @@ class Conversation(BaseModel):
 
 
 logger = logging.getLogger(__name__)
+
+# Constants
+DEFAULT_CACHE_TTL = 120  # seconds
+CONVERSATION_EXPIRY_TIME = 3600  # 1 hour in seconds
+SOURCE_CONTENT_TRUNCATE_LENGTH = 500  # characters
+CONVERSATION_HISTORY_CONTEXT_MESSAGES = 3  # number of previous messages to include
+LOCALAI_TIMEOUT = 30.0  # seconds
+LOCALAI_MAX_TOKENS = 1000
+FOLLOW_UP_SUGGESTIONS_COUNT = 3
+
+# Input validation constants
+MAX_QUERY_LENGTH = 1000  # characters
+MAX_DOCUMENT_ID_LENGTH = 255  # characters
+MAX_DOCUMENT_CONTENT_LENGTH = 1_000_000  # characters (1MB)
+MIN_QUERY_LENGTH = 1  # characters
+MAX_METADATA_KEYS = 50  # maximum number of metadata keys
+MAX_METADATA_VALUE_LENGTH = 1000  # characters per metadata value
 
 
 class GoSearchClient:
@@ -154,7 +353,11 @@ class ElasticConnector:
             return False
         try:
             return bool(self.client.ping())
-        except Exception:  # pragma: no cover - network failure
+        except (ConnectionError, TimeoutError, OSError) as e:
+            logger.debug(f"Elasticsearch connection check failed: {e}")
+            return False
+        except Exception as e:  # pragma: no cover - unexpected error
+            logger.warning(f"Unexpected error checking Elasticsearch availability: {e}")
             return False
 
     def search(self, index: str, body: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -182,16 +385,22 @@ class RedisConnector:
             return False
         try:
             return bool(self.client.ping())
-        except Exception:  # pragma: no cover - network failure
+        except (ConnectionError, TimeoutError, OSError) as e:
+            logger.debug(f"Redis connection check failed: {e}")
+            return False
+        except Exception as e:  # pragma: no cover - unexpected error
+            logger.warning(f"Unexpected error checking Redis availability: {e}")
             return False
 
-    def cache_search(self, key: str, payload: Dict[str, Any], ttl: int = 120) -> None:
+    def cache_search(self, key: str, payload: Dict[str, Any], ttl: int = DEFAULT_CACHE_TTL) -> None:
         if self.client is None:
             return
         try:
             self.client.setex(key, ttl, json.dumps(payload))
-        except Exception:  # pragma: no cover - serialization failure
-            pass
+        except (redis.RedisError, json.JSONEncodeError, TypeError) as e:
+            logger.debug(f"Redis cache write failed: {e}")
+        except Exception as e:  # pragma: no cover - unexpected error
+            logger.warning(f"Unexpected error caching search result: {e}")
 
     def get_cached_search(self, key: str) -> Optional[Dict[str, Any]]:
         if self.client is None:
@@ -211,7 +420,11 @@ class HANAConnector:
         if dsn and hdbapi is not None:
             try:
                 self._conn = hdbapi.connect(dsn=dsn)
-            except Exception:
+            except (ConnectionError, TimeoutError, OSError) as e:
+                logger.debug(f"HANA connection failed: {e}")
+                self._conn = None
+            except Exception as e:  # pragma: no cover - unexpected error
+                logger.warning(f"Unexpected error connecting to HANA: {e}")
                 self._conn = None
 
     @property
@@ -248,7 +461,7 @@ class ConversationManager:
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._conversations: Dict[str, Conversation] = {}
-        self._expiry_time = 3600  # 1 hour
+        self._expiry_time = CONVERSATION_EXPIRY_TIME
 
     def create_conversation(self) -> str:
         conversation_id = str(uuid.uuid4())
@@ -276,14 +489,25 @@ class ConversationManager:
                 conv.last_accessed = time.time()
 
     def cleanup_expired(self) -> None:
+        """Remove expired conversations. Thread-safe."""
         current_time = time.time()
+        expired_ids = []
+        
+        # First pass: identify expired conversations while holding read lock
         with self._lock:
-            expired_ids = [
-                conv_id for conv_id, conv in self._conversations.items()
-                if current_time - conv.last_accessed > self._expiry_time
-            ]
-            for conv_id in expired_ids:
-                del self._conversations[conv_id]
+            for conv_id, conv in self._conversations.items():
+                if current_time - conv.last_accessed > self._expiry_time:
+                    expired_ids.append(conv_id)
+        
+        # Second pass: remove expired conversations (write lock)
+        if expired_ids:
+            with self._lock:
+                # Re-check in case conversations were accessed between passes
+                current_time = time.time()
+                for conv_id in expired_ids[:]:  # Copy list to avoid modification during iteration
+                    conv = self._conversations.get(conv_id)
+                    if conv and current_time - conv.last_accessed > self._expiry_time:
+                        del self._conversations[conv_id]
 
 
 class AISearchOrchestrator:
@@ -300,12 +524,12 @@ class AISearchOrchestrator:
         if sources:
             prompt += "Sources:\n"
             for i, source in enumerate(sources, 1):
-                prompt += f"[{i}] {source.content[:500]}...\n"
+                prompt += f"[{i}] {source.content[:SOURCE_CONTENT_TRUNCATE_LENGTH]}...\n"
             prompt += "\n"
         
         if conversation_history:
             prompt += "Previous conversation:\n"
-            for msg in conversation_history[-3:]:  # Last 3 messages for context
+            for msg in conversation_history[-CONVERSATION_HISTORY_CONTEXT_MESSAGES:]:
                 prompt += f"{msg.role}: {msg.content}\n"
             prompt += "\n"
         
@@ -315,7 +539,7 @@ class AISearchOrchestrator:
     def _stream_llm_response(self, prompt: str) -> str:
         """Stream response from LocalAI"""
         try:
-            client = httpx.Client(timeout=30.0)
+            client = httpx.Client(timeout=LOCALAI_TIMEOUT)
             response = client.post(
                 f"{self.localai_url}/v1/chat/completions",
                 json={
@@ -323,7 +547,7 @@ class AISearchOrchestrator:
                     "messages": [{"role": "user", "content": prompt}],
                     "stream": True,
                     "temperature": 0.7,
-                    "max_tokens": 1000
+                    "max_tokens": LOCALAI_MAX_TOKENS
                 },
                 headers={"Content-Type": "application/json"}
             )
@@ -348,8 +572,14 @@ class AISearchOrchestrator:
                         continue
             
             return full_response
+        except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as e:
+            logger.error(f"Network error streaming LLM response: {e}")
+            return "I'm sorry, I couldn't connect to the AI service. Please try again."
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error streaming LLM response: {e.response.status_code} - {e.response.text}")
+            return "I'm sorry, the AI service returned an error. Please try again."
         except Exception as e:
-            logger.error(f"Error streaming LLM response: {e}")
+            logger.error(f"Unexpected error streaming LLM response: {e}")
             return "I'm sorry, I encountered an error while generating a response."
 
     def _generate_follow_up_suggestions(self, query: str, response: str) -> List[str]:
@@ -361,7 +591,7 @@ class AISearchOrchestrator:
             "What are the next steps?",
             "Are there any exceptions to this rule?"
         ]
-        return suggestions[:3]  # Return top 3 suggestions
+        return suggestions[:FOLLOW_UP_SUGGESTIONS_COUNT]
 
     def search_with_ai(self, request: AISearchRequest) -> AISearchResponse:
         # Get or create conversation
@@ -420,10 +650,51 @@ class AISearchOrchestrator:
         return self.conversation_manager.get_conversation(conversation_id)
 
 
+class SearchHistory:
+    """Manages search history for users"""
+    def __init__(self, max_history: int = 100):
+        self.history: List[Dict[str, Any]] = []
+        self.max_history = max_history
+        self.lock = threading.Lock()
+    
+    def add(self, query: str, filters: Dict[str, str], results_count: int) -> None:
+        with self.lock:
+            entry = {
+                "query": query,
+                "filters": filters,
+                "results_count": results_count,
+                "timestamp": time.time()
+            }
+            self.history.insert(0, entry)
+            if len(self.history) > self.max_history:
+                self.history = self.history[:self.max_history]
+    
+    def get_recent(self, limit: int = 10) -> List[Dict[str, Any]]:
+        with self.lock:
+            return self.history[:limit]
+    
+    def get_suggestions(self, prefix: str, limit: int = 5) -> List[str]:
+        """Get search suggestions based on prefix"""
+        with self.lock:
+            suggestions = set()
+            prefix_lower = prefix.lower()
+            for entry in self.history:
+                query = entry["query"].lower()
+                if query.startswith(prefix_lower) and query != prefix_lower:
+                    suggestions.add(entry["query"])
+                if len(suggestions) >= limit:
+                    break
+            return list(suggestions)[:limit]
+
+
 class SearchOrchestrator:
     def __init__(self) -> None:
         go_url = os.getenv("GO_SEARCH_URL")
+        # Phase 5: GNN integration for structural embeddings
+        self.training_service_url = os.getenv("TRAINING_SERVICE_URL", "http://training-service:8080")
+        self.enable_gnn_search = os.getenv("ENABLE_GNN_SEARCH", "false").lower() == "true"
         self.go_client = GoSearchClient(go_url) if go_url else None
+        self.search_history = SearchHistory()
 
         es_urls = [u.strip() for u in os.getenv("ELASTICSEARCH_URLS", "").split(",") if u.strip()]
         self.es_index = os.getenv("ELASTICSEARCH_INDEX", "agenticaieth-docs")
@@ -489,20 +760,63 @@ class SearchOrchestrator:
                 logger.warning("Secondary Go search ingest failed for %s: %s", doc.id, exc.detail)
 
     def search(self, request: SearchRequest) -> SearchResponse:
+        # Apply date range filters if provided
+        enhanced_filters = dict(request.filters)
+        if request.date_from or request.date_to:
+            date_filter = {}
+            if request.date_from:
+                date_filter["gte"] = request.date_from
+            if request.date_to:
+                date_filter["lte"] = request.date_to
+            enhanced_filters["date"] = date_filter
+        
+        # Apply source filter
+        if request.source:
+            enhanced_filters["source"] = request.source
+        
+        # Apply document type filter
+        if request.doc_type:
+            enhanced_filters["type"] = request.doc_type
+        
+        # Create modified request with enhanced filters
+        modified_request = SearchRequest(
+            query=request.query,
+            top_k=request.top_k * request.page_size,  # Get more results for pagination
+            filters=enhanced_filters,
+            page=request.page,
+            page_size=request.page_size
+        )
+        
         cache_key = None
         if self.redis.available:
-            cache_key = f"search::{request.query}::{json.dumps(request.filters, sort_keys=True)}::{request.top_k}"
+            cache_key = f"search::{request.query}::{json.dumps(enhanced_filters, sort_keys=True)}::{request.top_k}::{request.page}"
             cached = self.redis.get_cached_search(cache_key)
             if cached is not None:
                 results = [SearchResult(**item) for item in cached.get("results", [])]
                 return SearchResponse(backend=cached.get("backend", "cache"), results=results)
 
+        # Phase 5: Get semantic embedding (LLM-based)
         query_embedding = self._embed_text(request.query)
-
-        if self.elasticsearch.available:
-            response = self._search_elasticsearch(request, query_embedding)
+        
+        # Phase 5: Get GNN embedding if graph data is available in metadata
+        gnn_embedding = None
+        if self.enable_gnn_search:
+            # Extract graph structure from request metadata if available
+            graph_nodes = request.filters.get("graph_nodes", []) if isinstance(request.filters.get("graph_nodes"), list) else []
+            graph_edges = request.filters.get("graph_edges", []) if isinstance(request.filters.get("graph_edges"), list) else []
+            if graph_nodes or graph_edges:
+                gnn_embedding = self._get_gnn_embedding(graph_nodes, graph_edges, graph_level=True)
+        
+        # Phase 5: Use hybrid search if both embeddings available, otherwise fallback
+        if query_embedding and gnn_embedding:
+            response = self._hybrid_search(modified_request, query_embedding, gnn_embedding)
+        elif self.elasticsearch.available:
+            response = self._search_elasticsearch(modified_request, query_embedding)
         else:
-            response = self._search_in_memory(request, query_embedding)
+            response = self._search_in_memory(modified_request, query_embedding)
+
+        # Record search in history
+        self.search_history.add(request.query, enhanced_filters, len(response.results))
 
         if cache_key and response.results:
             cached_payload = {
@@ -512,6 +826,108 @@ class SearchOrchestrator:
             self.redis.cache_search(cache_key, cached_payload)
 
         return response
+    
+    def highlight_results(self, results: List[SearchResult], query: str) -> List[SearchResult]:
+        """Highlight query terms in search results"""
+        query_terms = query.lower().split()
+        for result in results:
+            content = result.content
+            highlighted = content
+            for term in query_terms:
+                if term:
+                    # Case-insensitive highlighting
+                    pattern = re.compile(re.escape(term), re.IGNORECASE)
+                    highlighted = pattern.sub(lambda m: f"<mark>{m.group()}</mark>", highlighted)
+            result.highlighted_content = highlighted
+        return results
+    
+    def generate_preview(self, content: str, query: str, max_length: int = 200) -> str:
+        """Generate a preview snippet around query terms"""
+        query_terms = query.lower().split()
+        content_lower = content.lower()
+        
+        # Find first occurrence of any query term
+        best_pos = -1
+        for term in query_terms:
+            if term:
+                pos = content_lower.find(term)
+                if pos != -1 and (best_pos == -1 or pos < best_pos):
+                    best_pos = pos
+        
+        if best_pos == -1:
+            # No match found, return beginning
+            return content[:max_length] + ("..." if len(content) > max_length else "")
+        
+        # Extract snippet around match
+        start = max(0, best_pos - max_length // 2)
+        end = min(len(content), start + max_length)
+        
+        preview = content[start:end]
+        if start > 0:
+            preview = "..." + preview
+        if end < len(content):
+            preview = preview + "..."
+        
+        return preview
+    
+    def explain_rankings(self, results: List[SearchResult], query: str) -> List[SearchResult]:
+        """Generate ranking explanations for results"""
+        query_terms = query.lower().split()
+        for result in results:
+            factors = {}
+            explanation_parts = []
+            
+            # Semantic similarity factor
+            if result.similarity > 0.8:
+                factors["semantic_similarity"] = result.similarity
+                explanation_parts.append(f"High semantic similarity ({result.similarity:.2f})")
+            elif result.similarity > 0.5:
+                factors["semantic_similarity"] = result.similarity
+                explanation_parts.append(f"Moderate semantic similarity ({result.similarity:.2f})")
+            
+            # Keyword match factor
+            content_lower = result.content.lower()
+            keyword_matches = sum(1 for term in query_terms if term in content_lower)
+            if keyword_matches > 0:
+                keyword_score = keyword_matches / len(query_terms)
+                factors["keyword_match"] = keyword_score
+                explanation_parts.append(f"Matches {keyword_matches} query term(s)")
+            
+            # Metadata relevance
+            if result.metadata:
+                metadata_score = 0.1  # Small boost for having metadata
+                factors["metadata_presence"] = metadata_score
+                explanation_parts.append("Contains metadata")
+            
+            explanation = RankingExplanation(
+                score=result.similarity,
+                factors=factors,
+                explanation="; ".join(explanation_parts) if explanation_parts else "Relevance score based on content matching"
+            )
+            result.explanation = explanation
+        
+        return results
+    
+    def calculate_facets(self, results: List[SearchResult], facet_fields: List[str]) -> List[Facet]:
+        """Calculate facet counts for specified fields"""
+        facets = {}
+        for field in facet_fields:
+            facet_values = defaultdict(int)
+            for result in results:
+                value = result.metadata.get(field, "Unknown")
+                if isinstance(value, (str, int, float)):
+                    facet_values[str(value)] += 1
+                elif isinstance(value, list):
+                    for v in value:
+                        facet_values[str(v)] += 1
+            
+            facet_values_list = [
+                FacetValue(value=k, count=v)
+                for k, v in sorted(facet_values.items(), key=lambda x: x[1], reverse=True)[:10]
+            ]
+            facets[field] = Facet(field=field, values=facet_values_list)
+        
+        return list(facets.values())
 
     def _embed_text(self, text: str) -> Optional[List[float]]:
         if not text.strip() or self.go_client is None:
@@ -520,6 +936,82 @@ class SearchOrchestrator:
         if embedding is None:
             logger.debug("Embedding unavailable from Go service; falling back to text search")
         return embedding
+    
+    def _get_gnn_embedding(self, nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]], graph_level: bool = True) -> Optional[List[float]]:
+        """Phase 5: Get GNN embedding from training service for graph structures.
+        
+        Args:
+            nodes: List of graph nodes
+            edges: List of graph edges
+            graph_level: If True, returns graph-level embedding; if False, returns node-level embeddings
+        
+        Returns:
+            Graph-level embedding vector or None if unavailable
+        """
+        if not self.enable_gnn_search or not nodes:
+            return None
+        
+        try:
+            payload = {
+                "nodes": nodes,
+                "edges": edges,
+                "graph_level": graph_level
+            }
+            
+            response = httpx.post(
+                f"{self.training_service_url}/gnn/embeddings",
+                json=payload,
+                timeout=10.0
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            if result.get("status") == "success" and "embeddings" in result:
+                embeddings = result["embeddings"]
+                if graph_level and "graph_embedding" in embeddings:
+                    return embeddings["graph_embedding"]
+                elif not graph_level and "node_embeddings" in embeddings:
+                    # Return first node embedding as fallback
+                    node_embeddings = embeddings["node_embeddings"]
+                    if node_embeddings:
+                        first_key = next(iter(node_embeddings))
+                        return node_embeddings[first_key]
+            
+            logger.debug("GNN embedding unavailable from training service")
+            return None
+        except Exception as e:
+            logger.debug(f"GNN embedding request failed: {e}")
+            return None
+    
+    def _hybrid_search(self, request: SearchRequest, semantic_embedding: Optional[List[float]], gnn_embedding: Optional[List[float]]) -> SearchResponse:
+        """Phase 5: Hybrid search combining semantic (LLM) + structural (GNN) embeddings.
+        
+        Args:
+            request: Search request
+            semantic_embedding: Semantic embedding from LLM
+            gnn_embedding: Structural embedding from GNN
+        
+        Returns:
+            SearchResponse with combined results
+        """
+        # For now, prioritize semantic embedding, use GNN as boost
+        # In future, could do weighted combination
+        primary_embedding = semantic_embedding or gnn_embedding
+        
+        if self.elasticsearch.available:
+            response = self._search_elasticsearch(request, primary_embedding)
+            # Phase 5: Boost results with GNN similarity if available
+            if gnn_embedding and semantic_embedding and response.results:
+                # Re-rank results based on GNN similarity
+                # This is a simplified version - full implementation would query GNN for each result
+                logger.debug("Hybrid search: using semantic + GNN embeddings")
+                response.backend = "elasticsearch-hybrid"
+        else:
+            response = self._search_in_memory(request, primary_embedding)
+            if gnn_embedding:
+                response.backend = "in-memory-hybrid"
+        
+        return response
 
     def _search_elasticsearch(self, request: SearchRequest, query_embedding: Optional[List[float]]) -> SearchResponse:
         backend_label = "elasticsearch-text"
@@ -599,6 +1091,140 @@ orchestrator = SearchOrchestrator()
 ai_orchestrator = AISearchOrchestrator(orchestrator)
 app = FastAPI(title="AgenticAiETH Search Gateway", version="0.1.0")
 
+# Authentication setup
+API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+BEARER_SCHEME = HTTPBearer(auto_error=False)
+
+# Rate limiting setup
+class RateLimiter:
+    """Simple in-memory rate limiter. For production, use Redis-based rate limiting."""
+    def __init__(self, requests_per_minute: int = 60):
+        self.requests_per_minute = requests_per_minute
+        self.requests: Dict[str, List[datetime]] = defaultdict(list)
+        self.lock = threading.Lock()
+        self.cleanup_interval = 300  # Clean up old entries every 5 minutes
+        self.last_cleanup = time.time()
+    
+    def is_allowed(self, key: str) -> tuple[bool, Optional[int]]:
+        """Check if request is allowed. Returns (allowed, retry_after_seconds)."""
+        now = datetime.now()
+        cutoff = now - timedelta(minutes=1)
+        
+        with self.lock:
+            # Cleanup old entries periodically
+            if time.time() - self.last_cleanup > self.cleanup_interval:
+                self._cleanup(cutoff)
+                self.last_cleanup = time.time()
+            
+            # Get requests in the last minute
+            recent_requests = [req_time for req_time in self.requests[key] if req_time > cutoff]
+            
+            if len(recent_requests) >= self.requests_per_minute:
+                # Calculate retry after
+                oldest_request = min(recent_requests)
+                retry_after = int((oldest_request + timedelta(minutes=1) - now).total_seconds()) + 1
+                return False, retry_after
+            
+            # Add current request
+            recent_requests.append(now)
+            self.requests[key] = recent_requests
+            return True, None
+    
+    def _cleanup(self, cutoff: datetime):
+        """Remove old entries."""
+        keys_to_remove = []
+        for key, requests in self.requests.items():
+            recent = [req for req in requests if req > cutoff]
+            if recent:
+                self.requests[key] = recent
+            else:
+                keys_to_remove.append(key)
+        
+        for key in keys_to_remove:
+            del self.requests[key]
+
+# Initialize rate limiter
+rate_limiter = RateLimiter(requests_per_minute=int(os.getenv("RATE_LIMIT_PER_MINUTE", "60")))
+
+
+def get_client_identifier(request: Request) -> str:
+    """Get client identifier for rate limiting."""
+    # Try to get from X-Forwarded-For header (if behind proxy)
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        # Take the first IP (original client)
+        return forwarded_for.split(",")[0].strip()
+    
+    # Fall back to direct client IP
+    if request.client:
+        return request.client.host
+    
+    return "unknown"
+
+
+async def verify_api_key(
+    request: Request,
+    api_key: Optional[str] = Depends(API_KEY_HEADER),
+    bearer: Optional[HTTPAuthorizationCredentials] = Depends(BEARER_SCHEME),
+) -> str:
+    """Verify API key from header or Bearer token."""
+    # Check if authentication is enabled
+    auth_enabled = os.getenv("AUTH_ENABLED", "false").lower() == "true"
+    if not auth_enabled:
+        return "anonymous"
+    
+    # Get API key from header or Bearer token
+    provided_key = api_key
+    if not provided_key and bearer:
+        provided_key = bearer.credentials
+    
+    if not provided_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing API key. Provide X-API-Key header or Bearer token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Get valid API keys from environment
+    valid_keys_str = os.getenv("API_KEYS", "")
+    if not valid_keys_str:
+        # If no keys configured, allow all (for development)
+        logger.warning("API_KEYS not configured - allowing all requests")
+        return "anonymous"
+    
+    valid_keys = [key.strip() for key in valid_keys_str.split(",") if key.strip()]
+    
+    # Use constant-time comparison to prevent timing attacks
+    for valid_key in valid_keys:
+        if secrets.compare_digest(provided_key, valid_key):
+            return "authenticated"
+    
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Invalid API key",
+    )
+
+
+async def check_rate_limit(request: Request) -> None:
+    """Check rate limit for the request."""
+    rate_limit_enabled = os.getenv("RATE_LIMIT_ENABLED", "true").lower() == "true"
+    if not rate_limit_enabled:
+        return
+    
+    # Skip rate limiting for health endpoint
+    if request.url.path == "/health":
+        return
+    
+    client_id = get_client_identifier(request)
+    allowed, retry_after = rate_limiter.is_allowed(client_id)
+    
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Rate limit exceeded. Please try again in {retry_after} seconds.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
 
 @app.get("/health", response_model=HealthResponse)
 def read_health() -> HealthResponse:
@@ -612,7 +1238,157 @@ def add_document(doc: SearchDocument) -> None:
 
 @app.post("/v1/search", response_model=SearchResponse)
 def search_documents(request: SearchRequest) -> SearchResponse:
-    return orchestrator.search(request)
+    import time
+    start_time = time.time()
+    
+    response = orchestrator.search(request)
+    
+    # Calculate pagination
+    total = len(response.results)
+    page = request.page
+    page_size = request.page_size
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    
+    # Apply pagination
+    start_idx = (page - 1) * page_size
+    end_idx = start_idx + page_size
+    paginated_results = response.results[start_idx:end_idx]
+    
+    # Add highlighting if requested
+    if request.include_highlighting:
+        paginated_results = orchestrator.highlight_results(paginated_results, request.query)
+    
+    # Add preview snippets
+    for result in paginated_results:
+        if not result.preview:
+            result.preview = orchestrator.generate_preview(result.content, request.query)
+    
+    # Add ranking explanations if requested
+    if request.include_explanation:
+        paginated_results = orchestrator.explain_rankings(paginated_results, request.query)
+    
+    # Calculate facets if requested
+    facets = []
+    if request.facets:
+        facets = orchestrator.calculate_facets(response.results, request.facets)
+    
+    query_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+    
+    return SearchResponse(
+        backend=response.backend,
+        results=paginated_results,
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        facets=facets,
+        query_time_ms=query_time
+    )
+
+
+@app.get("/v1/search/history")
+def get_search_history(limit: int = 10) -> Dict[str, Any]:
+    """Get recent search history"""
+    history = orchestrator.search_history.get_recent(limit)
+    return {"history": history, "count": len(history)}
+
+
+@app.get("/v1/search/suggestions")
+def get_search_suggestions(prefix: str, limit: int = 5) -> Dict[str, Any]:
+    """Get search suggestions based on prefix"""
+    suggestions = orchestrator.search_history.get_suggestions(prefix, limit)
+    return {"suggestions": suggestions, "count": len(suggestions)}
+
+
+@app.post("/v1/search/feedback")
+def submit_search_feedback(
+    result_id: str,
+    query: str,
+    helpful: bool,
+    comment: Optional[str] = None
+) -> Dict[str, str]:
+    """Submit feedback on search results (thumbs up/down)"""
+    # Store feedback (could be stored in Redis or database)
+    feedback_entry = {
+        "result_id": result_id,
+        "query": query,
+        "helpful": helpful,
+        "comment": comment,
+        "timestamp": time.time()
+    }
+    
+    # In a real implementation, this would be stored persistently
+    logger.info(f"Search feedback received: {feedback_entry}")
+    
+    return {"status": "success", "message": "Feedback recorded"}
+
+
+@app.get("/v1/search/analytics")
+def get_search_analytics(
+    days: int = 7,
+    limit: int = 20
+) -> Dict[str, Any]:
+    """Get search analytics (trends, popular queries, etc.)"""
+    history = orchestrator.search_history.get_recent(limit * 10)  # Get more for analysis
+    
+    # Calculate popular queries
+    query_counts = defaultdict(int)
+    for entry in history:
+        query_counts[entry["query"]] += 1
+    
+    popular_queries = [
+        {"query": q, "count": c}
+        for q, c in sorted(query_counts.items(), key=lambda x: x[1], reverse=True)[:limit]
+    ]
+    
+    # Calculate average results count
+    avg_results = sum(entry["results_count"] for entry in history) / len(history) if history else 0
+    
+    return {
+        "popular_queries": popular_queries,
+        "total_searches": len(history),
+        "average_results_per_query": avg_results,
+        "period_days": days
+    }
+
+
+@app.post("/v1/search/export")
+def export_search_results(
+    request: SearchRequest,
+    format: str = "json"  # json or csv
+) -> StreamingResponse:
+    """Export search results in various formats"""
+    response = orchestrator.search(request)
+    
+    if format.lower() == "csv":
+        import csv
+        import io
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow(["ID", "Content", "Similarity", "Metadata"])
+        
+        # Write data
+        for result in response.results:
+            metadata_str = json.dumps(result.metadata)
+            writer.writerow([result.id, result.content, result.similarity, metadata_str])
+        
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename=search_results_{int(time.time())}.csv"}
+        )
+    else:  # JSON
+        results_data = [result.dict() for result in response.results]
+        json_data = json.dumps(results_data, indent=2)
+        return StreamingResponse(
+            iter([json_data]),
+            media_type="application/json",
+            headers={"Content-Disposition": f"attachment; filename=search_results_{int(time.time())}.json"}
+        )
 
 
 @app.post("/v1/ai-search", response_model=AISearchResponse)
@@ -621,18 +1397,35 @@ def ai_search(request: AISearchRequest) -> AISearchResponse:
     return ai_orchestrator.search_with_ai(request)
 
 
-@app.get("/v1/conversation/{conversation_id}", response_model=Conversation)
-def get_conversation(conversation_id: str) -> Conversation:
+@app.get("/v1/conversation/{conversation_id}", response_model=Conversation, dependencies=[Depends(check_rate_limit)])
+def get_conversation(
+    conversation_id: str = Path(..., description="Conversation UUID"),
+    api_key: str = Depends(verify_api_key),
+) -> Conversation:
     """Get conversation history"""
+    # Validate conversation ID format
+    try:
+        conversation_id = validate_conversation_id(conversation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
     conversation = ai_orchestrator.get_conversation(conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
 
 
-@app.get("/v1/sources/{doc_id}")
-def get_source_document(doc_id: str) -> Dict[str, Any]:
+@app.get("/v1/sources/{doc_id}", dependencies=[Depends(check_rate_limit)])
+def get_source_document(
+    doc_id: str = Path(..., description="Document ID"),
+    api_key: str = Depends(verify_api_key),
+) -> Dict[str, Any]:
     """Get full source document by ID"""
+    # Validate document ID format
+    try:
+        doc_id = validate_document_id(doc_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     # Try to get from Elasticsearch first
     if orchestrator.elasticsearch.available:
         try:
@@ -642,7 +1435,11 @@ def get_source_document(doc_id: str) -> Dict[str, Any]:
             )
             return response["_source"]
         except Exception as e:
-            logger.warning(f"Failed to get document {doc_id} from Elasticsearch: {e}")
+            # Check if it's a not found error (404)
+            if hasattr(e, 'status_code') and e.status_code == 404:
+                logger.debug(f"Document {doc_id} not found in Elasticsearch")
+            else:
+                logger.warning(f"Failed to get document {doc_id} from Elasticsearch: {e}")
     
     # Fallback to in-memory store
     doc = orchestrator.in_memory.get(doc_id)

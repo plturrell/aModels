@@ -173,6 +173,146 @@ class CommandPalette {
         keywords: ['advanced', 'toggle', 'show', 'hide'],
         action: () => window.toggleAdvanced?.(),
         category: 'System'
+      },
+      
+      // Analytics commands
+      {
+        id: 'view-analytics',
+        name: 'View Analytics Dashboard',
+        description: 'Open analytics dashboard in browser shell',
+        icon: '📊',
+        keywords: ['analytics', 'dashboard', 'metrics', 'stats', 'view'],
+        action: async () => {
+          const { browserUrl } = await chrome.storage.sync.get(['browserUrl']);
+          const url = browserUrl || 'http://localhost:8070';
+          chrome.tabs.create({ url: `${url}/#/analytics` });
+        },
+        category: 'Analytics'
+      },
+      {
+        id: 'ask-analytics',
+        name: 'Ask About Analytics',
+        description: 'Ask AI questions about your analytics data',
+        icon: '🤖',
+        keywords: ['ask', 'analytics', 'ai', 'question', 'insight'],
+        action: async () => {
+          const { browserUrl } = await chrome.storage.sync.get(['browserUrl']);
+          const url = browserUrl || 'http://localhost:8070';
+          chrome.tabs.create({ url: `${url}/#/analytics` });
+          // Focus on AI assistant after a delay
+          setTimeout(() => {
+            window.postMessage({ type: 'focus-analytics-ai' }, '*');
+          }, 1000);
+        },
+        category: 'Analytics'
+      },
+      
+      // Search commands
+      {
+        id: 'open-search',
+        name: 'Open Search',
+        description: 'Open search interface in browser shell',
+        icon: '🔍',
+        keywords: ['search', 'find', 'query', 'lookup'],
+        action: async () => {
+          const { browserUrl } = await chrome.storage.sync.get(['browserUrl']);
+          const url = browserUrl || 'http://localhost:8070';
+          chrome.tabs.create({ url: `${url}/#/search` });
+        },
+        category: 'Search'
+      },
+      {
+        id: 'quick-search',
+        name: 'Quick Search',
+        description: 'Perform a quick search from extension',
+        icon: '⚡',
+        keywords: ['quick', 'search', 'fast', 'find'],
+        action: () => {
+          const input = document.getElementById('quick-search-input');
+          if (input) {
+            input.focus();
+            this.close();
+          }
+        },
+        category: 'Search'
+      },
+      {
+        id: 'ai-search',
+        name: 'AI-Enhanced Search',
+        description: 'Use AI to enhance your search query',
+        icon: '🧠',
+        keywords: ['ai', 'search', 'enhance', 'improve', 'refine'],
+        action: async () => {
+          const { browserUrl } = await chrome.storage.sync.get(['browserUrl']);
+          const url = browserUrl || 'http://localhost:8070';
+          chrome.tabs.create({ url: `${url}/#/search` });
+          setTimeout(() => {
+            window.postMessage({ type: 'focus-search-ai' }, '*');
+          }, 1000);
+        },
+        category: 'Search'
+      },
+      
+      // LocalAI commands
+      {
+        id: 'open-chat',
+        name: 'Open LocalAI Chat',
+        description: 'Open LocalAI chat interface',
+        icon: '💬',
+        keywords: ['chat', 'localai', 'ai', 'conversation', 'talk'],
+        action: async () => {
+          const { browserUrl } = await chrome.storage.sync.get(['browserUrl']);
+          const url = browserUrl || 'http://localhost:8070';
+          chrome.tabs.create({ url: `${url}/#/localai` });
+        },
+        category: 'LocalAI'
+      },
+      {
+        id: 'quick-chat',
+        name: 'Quick Chat',
+        description: 'Start a quick chat from extension',
+        icon: '⚡',
+        keywords: ['quick', 'chat', 'fast', 'message'],
+        action: () => {
+          const input = document.getElementById('chat-input');
+          if (input) {
+            input.focus();
+            this.close();
+          }
+        },
+        category: 'LocalAI'
+      },
+      {
+        id: 'ask-about-search',
+        name: 'Ask AI About Search Results',
+        description: 'Ask LocalAI questions about your search results',
+        icon: '🤔',
+        keywords: ['ask', 'search', 'results', 'ai', 'question'],
+        action: async () => {
+          const { browserUrl } = await chrome.storage.sync.get(['browserUrl']);
+          const url = browserUrl || 'http://localhost:8070';
+          chrome.tabs.create({ url: `${url}/#/search` });
+          setTimeout(() => {
+            window.postMessage({ type: 'focus-search-ai-ask' }, '*');
+          }, 1000);
+        },
+        category: 'LocalAI'
+      },
+      {
+        id: 'ask-about-analytics',
+        name: 'Ask AI About Analytics',
+        description: 'Ask LocalAI questions about your analytics',
+        icon: '📈',
+        keywords: ['ask', 'analytics', 'ai', 'question', 'insight'],
+        action: async () => {
+          const { browserUrl } = await chrome.storage.sync.get(['browserUrl']);
+          const url = browserUrl || 'http://localhost:8070';
+          chrome.tabs.create({ url: `${url}/#/analytics` });
+          setTimeout(() => {
+            window.postMessage({ type: 'focus-analytics-ai' }, '*');
+          }, 1000);
+        },
+        category: 'LocalAI'
       }
     ];
   }

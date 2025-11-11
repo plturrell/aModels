@@ -1,19 +1,42 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
+import time
+import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, Optional
-import time
 
 import httpx
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, Response
+from fastapi.responses import StreamingResponse, Response, JSONResponse
 from redis import asyncio as aioredis
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 
 from retry_utils import retry_http_request
+from circuit_breaker import CircuitBreakerManager, CircuitBreakerOpenError, CircuitBreakerConfig
+from rate_limiter import MultiTierRateLimiter
+from logging_config import setup_logging, get_logger, set_correlation_id, get_correlation_id
+from proxy_utils import ServiceProxy, create_proxy_helper
+from cache_manager import CacheManager, CacheStrategy
+from models import (
+    UnifiedSearchRequest, UnifiedSearchResponse, SearchResult, SearchMetadata,
+    ProcessRequest, ProcessResponse, StatusResponse, HistoryRequest, HistoryResponse,
+    BatchRequest, BatchResponse, DataElementRequest, DataProductRequest,
+    SemanticSearchRequest, GraphQueryRequest, ResearchRequest,
+    HealthResponse, ServiceHealth, CircuitBreakerStats, CacheStats,
+    GenericResponse, ErrorDetail
+)
+
+# Setup structured logging
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+JSON_LOGS = os.getenv("JSON_LOGS", "false").lower() == "true"
+setup_logging(level=LOG_LEVEL, json_format=JSON_LOGS)
+
+# Get structured logger
+logger = get_logger(__name__)
 
 
 GATEWAY_PORT = int(os.getenv("GATEWAY_PORT", "8000"))
@@ -34,19 +57,104 @@ CATALOG_URL = os.getenv("CATALOG_URL", "http://localhost:8084")
 DEEP_RESEARCH_URL = os.getenv("DEEP_RESEARCH_URL", "http://localhost:8085")
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
 
-logger = logging.getLogger(__name__)
 if LOCALAI_URL == GRAPH_SERVICE_URL:
     logger.warning(
-        "LOCALAI_URL (%s) matches GRAPH_SERVICE_URL (%s). "
-        "Override one of them to avoid routing conflicts.",
-        LOCALAI_URL,
-        GRAPH_SERVICE_URL,
+        "LOCALAI_URL matches GRAPH_SERVICE_URL - potential routing conflict",
+        localai_url=LOCALAI_URL,
+        graph_url=GRAPH_SERVICE_URL
     )
 
-client = httpx.AsyncClient(timeout=30.0)
-
-app = FastAPI(title="aModels Gateway", version="0.1.0")
+# Initialize global clients (will be set in lifespan)
+client: httpx.AsyncClient | None = None
 redis_client: aioredis.Redis | None = None
+circuit_breaker_manager: CircuitBreakerManager | None = None
+rate_limiter: MultiTierRateLimiter | None = None
+cache_manager: CacheManager | None = None
+service_proxy: ServiceProxy | None = None
+
+# Prometheus metrics
+request_counter = Counter('gateway_requests_total', 'Total requests', ['method', 'endpoint', 'status'])
+request_duration = Histogram('gateway_request_duration_seconds', 'Request duration', ['method', 'endpoint'])
+circuit_breaker_state = Gauge('gateway_circuit_breaker_state', 'Circuit breaker state', ['service'])
+rate_limit_rejections = Counter('gateway_rate_limit_rejections_total', 'Rate limit rejections', ['endpoint'])
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager for startup/shutdown."""
+    global client, redis_client, circuit_breaker_manager, rate_limiter, cache_manager, service_proxy
+    
+    logger.info("Starting aModels Gateway v0.2.0", port=GATEWAY_PORT)
+    
+    # Initialize httpx client with connection pooling and proper timeout
+    client = httpx.AsyncClient(
+        timeout=60.0,  # Increased from 30s
+        limits=httpx.Limits(
+            max_keepalive_connections=20,  # Keep 20 connections alive
+            max_connections=100,  # Max 100 total connections
+            keepalive_expiry=30.0  # Keep alive for 30s
+        )
+    )
+    logger.info("HTTP client initialized", timeout=60.0, max_connections=100)
+    
+    # Initialize Redis
+    try:
+        redis_client = aioredis.from_url(REDIS_URL)
+        await redis_client.ping()
+        logger.info("Redis connected", url=REDIS_URL)
+    except Exception as e:
+        logger.warning("Redis connection failed, continuing without cache", error=str(e))
+        redis_client = None
+    
+    # Initialize circuit breaker manager
+    circuit_breaker_manager = CircuitBreakerManager()
+    logger.info("Circuit breaker manager initialized")
+    
+    # Initialize rate limiter
+    rate_limiter = MultiTierRateLimiter()
+    await rate_limiter.start_cleanup_task()
+    logger.info("Rate limiter initialized", 
+                default_rate="100 req/min",
+                strict_rate="20 req/min",
+                lenient_rate="300 req/min")
+    
+    # Initialize cache manager
+    cache_manager = CacheManager(redis_client)
+    logger.info("Cache manager initialized", 
+                enabled=redis_client is not None,
+                strategies=["SHORT: 60s", "MEDIUM: 5m", "LONG: 1h", "VERY_LONG: 24h"])
+    
+    # Initialize service proxy helper
+    service_proxy = create_proxy_helper(client, circuit_breaker_manager, redis_client)
+    logger.info("Service proxy initialized with circuit breaker and caching support")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down aModels Gateway")
+    
+    if cache_manager:
+        stats = cache_manager.get_stats()
+        logger.info("Cache statistics at shutdown", **stats)
+    
+    if rate_limiter:
+        await rate_limiter.stop_cleanup_task()
+        logger.info("Rate limiter stopped")
+    
+    if redis_client:
+        await redis_client.close()
+        logger.info("Redis connection closed")
+    
+    if client:
+        await client.aclose()
+        logger.info("HTTP client closed")
+
+
+app = FastAPI(
+    title="aModels Gateway",
+    version="0.2.0",  # Bumped version for optimizations
+    lifespan=lifespan
+)
 
 # Perplexity API endpoints - proxy to orchestration service
 ORCHESTRATION_URL = os.getenv("ORCHESTRATION_URL", "http://localhost:8080")
@@ -63,6 +171,63 @@ async def check_orchestration_health() -> bool:
 # Cache health check result
 _orchestration_available = None
 _last_health_check = 0
+
+
+# Helper function for circuit breaker-protected service calls
+async def call_with_circuit_breaker(
+    service_name: str,
+    func,
+    timeout: float = 30.0
+):
+    """
+    Call a service with circuit breaker protection.
+    
+    Args:
+        service_name: Name of the service (for circuit breaker identification)
+        func: Async function to execute
+        timeout: Request timeout in seconds
+        
+    Returns:
+        Response from the service
+        
+    Raises:
+        HTTPException: On service error or circuit breaker open
+    """
+    if circuit_breaker_manager is None:
+        # Fallback if circuit breaker not initialized
+        return await func()
+    
+    breaker = circuit_breaker_manager.get_breaker(
+        service_name,
+        CircuitBreakerConfig(
+            failure_threshold=5,
+            success_threshold=2,
+            timeout=60.0
+        )
+    )
+    
+    try:
+        result = await breaker.call(func)
+        return result
+    except CircuitBreakerOpenError as e:
+        logger.error(
+            f"Circuit breaker open for {service_name}",
+            service=service_name,
+            error=str(e)
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Service temporarily unavailable",
+                "service": service_name,
+                "message": str(e),
+                "retry_after": 60
+            }
+        )
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"{service_name} service error: {e}")
 
 @app.post("/api/perplexity/process")
 async def perplexity_process(payload: Dict[str, Any]) -> Any:
@@ -732,11 +897,98 @@ async def murex_history(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # TODO: Restrict in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Middleware for correlation ID and request logging
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    """Add correlation ID to each request for tracing."""
+    # Get or generate correlation ID
+    corr_id = request.headers.get("X-Correlation-ID") or request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    set_correlation_id(corr_id)
+    
+    # Log request
+    start_time = time.time()
+    logger.info(
+        f"Request started: {request.method} {request.url.path}",
+        method=request.method,
+        path=request.url.path,
+        client_ip=request.client.host if request.client else "unknown"
+    )
+    
+    # Add correlation ID to response headers
+    response = await call_next(request)
+    response.headers["X-Correlation-ID"] = corr_id
+    
+    # Log response and record metrics
+    duration = time.time() - start_time
+    endpoint = request.url.path
+    request_counter.labels(
+        method=request.method,
+        endpoint=endpoint,
+        status=response.status_code
+    ).inc()
+    request_duration.labels(
+        method=request.method,
+        endpoint=endpoint
+    ).observe(duration)
+    
+    logger.info(
+        f"Request completed: {request.method} {request.url.path}",
+        method=request.method,
+        path=request.url.path,
+        status_code=response.status_code,
+        duration_ms=f"{duration * 1000:.2f}"
+    )
+    
+    return response
+
+
+# Middleware for rate limiting
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Apply rate limiting to requests."""
+    if rate_limiter is None:
+        return await call_next(request)
+    
+    # Skip rate limiting for health and metrics endpoints
+    if request.url.path in ["/healthz", "/health", "/metrics", "/circuit-breakers"]:
+        return await call_next(request)
+    
+    # Use client IP as identifier
+    client_id = request.client.host if request.client else "unknown"
+    
+    # Check rate limit
+    allowed, info = await rate_limiter.is_allowed(client_id, request.url.path)
+    
+    if not allowed:
+        rate_limit_rejections.labels(endpoint=request.url.path).inc()
+        logger.warning(
+            "Rate limit exceeded",
+            client_ip=client_id,
+            path=request.url.path,
+            retry_after=info["retry_after"]
+        )
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": "Rate limit exceeded",
+                "retry_after": info["retry_after"],
+                "message": f"Please wait {info['retry_after']} seconds before retrying"
+            },
+            headers={"Retry-After": str(info["retry_after"])}
+        )
+    
+    # Add rate limit info to response headers
+    response = await call_next(request)
+    response.headers["X-RateLimit-Remaining"] = str(info["tokens_remaining"])
+    
+    return response
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SGMI_JSON_PATH = REPO_ROOT / "data" / "training" / "sgmi" / "json_with_changes.json"
@@ -762,11 +1014,27 @@ def _load_json_file(path: Path) -> Any:
 
 @app.get("/healthz")
 async def healthz() -> Dict[str, Any]:
-    statuses: Dict[str, Any] = {"gateway": "ok"}
-    # HANA health
+    statuses: Dict[str, Any] = {
+        "gateway": "ok",
+        "timestamp": time.time(),
+        "version": "0.2.0"
+    }
+    
+    # Add circuit breaker status
+    if circuit_breaker_manager:
+        cb_stats = circuit_breaker_manager.get_all_stats()
+        statuses["circuit_breakers"] = {
+            name: stats["state"] for name, stats in cb_stats.items()
+        }
+    
+    # HANA health (with circuit breaker)
     try:
-        r = await client.get(f"{HANA_URL}/healthz")
+        async def check_hana():
+            return await client.get(f"{HANA_URL}/healthz", timeout=5.0)
+        r = await call_with_circuit_breaker("hana", check_hana, timeout=5.0)
         statuses["hana"] = "ok" if r.status_code == 200 else f"status:{r.status_code}"
+    except HTTPException as e:
+        statuses["hana"] = f"circuit_breaker_open" if e.status_code == 503 else f"error:{e.detail}"
     except Exception as e:
         statuses["hana"] = f"error:{e}"
     # AgentFlow health
@@ -2151,17 +2419,103 @@ async def redis_set(payload: Dict[str, Any]) -> Any:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.on_event("startup")
-async def on_startup() -> None:
-    global redis_client
-    redis_client = aioredis.from_url(REDIS_URL)
+# Startup/shutdown now handled by lifespan context manager
+
+# New observability endpoints
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint."""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-@app.on_event("shutdown")
-async def on_shutdown() -> None:
-    global redis_client
-    if redis_client is not None:
-        await redis_client.close()
+@app.get("/circuit-breakers")
+async def circuit_breakers_status() -> Dict[str, Any]:
+    """Get status of all circuit breakers."""
+    if circuit_breaker_manager is None:
+        return {"error": "Circuit breaker manager not initialized"}
+    
+    stats = circuit_breaker_manager.get_all_stats()
+    
+    # Update Prometheus gauges
+    for service, breaker_stats in stats.items():
+        state_value = {"closed": 0, "half_open": 1, "open": 2}.get(breaker_stats["state"], -1)
+        circuit_breaker_state.labels(service=service).set(state_value)
+    
+    return {
+        "circuit_breakers": stats,
+        "total_breakers": len(stats)
+    }
+
+
+@app.post("/circuit-breakers/reset")
+async def reset_circuit_breakers() -> Dict[str, str]:
+    """Manually reset all circuit breakers (admin operation)."""
+    if circuit_breaker_manager is None:
+        raise HTTPException(status_code=503, detail="Circuit breaker manager not initialized")
+    
+    await circuit_breaker_manager.reset_all()
+    logger.info("All circuit breakers manually reset")
+    
+    return {"status": "success", "message": "All circuit breakers reset to closed state"}
+
+
+@app.get("/rate-limit/stats")
+async def rate_limit_stats() -> Dict[str, Any]:
+    """Get rate limiter statistics."""
+    if rate_limiter is None:
+        return {"error": "Rate limiter not initialized"}
+    
+    return rate_limiter.get_stats()
+
+
+@app.get("/cache/stats", response_model=CacheStats)
+async def cache_stats() -> CacheStats:
+    """Get cache statistics."""
+    if cache_manager is None:
+        raise HTTPException(status_code=503, detail="Cache manager not initialized")
+    
+    stats = cache_manager.get_stats()
+    return CacheStats(
+        total_keys=stats["hits"] + stats["misses"],
+        hit_rate=stats["hit_rate"],
+        miss_rate=stats["miss_rate"],
+        total_hits=stats["hits"],
+        total_misses=stats["misses"]
+    )
+
+
+@app.post("/cache/invalidate")
+async def invalidate_cache(pattern: str = Query(..., description="Redis key pattern to invalidate")) -> GenericResponse:
+    """Invalidate cache entries matching pattern (admin operation)."""
+    if cache_manager is None:
+        raise HTTPException(status_code=503, detail="Cache manager not initialized")
+    
+    deleted = await cache_manager.invalidate_pattern(pattern)
+    logger.info("Cache invalidated via API", pattern=pattern, deleted_keys=deleted)
+    
+    return GenericResponse(
+        status="success",
+        message=f"Invalidated {deleted} cache entries",
+        data={"pattern": pattern, "deleted_keys": deleted}
+    )
+
+
+@app.post("/cache/clear")
+async def clear_all_cache() -> GenericResponse:
+    """Clear all gateway cache entries (admin operation)."""
+    if cache_manager is None:
+        raise HTTPException(status_code=503, detail="Cache manager not initialized")
+    
+    success = await cache_manager.clear_all()
+    
+    if success:
+        return GenericResponse(
+            status="success",
+            message="All cache entries cleared"
+        )
+    else:
+        raise HTTPException(status_code=500, detail="Failed to clear cache")
 
 
 @app.get("/telemetry/recent")
@@ -2403,6 +2757,168 @@ async def deep_research_healthz() -> Any:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except httpx.RequestError as e:
         raise HTTPException(status_code=502, detail=f"Deep Research service error: {e}")
+
+
+# ============================================================================
+# REFACTORED ENDPOINTS - Examples using new DRY patterns and Pydantic models
+# ============================================================================
+
+@app.post("/v2/catalog/semantic-search", response_model=Dict[str, Any])
+async def catalog_semantic_search_v2(request: SemanticSearchRequest) -> Dict[str, Any]:
+    """
+    Semantic search in catalog (REFACTORED VERSION with caching).
+    Demonstrates: Pydantic validation, ServiceProxy, automatic caching.
+    """
+    if service_proxy is None:
+        raise HTTPException(status_code=503, detail="Service proxy not initialized")
+    
+    # ServiceProxy handles circuit breaker, caching automatically
+    result = await service_proxy.proxy_post(
+        service_name="catalog",
+        service_url=CATALOG_URL,
+        path="/catalog/semantic-search",
+        payload=request.dict(),
+        timeout=30.0
+    )
+    
+    return result
+
+
+@app.post("/v2/catalog/data-elements", response_model=Dict[str, Any])
+async def create_data_element_v2(request: DataElementRequest) -> Dict[str, Any]:
+    """
+    Create data element (REFACTORED VERSION with validation).
+    Demonstrates: Pydantic validation for request body.
+    """
+    if service_proxy is None:
+        raise HTTPException(status_code=503, detail="Service proxy not initialized")
+    
+    result = await service_proxy.proxy_post(
+        service_name="catalog",
+        service_url=CATALOG_URL,
+        path="/catalog/data-elements",
+        payload=request.dict()
+    )
+    
+    # Invalidate catalog cache after write operation
+    if cache_manager:
+        await cache_manager.invalidate_pattern("gateway:cache:*:catalog*")
+    
+    return result
+
+
+@app.get("/v2/catalog/data-elements", response_model=Dict[str, Any])
+async def list_data_elements_v2() -> Dict[str, Any]:
+    """
+    List data elements (REFACTORED VERSION with caching).
+    Demonstrates: ServiceProxy with automatic caching (LONG strategy = 1 hour).
+    """
+    if service_proxy is None:
+        raise HTTPException(status_code=503, detail="Service proxy not initialized")
+    
+    # GET requests with cache_ttl enabled = automatic caching
+    result = await service_proxy.proxy_get(
+        service_name="catalog",
+        service_url=CATALOG_URL,
+        path="/catalog/data-elements",
+        cache_ttl=3600  # 1 hour cache
+    )
+    
+    return result
+
+
+@app.post("/v2/deep-research/research", response_model=Dict[str, Any])
+async def deep_research_v2(request: ResearchRequest) -> Dict[str, Any]:
+    """
+    Deep research (REFACTORED VERSION with validation and caching).
+    Demonstrates: Complex Pydantic model, aggressive caching for expensive operations.
+    """
+    if service_proxy is None:
+        raise HTTPException(status_code=503, detail="Service proxy not initialized")
+    
+    result = await service_proxy.proxy_post(
+        service_name="deep-research",
+        service_url=DEEP_RESEARCH_URL,
+        path="/research",
+        payload=request.dict(),
+        timeout=300.0  # Long timeout for research
+    )
+    
+    return result
+
+
+@app.get("/v2/sap-bdc/data-products", response_model=Dict[str, Any])
+async def sap_bdc_data_products_v2() -> Dict[str, Any]:
+    """
+    List SAP BDC data products (REFACTORED VERSION).
+    Demonstrates: GET with long caching for relatively static data.
+    """
+    if service_proxy is None:
+        raise HTTPException(status_code=503, detail="Service proxy not initialized")
+    
+    result = await service_proxy.proxy_get(
+        service_name="sap-bdc",
+        service_url=SAP_BDC_URL,
+        path="/data-products",
+        cache_ttl=3600  # 1 hour - data products don't change often
+    )
+    
+    return result
+
+
+@app.post("/v2/knowledge-graph/query", response_model=Dict[str, Any])
+async def knowledge_graph_query_v2(request: GraphQueryRequest) -> Dict[str, Any]:
+    """
+    Query knowledge graph (REFACTORED VERSION).
+    Demonstrates: Validated graph query with Pydantic model.
+    """
+    if service_proxy is None:
+        raise HTTPException(status_code=503, detail="Service proxy not initialized")
+    
+    result = await service_proxy.proxy_post(
+        service_name="graph",
+        service_url=GRAPH_SERVICE_URL,
+        path="/knowledge-graph/query",
+        payload=request.dict(),
+        timeout=30.0
+    )
+    
+    return result
+
+
+# ============================================================================
+# Additional Admin/Debug Endpoints
+# ============================================================================
+
+@app.get("/debug/config")
+async def debug_config() -> Dict[str, Any]:
+    """Debug endpoint showing current configuration (admin only)."""
+    return {
+        "version": "0.2.0",
+        "services": {
+            "orchestration": ORCHESTRATION_URL,
+            "hana": HANA_URL,
+            "catalog": CATALOG_URL,
+            "deep_research": DEEP_RESEARCH_URL,
+            "graph": GRAPH_SERVICE_URL,
+            "sap_bdc": SAP_BDC_URL,
+        },
+        "features": {
+            "circuit_breakers": circuit_breaker_manager is not None,
+            "rate_limiting": rate_limiter is not None,
+            "caching": cache_manager is not None and redis_client is not None,
+            "service_proxy": service_proxy is not None,
+            "structured_logging": True,
+            "prometheus_metrics": True,
+        },
+        "configuration": {
+            "http_timeout": "60s",
+            "max_connections": 100,
+            "keepalive_connections": 20,
+            "log_level": LOG_LEVEL,
+            "json_logs": JSON_LOGS,
+        }
+    }
 
 
 if __name__ == "__main__":

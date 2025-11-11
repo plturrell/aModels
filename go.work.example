@@ -1,0 +1,50 @@
+// Go Workspace Configuration for aModels Mono-Repository
+// 
+// This file enables multi-module development across the entire mono-repo.
+// 
+// Usage:
+//   1. Copy this file to go.work: cp go.work.example go.work
+//   2. The go.work file is gitignored (developer-specific)
+//   3. IDEs will use this for cross-module navigation and autocomplete
+//   4. All `go` commands will resolve local modules automatically
+//
+// Benefits:
+//   - Single source of truth for all module versions
+//   - IDE autocomplete works across services
+//   - No need for replace directives in go.mod files
+//   - Simplified dependency management
+//
+// Documentation: https://go.dev/doc/tutorial/workspaces
+
+go 1.23
+
+use (
+	// Core services
+	./services/agentflow
+	./services/catalog
+	./services/extract
+	./services/framework
+	./services/gpu-orchestrator
+	./services/graph
+	./services/hana
+	./services/localai
+	./services/orchestration
+	./services/plot
+	./services/postgres
+	./services/regulatory
+	./services/runtime
+	./services/sap-bdc
+	./services/stdlib
+
+	// Shared libraries (if they have go.mod)
+	// ./services/shared
+
+	// Add additional services as they are created
+	// ./services/new-service
+)
+
+// Notes:
+// - Only include directories that have a go.mod file
+// - Paths are relative to this file's location (/home/aModels)
+// - The workspace unifies all module versions across services
+// - Use `go work sync` to synchronize go.sum files

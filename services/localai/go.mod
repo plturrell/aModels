@@ -32,15 +32,8 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250825161204-c5933d9347a5 // indirect
 )
 
-// Removed replace directives for unavailable agenticAiETH dependencies
-// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer1_Blockchain => ../agenticAiETH_layer1_Blockchain
 
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/glove => ../../models/glove
 
 replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Training/models/sentencepiece => ../../models/sentencepiece
 
-// Removed - third_party not available: replace github.com/go-skynet/go-llama.cpp => ../third_party/go-llama.cpp
-
-// Removed - AgentSDK not available: replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_AgentSDK => ../agenticAiETH_layer4_AgentSDK
-// Maths moved to archive - update path if needed
-// replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths => ../../archive/maths-YYYYMMDD

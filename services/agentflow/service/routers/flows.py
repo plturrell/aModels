@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from typing import Optional
 
@@ -8,12 +9,24 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
 
-from ..dependencies import get_catalog, get_langflow_client, get_registry_service
+from ..dependencies import (
+    get_catalog,
+    get_langflow_client,
+    get_registry_service,
+    require_service_api_key,
+)
 from ..schemas import FlowInfo, FlowRunRequestSchema, FlowSyncRequest, FlowSyncResponse
 from ..services import FlowCatalog, FlowRegistryService
 from ..services.langflow import FlowImportRequest, LangflowClient, RunFlowRequest
 
-router = APIRouter(prefix="/flows", tags=["flows"])
+router = APIRouter(
+    prefix="/flows",
+    tags=["flows"],
+    dependencies=[Depends(require_service_api_key)],
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 def _mapping_to_info(mapping) -> FlowInfo:
@@ -150,6 +163,7 @@ async def _request_gpu_allocation(
     """Request GPU allocation for LLM-intensive flow (Priority 4)."""
     gpu_orchestrator_url = os.getenv("GPU_ORCHESTRATOR_URL", "http://gpu-orchestrator:8086")
     if not gpu_orchestrator_url:
+        logger.debug("GPU orchestrator URL missing; skipping allocation", extra={"flow_id": flow_id})
         return None
     
     workload_data = {
@@ -178,10 +192,53 @@ async def _request_gpu_allocation(
             if resp.status_code == 200:
                 result = resp.json()
                 return result.get("id")
-    except Exception:
-        pass  # Non-fatal - continue without GPU
-    
+            logger.debug(
+                "GPU allocation request returned non-success status",
+                extra={
+                    "flow_id": flow_id,
+                    "status_code": resp.status_code,
+                    "response_body": resp.text[:256],
+                },
+            )
+    except Exception as exc:
+        logger.debug(
+            "GPU allocation request failed",
+            extra={
+                "flow_id": flow_id,
+                "workflow_id": workflow_id,
+            },
+            exc_info=exc,
+        )
+
     return None
+
+
+async def _release_gpu_allocation(allocation_id: str) -> None:
+    """Release a previously acquired GPU allocation."""
+    gpu_orchestrator_url = os.getenv("GPU_ORCHESTRATOR_URL", "http://gpu-orchestrator:8086")
+    if not gpu_orchestrator_url:
+        logger.debug(
+            "GPU orchestrator URL missing; skipping release",
+            extra={"allocation_id": allocation_id},
+        )
+        return
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(
+                f"{gpu_orchestrator_url}/gpu/release",
+                json={"allocation_id": allocation_id, "service_name": "agentflow"},
+            )
+        logger.debug(
+            "Released GPU allocation for flow execution",
+            extra={"allocation_id": allocation_id},
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to release GPU allocation",
+            extra={"allocation_id": allocation_id},
+            exc_info=exc,
+        )
 
 
 @router.post("/{flow_id:path}/run")
@@ -219,72 +276,84 @@ async def run_flow(
             workflow_priority=workflow_priority,
         )
         if gpu_allocation_id:
-            # Store allocation ID for cleanup after flow execution
-            # Note: In production, use proper async context manager or background task
-            pass  # GPU will be released by orchestrator timeout or explicit release
-
-    mapping = None
-    if payload.ensure:
-        existing_mapping = await registry.get(spec.id)
-        import_request = FlowImportRequest(
-            flow=spec.raw,
-            force=True,
-            project_id=spec.raw.get("project_id"),
-            folder_path=None,
-            remote_id=existing_mapping.remote_id if existing_mapping else None,
-        )
-        remote_record = await langflow.import_flow(import_request)
-        mapping = await registry.upsert_from_flow(spec=spec, remote=remote_record)
-    else:
-        mapping = await registry.get(spec.id)
-        if mapping is None or not mapping.remote_id:
-            raise HTTPException(
-                status_code=status.HTTP_412_PRECONDITION_FAILED,
-                detail="Flow is not synchronised with Langflow. Run with ensure=true or sync first.",
+            logger.debug(
+                "Acquired GPU allocation for flow execution",
+                extra={
+                    "flow_id": flow_id,
+                    "allocation_id": gpu_allocation_id,
+                    "workflow_id": workflow_id,
+                    "workflow_priority": workflow_priority,
+                },
             )
 
-    target_id = mapping.remote_id or spec.id
-    run_request = RunFlowRequest(
-        input_value=payload.input_value,
-        inputs=payload.inputs,
-        chat_history=payload.chat_history,
-        session_id=payload.session_id,
-        tweaks=payload.tweaks,
-        stream=payload.stream,
-    )
-    result = await langflow.run_flow(target_id, run_request)
-    
-    # Priority 4: Release GPU allocation after flow execution
-    if gpu_allocation_id:
+    try:
+        mapping = None
+        if payload.ensure:
+            existing_mapping = await registry.get(spec.id)
+            import_request = FlowImportRequest(
+                flow=spec.raw,
+                force=True,
+                project_id=spec.raw.get("project_id"),
+                folder_path=None,
+                remote_id=existing_mapping.remote_id if existing_mapping else None,
+            )
+            remote_record = await langflow.import_flow(import_request)
+            mapping = await registry.upsert_from_flow(spec=spec, remote=remote_record)
+        else:
+            mapping = await registry.get(spec.id)
+            if mapping is None or not mapping.remote_id:
+                raise HTTPException(
+                    status_code=status.HTTP_412_PRECONDITION_FAILED,
+                    detail="Flow is not synchronised with Langflow. Run with ensure=true or sync first.",
+                )
+
+        target_id = mapping.remote_id or spec.id
+        run_request = RunFlowRequest(
+            input_value=payload.input_value,
+            inputs=payload.inputs,
+            chat_history=payload.chat_history,
+            session_id=payload.session_id,
+            tweaks=payload.tweaks,
+            stream=payload.stream,
+        )
+
         try:
-            gpu_orchestrator_url = os.getenv("GPU_ORCHESTRATOR_URL", "http://gpu-orchestrator:8086")
-            if gpu_orchestrator_url:
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    await client.post(
-                        f"{gpu_orchestrator_url}/gpu/release",
-                        json={"allocation_id": gpu_allocation_id, "service_name": "agentflow"},
-                    )
-        except Exception:
-            pass  # Non-fatal - GPU will be released by orchestrator timeout
+            result = await langflow.run_flow(target_id, run_request)
+        except Exception as exc:  # pragma: no cover - defensive catch, re-raised as HTTP error
+            logger.error(
+                "Langflow run failed",
+                extra={
+                    "flow_id": flow_id,
+                    "target_id": target_id,
+                },
+                exc_info=exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Langflow execution failed",
+            ) from exc
 
-    # Optional DeepAgents analysis (if enabled)
-    from ..deepagents import analyze_flow_execution
+        # Optional DeepAgents analysis (if enabled)
+        from ..deepagents import analyze_flow_execution
 
-    deepagents_analysis = await analyze_flow_execution(
-        flow_id=flow_id,
-        flow_result=result,
-        input_value=payload.input_value,
-        inputs=payload.inputs,
-    )
+        deepagents_analysis = await analyze_flow_execution(
+            flow_id=flow_id,
+            flow_result=result,
+            input_value=payload.input_value,
+            inputs=payload.inputs,
+        )
 
-    response = {
-        "local_id": spec.id,
-        "remote_id": target_id,
-        "result": result,
-    }
+        response = {
+            "local_id": spec.id,
+            "remote_id": target_id,
+            "result": result,
+        }
 
-    # Add DeepAgents analysis if available
-    if deepagents_analysis:
-        response["deepagents_analysis"] = deepagents_analysis
+        # Add DeepAgents analysis if available
+        if deepagents_analysis:
+            response["deepagents_analysis"] = deepagents_analysis
 
-    return response
+        return response
+    finally:
+        if gpu_allocation_id:
+            await _release_gpu_allocation(gpu_allocation_id)

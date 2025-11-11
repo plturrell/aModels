@@ -139,6 +139,48 @@ var (
 		},
 		[]string{"alert_type"},
 	)
+
+	// Integration metrics
+	IntegrationRequestDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "catalog_integration_request_duration_seconds",
+			Help:    "Integration request duration in seconds",
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 12), // 1ms to 4s
+		},
+		[]string{"service", "endpoint", "status", "correlation_id"},
+	)
+
+	IntegrationRequestCount = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "catalog_integration_requests_total",
+			Help: "Total number of integration requests",
+		},
+		[]string{"service", "endpoint", "status"},
+	)
+
+	IntegrationErrorCount = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "catalog_integration_errors_total",
+			Help: "Total number of integration errors",
+		},
+		[]string{"service", "endpoint", "error_type"},
+	)
+
+	CircuitBreakerState = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "catalog_circuit_breaker_state",
+			Help: "Circuit breaker state (0=closed, 1=open, 2=half-open)",
+		},
+		[]string{"service"},
+	)
+
+	IntegrationRetryCount = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "catalog_integration_retries_total",
+			Help: "Total number of integration retries",
+		},
+		[]string{"service", "endpoint"},
+	)
 )
 
 // RecordRequest records metrics for an HTTP request.
@@ -195,5 +237,33 @@ func UpdateConnectionPool(state string, size int) {
 // RecordAlert records an alert event.
 func RecordAlert(alertType string, details map[string]interface{}) {
 	AlertsTotal.WithLabelValues(alertType).Inc()
+}
+
+// RecordIntegrationRequest records metrics for an integration request.
+func RecordIntegrationRequest(service, endpoint string, statusCode int, latency time.Duration, correlationID string) {
+	status := "success"
+	if statusCode >= 400 {
+		status = "error"
+	}
+	IntegrationRequestDuration.WithLabelValues(service, endpoint, status, correlationID).Observe(latency.Seconds())
+	IntegrationRequestCount.WithLabelValues(service, endpoint, status).Inc()
+	
+	if statusCode >= 400 {
+		errorType := "client_error"
+		if statusCode >= 500 {
+			errorType = "server_error"
+		}
+		IntegrationErrorCount.WithLabelValues(service, endpoint, errorType).Inc()
+	}
+}
+
+// RecordCircuitBreakerState records circuit breaker state.
+func RecordCircuitBreakerState(service string, state int) {
+	CircuitBreakerState.WithLabelValues(service).Set(float64(state))
+}
+
+// RecordIntegrationRetry records a retry attempt.
+func RecordIntegrationRetry(service, endpoint string) {
+	IntegrationRetryCount.WithLabelValues(service, endpoint).Inc()
 }
 

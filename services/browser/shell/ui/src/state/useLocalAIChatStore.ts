@@ -6,6 +6,7 @@ import {
   type ChatRequest,
   type ChatResponse
 } from "../api/localai";
+import { streamLocalAIChat } from "../api/localai-streaming";
 import { useTelemetryStore } from "./useTelemetryStore";
 
 export type ChatRole = "user" | "assistant";
@@ -40,10 +41,11 @@ interface LocalAIChatState {
   pending: boolean;
   error: string | null;
   temperature: number;
+  streaming: boolean;
   setModel: (model: string) => void;
   setTemperature: (value: number) => void;
   reset: () => void;
-  sendMessage: (prompt: string, opts?: { model?: string }) => Promise<void>;
+  sendMessage: (prompt: string, opts?: { model?: string; stream?: boolean }) => Promise<void>;
   applyFollowUp: (prompt: string) => Promise<void>;
 }
 
@@ -139,9 +141,10 @@ export const useLocalAIChatStore = create<LocalAIChatState>((set, get) => ({
   pending: false,
   error: null,
   temperature: 0.4,
+  streaming: false,
   setModel: (model) => set({ model }),
   setTemperature: (value) => set({ temperature: value }),
-  reset: () => set({ messages: [], followUps: [], pending: false, error: null }),
+  reset: () => set({ messages: [], followUps: [], pending: false, error: null, streaming: false }),
   sendMessage: async (prompt, opts) => {
     const trimmed = prompt.trim();
     if (!trimmed) return;
@@ -149,6 +152,7 @@ export const useLocalAIChatStore = create<LocalAIChatState>((set, get) => ({
     const history = get().messages;
     const start = performance.now();
     const currentModel = opts?.model ?? get().model ?? DEFAULT_MODEL;
+    const useStreaming = opts?.stream ?? true; // Default to streaming
 
     const userMessage: ChatMessage = {
       id: createId(),
@@ -160,6 +164,7 @@ export const useLocalAIChatStore = create<LocalAIChatState>((set, get) => ({
     set((state) => ({
       messages: [...state.messages, userMessage],
       pending: true,
+      streaming: useStreaming,
       error: null,
       model: currentModel
     }));
@@ -179,58 +184,124 @@ export const useLocalAIChatStore = create<LocalAIChatState>((set, get) => ({
     };
 
     try {
-      const response = await sendLocalAIChat(request);
-      const choice = response.choices?.[0];
-      const content = choice?.message?.content?.trim();
-      if (!content) {
-        throw new Error("LocalAI returned an empty response");
-      }
+      if (useStreaming) {
+        // Use streaming API
+        const assistantMessageId = createId();
+        let fullContent = "";
+        let citations: NormalisedCitation[] = [];
 
-      const citations = gatherCitations(response);
-      const followUps = deriveFollowUps(content, citations);
+        const assistantMessage: ChatMessage = {
+          id: assistantMessageId,
+          role: "assistant",
+          content: "",
+          createdAt: Date.now(),
+          streaming: true,
+          citations: []
+        };
 
-      const assistantMessage: ChatMessage = {
-        id: createId(),
-        role: "assistant",
-        content,
-        createdAt: Date.now(),
-        streaming: true,
-        citations
-      };
-
-      set((state) => ({
-        messages: [...state.messages, assistantMessage],
-        followUps,
-        pending: false,
-        error: null
-      }));
-
-      const durationMs = Math.round(performance.now() - start);
-      const usage = response.usage ?? {};
-
-      useTelemetryStore.getState().recordInteraction({
-        id: assistantMessage.id,
-        model: response.model ?? currentModel,
-        durationMs,
-        timestamp: Date.now(),
-        promptChars: trimmed.length,
-        completionChars: content.length,
-        promptTokens: usage.prompt_tokens,
-        completionTokens: usage.completion_tokens,
-        citations: citations.length
-      });
-
-      window.setTimeout(() => {
         set((state) => ({
-          messages: state.messages.map((message) =>
-            message.id === assistantMessage.id ? { ...message, streaming: false } : message
-          )
+          messages: [...state.messages, assistantMessage]
         }));
-      }, Math.min(4000, Math.max(1200, content.length * 18)));
+
+        await streamLocalAIChat(request, {
+          onContent: (content) => {
+            fullContent = content;
+            set((state) => ({
+              messages: state.messages.map((message) =>
+                message.id === assistantMessageId
+                  ? { ...message, content: fullContent, streaming: true }
+                  : message
+              )
+            }));
+          },
+          onComplete: (content) => {
+            fullContent = content;
+            const citations = gatherCitations({ choices: [{ message: { content } }] } as ChatResponse);
+            const followUps = deriveFollowUps(fullContent, citations);
+
+            set((state) => ({
+              messages: state.messages.map((message) =>
+                message.id === assistantMessageId
+                  ? { ...message, content: fullContent, streaming: false, citations }
+                  : message
+              ),
+              followUps,
+              pending: false,
+              streaming: false,
+              error: null
+            }));
+
+            const durationMs = Math.round(performance.now() - start);
+            useTelemetryStore.getState().recordInteraction({
+              id: assistantMessageId,
+              model: currentModel,
+              durationMs,
+              timestamp: Date.now(),
+              promptChars: trimmed.length,
+              completionChars: fullContent.length,
+              citations: citations.length
+            });
+          },
+          onError: (error) => {
+            set((state) => ({
+              pending: false,
+              streaming: false,
+              error: error.message,
+              messages: state.messages.map((message) =>
+                message.id === userMessage.id ? { ...message, error: true } : message
+              )
+            }));
+          }
+        });
+      } else {
+        // Use non-streaming API (fallback)
+        const response = await sendLocalAIChat(request);
+        const choice = response.choices?.[0];
+        const content = choice?.message?.content?.trim();
+        if (!content) {
+          throw new Error("LocalAI returned an empty response");
+        }
+
+        const citations = gatherCitations(response);
+        const followUps = deriveFollowUps(content, citations);
+
+        const assistantMessage: ChatMessage = {
+          id: createId(),
+          role: "assistant",
+          content,
+          createdAt: Date.now(),
+          streaming: false,
+          citations
+        };
+
+        set((state) => ({
+          messages: [...state.messages, assistantMessage],
+          followUps,
+          pending: false,
+          streaming: false,
+          error: null
+        }));
+
+        const durationMs = Math.round(performance.now() - start);
+        const usage = response.usage ?? {};
+
+        useTelemetryStore.getState().recordInteraction({
+          id: assistantMessage.id,
+          model: response.model ?? currentModel,
+          durationMs,
+          timestamp: Date.now(),
+          promptChars: trimmed.length,
+          completionChars: content.length,
+          promptTokens: usage.prompt_tokens,
+          completionTokens: usage.completion_tokens,
+          citations: citations.length
+        });
+      }
     } catch (error) {
       const err = error instanceof Error ? error.message : String(error);
       set((state) => ({
         pending: false,
+        streaming: false,
         error: err,
         messages: state.messages.map((message) =>
           message.id === userMessage.id ? { ...message, error: true } : message

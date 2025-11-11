@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
+from pydantic import ConfigDict
 from sqlalchemy import Column, Text
 from sqlmodel import Field, SQLModel
 
@@ -28,5 +29,4 @@ class FlowMapping(SQLModel, table=True):
         sa_column=Column(Text, nullable=True),
     )
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)

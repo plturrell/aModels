@@ -159,25 +159,66 @@ func main() {
 
 	srv := server.NewSearchServer(searchService.Model(), searchService)
 
-	http.HandleFunc("/health", srv.HandleHealth)
-	http.HandleFunc("/v1/embed", srv.HandleEmbed)
-	http.HandleFunc("/v1/rerank", srv.HandleRerank)
-	http.HandleFunc("/v1/search", srv.HandleSearch)
-	http.HandleFunc("/v1/documents", srv.HandleAddDocument)
-	http.HandleFunc("/v1/documents/batch", srv.HandleAddDocuments)
-	http.HandleFunc("/v1/model", srv.HandleModelInfo)
-	http.HandleFunc("/v1/agent-catalog", handleAgentCatalog(searchService))
-	http.HandleFunc("/v1/agent-catalog/stats", handleAgentCatalogStats(searchService))
-	http.HandleFunc("/", server.ServeStatic("web"))
+	// Setup authentication and rate limiting
+	authConfig := server.LoadAuthConfig(log.Default())
+	rateLimiter, rateLimitEnabled := server.LoadRateLimiterConfig()
+
+	// Create middleware chain
+	var handler http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/health":
+			srv.HandleHealth(w, r)
+		case "/v1/embed":
+			srv.HandleEmbed(w, r)
+		case "/v1/rerank":
+			srv.HandleRerank(w, r)
+		case "/v1/search":
+			srv.HandleSearch(w, r)
+		case "/v1/documents":
+			if r.Method == http.MethodPost {
+				srv.HandleAddDocument(w, r)
+			} else {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			}
+		case "/v1/documents/batch":
+			if r.Method == http.MethodPost {
+				srv.HandleAddDocuments(w, r)
+			} else {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			}
+		case "/v1/model":
+			srv.HandleModelInfo(w, r)
+		case "/v1/agent-catalog":
+			handleAgentCatalog(searchService, log.Default())(w, r)
+		case "/v1/agent-catalog/stats":
+			handleAgentCatalogStats(searchService)(w, r)
+		default:
+			server.ServeStatic("web")(w, r)
+		}
+	})
+
+	// Apply rate limiting middleware
+	if rateLimitEnabled && rateLimiter != nil {
+		handler = server.RateLimitMiddleware(rateLimiter, true)(handler)
+		log.Printf("🛡️  Rate limiting enabled: %d requests/minute", rateLimiter.requestsPerMinute)
+	}
+
+	// Apply authentication middleware
+	if authConfig.Enabled {
+		handler = server.AuthMiddleware(authConfig)(handler)
+		log.Printf("🔐 Authentication enabled")
+	} else {
+		log.Printf("⚠️  Authentication disabled (set AUTH_ENABLED=true to enable)")
+	}
 
 	log.Printf("✅ Ready on http://localhost:%s", *port)
 	log.Printf("   Agent catalog: http://localhost:%s/v1/agent-catalog", *port)
-	if err := http.ListenAndServe(":"+*port, nil); err != nil {
+	if err := http.ListenAndServe(":"+*port, handler); err != nil {
 		log.Fatalf("server stopped: %v", err)
 	}
 }
 
-func handleAgentCatalog(service *search.SearchService) http.HandlerFunc {
+func handleAgentCatalog(service *search.SearchService, logger *log.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if service == nil {
 			http.Error(w, "search service not configured", http.StatusServiceUnavailable)
@@ -186,6 +227,9 @@ func handleAgentCatalog(service *search.SearchService) http.HandlerFunc {
 		// Agent catalog disabled - AgentSDK not available
 		if cached, updated := service.AgentCatalogSnapshot(); cached != nil {
 			sendSearchCatalogResponse(w, cached, updated)
+			if logger != nil {
+				logger.Printf("[catalog] served cached snapshot with %d suites", len(cached.Suites))
+			}
 			return
 		}
 		http.Error(w, "agent catalog not available (AgentSDK dependency removed)", http.StatusServiceUnavailable)

@@ -4,6 +4,9 @@ Routes natural language queries to appropriate GNN capabilities and generates re
 """
 
 import logging
+import os
+import sys
+from pathlib import Path
 from typing import TypedDict, Annotated, Literal, Optional, Dict, Any, List
 import operator
 
@@ -17,6 +20,19 @@ except ImportError:
     StateGraph = None
     END = None
     START = None
+
+# Import LLM pool
+try:
+    # Try to import from shared python directory
+    shared_python_path = Path(__file__).parent.parent.parent.parent.parent / "shared" / "python"
+    if shared_python_path.exists():
+        sys.path.insert(0, str(shared_python_path.parent))
+    from shared.python.llm_pool import LLMClientPool, LLMPoolConfig
+    HAS_LLM_POOL = True
+except ImportError:
+    HAS_LLM_POOL = False
+    LLMClientPool = None
+    LLMPoolConfig = None
 
 # Import narrative GNN
 import sys
@@ -60,7 +76,9 @@ class NarrativeLangGraphAgent:
         self,
         narrative_gnn: Optional[MultiPurposeNarrativeGNN] = None,
         narrative_graph: Optional[NarrativeGraph] = None,
-        llm_model: str = "openai:gpt-4o-mini"
+        llm_model: str = "openai:gpt-4o-mini",
+        use_pool: bool = True,
+        pool_config: Optional[LLMPoolConfig] = None
     ):
         """Initialize narrative LangGraph agent.
         
@@ -68,6 +86,8 @@ class NarrativeLangGraphAgent:
             narrative_gnn: Optional MultiPurposeNarrativeGNN instance
             narrative_graph: Optional NarrativeGraph instance
             llm_model: LLM model for classification and response generation
+            use_pool: Whether to use LLM connection pooling (default: True)
+            pool_config: Optional LLM pool configuration
         """
         if not HAS_LANGGRAPH:
             raise ImportError("LangGraph is required for NarrativeLangGraphAgent")
@@ -76,13 +96,30 @@ class NarrativeLangGraphAgent:
         self.narrative_graph = narrative_graph
         self.llm_model = llm_model
         
-        # Initialize LLM
-        self.llm = init_chat_model(llm_model)
+        # Initialize LLM with optional pooling
+        if use_pool and HAS_LLM_POOL:
+            if pool_config is None:
+                pool_config = LLMPoolConfig(
+                    max_connections=10,
+                    rate_limit=int(os.getenv("LLM_RATE_LIMIT", "100")),
+                    cache_enabled=True,
+                    cache_ttl=int(os.getenv("LLM_CACHE_TTL", "300")),
+                    redis_url=os.getenv("REDIS_URL")
+                )
+            
+            def llm_factory():
+                return init_chat_model(llm_model)
+            
+            self.llm_pool = LLMClientPool(pool_config, llm_factory)
+            self.llm = None  # Will get from pool when needed
+            logger.info("Initialized NarrativeLangGraphAgent with LLM pooling")
+        else:
+            self.llm = init_chat_model(llm_model)
+            self.llm_pool = None
+            logger.info("Initialized NarrativeLangGraphAgent without pooling")
         
         # Build workflow graph
         self.graph = self._build_graph()
-        
-        logger.info("Initialized NarrativeLangGraphAgent")
     
     def _build_graph(self) -> StateGraph:
         """Build LangGraph workflow.
@@ -107,6 +144,29 @@ class NarrativeLangGraphAgent:
         
         return workflow.compile()
     
+    def _get_llm_response(self, messages: List[Any], cache_key: Optional[str] = None) -> Any:
+        """Get LLM response with pooling and caching.
+        
+        Args:
+            messages: List of messages
+            cache_key: Optional cache key
+            
+        Returns:
+            LLM response
+        """
+        if self.llm_pool:
+            client = self.llm_pool.get_client(timeout=5.0)
+            try:
+                return self.llm_pool.invoke_with_cache(
+                    client,
+                    messages,
+                    cache_key=cache_key
+                )
+            finally:
+                self.llm_pool.return_client(client)
+        else:
+            return self.llm.invoke(messages)
+    
     def classify_query_type(self, state: NarrativeState) -> Dict[str, Any]:
         """Classify query type using LLM.
         
@@ -130,7 +190,8 @@ Query: {query}
 Respond with ONLY the category name (explain, predict, detect_anomalies, or what_if):"""
         
         try:
-            response = self.llm.invoke([HumanMessage(content=classification_prompt)])
+            cache_key = f"classify:{hash(query)}" if self.llm_pool else None
+            response = self._get_llm_response([HumanMessage(content=classification_prompt)], cache_key)
             query_type = response.content.strip().lower()
             
             # Validate query type
@@ -178,7 +239,8 @@ Respond in JSON format:
 }}"""
         
         try:
-            response = self.llm.invoke([HumanMessage(content=extraction_prompt)])
+            cache_key = f"extract:{hash(query)}" if self.llm_pool else None
+            response = self._get_llm_response([HumanMessage(content=extraction_prompt)], cache_key)
             # Try to parse JSON from response
             import json
             import re
@@ -359,7 +421,8 @@ Respond in JSON format:
 }}"""
         
         try:
-            response = self.llm.invoke([HumanMessage(content=extraction_prompt)])
+            cache_key = f"whatif:{hash(query)}" if self.llm_pool else None
+            response = self._get_llm_response([HumanMessage(content=extraction_prompt)], cache_key)
             import json
             import re
             
@@ -428,7 +491,8 @@ Respond in JSON format:
         messages.append(HumanMessage(content=response_prompt))
         
         try:
-            response = self.llm.invoke(messages)
+            cache_key = f"response:{hash(str(query))}:{hash(str(gnn_results))}" if self.llm_pool else None
+            response = self._get_llm_response(messages, cache_key)
             final_response = response.content
             
             logger.info("Generated LLM response")

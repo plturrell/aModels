@@ -25,6 +25,22 @@ from .routing_optimizer import RoutingOptimizer
 from .domain_optimizer import DomainOptimizer
 from .digital_twin import DigitalTwinSimulator
 from .langsmith_tracing import LangSmithTracer
+from .graph_client import GraphServiceClient
+
+# Coral NPU integration
+try:
+    from .coralnpu_client import CoralNPUClient, create_coralnpu_client
+    from .coralnpu_quantization import CoralNPUQuantizer, create_quantizer
+    from .coralnpu_converter import CoralNPUConverter, create_converter
+    HAS_CORALNPU = True
+except ImportError:
+    HAS_CORALNPU = False
+    CoralNPUClient = None
+    CoralNPUQuantizer = None
+    CoralNPUConverter = None
+    create_coralnpu_client = None
+    create_quantizer = None
+    create_converter = None
 
 # Phase 9.1: Auto-tuning
 try:
@@ -105,6 +121,7 @@ class TrainingPipeline:
     def __init__(
         self,
         extract_service_url: Optional[str] = None,
+        graph_service_url: Optional[str] = None,
         glean_db_name: Optional[str] = None,
         output_dir: Optional[str] = None,
         enable_domain_filtering: bool = True,
@@ -115,9 +132,26 @@ class TrainingPipeline:
         enable_gnn_link_prediction: Optional[bool] = None,
         enable_gnn_device: Optional[str] = None,
         enable_gnn_training: Optional[bool] = None,
-        gnn_models_dir: Optional[str] = None
+        gnn_models_dir: Optional[str] = None,
+        enable_coralnpu: Optional[bool] = None,
+        coralnpu_quantize: Optional[bool] = None,
+        coralnpu_compile: Optional[bool] = None,
     ):
         self.extract_service_url = extract_service_url or os.getenv("EXTRACT_SERVICE_URL", "http://localhost:19080")
+        # Phase 1: Initialize Graph service client for optimized Neo4j access
+        self.graph_service_url = graph_service_url or os.getenv("GRAPH_SERVICE_URL")
+        self.graph_client = None
+        if os.getenv("ENABLE_GRAPH_SERVICE_INTEGRATION", "true").lower() == "true":
+            try:
+                self.graph_client = GraphServiceClient(
+                    graph_service_url=self.graph_service_url,
+                    extract_service_url=self.extract_service_url
+                )
+                logger.info("Graph service client initialized for optimized Neo4j access")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Graph service client (falling back to Extract service): {e}")
+                self.graph_client = None
+        
         self.glean_client = GleanTrainingClient(db_name=glean_db_name)
         self.output_dir = output_dir or os.getenv("TRAINING_OUTPUT_DIR", "./training_data")
         os.makedirs(self.output_dir, exist_ok=True)
@@ -292,6 +326,55 @@ class TrainingPipeline:
                     logger.info("GNN Inference optimizer initialized (Priority 4: Performance)")
             except Exception as e:
                 logger.warning(f"Failed to initialize GNN inference optimizer: {e}")
+        
+        # Initialize Coral NPU integration
+        self.enable_coralnpu = enable_coralnpu if enable_coralnpu is not None else (
+            os.getenv("CORALNPU_ENABLED", "false").lower() == "true"
+        )
+        self.coralnpu_quantize = coralnpu_quantize if coralnpu_quantize is not None else (
+            os.getenv("CORALNPU_QUANTIZE_MODELS", "false").lower() == "true"
+        )
+        self.coralnpu_compile = coralnpu_compile if coralnpu_compile is not None else (
+            os.getenv("CORALNPU_COMPILE_MODELS", "false").lower() == "true"
+        )
+        
+        self.coralnpu_client = None
+        self.coralnpu_quantizer = None
+        self.coralnpu_converter = None
+        
+        if self.enable_coralnpu and HAS_CORALNPU:
+            try:
+                # Create metrics collector for Coral NPU
+                def coralnpu_metrics_collector(service: str, operation: str, latency: float, is_npu: bool):
+                    device = "npu" if is_npu else "cpu"
+                    logger.info(f"Coral NPU {operation}: {latency:.3f}s on {device}")
+                
+                self.coralnpu_client = create_coralnpu_client(
+                    enabled=self.enable_coralnpu,
+                    fallback_to_cpu=True,
+                    metrics_collector=coralnpu_metrics_collector,
+                )
+                
+                if self.coralnpu_quantize:
+                    self.coralnpu_quantizer = create_quantizer(
+                        client=self.coralnpu_client,
+                        enabled=True,
+                    )
+                
+                self.coralnpu_converter = create_converter(
+                    client=self.coralnpu_client,
+                    quantizer=self.coralnpu_quantizer,
+                )
+                
+                logger.info("Coral NPU integration initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Coral NPU: {e}")
+                self.enable_coralnpu = False
+        else:
+            if not HAS_CORALNPU:
+                logger.info("Coral NPU modules not available")
+            else:
+                logger.info("Coral NPU integration disabled")
     
     def run_full_pipeline(
         self,
@@ -346,18 +429,45 @@ class TrainingPipeline:
         if train_gnn_models and self.enable_gnn_training and self.gnn_trainer:
             logger.info("Priority 2: Training GNN models before pipeline execution...")
             try:
-                # Extract initial graph for training
-                initial_graph = self._extract_knowledge_graph(
-                    project_id=project_id,
-                    system_id=system_id,
-                    json_tables=json_tables or [],
-                    hive_ddls=hive_ddls or [],
-                    control_m_files=control_m_files or [],
-                    signavio_files=signavio_files or [],
-                )
+                # Phase 6: Use graph service streaming for efficient training data loading
+                training_nodes = []
+                training_edges = []
                 
-                training_nodes = initial_graph.get("nodes", [])
-                training_edges = initial_graph.get("edges", [])
+                if self.graph_client:
+                    # Use graph service client streaming for optimized batch loading
+                    logger.info("Using graph service streaming for GNN training data...")
+                    batch_size = int(os.getenv("GNN_TRAINING_BATCH_SIZE", "1000"))
+                    
+                    # Stream nodes
+                    for node_batch in self.graph_client.stream_nodes(
+                        project_id=project_id,
+                        system_id=system_id,
+                        batch_size=batch_size
+                    ):
+                        training_nodes.extend([node.dict() for node in node_batch])
+                    
+                    # Stream edges
+                    for edge_batch in self.graph_client.stream_edges(
+                        project_id=project_id,
+                        system_id=system_id,
+                        batch_size=batch_size
+                    ):
+                        training_edges.extend([edge.dict() for edge in edge_batch])
+                    
+                    logger.info(f"Streamed {len(training_nodes)} nodes, {len(training_edges)} edges from graph service")
+                else:
+                    # Fallback to extract service
+                    initial_graph = self._extract_knowledge_graph(
+                        project_id=project_id,
+                        system_id=system_id,
+                        json_tables=json_tables or [],
+                        hive_ddls=hive_ddls or [],
+                        control_m_files=control_m_files or [],
+                        signavio_files=signavio_files or [],
+                    )
+                    
+                    training_nodes = initial_graph.get("nodes", [])
+                    training_edges = initial_graph.get("edges", [])
                 
                 if training_nodes and training_edges:
                     training_results = self.train_gnn_models(
@@ -522,19 +632,28 @@ class TrainingPipeline:
             logger.info("Step 3a: Learning workflow patterns from Petri nets...")
             workflow_learner = WorkflowPatternLearner()
             
-            # Query Petri nets from catalog via Extract service
-            if self.extract_service_url:
+            # Query Petri nets from catalog via Graph service (Phase 1: optimized Neo4j access)
+            if self.graph_client or self.extract_service_url:
                 try:
-                    from .extract_client import ExtractServiceClient
-                    extract_client = ExtractServiceClient(extract_service_url=self.extract_service_url)
-                    
-                    # Query for Petri nets
-                    petri_nets_query = """
-                    MATCH (n)
-                    WHERE n.type = 'petri_net'
-                    RETURN n.id as id, n.label as label, n.properties_json as properties
-                    """
-                    petri_nets_result = extract_client.query_knowledge_graph(petri_nets_query)
+                    # Phase 1: Use graph service client for optimized Neo4j queries
+                    if self.graph_client:
+                        # Query for Petri nets using graph service client
+                        petri_nets_query = """
+                        MATCH (n)
+                        WHERE n.type = 'petri_net'
+                        RETURN n.id as id, n.label as label, n.properties_json as properties
+                        """
+                        petri_nets_result = self.graph_client.query_neo4j(petri_nets_query)
+                    else:
+                        # Fallback to extract client
+                        from .extract_client import ExtractServiceClient
+                        extract_client = ExtractServiceClient(extract_service_url=self.extract_service_url)
+                        petri_nets_query = """
+                        MATCH (n)
+                        WHERE n.type = 'petri_net'
+                        RETURN n.id as id, n.label as label, n.properties_json as properties
+                        """
+                        petri_nets_result = extract_client.query_knowledge_graph(petri_nets_query)
                     
                     if petri_nets_result and petri_nets_result.get("data"):
                         # Learn from first Petri net (can be extended to learn from all)
@@ -590,16 +709,42 @@ class TrainingPipeline:
                 # Get Glean metrics if available
                 glean_metrics = glean_data.get("metrics", {}) if glean_data else None
                 
-                # Create Extract client for Neo4j queries
+                # Phase 1: Use graph service client for Neo4j queries (optimized)
+                # Create adapter for temporal learner (it expects extract_client interface)
                 extract_client = None
-                if self.extract_service_url:
+                if self.graph_client:
+                    # Use graph client wrapped in extract_client-compatible interface
+                    # TemporalPatternLearner uses extract_client.query_knowledge_graph()
+                    # We'll pass graph_client which has query_neo4j() with similar interface
+                    try:
+                        # Create adapter that wraps graph_client to match extract_client interface
+                        class GraphClientAdapter:
+                            def __init__(self, graph_client):
+                                self.graph_client = graph_client
+                            
+                            def query_knowledge_graph(self, query, params=None):
+                                result = self.graph_client.query_neo4j(query, params or {})
+                                # Convert to extract_client format
+                                return {
+                                    "columns": result.get("columns", []),
+                                    "data": result.get("data", [])
+                                }
+                        
+                        extract_client = GraphClientAdapter(self.graph_client)
+                        logger.info("Using graph service client for temporal pattern learning")
+                    except Exception as e:
+                        logger.warning(f"Failed to create graph client adapter: {e}")
+                        extract_client = None
+                
+                # Fallback to extract client if graph client not available
+                if not extract_client and self.extract_service_url:
                     try:
                         from .extract_client import ExtractServiceClient
                         extract_client = ExtractServiceClient(extract_service_url=self.extract_service_url)
                     except Exception as e:
                         logger.warning(f"Failed to create Extract client: {e}")
                 
-                # Learn temporal patterns (with Extract client for Neo4j queries)
+                # Learn temporal patterns (with graph client or extract client for Neo4j queries)
                 temporal_learner = TemporalPatternLearner(
                     extract_client=extract_client,
                     glean_client=self.glean_client,
@@ -627,11 +772,12 @@ class TrainingPipeline:
             results["steps"]["temporal_analysis"] = {"status": "skipped"}
         
         # Step 3c: Generate GNN embeddings (Priority 1: Integration)
+        # Phase 6: Parallel GNN processing for better performance
         gnn_embeddings = None
         gnn_classifications = None
         gnn_link_predictions = None
         if self.enable_gnn and self.gnn_embedder:
-            logger.info("Step 3c: Generating GNN embeddings...")
+            logger.info("Step 3c: Generating GNN embeddings and insights (parallel processing)...")
             try:
                 graph_nodes = graph_data.get("nodes", [])
                 graph_edges = graph_data.get("edges", [])
@@ -649,68 +795,59 @@ class TrainingPipeline:
                         gnn_embeddings = cached
                         logger.info("Using cached GNN embeddings")
                 
-                if gnn_embeddings is None:
-                    # Generate graph-level and node-level embeddings
-                    gnn_embeddings = self.gnn_embedder.generate_embeddings(
-                        graph_nodes,
-                        graph_edges,
-                        graph_level=True
-                    )
-
-                    # Optimize embedder model for inference after first init
-                    if (
-                        self.enable_gnn_inference_opt
-                        and HAS_GNN_PRIORITY4
-                        and getattr(self.gnn_embedder, "model", None) is not None
-                        and not self._embedder_optimized
-                        and self.gnn_inference_optimizer is not None
-                    ):
-                        try:
-                            self.gnn_embedder.model = self.gnn_inference_optimizer.optimize_for_inference(
-                                self.gnn_embedder.model, None
-                            )
-                            self._embedder_optimized = True
-                            logger.info("Optimized GNN embedder model for inference")
-                        except Exception as e:
-                            logger.warning(f"Failed to optimize embedder model: {e}")
-                    
-                    node_embeddings = self.gnn_embedder.generate_embeddings(
-                        graph_nodes,
-                        graph_edges,
-                        graph_level=False
-                    )
-                    
-                    if "error" not in gnn_embeddings and "error" not in node_embeddings:
-                        gnn_embeddings["node_embeddings"] = node_embeddings.get("node_embeddings", {})
-                        if self.embedding_cache and self.enable_gnn_cache:
-                            self.embedding_cache.put(graph_nodes, graph_edges, gnn_embeddings, cache_config)
-                            logger.info("Cached GNN embeddings")
+                # Phase 6: Parallel GNN processing using threading
+                import concurrent.futures
+                enable_parallel = os.getenv("ENABLE_PARALLEL_GNN", "true").lower() == "true"
                 
-                # Node classification if enabled
-                if self.enable_gnn_classification and self.gnn_classifier:
+                if gnn_embeddings is None or enable_parallel:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                        # Submit parallel tasks
+                        futures = {}
+                        
+                        # Task 1: Generate embeddings
+                        if gnn_embeddings is None:
+                            futures["embeddings"] = executor.submit(
+                                self._generate_gnn_embeddings_parallel,
+                                graph_nodes, graph_edges, cache_config
+                            )
+                        
+                        # Task 2: Classify nodes (if enabled)
+                        if self.enable_gnn_classification and self.gnn_classifier:
+                            futures["classifications"] = executor.submit(
+                                self._classify_nodes_parallel,
+                                graph_nodes, graph_edges
+                            )
+                        
+                        # Task 3: Predict links (if enabled)
+                        if self.enable_gnn_link_prediction and self.gnn_link_predictor:
+                            futures["link_predictions"] = executor.submit(
+                                self._predict_links_parallel,
+                                graph_nodes, graph_edges
+                            )
+                        
+                        # Collect results
+                        if "embeddings" in futures:
+                            gnn_embeddings = futures["embeddings"].result()
+                        
+                        if "classifications" in futures:
+                            gnn_classifications = futures["classifications"].result()
+                        
+                        if "link_predictions" in futures:
+                            gnn_link_predictions = futures["link_predictions"].result()
+                        
+                        logger.info("✅ Parallel GNN processing completed")
+                else:
+                    # Sequential processing if parallel disabled or embeddings cached
+                    if gnn_embeddings is None:
+                        gnn_embeddings = self._generate_gnn_embeddings_parallel(graph_nodes, graph_edges, cache_config)
+                
+                # Process results from parallel or sequential execution
+                # Handle classification results (only if not already processed in parallel)
+                if self.enable_gnn_classification and self.gnn_classifier and gnn_classifications is None:
                     try:
-                        # Optimize classifier model for inference (once)
-                        if (
-                            self.enable_gnn_inference_opt
-                            and HAS_GNN_PRIORITY4
-                            and getattr(self.gnn_classifier, "model", None) is not None
-                            and not self._classifier_optimized
-                            and self.gnn_inference_optimizer is not None
-                        ):
-                            try:
-                                self.gnn_classifier.model = self.gnn_inference_optimizer.optimize_for_inference(
-                                    self.gnn_classifier.model, None
-                                )
-                                self._classifier_optimized = True
-                                logger.info("Optimized GNN classifier model for inference")
-                            except Exception as e:
-                                logger.warning(f"Failed to optimize classifier model: {e}")
-                        # Try to classify nodes (may need training first)
-                        gnn_classifications = self.gnn_classifier.classify_nodes(
-                            graph_nodes,
-                            graph_edges
-                        )
-                        if "error" not in gnn_classifications:
+                        # Sequential fallback if parallel didn't run
+                        gnn_classifications = self._classify_nodes_parallel(graph_nodes, graph_edges)
+                        if gnn_classifications and "error" not in gnn_classifications:
                             results["steps"]["gnn_classification"] = {
                                 "status": "success",
                                 "num_classified": len(gnn_classifications.get("classifications", [])),
@@ -772,32 +909,12 @@ class TrainingPipeline:
                 else:
                     results["steps"]["gnn_classification"] = {"status": "skipped", "reason": "disabled"}
                 
-                # Link prediction if enabled
-                if self.enable_gnn_link_prediction and self.gnn_link_predictor:
+                # Link prediction if enabled (only if not already processed in parallel)
+                if self.enable_gnn_link_prediction and self.gnn_link_predictor and gnn_link_predictions is None:
                     try:
-                        # Optimize link predictor model for inference (once)
-                        if (
-                            self.enable_gnn_inference_opt
-                            and HAS_GNN_PRIORITY4
-                            and getattr(self.gnn_link_predictor, "model", None) is not None
-                            and not self._link_predictor_optimized
-                            and self.gnn_inference_optimizer is not None
-                        ):
-                            try:
-                                self.gnn_link_predictor.model = self.gnn_inference_optimizer.optimize_for_inference(
-                                    self.gnn_link_predictor.model, None
-                                )
-                                self._link_predictor_optimized = True
-                                logger.info("Optimized GNN link predictor model for inference")
-                            except Exception as e:
-                                logger.warning(f"Failed to optimize link predictor model: {e}")
-                        # Predict missing links (may need training first)
-                        gnn_link_predictions = self.gnn_link_predictor.predict_links(
-                            graph_nodes,
-                            graph_edges,
-                            top_k=int(os.getenv("GNN_LINK_PREDICTION_TOP_K", "10"))
-                        )
-                        if "error" not in gnn_link_predictions:
+                        # Sequential fallback if parallel didn't run
+                        gnn_link_predictions = self._predict_links_parallel(graph_nodes, graph_edges)
+                        if gnn_link_predictions and "error" not in gnn_link_predictions:
                             results["steps"]["gnn_link_prediction"] = {
                                 "status": "success",
                                 "num_predictions": len(gnn_link_predictions.get("predictions", [])),
@@ -1221,7 +1338,14 @@ class TrainingPipeline:
         control_m_files: list,
         signavio_files: Optional[list] = None,
     ) -> Dict[str, Any]:
-        """Extract knowledge graph from source data via Extract service."""
+        """Extract knowledge graph from source data via Extract service or Graph service.
+        
+        Phase 1: Uses Graph service client for optimized Neo4j access when available,
+        falls back to Extract service for backward compatibility.
+        
+        Note: Knowledge graph extraction still uses Extract service endpoint as it processes
+        source files. Graph service client is used for subsequent Neo4j queries.
+        """
         import httpx
         
         payload = {
@@ -1234,6 +1358,8 @@ class TrainingPipeline:
             "system_id": system_id,
         }
         
+        # Knowledge graph extraction uses Extract service (processes source files)
+        # Graph service client will be used for subsequent Neo4j queries
         client = httpx.Client(timeout=300.0)
         try:
             response = client.post(
@@ -1673,3 +1799,135 @@ class TrainingPipeline:
             "files": [features_file, metadata_file],
             "metadata": metadata,
         }
+    
+    def _generate_gnn_embeddings_parallel(
+        self,
+        graph_nodes: List[Dict[str, Any]],
+        graph_edges: List[Dict[str, Any]],
+        cache_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Phase 6: Generate GNN embeddings (parallel processing helper).
+        
+        Args:
+            graph_nodes: Graph nodes
+            graph_edges: Graph edges
+            cache_config: Cache configuration
+        
+        Returns:
+            Embeddings dictionary
+        """
+        # Generate graph-level and node-level embeddings
+        gnn_embeddings = self.gnn_embedder.generate_embeddings(
+            graph_nodes,
+            graph_edges,
+            graph_level=True
+        )
+
+        # Optimize embedder model for inference after first init
+        if (
+            self.enable_gnn_inference_opt
+            and HAS_GNN_PRIORITY4
+            and getattr(self.gnn_embedder, "model", None) is not None
+            and not self._embedder_optimized
+            and self.gnn_inference_optimizer is not None
+        ):
+            try:
+                self.gnn_embedder.model = self.gnn_inference_optimizer.optimize_for_inference(
+                    self.gnn_embedder.model, None
+                )
+                self._embedder_optimized = True
+                logger.info("Optimized GNN embedder model for inference")
+            except Exception as e:
+                logger.warning(f"Failed to optimize embedder model: {e}")
+        
+        node_embeddings = self.gnn_embedder.generate_embeddings(
+            graph_nodes,
+            graph_edges,
+            graph_level=False
+        )
+        
+        if "error" not in gnn_embeddings and "error" not in node_embeddings:
+            gnn_embeddings["node_embeddings"] = node_embeddings.get("node_embeddings", {})
+            if self.embedding_cache and self.enable_gnn_cache:
+                self.embedding_cache.put(graph_nodes, graph_edges, gnn_embeddings, cache_config)
+                logger.info("Cached GNN embeddings")
+        
+        return gnn_embeddings
+    
+    def _classify_nodes_parallel(
+        self,
+        graph_nodes: List[Dict[str, Any]],
+        graph_edges: List[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """Phase 6: Classify nodes (parallel processing helper).
+        
+        Args:
+            graph_nodes: Graph nodes
+            graph_edges: Graph edges
+        
+        Returns:
+            Classifications dictionary or None
+        """
+        try:
+            # Optimize classifier model for inference (once)
+            if (
+                self.enable_gnn_inference_opt
+                and HAS_GNN_PRIORITY4
+                and getattr(self.gnn_classifier, "model", None) is not None
+                and not self._classifier_optimized
+                and self.gnn_inference_optimizer is not None
+            ):
+                try:
+                    self.gnn_classifier.model = self.gnn_inference_optimizer.optimize_for_inference(
+                        self.gnn_classifier.model, None
+                    )
+                    self._classifier_optimized = True
+                    logger.info("Optimized GNN classifier model for inference")
+                except Exception as e:
+                    logger.warning(f"Failed to optimize classifier model: {e}")
+            
+            return self.gnn_classifier.classify_nodes(graph_nodes, graph_edges)
+        except Exception as e:
+            logger.warning(f"Parallel node classification failed: {e}")
+            return None
+    
+    def _predict_links_parallel(
+        self,
+        graph_nodes: List[Dict[str, Any]],
+        graph_edges: List[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """Phase 6: Predict links (parallel processing helper).
+        
+        Args:
+            graph_nodes: Graph nodes
+            graph_edges: Graph edges
+        
+        Returns:
+            Link predictions dictionary or None
+        """
+        try:
+            # Optimize link predictor model for inference (once)
+            if (
+                self.enable_gnn_inference_opt
+                and HAS_GNN_PRIORITY4
+                and getattr(self.gnn_link_predictor, "model", None) is not None
+                and not self._link_predictor_optimized
+                and self.gnn_inference_optimizer is not None
+            ):
+                try:
+                    self.gnn_link_predictor.model = self.gnn_inference_optimizer.optimize_for_inference(
+                        self.gnn_link_predictor.model, None
+                    )
+                    self._link_predictor_optimized = True
+                    logger.info("Optimized GNN link predictor model for inference")
+                except Exception as e:
+                    logger.warning(f"Failed to optimize link predictor model: {e}")
+            
+            return self.gnn_link_predictor.predict_links(
+                graph_nodes,
+                graph_edges,
+                top_k=int(os.getenv("GNN_LINK_PREDICTION_TOP_K", "10"))
+            )
+        except Exception as e:
+            logger.warning(f"Parallel link prediction failed: {e}")
+            return None

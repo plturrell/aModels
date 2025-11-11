@@ -8,22 +8,27 @@ The Dynamic Sample Generator provides intelligent, database-driven test data gen
 
 ### 1. **Dynamic & Intelligent Generation**
 - **Knowledge Graph Driven**: Uses knowledge graph to understand table schemas, relationships, and classifications
-- **Pattern Learning**: Learns from existing data patterns to generate realistic test data
+- **AI-Powered Generation**: Uses LocalAI for intelligent value generation based on column semantics
+- **Pattern Learning**: Learns from existing data patterns to generate realistic test data (with AI enhancement)
 - **Type-Aware**: Generates appropriate data based on column types, constraints, and patterns
 - **Reference Table Support**: Handles reference/lookup tables with distinct values
 - **Transaction Table Support**: Generates realistic transaction data
+- **Foreign Key Resolution**: Automatically ensures foreign key values exist in referenced tables
 
 ### 2. **Database-Driven**
 - **Schema Discovery**: Automatically discovers table schemas from knowledge graph
 - **Relationship Awareness**: Understands foreign keys and table relationships
+- **Foreign Key Resolution**: Automatically generates referenced data and ensures FK integrity
 - **Constraint Validation**: Validates generated data against database constraints
 - **Dynamic Query Execution**: Executes test scenarios against actual database
+- **Performance Optimized**: Batch inserts and connection pooling for efficient data generation
 
 ### 3. **End-to-End Process Testing**
 - **Process Execution**: Executes Control-M jobs, SQL queries, and workflows
 - **Input/Output Validation**: Validates process inputs and outputs
 - **Sequence Testing**: Tests table processing sequences from knowledge graph
 - **Petri Net Testing**: Generates test scenarios from Petri net workflows
+- **Search Integration**: Discover similar test scenarios and patterns using semantic search
 
 ### 4. **Telemetry & Metrics**
 - **Latency Metrics**: Tracks process execution durations
@@ -33,6 +38,7 @@ The Dynamic Sample Generator provides intelligent, database-driven test data gen
 - **Error Tracking**: Captures errors with context and severity
 
 ### 5. **Quality Issue Detection**
+- **AI-Powered Quality Rules**: LocalAI generates intelligent quality rules based on table semantics
 - **Data Quality**: Detects NULL values in non-nullable columns
 - **Constraint Violations**: Validates foreign keys and constraints
 - **Code Quality**: Detects potential code issues
@@ -289,11 +295,69 @@ The generator uses the knowledge graph to:
 5. **Database-Driven**: Uses actual database schemas and constraints
 6. **Dynamic**: Adapts to schema changes automatically
 
+## Configuration
+
+The service can be configured using environment variables:
+
+### Server Settings
+- `TEST_SERVICE_PORT`: HTTP server port (default: "8082")
+
+### Database Settings
+- `TEST_DB_DSN`: Database connection string (required)
+
+### Service URLs
+- `EXTRACT_SERVICE_URL`: Extract service URL (default: "http://localhost:8081")
+- `LOCALAI_URL`: LocalAI service URL (default: "http://localhost:8080")
+- `SEARCH_SERVICE_URL`: Search service URL (defaults to Extract service URL if not set)
+
+### LocalAI Settings
+- `LOCALAI_ENABLED`: Enable LocalAI integration (default: true)
+- `LOCALAI_MODEL`: Model to use (default: "phi-3.5-mini")
+- `LOCALAI_TIMEOUT`: Request timeout (default: "60s")
+- `LOCALAI_RETRY_ATTEMPTS`: Number of retry attempts (default: 3)
+
+### Default Row Counts
+- `DEFAULT_REFERENCE_ROW_COUNT`: Default rows for reference tables (default: 50)
+- `DEFAULT_TRANSACTION_ROW_COUNT`: Default rows for transaction tables (default: 1000)
+- `DEFAULT_STAGING_ROW_COUNT`: Default rows for staging tables (default: 500)
+
+### Performance Settings
+- `BATCH_INSERT_SIZE`: Batch size for inserts (default: 100)
+- `DB_CONNECTION_POOL_SIZE`: Max open connections (default: 10)
+- `DB_CONNECTION_MAX_IDLE`: Max idle connections (default: 5)
+- `DB_CONNECTION_MAX_LIFETIME`: Connection max lifetime (default: "5m")
+
+### Feature Flags
+- `ENABLE_LOCALAI`: Enable LocalAI features (default: true)
+- `ENABLE_SEARCH`: Enable search features (default: true)
+- `ENABLE_FK_RESOLUTION`: Enable foreign key resolution (default: true)
+- `ENABLE_BATCH_INSERTS`: Enable batch inserts (default: true)
+
+## Building and Running
+
+```bash
+# Build the service
+make build
+
+# Run the service
+make run
+
+# Run tests
+make test
+```
+
+The service expects:
+- PostgreSQL database (connection via `TEST_DB_DSN`)
+- Extract service running (for knowledge graph queries)
+- LocalAI service (optional, for AI-powered features)
+- Search service (optional, defaults to Extract service)
+
 ## Future Enhancements
 
-1. **Pattern Learning**: Learn from historical data patterns
+1. **Enhanced Pattern Learning**: Improved AI-powered pattern recognition
 2. **Smart Seeding**: Use seed data from production (anonymized)
 3. **Test Data Management**: Version control for test scenarios
 4. **Visualization**: Dashboard for test execution results
 5. **Regression Testing**: Compare execution results over time
+6. **Parallel Data Generation**: Generate data for multiple tables concurrently
 

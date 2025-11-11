@@ -49,25 +49,51 @@ The platform is structured as a multi-component system:
 To get the search platform up and running, follow these steps:
 
 1.  **Install Dependencies:** Make sure you have the necessary dependencies installed (see the Dependencies section below).
-2.  **Build the Components:**
+2.  **Build the Components (optional when using Docker Compose):**
 
     ```bash
-    # Example build commands (replace with actual build commands)
     go build ./server
     npm install --prefix client && npm run build --prefix client
     ```
 
 3.  **Run the Services:**
 
-    ```bash
-    # Run the backend server
-    ./server/server &
+    **Option A – Docker Compose (recommended for local development):**
 
-    # Run the Python service
-    python ./python_service/main.py &
+    ```bash
+    docker compose up --build
     ```
 
-4.  **Access the Client:** Open your web browser and navigate to the client's address (e.g., `http://localhost:3000`).
+    This brings up Elasticsearch, Redis, LocalAI, the Go search-inference service (port `8090`), and the FastAPI gateway (port `8081`).
+
+    **Option B – Manual startup:**
+
+    ```bash
+    ./server/server &
+    python ./python_service/app.py &
+    ```
+
+4.  **Access the Services:**
+
+    - Search inference API: `http://localhost:8090`
+    - FastAPI gateway: `http://localhost:8081`
+    - Elasticsearch: `http://localhost:9200`
+    - LocalAI: `http://localhost:8080` (internal to Docker network)
+
+5.  **OpenAPI Documentation:**
+
+    The FastAPI gateway exports an OpenAPI document at `python_service/openapi.json`. Regenerate it after API changes by running:
+
+    ```bash
+    cd python_service
+    python - <<'PY'
+    import json
+    from app import app
+
+    with open("openapi.json", "w") as f:
+        json.dump(app.openapi(), f, indent=2)
+    PY
+    ```
 
 ## 5. Directory Reference
 
@@ -76,17 +102,55 @@ For detailed information on each component, please see the `README.md` file loca
 ## 6. Dependencies
 
 - **Go:** Version 1.20 or higher
+  - The search-inference service now requires Go **1.21** (see `search-inference/go.mod`).
 - **Python:** Version 3.10 or higher
 - **Node.js:** Version 18 or higher
 
 ## 7. Testing
 
-To run the tests for the platform, use the following command:
+### Unit Tests
 
+**Python Service:**
 ```bash
-# Example test command (replace with actual test command)
+cd python_service
+pytest test_app.py -v
+```
+
+**Go Service:**
+```bash
+cd search-inference
 go test ./...
 ```
+
+### Integration Tests
+
+Integration tests require the services to be running via Docker Compose:
+
+```bash
+# Start services
+docker compose up -d
+
+# Wait for services to be ready (about 30 seconds)
+sleep 30
+
+# Run integration tests
+cd python_service
+export AUTH_ENABLED=false  # Or set to true and provide TEST_API_KEY
+export TEST_API_KEY=your-api-key  # If AUTH_ENABLED=true
+pytest test_integration.py -v
+
+# Stop services
+docker compose down
+```
+
+### Test Configuration
+
+Integration tests can be configured via environment variables:
+
+- `PYTHON_SERVICE_URL`: Python service URL (default: http://localhost:8081)
+- `GO_SERVICE_URL`: Go service URL (default: http://localhost:8090)
+- `AUTH_ENABLED`: Enable authentication in tests (default: false)
+- `TEST_API_KEY`: API key for authenticated tests
 
 ## 8. Contributing
 

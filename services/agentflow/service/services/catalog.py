@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -22,6 +23,7 @@ class FlowSpec:
 
     @property
     def metadata(self) -> Dict[str, Any]:
+        """Return metadata block from the raw Langflow definition."""
         return self.raw.get("metadata", {})
 
 
@@ -30,11 +32,12 @@ class FlowCatalog:
     Loads flow definitions from the repository-managed `flows/` directory.
     """
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, *, logger: Optional[logging.Logger] = None):
         self.root = root
         self._specs_by_id: Dict[str, FlowSpec] = {}
         self._spec_list: List[FlowSpec] = []
         self._snapshot: Dict[str, float] = {}
+        self._logger = logger or logging.getLogger(__name__)
 
     def _iter_json_files(self) -> Iterable[Path]:
         if not self.root.exists():
@@ -54,6 +57,10 @@ class FlowCatalog:
         flow_id = data.get("id") or data.get("name")
         if not flow_id:
             relative = json_path.relative_to(self.root) if json_path.is_relative_to(self.root) else json_path
+            self._logger.error(
+                "Flow definition missing id",
+                extra={"path": str(json_path)},
+            )
             raise ValueError(f"Flow {relative} missing 'id' field")
 
         tags = [tag for tag in data.get("tags", []) if isinstance(tag, str)]
@@ -72,6 +79,10 @@ class FlowCatalog:
         paths = list(self._iter_json_files())
         snapshot = self._snapshot_paths(paths)
         if snapshot == self._snapshot:
+            self._logger.debug(
+                "flow catalog snapshot unchanged",
+                extra={"root": str(self.root)},
+            )
             return
 
         specs_by_id: Dict[str, FlowSpec] = {}
@@ -84,10 +95,25 @@ class FlowCatalog:
             except FileNotFoundError:
                 # File was removed between discovery and load – skip; snapshot already reflects removal.
                 continue
+            except json.JSONDecodeError as exc:
+                self._logger.error(
+                    "Invalid JSON payload for flow",
+                    extra={"path": str(json_path)},
+                    exc_info=exc,
+                )
+                raise ValueError(f"Flow JSON at {json_path} is not valid: {exc.msg}") from exc
 
             spec = self._build_spec(json_path, data)
             if spec.id in specs_by_id:
                 existing_path = specs_by_id[spec.id].path
+                self._logger.error(
+                    "Duplicate flow id detected",
+                    extra={
+                        "flow_id": spec.id,
+                        "current_path": str(json_path),
+                        "existing_path": str(existing_path),
+                    },
+                )
                 raise ValueError(
                     f"Duplicate flow id '{spec.id}' in {json_path} (already defined in {existing_path})"
                 )
@@ -97,6 +123,13 @@ class FlowCatalog:
         self._specs_by_id = specs_by_id
         self._spec_list = spec_list
         self._snapshot = snapshot
+        self._logger.info(
+            "flow catalog refreshed",
+            extra={
+                "root": str(self.root),
+                "flow_count": len(self._spec_list),
+            },
+        )
 
     def list(self) -> List[FlowSpec]:
         self._refresh_cache()

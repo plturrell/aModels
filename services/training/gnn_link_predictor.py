@@ -14,12 +14,17 @@ try:
     import torch
     import torch.nn as nn
     import torch.nn.functional as F
+    from torch.cuda.amp import autocast, GradScaler
     from torch_geometric.data import Data, Batch
     from torch_geometric.nn import GCNConv, GATConv, GraphSAGE
     from torch_geometric.nn.models import GAE, VGAE
     HAS_PYG = True
+    HAS_AMP = True
 except ImportError:
     HAS_PYG = False
+    HAS_AMP = False
+    autocast = None
+    GradScaler = None
     torch = None
     # Provide a minimal nn.Module stub so class definitions don't fail at import time
     class _NNModuleStub:
@@ -276,7 +281,9 @@ class GNNLinkPredictor:
         edges: List[Dict[str, Any]],
         epochs: int = 100,
         lr: float = 0.01,
-        neg_samples: int = 1
+        neg_samples: int = 1,
+        use_amp: bool = False,
+        scaler: Optional[Any] = None
     ) -> Dict[str, Any]:
         """Train the link predictor.
         
@@ -330,16 +337,30 @@ class GNNLinkPredictor:
         optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         criterion = nn.BCELoss()
         
-        # Training loop
+        # Training loop with AMP support
         self.model.train()
         train_losses = []
+        use_amp_training = use_amp and HAS_AMP and scaler is not None
         
         for epoch in range(epochs):
             optimizer.zero_grad()
-            pred = self.model(data.x, data.edge_index, edge_label_index)
-            loss = criterion(pred, edge_labels)
-            loss.backward()
-            optimizer.step()
+            
+            if use_amp_training:
+                # Use AMP autocast for forward pass
+                with autocast():
+                    pred = self.model(data.x, data.edge_index, edge_label_index)
+                    loss = criterion(pred, edge_labels)
+                
+                # Scale loss and backward pass
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                # Standard training without AMP
+                pred = self.model(data.x, data.edge_index, edge_label_index)
+                loss = criterion(pred, edge_labels)
+                loss.backward()
+                optimizer.step()
             
             train_losses.append(loss.item())
             

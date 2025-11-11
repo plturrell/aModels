@@ -1,0 +1,63 @@
+# Binaries
+graph-server
+langgraph
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace files (developer-specific)
+go.work
+go.work.sum
+
+# IDE specific
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+build/
+dist/
+bin/
+
+# Checkpointing databases
+*.db
+*.db-shm
+*.db-wal
+langgraph.dev.db
+
+# Test coverage
+coverage.out
+coverage.html
+*.coverprofile
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.hana
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Python cache (for python/ directory)
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.egg-info/
+dist/
+*.egg
+
+# Documentation build
+docs/_build/

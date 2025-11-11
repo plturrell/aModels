@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from app.api.routers import documents
 from app.core.config import get_settings
+from app.core.middleware import CorrelationIDMiddleware
 from app.core.neo4j import get_neo4j_driver
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,9 @@ def create_app() -> FastAPI:
         debug=settings.debug,
     )
 
+    # Add correlation ID middleware
+    app.add_middleware(CorrelationIDMiddleware)
+    
     app.include_router(documents.router)
 
     @app.on_event("startup")

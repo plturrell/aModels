@@ -1,7 +1,7 @@
 .PHONY: build run test clean
 
 build:
-	go build -o bin/testing-service ./main.go
+	go build -o bin/testing-service ./cmd/testing-service
 
 run: build
 	./bin/testing-service

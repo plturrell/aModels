@@ -7,6 +7,32 @@ import (
 	"time"
 
 	"github.com/plturrell/aModels/services/gpu-orchestrator/gpu_monitor"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+var (
+	allocationsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "gpu_allocator_allocations_total",
+			Help: "Total number of GPU allocations by status",
+		},
+		[]string{"status"},
+	)
+
+	allocationsActive = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "gpu_allocator_allocations_active",
+			Help: "Number of currently active GPU allocations",
+		},
+	)
+
+	gpusAllocatedTotal = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "gpu_allocator_gpus_allocated_total",
+			Help: "Total number of allocated GPUs",
+		},
+	)
 )
 
 // AllocationRequest represents a request to allocate GPU resources
@@ -19,6 +45,9 @@ type AllocationRequest struct {
 	MaxUtilization float64  `json:"max_utilization,omitempty"` // Maximum allowed utilization
 	PreferredGPUs  []int    `json:"preferred_gpus,omitempty"` // Preferred GPU IDs
 	TTL            *time.Duration `json:"ttl,omitempty"` // Time to live for allocation
+	WebhookURL     string   `json:"webhook_url,omitempty"` // Callback URL for async notifications
+	WorkloadType   string   `json:"workload_type,omitempty"` // Type of workload for tracking
+	WorkloadData   map[string]interface{} `json:"workload_data,omitempty"` // Additional workload context
 }
 
 // Allocation represents an active GPU allocation
@@ -113,6 +142,11 @@ func (a *GPUAllocator) Allocate(req *AllocationRequest) (*Allocation, error) {
 
 	a.allocations[allocationID] = allocation
 
+	// Update metrics
+	allocationsTotal.WithLabelValues("success").Inc()
+	allocationsActive.Set(float64(len(a.allocations)))
+	gpusAllocatedTotal.Add(float64(len(gpuIDs)))
+
 	a.logger.Printf("Allocated GPUs %v to service %s (allocation ID: %s)", gpuIDs, req.ServiceName, allocationID)
 
 	return allocation, nil
@@ -133,6 +167,11 @@ func (a *GPUAllocator) Release(allocationID string) error {
 	}
 
 	delete(a.allocations, allocationID)
+
+	// Update metrics
+	allocationsActive.Set(float64(len(a.allocations)))
+	gpusAllocatedTotal.Sub(float64(len(allocation.GPUIDs)))
+
 	a.logger.Printf("Released allocation %s (GPUs: %v)", allocationID, allocation.GPUIDs)
 
 	return nil

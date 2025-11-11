@@ -12,9 +12,11 @@ import (
 
 // IntelligentGenerator enhances sample generation with pattern learning and intelligence.
 type IntelligentGenerator struct {
-	generator *SampleGenerator
-	logger    *log.Logger
-	patterns  *LearnedPatterns
+	generator     *SampleGenerator
+	logger        *log.Logger
+	patterns      *LearnedPatterns
+	localaiClient *LocalAIClient
+	execution     *TestExecution // For tracking LLM calls
 }
 
 // LearnedPatterns stores patterns learned from historical data.
@@ -51,16 +53,22 @@ type RelationshipPattern struct {
 }
 
 // NewIntelligentGenerator creates a new intelligent generator.
-func NewIntelligentGenerator(generator *SampleGenerator, logger *log.Logger) *IntelligentGenerator {
+func NewIntelligentGenerator(generator *SampleGenerator, localaiClient *LocalAIClient, logger *log.Logger) *IntelligentGenerator {
 	return &IntelligentGenerator{
-		generator: generator,
-		logger:    logger,
+		generator:     generator,
+		logger:        logger,
+		localaiClient: localaiClient,
 		patterns: &LearnedPatterns{
 			ColumnPatterns:      make(map[string]*ColumnPattern),
 			ValueDistributions:  make(map[string]*ValueDistribution),
 			RelationshipPatterns: make(map[string]*RelationshipPattern),
 		},
 	}
+}
+
+// SetExecution sets the current test execution for telemetry tracking.
+func (ig *IntelligentGenerator) SetExecution(execution *TestExecution) {
+	ig.execution = execution
 }
 
 // LearnPatternsFromDatabase learns patterns from existing database data.
@@ -200,9 +208,67 @@ func (ig *IntelligentGenerator) learnValuePattern(pattern *ColumnPattern, column
 	}
 }
 
-// GenerateIntelligentValue generates a value using learned patterns.
-func (ig *IntelligentGenerator) GenerateIntelligentValue(tableName, columnName string, column *ColumnSchema) any {
+// GenerateIntelligentValue generates a value using learned patterns and AI.
+func (ig *IntelligentGenerator) GenerateIntelligentValue(ctx context.Context, tableName, columnName string, column *ColumnSchema, schema *TableSchema) any {
 	key := fmt.Sprintf("%s.%s", tableName, columnName)
+	
+	// Try LocalAI first if enabled
+	if ig.localaiClient != nil && ig.localaiClient.IsEnabled() {
+		contextInfo := map[string]any{
+			"table_type": schema.Type,
+			"column_type": column.Type,
+			"nullable":    column.Nullable,
+		}
+		
+		// Add foreign key info if present
+		if column.IsForeignKey && column.References != nil {
+			contextInfo["foreign_key"] = fmt.Sprintf("%s.%s", column.References.ReferencedTable, column.References.ReferencedColumn)
+		}
+		
+		llmStart := time.Now()
+		value, err := ig.localaiClient.GenerateIntelligentValue(ctx, tableName, columnName, column.Type, contextInfo)
+		llmLatency := time.Since(llmStart)
+		
+		if err == nil && value != "" {
+			ig.logger.Printf("Generated value using LocalAI for %s.%s: %s", tableName, columnName, value)
+			
+			// Record LLM call for telemetry
+			if ig.execution != nil {
+				ig.generator.recordLLMCall(
+					ig.execution,
+					ig.localaiClient.model,
+					fmt.Sprintf("Generate value for %s.%s", tableName, columnName),
+					value,
+					0, // Token count not available from client
+					llmLatency,
+					0.7, // Default temperature
+					"value_generation",
+					true,
+					nil,
+				)
+			}
+			return value
+		}
+		// Fall through to pattern-based generation if AI fails
+		ig.logger.Printf("LocalAI generation failed for %s.%s, falling back to patterns: %v", tableName, columnName, err)
+		
+		// Record failed LLM call
+		if ig.execution != nil {
+			model := "phi-3.5-mini" // Default, would get from client if exposed
+			ig.generator.recordLLMCall(
+				ig.execution,
+				model,
+				fmt.Sprintf("Generate value for %s.%s", tableName, columnName),
+				"",
+				0,
+				llmLatency,
+				0.7,
+				"value_generation",
+				false,
+				err,
+			)
+		}
+	}
 	
 	// Use learned patterns if available
 	if pattern, exists := ig.patterns.ColumnPatterns[key]; exists {
@@ -231,6 +297,50 @@ func (ig *IntelligentGenerator) GenerateIntelligentValue(tableName, columnName s
 	}
 	
 	// Fallback to standard generation
-	return ig.generator.generateValueForColumn(context.Background(), column, &TableSchema{}, &TableTestConfig{}, rand.Intn(1000))
+	return ig.generator.generateValueForColumn(ctx, column, schema, &TableTestConfig{}, rand.Intn(1000))
+}
+
+// LearnPatternsWithAI enhances pattern learning with LocalAI.
+func (ig *IntelligentGenerator) LearnPatternsWithAI(ctx context.Context, tableName string, sampleData []map[string]any) error {
+	if ig.localaiClient == nil || !ig.localaiClient.IsEnabled() {
+		// Fallback to database-based learning
+		return ig.LearnPatternsFromDatabase(ctx, ig.generator.db, tableName)
+	}
+	
+	llmStart := time.Now()
+	patterns, err := ig.localaiClient.LearnPatterns(ctx, tableName, sampleData)
+	llmLatency := time.Since(llmStart)
+	
+	// Record LLM call for pattern learning
+	if ig.execution != nil {
+		model := "phi-3.5-mini" // Default, would get from client if exposed
+		if ig.localaiClient != nil {
+			model = ig.localaiClient.model
+		}
+		ig.generator.recordLLMCall(
+			ig.execution,
+			model,
+			fmt.Sprintf("Learn patterns from table %s", tableName),
+			fmt.Sprintf("Learned %d patterns", len(patterns)),
+			0,
+			llmLatency,
+			0.2,
+			"pattern_learning",
+			err == nil,
+			err,
+		)
+	}
+	
+	if err != nil {
+		ig.logger.Printf("LocalAI pattern learning failed, falling back to database learning: %v", err)
+		return ig.LearnPatternsFromDatabase(ctx, ig.generator.db, tableName)
+	}
+	
+	// Merge AI-learned patterns with existing patterns
+	for key, pattern := range patterns {
+		ig.patterns.ColumnPatterns[key] = pattern
+	}
+	
+	return nil
 }
 

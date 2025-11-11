@@ -2,6 +2,7 @@ package search
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -126,12 +127,12 @@ type Enrichment struct {
 
 // EnrichmentStats represents statistics about the catalog
 type EnrichmentStats struct {
-	SuiteCount          int
-	UniqueToolCount     int
-	ImplementationCount int
-	StandaloneToolCount int
-	LastAttachmentSuite string
-	LastAttachmentAgo   string
+	SuiteCount          int    `json:"suite_count"`
+	UniqueToolCount     int    `json:"unique_tool_count"`
+	ImplementationCount int    `json:"implementation_count"`
+	StandaloneToolCount int    `json:"standalone_tool_count"`
+	LastAttachmentSuite string `json:"last_attachment_suite"`
+	LastAttachmentAgo   string `json:"last_attachment_ago"`
 }
 
 // EnrichCatalog converts an AgentCatalog into enrichment format
@@ -140,14 +141,69 @@ func EnrichCatalog(cat *AgentCatalog) Enrichment {
 	if cat == nil {
 		return Enrichment{}
 	}
-	
+
 	stats := EnrichmentStats{
 		SuiteCount:      len(cat.Suites),
 		UniqueToolCount: len(cat.Tools),
 	}
-	
+
+	implementationSet := map[string]struct{}{}
+	var latestSuite string
+	var latestTime time.Time
+	var suiteLines []string
+
+	for _, suite := range cat.Suites {
+		if suite.Implementation != "" {
+			implementationSet[suite.Implementation] = struct{}{}
+		}
+		if suite.AttachedAt.After(latestTime) {
+			latestTime = suite.AttachedAt
+			latestSuite = suite.Name
+		}
+		suiteLines = append(suiteLines, fmt.Sprintf("- %s (%d tools)", suite.Name, len(suite.ToolNames)))
+	}
+
+	stats.ImplementationCount = len(implementationSet)
+
+	if stats.UniqueToolCount > 0 {
+		stats.StandaloneToolCount = stats.UniqueToolCount
+	}
+	if !latestTime.IsZero() {
+		stats.LastAttachmentSuite = latestSuite
+		stats.LastAttachmentAgo = time.Since(latestTime).Round(time.Minute).String()
+	}
+
+	uniqueTools := make([]interface{}, 0, len(cat.Tools))
+	standalone := make([]interface{}, 0, len(cat.Tools))
+	for _, tool := range cat.Tools {
+		uniqueTools = append(uniqueTools, tool.Name)
+		standalone = append(standalone, map[string]string{
+			"name":        tool.Name,
+			"description": tool.Description,
+		})
+	}
+
+	promptBuilder := &strings.Builder{}
+	promptBuilder.WriteString("Suites:\n")
+	for _, line := range suiteLines {
+		promptBuilder.WriteString(line)
+		promptBuilder.WriteByte('\n')
+	}
+	if len(cat.Tools) > 0 {
+		promptBuilder.WriteString("Tools:\n")
+		for _, tool := range cat.Tools {
+			promptBuilder.WriteString(fmt.Sprintf("- %s\n", tool.Name))
+		}
+	}
+
+	summary := fmt.Sprintf("%d suites, %d tools", len(cat.Suites), len(cat.Tools))
+
 	return Enrichment{
-		Summary: fmt.Sprintf("%d suites, %d tools", len(cat.Suites), len(cat.Tools)),
-		Stats:   stats,
+		Summary:         summary,
+		Prompt:          promptBuilder.String(),
+		Stats:           stats,
+		Implementations: make([]interface{}, 0, stats.ImplementationCount),
+		UniqueTools:     uniqueTools,
+		StandaloneTools: standalone,
 	}
 }

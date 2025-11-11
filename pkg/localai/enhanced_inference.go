@@ -1,3 +1,6 @@
+//go:build !noflightcatalog
+// +build !noflightcatalog
+
 package localai
 
 import (
@@ -7,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"ai_benchmarks/pkg/catalog/flightcatalog"
+	"github.com/plturrell/aModels/pkg/catalog/flightcatalog"
 )
 
 // EnhancedInferenceEngine provides advanced inference capabilities with domain routing

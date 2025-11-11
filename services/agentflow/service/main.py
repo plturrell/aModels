@@ -9,10 +9,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from .cache import get_redis_client
 from .config import get_settings
 from .db import init_db
-from .db.postgres import ensure_postgres_registry
+from .db.postgres import close_postgres_pool, ensure_postgres_registry
 from .routers import flows_router, health_router, sgmi_router
 from .services import FlowCatalog
 from .services.langflow import LangflowClient
+from .services.localai import LocalAIClient, close_localai_client
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +39,14 @@ async def lifespan(app: FastAPI):
         timeout_seconds=settings.langflow_timeout_seconds,
     )
 
+    # Initialize LocalAI client for direct LLM node integration
+    localai_client = LocalAIClient()
+
     app.state.settings = settings
     app.state.catalog = catalog
     app.state.redis = redis_client
     app.state.langflow_client = langflow_client
+    app.state.localai_client = localai_client
 
     try:
         yield
@@ -56,6 +61,10 @@ async def lifespan(app: FastAPI):
         # Close DeepAgents client
         from .deepagents import close_deepagents_client
         await close_deepagents_client()
+        # Close LocalAI client
+        await close_localai_client()
+        # Close Postgres connection pool
+        close_postgres_pool()
 
 
 app = FastAPI(title="AgentFlow Service", version="0.1.0", lifespan=lifespan)

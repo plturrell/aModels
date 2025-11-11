@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/plturrell/aModels/pkg/sap"
+	"github.com/plturrell/aModels/services/catalog/httpclient"
 	"github.com/plturrell/aModels/services/catalog/security"
 )
 
@@ -23,6 +24,7 @@ type HANAInboundIntegration struct {
 	searchServiceURL        string
 	privacyDomainIntegration *security.PrivacyDomainIntegration
 	logger                  *log.Logger
+	extractHTTPClient       *httpclient.Client
 }
 
 // HANAInboundRequest represents a request to process HANA tables
@@ -60,6 +62,19 @@ func NewHANAInboundIntegration(
 	privacyDomainIntegration *security.PrivacyDomainIntegration,
 	logger *log.Logger,
 ) *HANAInboundIntegration {
+	var extractHTTPClient *httpclient.Client
+	if extractServiceURL != "" {
+		extractHTTPClient = httpclient.NewClient(httpclient.ClientConfig{
+			Timeout:         5 * time.Minute,
+			MaxRetries:      3,
+			InitialBackoff:  1 * time.Second,
+			MaxBackoff:      10 * time.Second,
+			BaseURL:         extractServiceURL,
+			HealthCheckPath: "/healthz",
+			Logger:          logger,
+		})
+	}
+	
 	return &HANAInboundIntegration{
 		hanaClient:              hanaClient,
 		extractServiceURL:       extractServiceURL,
@@ -68,6 +83,7 @@ func NewHANAInboundIntegration(
 		searchServiceURL:        searchServiceURL,
 		privacyDomainIntegration: privacyDomainIntegration,
 		logger:                  logger,
+		extractHTTPClient:       extractHTTPClient,
 	}
 }
 
@@ -323,43 +339,71 @@ func (hii *HANAInboundIntegration) processThroughExtraction(
 		}
 	}
 
-	// Call extraction service
-	reqBody, err := json.Marshal(extractReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", hii.extractServiceURL+"/extract", 
-		bytes.NewBuffer(reqBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Forward XSUAA token if available (from original request)
-	if req, ok := ctx.Value("http_request").(*http.Request); ok {
-		if authHeader := req.Header.Get("Authorization"); authHeader != "" {
-			httpReq.Header.Set("Authorization", authHeader)
-		}
-	}
-
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 5 * time.Minute}
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("extraction service request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		// Read response body for better error messages
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("extraction service returned status %d: %s", resp.StatusCode, string(body))
-	}
-
+	// Use enhanced HTTP client if available, otherwise fall back to basic client
 	var extractResp map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&extractResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
+	
+	if hii.extractHTTPClient != nil {
+		// Use enhanced HTTP client with retry, circuit breaker, health checks, etc.
+		// Add auth token to context if available
+		if req, ok := ctx.Value("http_request").(*http.Request); ok {
+			if authHeader := req.Header.Get("Authorization"); authHeader != "" {
+				ctx = context.WithValue(ctx, httpclient.AuthTokenKey, authHeader)
+			}
+		}
+		
+		// Validate response structure
+		validator := func(data map[string]interface{}) error {
+			if _, ok := data["nodes"]; !ok {
+				return fmt.Errorf("response missing 'nodes' field")
+			}
+			if _, ok := data["edges"]; !ok {
+				return fmt.Errorf("response missing 'edges' field")
+			}
+			return nil
+		}
+		
+		err := hii.extractHTTPClient.PostJSON(ctx, "/extract", extractReq, &extractResp, validator)
+		if err != nil {
+			return nil, fmt.Errorf("extraction service request failed: %w", err)
+		}
+	} else {
+		// Fallback to basic HTTP client
+		reqBody, err := json.Marshal(extractReq)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request: %w", err)
+		}
+
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", hii.extractServiceURL+"/extract", 
+			bytes.NewBuffer(reqBody))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+
+		// Forward XSUAA token if available (from original request)
+		if req, ok := ctx.Value("http_request").(*http.Request); ok {
+			if authHeader := req.Header.Get("Authorization"); authHeader != "" {
+				httpReq.Header.Set("Authorization", authHeader)
+			}
+		}
+
+		httpReq.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{Timeout: 5 * time.Minute}
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			return nil, fmt.Errorf("extraction service request failed: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			// Read response body for better error messages
+			body, _ := io.ReadAll(resp.Body)
+			return nil, fmt.Errorf("extraction service returned status %d: %s", resp.StatusCode, string(body))
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&extractResp); err != nil {
+			return nil, fmt.Errorf("failed to decode response: %w", err)
+		}
 	}
 
 	nodes, _ := extractResp["nodes"].(float64)

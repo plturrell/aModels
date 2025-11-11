@@ -24,24 +24,33 @@ class GNNActiveLearner:
     def __init__(
         self,
         model=None,
-        sampling_strategy: str = "uncertainty",  # "uncertainty", "diversity", "hybrid"
-        device: Optional[str] = None
+        sampling_strategy: str = "uncertainty",  # "uncertainty", "diversity", "hybrid", "voi"
+        device: Optional[str] = None,
+        use_value_of_information: bool = False,
+        discount_factor: float = 0.9
     ):
         """Initialize active learner.
         
         Args:
             model: GNN model to use
-            sampling_strategy: Sampling strategy
+            sampling_strategy: Sampling strategy ("uncertainty", "diversity", "hybrid", "voi")
             device: Device to use
+            use_value_of_information: Whether to use VOI (Bellman-based) for sample selection
+            discount_factor: Discount factor γ for Bellman equation in VOI calculation
         """
         self.model = model
         self.sampling_strategy = sampling_strategy
         self.device = device
+        self.use_value_of_information = use_value_of_information or (sampling_strategy == "voi")
+        self.discount_factor = discount_factor
         
         # Track labeled and unlabeled data
         self.labeled_nodes = set()
         self.unlabeled_nodes = set()
         self.user_feedback = {}  # node_id -> label
+        
+        # Model performance history for VOI calculation
+        self.model_performance_history = []  # List of (epoch, accuracy, loss) tuples
     
     def compute_uncertainty(
         self,
@@ -123,6 +132,8 @@ class GNNActiveLearner:
             return self._diversity_sampling(candidate_nodes, edges, num_samples)
         elif self.sampling_strategy == "hybrid":
             return self._hybrid_sampling(candidate_nodes, edges, num_samples)
+        elif self.sampling_strategy == "voi" or self.use_value_of_information:
+            return self._voi_sampling(candidate_nodes, edges, num_samples)
         else:
             return candidate_nodes[:num_samples]
     
@@ -238,6 +249,117 @@ class GNNActiveLearner:
         ]
         
         return selected
+    
+    def _voi_sampling(
+        self,
+        nodes: List[Dict[str, Any]],
+        edges: List[Dict[str, Any]],
+        num_samples: int
+    ) -> List[Dict[str, Any]]:
+        """Select samples using Value of Information (VOI) based on Bellman equation.
+        
+        VOI(sample) = E[V(model_after_labeling) - V(model_before)]
+        where V(model) is the expected future value of the model.
+        
+        Uses Bellman equation: V(model) = current_performance + γ * E[V(model_after_learning)]
+        
+        Args:
+            nodes: Candidate nodes
+            edges: Graph edges
+            num_samples: Number of samples to select
+        
+        Returns:
+            Selected nodes with VOI scores
+        """
+        if self.model is None:
+            # Fallback to uncertainty sampling
+            return self._uncertainty_sampling(nodes, edges, num_samples)
+        
+        # Get current model value
+        current_model_value = self._evaluate_model_value()
+        
+        # Compute VOI for each candidate node
+        node_vois = []
+        for node in nodes:
+            node_id = node.get("id", "")
+            if node_id in self.labeled_nodes:
+                continue
+            
+            # Estimate VOI using Bellman equation
+            voi = self._compute_value_of_information(node, edges, current_model_value)
+            node_vois.append((node, voi))
+        
+        # Sort by VOI (highest first)
+        node_vois.sort(key=lambda x: x[1], reverse=True)
+        
+        # Select top samples
+        selected = [
+            {
+                **node,
+                "voi": voi,
+                "selection_reason": "value_of_information"
+            }
+            for node, voi in node_vois[:num_samples]
+        ]
+        
+        return selected
+    
+    def _compute_value_of_information(
+        self,
+        node: Dict[str, Any],
+        edges: List[Dict[str, Any]],
+        current_model_value: float
+    ) -> float:
+        """Compute Value of Information for a node using Bellman equation.
+        
+        VOI = E[V(model_after) - V(model_before)]
+        where V(model) = performance + γ * E[future_performance]
+        
+        Args:
+            node: Node to evaluate
+            edges: Graph edges
+            current_model_value: Current model value
+        
+        Returns:
+            Value of Information score
+        """
+        # Estimate possible labels and their probabilities
+        uncertainties = self.compute_uncertainty([node], edges)
+        node_id = node.get("id", "")
+        uncertainty = uncertainties.get(node_id, 0.5)
+        
+        # Estimate label probabilities (simplified: use uncertainty as proxy)
+        # High uncertainty = more informative
+        label_probability = uncertainty
+        
+        # Estimate model value after labeling this node
+        # Simplified: assume improvement proportional to uncertainty
+        # In practice, would simulate retraining and evaluate
+        expected_improvement = uncertainty * 0.1  # 10% of uncertainty as improvement
+        
+        # Bellman equation: V(model_after) = current + improvement + γ * E[future_value]
+        # VOI = E[V(model_after) - V(model_before)]
+        voi = label_probability * (expected_improvement + self.discount_factor * expected_improvement)
+        
+        return voi
+    
+    def _evaluate_model_value(self) -> float:
+        """Evaluate current model value (performance metric).
+        
+        Returns:
+            Model value (0-1 scale, higher is better)
+        """
+        if not self.model_performance_history:
+            return 0.5  # Default value
+        
+        # Use most recent performance
+        latest = self.model_performance_history[-1]
+        accuracy = latest.get("accuracy", 0.5)
+        loss = latest.get("loss", 1.0)
+        
+        # Combine accuracy and loss into value metric
+        value = accuracy * 0.7 + (1.0 - min(loss, 1.0)) * 0.3
+        return value
     
     def add_user_feedback(
         self,

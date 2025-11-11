@@ -40,6 +40,7 @@ type AllocationRequest struct {
 	ServiceName   string                 `json:"service_name"`
 	WorkloadType  string                 `json:"workload_type"`
 	WorkloadData  map[string]interface{} `json:"workload_data,omitempty"`
+	WebhookURL    string                 `json:"webhook_url,omitempty"` // Callback URL for async notifications
 }
 
 // HandleAllocateGPU handles GPU allocation requests
@@ -62,6 +63,14 @@ func (h *Handlers) HandleAllocateGPU(w http.ResponseWriter, r *http.Request) {
 
 	if req.WorkloadType == "" {
 		req.WorkloadType = "generic"
+	}
+	
+	// Add webhook URL to workload data if provided
+	if req.WebhookURL != "" {
+		if req.WorkloadData == nil {
+			req.WorkloadData = make(map[string]interface{})
+		}
+		req.WorkloadData["webhook_url"] = req.WebhookURL
 	}
 
 	allocation, err := h.orchestrator.AllocateGPUs(r.Context(), req.ServiceName, req.WorkloadType, req.WorkloadData)

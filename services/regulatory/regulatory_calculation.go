@@ -9,7 +9,8 @@ import (
 
 // RegulatoryCalculationEngine performs regulatory calculations.
 type RegulatoryCalculationEngine struct {
-	logger *log.Logger
+	logger           *log.Logger
+	bcbs239GraphClient *BCBS239GraphClient // Optional: for automatic graph lineage tracking
 }
 
 // NewRegulatoryCalculationEngine creates a new regulatory calculation engine.
@@ -17,6 +18,12 @@ func NewRegulatoryCalculationEngine(logger *log.Logger) *RegulatoryCalculationEn
 	return &RegulatoryCalculationEngine{
 		logger: logger,
 	}
+}
+
+// WithBCBS239GraphClient adds Neo4j graph tracking capability to the engine.
+func (rce *RegulatoryCalculationEngine) WithBCBS239GraphClient(graphClient *BCBS239GraphClient) *RegulatoryCalculationEngine {
+	rce.bcbs239GraphClient = graphClient
+	return rce
 }
 
 // RegulatoryCalculationRequest represents a request for regulatory calculations.
@@ -61,7 +68,66 @@ func (rce *RegulatoryCalculationEngine) CalculateRegulatoryMetrics(ctx context.C
 		rce.logger.Printf("Calculated %d regulatory metrics", len(calculations))
 	}
 
+	// Emit to Neo4j if BCBS 239 graph client is available
+	if req.Framework == "BCBS 239" && rce.bcbs239GraphClient != nil {
+		if err := rce.emitBCBS239ToGraph(ctx, calculations); err != nil {
+			if rce.logger != nil {
+				rce.logger.Printf("Warning: Failed to emit BCBS 239 calculations to Neo4j: %v", err)
+			}
+			// Don't fail the calculation if graph persistence fails
+		}
+	}
+
 	return calculations, nil
+}
+
+// emitBCBS239ToGraph persists BCBS 239 calculations to the knowledge graph.
+func (rce *RegulatoryCalculationEngine) emitBCBS239ToGraph(ctx context.Context, calculations []RegulatoryCalculation) error {
+	for _, calc := range calculations {
+		// Define source assets and controls based on calculation type
+		var sourceAssets []string
+		var controlIDs []string
+		
+		switch calc.CalculationType {
+		case "risk_data_aggregation":
+			// Example: Link to data quality controls and source systems
+			sourceAssets = []string{
+				"asset-bcrs-risk-data-warehouse",
+				"asset-bcrs-trade-repository",
+			}
+			controlIDs = []string{
+				"control-data-accuracy-p3",
+				"control-data-completeness-p4",
+				"control-data-timeliness-p5",
+			}
+		case "accuracy_validation":
+			sourceAssets = []string{
+				"asset-bcrs-validation-rules",
+			}
+			controlIDs = []string{
+				"control-data-accuracy-p3",
+			}
+		case "completeness_check":
+			sourceAssets = []string{
+				"asset-bcrs-completeness-monitor",
+			}
+			controlIDs = []string{
+				"control-data-completeness-p4",
+			}
+		}
+		
+		// Upsert to Neo4j with lineage
+		if err := rce.bcbs239GraphClient.UpsertCalculationWithLineage(
+			ctx,
+			calc,
+			sourceAssets,
+			controlIDs,
+		); err != nil {
+			return fmt.Errorf("failed to upsert calculation %s to graph: %w", calc.CalculationID, err)
+		}
+	}
+	
+	return nil
 }
 
 // calculateMAS610Metrics calculates MAS 610 specific metrics.

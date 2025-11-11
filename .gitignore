@@ -25,6 +25,11 @@ localai/logs/
 localai/tmp/
 
 .gocache/
+
+# Go workspace files (developer-specific, use go.work.example instead)
+go.work
+go.work.sum
+
 # Node dependencies
 node_modules/
 models/TinyRecursiveModels
