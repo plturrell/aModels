@@ -1,0 +1,103 @@
+[
+  {
+    "id": "vacation_policy_2024",
+    "content": "Vacation Policy 2024: All full-time employees are entitled to 20 days of paid vacation per year. Vacation requests must be submitted at least 2 weeks in advance through the HR portal. Unused vacation days do not roll over to the next year unless approved by management. Emergency vacation requests may be approved by immediate supervisor. Vacation blackout periods include the last two weeks of December and major product launch periods.",
+    "metadata": {
+      "category": "HR",
+      "policy_type": "vacation",
+      "year": "2024",
+      "department": "Human Resources",
+      "last_updated": "2024-01-15"
+    }
+  },
+  {
+    "id": "expense_reimbursement_guide",
+    "content": "Expense Reimbursement Guidelines: All business expenses must be pre-approved by department head. Receipts must be submitted within 30 days of expense. Maximum daily meal allowance is $75 for domestic travel, $100 for international. Hotel expenses should not exceed $200 per night unless approved. Travel expenses include economy class flights only. Use company credit card when possible. Submit expenses through the online portal with proper documentation.",
+    "metadata": {
+      "category": "Finance",
+      "policy_type": "expenses",
+      "department": "Finance",
+      "last_updated": "2024-01-10"
+    }
+  },
+  {
+    "id": "remote_work_policy",
+    "content": "Remote Work Policy: Employees may work remotely up to 3 days per week with manager approval. Remote work requests must be submitted monthly. Home office must meet security requirements including VPN access and secure internet connection. All company equipment must be returned if employment ends. Remote workers must maintain regular communication with team and attend all mandatory meetings. Performance standards remain the same regardless of work location.",
+    "metadata": {
+      "category": "HR",
+      "policy_type": "remote_work",
+      "department": "Human Resources",
+      "last_updated": "2024-02-01"
+    }
+  },
+  {
+    "id": "code_of_conduct",
+    "content": "Code of Conduct: All employees must maintain the highest ethical standards. Conflicts of interest must be disclosed immediately. Confidential information must be protected at all times. Harassment of any kind is strictly prohibited. Employees must report violations to HR or through the anonymous hotline. Violations may result in disciplinary action up to and including termination. Regular training sessions are mandatory for all employees.",
+    "metadata": {
+      "category": "Compliance",
+      "policy_type": "ethics",
+      "department": "Legal",
+      "last_updated": "2024-01-01"
+    }
+  },
+  {
+    "id": "it_security_policy",
+    "content": "IT Security Policy: All passwords must be at least 12 characters with mixed case, numbers, and symbols. Passwords must be changed every 90 days. Two-factor authentication is required for all systems. Personal devices are not allowed on company network. All software must be approved by IT department. Data encryption is required for all sensitive information. Report security incidents immediately to IT security team. Regular security training is mandatory.",
+    "metadata": {
+      "category": "IT",
+      "policy_type": "security",
+      "department": "Information Technology",
+      "last_updated": "2024-01-20"
+    }
+  },
+  {
+    "id": "performance_review_process",
+    "content": "Performance Review Process: Annual reviews are conducted in December. Goals are set at the beginning of each year. Mid-year check-ins are scheduled for June. Reviews include self-assessment, manager evaluation, and peer feedback. Performance ratings are: Exceeds Expectations, Meets Expectations, Needs Improvement. Improvement plans are created for employees rated as Needs Improvement. Reviews determine merit increases and promotion eligibility.",
+    "metadata": {
+      "category": "HR",
+      "policy_type": "performance",
+      "department": "Human Resources",
+      "last_updated": "2024-01-05"
+    }
+  },
+  {
+    "id": "project_management_guidelines",
+    "content": "Project Management Guidelines: All projects must have a defined scope, timeline, and budget. Project managers must use the company's project management software. Regular status updates are required weekly. Risk assessments must be completed for all projects. Stakeholder communication plans are mandatory. Project documentation must be maintained in the central repository. Post-project reviews are conducted within 30 days of completion.",
+    "metadata": {
+      "category": "Operations",
+      "policy_type": "project_management",
+      "department": "Operations",
+      "last_updated": "2024-01-12"
+    }
+  },
+  {
+    "id": "customer_support_standards",
+    "content": "Customer Support Standards: All customer inquiries must be responded to within 4 hours during business hours. Escalation procedures are in place for complex issues. Customer satisfaction surveys are conducted after each interaction. Support tickets must be properly categorized and tracked. Knowledge base articles must be updated regularly. Training is provided monthly on new products and features. Quality assurance reviews are conducted weekly.",
+    "metadata": {
+      "category": "Customer Service",
+      "policy_type": "support",
+      "department": "Customer Success",
+      "last_updated": "2024-01-18"
+    }
+  },
+  {
+    "id": "data_privacy_policy",
+    "content": "Data Privacy Policy: Personal data collection must be minimized and justified. Consent must be obtained before collecting personal information. Data retention periods are defined for each data type. Right to be forgotten requests must be processed within 30 days. Data breach notification procedures are in place. Regular privacy impact assessments are conducted. Employee training on data privacy is mandatory annually.",
+    "metadata": {
+      "category": "Compliance",
+      "policy_type": "privacy",
+      "department": "Legal",
+      "last_updated": "2024-01-25"
+    }
+  },
+  {
+    "id": "office_supplies_procurement",
+    "content": "Office Supplies Procurement: All office supplies must be ordered through the approved vendor portal. Purchase orders are required for amounts over $500. Emergency purchases must be approved by department head. Standard supplies are available in the company store. Special requests require 2-week lead time. Budget limits are set per department quarterly. Receipts must be submitted for all purchases.",
+    "metadata": {
+      "category": "Procurement",
+      "policy_type": "office_supplies",
+      "department": "Administration",
+      "last_updated": "2024-01-08"
+    }
+  }
+]

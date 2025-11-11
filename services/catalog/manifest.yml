@@ -1,0 +1,39 @@
+---
+applications:
+  - name: amodels-catalog
+    path: .
+    buildpacks:
+      - go_buildpack
+    memory: 512M
+    disk_quota: 1G
+    instances: 1
+    services:
+      - amodels-catalog-xsuaa
+      - amodels-catalog-postgres
+      - amodels-catalog-redis
+    env:
+      PORT: 8084
+      ENVIRONMENT: production
+      # Catalog service configuration
+      CATALOG_BASE_URI: https://amodels-catalog.cfapps.sap.hana.ondemand.com
+      # Service URLs (adjust based on your deployment)
+      EXTRACT_SERVICE_URL: https://amodels-extract.cfapps.sap.hana.ondemand.com
+      GRAPH_SERVICE_URL: https://amodels-graph.cfapps.sap.hana.ondemand.com
+      LOCALAI_URL: https://amodels-localai.cfapps.sap.hana.ondemand.com
+      DEEP_RESEARCH_URL: https://amodels-deep-research.cfapps.sap.hana.ondemand.com
+      # Neo4j configuration (if using managed service)
+      NEO4J_URI: ${neo4j-service.uri}
+      NEO4J_USERNAME: ${neo4j-service.username}
+      NEO4J_PASSWORD: ${neo4j-service.password}
+      # Redis configuration
+      REDIS_URL: ${redis-service.url}
+      # Database configuration
+      CATALOG_DATABASE_URL: ${postgres-service.url}
+      SQL_MIGRATIONS_DRIVER: postgres
+      SQL_MIGRATIONS_DSN: ${postgres-service.url}
+      # XSUAA will be automatically injected via service binding
+      # VCAP_SERVICES will contain XSUAA credentials
+    health-check-type: http
+    health-check-http-endpoint: /healthz
+    timeout: 180
+

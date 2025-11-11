@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+{{template "views/partials/head" .}}
+
+<body class="bg-[#101827] text-[#E5E7EB]">
+<div class="flex flex-col min-h-screen">
+
+    {{template "views/partials/navbar" .}}
+
+    <div class="container mx-auto px-4 py-8 flex-grow">
+        <!-- Hero Header -->
+        <div class="relative bg-[#1E293B] border border-[#8B5CF6]/20 rounded-3xl shadow-2xl shadow-[#8B5CF6]/10 p-8 mb-8 overflow-hidden">
+            <!-- Background Pattern -->
+            <div class="absolute inset-0 opacity-10">
+                <div class="absolute inset-0 bg-gradient-to-r from-[#8B5CF6]/20 to-[#38BDF8]/20"></div>
+                <div class="absolute top-0 left-0 w-full h-full" style="background-image: radial-gradient(circle at 1px 1px, rgba(139,92,246,0.15) 1px, transparent 0); background-size: 20px 20px;"></div>
+            </div>
+            
+            <div class="relative max-w-5xl mx-auto">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between">
+                    <div class="mb-4 md:mb-0">
+                        <h1 class="text-3xl md:text-4xl font-bold text-white mb-2">
+                            <span class="bg-clip-text text-transparent bg-gradient-to-r from-violet-400 via-purple-400 to-fuchsia-400">
+                                {{if .ModelName}}Edit Model: {{.ModelName}}{{else}}Import New Model{{end}}
+                            </span>
+                        </h1>
+                        <p class="text-lg text-gray-300 font-light">Configure your model settings using YAML</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button id="validateBtn" class="group relative inline-flex items-center bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-300 ease-in-out transform hover:scale-105 hover:shadow-xl hover:shadow-blue-500/25">
+                            <i class="fas fa-check mr-2 group-hover:animate-pulse"></i>
+                            <span>Validate</span>
+                            <div class="absolute inset-0 rounded-xl bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        </button>
+                        <button id="saveBtn" class="group relative inline-flex items-center bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-3 px-6 rounded-xl font-semibold transition-all duration-300 ease-in-out transform hover:scale-105 hover:shadow-xl hover:shadow-green-500/25">
+                            <i class="fas fa-save mr-2 group-hover:animate-pulse"></i>
+                            <span>{{if .ModelName}}Update{{else}}Create{{end}}</span>
+                            <div class="absolute inset-0 rounded-xl bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alert Messages -->
+        <div id="alertContainer" class="mb-6"></div>
+
+        <!-- YAML Editor Panel -->
+        <div class="relative bg-gradient-to-br from-gray-800/90 to-gray-900/90 border border-gray-700/50 rounded-2xl overflow-hidden shadow-xl backdrop-blur-sm h-[calc(100vh-250px)]">
+            <div class="absolute inset-0 rounded-2xl bg-gradient-to-br from-fuchsia-500/5 to-purple-500/5"></div>
+            
+            <div class="relative sticky top-0 bg-gray-800/95 border-b border-gray-700/50 p-6 flex items-center justify-between z-10 backdrop-blur-sm">
+                <h2 class="text-xl font-semibold text-white flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-fuchsia-500/20 flex items-center justify-center">
+                        <i class="fas fa-code text-fuchsia-400"></i>
+                    </div>
+                    YAML Configuration Editor
+                </h2>
+                <div class="flex items-center gap-3">
+                    <button id="formatYamlBtn" class="group text-gray-400 hover:text-gray-200 text-sm px-3 py-1.5 rounded-lg hover:bg-gray-700/50 transition-all duration-200">
+                        <i class="fas fa-indent mr-1.5 group-hover:animate-pulse"></i> Format
+                    </button>
+                    <button id="copyYamlBtn" class="group text-gray-400 hover:text-gray-200 text-sm px-3 py-1.5 rounded-lg hover:bg-gray-700/50 transition-all duration-200">
+                        <i class="fas fa-copy mr-1.5 group-hover:animate-bounce"></i> Copy
+                    </button>
+                </div>
+            </div>
+            <div class="relative" style="height: calc(100% - 88px);">
+                <div id="yamlCodeMirror" class="h-full"></div>
+            </div>
+        </div>
+    </div>
+
+    {{template "views/partials/footer" .}}
+</div>
+
+<!-- Include JS-YAML library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+
+<!-- Include CodeMirror for syntax highlighting -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/yaml/yaml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/display/autorefresh.min.js"></script>
+
+<style>
+/* Enhanced CodeMirror styling */
+.CodeMirror {
+    background: linear-gradient(135deg, #111827 0%, #1f2937 100%) !important;
+    color: #e5e7eb !important;
+    border: none !important;
+    height: 100% !important;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Consolas', monospace !important;
+    font-size: 14px !important;
+    border-radius: 0 !important;
+    line-height: 1.5 !important;
+}
+
+.CodeMirror-cursor {
+    border-left: 2px solid #a78bfa !important;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
+.CodeMirror-gutters {
+    background: linear-gradient(135deg, #1f2937 0%, #374151 100%) !important;
+    border-right: 1px solid rgba(75, 85, 99, 0.5) !important;
+    color: #9ca3af !important;
+    padding-right: 8px !important;
+}
+
+.CodeMirror-linenumber {
+    color: #6b7280 !important;
+    padding: 0 8px 0 4px !important;
+    font-size: 12px !important;
+}
+
+.CodeMirror-activeline-background {
+    background: rgba(139, 92, 246, 0.1) !important;
+}
+
+.CodeMirror-selected {
+    background: rgba(139, 92, 246, 0.25) !important;
+}
+
+.CodeMirror-selectedtext {
+    background: rgba(139, 92, 246, 0.25) !important;
+}
+
+.CodeMirror-focused .CodeMirror-selected {
+    background: rgba(139, 92, 246, 0.3) !important;
+}
+
+.CodeMirror-line::selection, .CodeMirror-line > span::selection, .CodeMirror-line > span > span::selection {
+    background: rgba(139, 92, 246, 0.3) !important;
+}
+
+.CodeMirror-line::-moz-selection, .CodeMirror-line > span::-moz-selection, .CodeMirror-line > span > span::-moz-selection {
+    background: rgba(139, 92, 246, 0.3) !important;
+}
+
+/* Enhanced YAML Syntax Highlighting */
+.cm-keyword { color: #8b5cf6 !important; font-weight: 600 !important; } /* Purple for YAML keys */
+.cm-string { color: #10b981 !important; } /* Emerald for strings */
+.cm-number { color: #f59e0b !important; } /* Amber for numbers */
+.cm-comment { color: #6b7280 !important; font-style: italic !important; } /* Gray for comments */
+.cm-property { color: #ec4899 !important; } /* Pink for properties */
+.cm-operator { color: #ef4444 !important; } /* Red for operators */
+.cm-variable { color: #06b6d4 !important; } /* Cyan for variables */
+.cm-tag { color: #8b5cf6 !important; font-weight: 600 !important; } /* Purple for tags */
+.cm-attribute { color: #f59e0b !important; } /* Amber for attributes */
+.cm-def { color: #ec4899 !important; font-weight: 600 !important; } /* Pink for definitions */
+.cm-bracket { color: #d1d5db !important; } /* Light gray for brackets */
+.cm-punctuation { color: #d1d5db !important; } /* Light gray for punctuation */
+.cm-quote { color: #10b981 !important; } /* Emerald for quotes */
+.cm-meta { color: #6b7280 !important; } /* Gray for meta */
+.cm-builtin { color: #f472b6 !important; } /* Pink for builtins */
+.cm-atom { color: #f59e0b !important; } /* Amber for atoms like true/false/null */
+
+/* Enhanced scrollbar styling */
+.CodeMirror-scrollbar-filler, .CodeMirror-gutter-filler {
+    background: #1f2937 !important;
+}
+
+.CodeMirror-vscrollbar, .CodeMirror-hscrollbar {
+    background: #1f2937 !important;
+}
+
+.CodeMirror-vscrollbar::-webkit-scrollbar, .CodeMirror-hscrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.CodeMirror-vscrollbar::-webkit-scrollbar-track, .CodeMirror-hscrollbar::-webkit-scrollbar-track {
+    background: #1f2937;
+    border-radius: 4px;
+}
+
+.CodeMirror-vscrollbar::-webkit-scrollbar-thumb, .CodeMirror-hscrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);
+    border-radius: 4px;
+}
+
+.CodeMirror-vscrollbar::-webkit-scrollbar-thumb:hover, .CodeMirror-hscrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #9ca3af 0%, #d1d5db 100%);
+}
+
+/* Focus ring styling */
+.CodeMirror-focused {
+    outline: 2px solid rgba(139, 92, 246, 0.5) !important;
+    outline-offset: -2px !important;
+    border-radius: 0.5rem !important;
+}
+
+/* Alert styling */
+.alert {
+    border-radius: 1rem;
+    padding: 1rem 1.5rem;
+    backdrop-filter: blur(8px);
+    border: 1px solid;
+    animation: slideInFromTop 0.3s ease-out;
+}
+
+@keyframes slideInFromTop {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.alert-success {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #10b981;
+}
+
+.alert-error {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(220, 38, 38, 0.1) 100%);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+}
+
+.alert-warning {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(217, 119, 6, 0.1) 100%);
+    border-color: rgba(245, 158, 11, 0.3);
+    color: #f59e0b;
+}
+
+.alert-info {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.1) 100%);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: #3b82f6;
+}
+</style>
+
+<script>
+class ModelEditor {
+    constructor() {
+        this.modelName = '{{.ModelName}}';
+        this.isEditMode = !!this.modelName;
+        this.yamlEditor = null;
+        
+        this.init();
+    }
+
+    init() {
+        this.initializeCodeMirror();
+        this.bindEvents();
+    }
+
+    getDefaultConfig() {
+        return `# Model Configuration
+name: my-model
+backend: llama-cpp
+parameters:
+  model: path/to/model.gguf
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 40
+  max_tokens: 2048
+
+# Uncomment and configure as needed:
+# context_size: 4096
+# gpu_layers: 35
+# threads: 8
+# f16: true
+# mmap: true
+
+# Template configuration
+# template:
+#   chat: |
+#     {{"{{"}}.Input}}
+#   completion: |
+#     {{"{{"}}.Input}}
+
+# Use cases
+# known_usecases:
+#   - chat
+#   - completion
+`;
+    }
+
+    initializeCodeMirror() {
+        const initialValue = {{if .ConfigYAML}}`{{.ConfigYAML}}`{{else}}this.getDefaultConfig(){{end}};
+        
+        this.yamlEditor = CodeMirror(document.getElementById('yamlCodeMirror'), {
+            mode: 'yaml',
+            theme: 'default',
+            lineNumbers: true,
+            autoRefresh: true,
+            indentUnit: 2,
+            tabSize: 2,
+            indentWithTabs: false,
+            lineWrapping: true,
+            styleActiveLine: true,
+            matchBrackets: true,
+            autoCloseBrackets: true,
+            value: initialValue
+        });
+    }
+
+    bindEvents() {
+        // Button events
+        document.getElementById('saveBtn').addEventListener('click', () => this.saveConfig());
+        document.getElementById('validateBtn').addEventListener('click', () => this.validateConfig());
+        document.getElementById('formatYamlBtn').addEventListener('click', () => this.formatYaml());
+        document.getElementById('copyYamlBtn').addEventListener('click', () => this.copyYaml());
+    }
+
+    validateConfig() {
+        try {
+            const yamlContent = this.yamlEditor.getValue();
+            const config = jsyaml.load(yamlContent);
+            
+            if (!config || typeof config !== 'object') {
+                throw new Error('Invalid YAML structure');
+            }
+            
+            if (!config.name) {
+                throw new Error('Model name is required');
+            }
+            if (!config.backend) {
+                throw new Error('Backend is required');
+            }
+            if (!config.parameters || !config.parameters.model) {
+                throw new Error('Model file/path is required in parameters.model');
+            }
+            
+            this.showAlert('success', 'Configuration is valid!');
+        } catch (error) {
+            this.showAlert('error', 'Validation failed: ' + error.message);
+        }
+    }
+
+    async saveConfig() {
+        try {
+            // Validate before saving
+            const yamlContent = this.yamlEditor.getValue();
+            const config = jsyaml.load(yamlContent);
+            
+            if (!config || typeof config !== 'object') {
+                throw new Error('Invalid YAML structure');
+            }
+            
+            if (!config.name) {
+                throw new Error('Model name is required');
+            }
+            if (!config.backend) {
+                throw new Error('Backend is required');
+            }
+            if (!config.parameters || !config.parameters.model) {
+                throw new Error('Model file/path is required in parameters.model');
+            }
+            
+            const endpoint = this.isEditMode ? `/models/edit/${this.modelName}` : '/models/import';
+            
+            const response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-yaml',
+                },
+                body: yamlContent
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                this.showAlert('success', result.message || (this.isEditMode ? 'Model updated successfully!' : 'Model created successfully!'));
+                if (!this.isEditMode && config.name) {
+                    setTimeout(() => {
+                        window.location.href = `/models/edit/${config.name}`;
+                    }, 2000);
+                }
+            } else {
+                this.showAlert('error', result.error || 'Failed to save configuration');
+            }
+        } catch (error) {
+            this.showAlert('error', 'Failed to save: ' + error.message);
+        }
+    }
+
+    formatYaml() {
+        try {
+            const yamlContent = this.yamlEditor.getValue();
+            const parsed = jsyaml.load(yamlContent);
+            const formatted = jsyaml.dump(parsed, {
+                indent: 2,
+                lineWidth: 120,
+                noRefs: true,
+                sortKeys: false
+            });
+            this.yamlEditor.setValue(formatted);
+            this.showAlert('success', 'YAML formatted successfully');
+        } catch (error) {
+            this.showAlert('error', 'Failed to format YAML: ' + error.message);
+        }
+    }
+
+    copyYaml() {
+        const yamlContent = this.yamlEditor.getValue();
+        navigator.clipboard.writeText(yamlContent).then(() => {
+            this.showAlert('success', 'YAML copied to clipboard');
+        }).catch(err => {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = yamlContent;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            this.showAlert('success', 'YAML copied to clipboard');
+        });
+    }
+
+    showAlert(type, message) {
+        const container = document.getElementById('alertContainer');
+        const alertClasses = {
+            success: 'alert alert-success',
+            error: 'alert alert-error',
+            warning: 'alert alert-warning',
+            info: 'alert alert-info'
+        };
+        
+        const alertIcons = {
+            success: 'fas fa-check-circle',
+            error: 'fas fa-exclamation-triangle',
+            warning: 'fas fa-exclamation-circle',
+            info: 'fas fa-info-circle'
+        };
+        
+        container.innerHTML = `
+            <div class="${alertClasses[type]}">
+                <div class="flex items-center">
+                    <i class="${alertIcons[type]} mr-3 text-lg"></i>
+                    <span class="flex-1">${message}</span>
+                    <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-current hover:opacity-70 transition-opacity">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        if (type === 'success' || type === 'info') {
+            setTimeout(() => {
+                const alert = container.querySelector('div');
+                if (alert) alert.remove();
+            }, 5000);
+        }
+    }
+
+    clearAlert() {
+        document.getElementById('alertContainer').innerHTML = '';
+    }
+}
+
+// Initialize the editor when the page loads
+let modelEditor;
+document.addEventListener('DOMContentLoaded', () => {
+    modelEditor = new ModelEditor();
+});
+</script>
+
+</body>
+</html>

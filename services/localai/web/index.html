@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VaultGemma LocalAI - Test UI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .header h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 16px;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        
+        .status.online {
+            background: #10b981;
+            color: white;
+        }
+        
+        .status.offline {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+        
+        .sidebar {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            height: fit-content;
+        }
+        
+        .sidebar h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .domain-list {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .domain-item {
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        
+        .domain-item:hover {
+            background: #f3f4f6;
+        }
+        
+        .domain-item.selected {
+            background: #ede9fe;
+            border-color: #667eea;
+        }
+        
+        .domain-name {
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+        
+        .domain-meta {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .chat-area {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+            height: 600px;
+        }
+        
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .message {
+            margin-bottom: 16px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+        
+        .message.user {
+            background: #667eea;
+            color: white;
+            margin-left: auto;
+        }
+        
+        .message.assistant {
+            background: white;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .message-header {
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            opacity: 0.8;
+        }
+        
+        .message-content {
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+        
+        .input-area {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .input-area textarea {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 14px;
+            resize: none;
+            height: 60px;
+        }
+        
+        .input-area textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .input-area button {
+            padding: 12px 24px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .input-area button:hover {
+            background: #5568d3;
+        }
+        
+        .input-area button:disabled {
+            background: #cbd5e1;
+            cursor: not-allowed;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f4f6;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .stat-card {
+            background: #f9fafb;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 VaultGemma LocalAI</h1>
+            <p>Multi-Domain Agent Testing Interface</p>
+            <span class="status offline" id="status">● Checking...</span>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="domainCount">0</div>
+                    <div class="stat-label">Domains</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="messageCount">0</div>
+                    <div class="stat-label">Messages</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="responseTime">0ms</div>
+                    <div class="stat-label">Avg Response</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="sidebar">
+                <h3>📋 Available Domains</h3>
+                <div class="domain-list" id="domainList">
+                    <p style="color: #999; text-align: center; padding: 20px;">Loading...</p>
+                </div>
+            </div>
+            
+            <div class="chat-area">
+                <div class="messages" id="messages">
+                    <div style="text-align: center; color: #999; padding: 40px;">
+                        <h3>Welcome to VaultGemma LocalAI</h3>
+                        <p>Select a domain or type a message to start chatting</p>
+                    </div>
+                </div>
+                
+                <div class="input-area">
+                    <textarea 
+                        id="promptInput" 
+                        placeholder="Type your message here... (e.g., 'Calculate cosine similarity' or 'SELECT * FROM users')"
+                        onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendMessage();}"
+                    ></textarea>
+                    <button onclick="sendMessage()" id="sendBtn">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = 'http://localhost:8080';
+        let selectedDomain = 'auto';
+        let messageCount = 0;
+        let responseTimes = [];
+        
+        // Check server status
+        async function checkStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                document.getElementById('status').className = 'status online';
+                document.getElementById('status').textContent = '● Online';
+                return true;
+            } catch (error) {
+                document.getElementById('status').className = 'status offline';
+                document.getElementById('status').textContent = '● Offline';
+                return false;
+            }
+        }
+        
+        // Load available domains
+        async function loadDomains() {
+            try {
+                const response = await fetch(`${API_BASE}/v1/domains`);
+                const data = await response.json();
+                const domainList = document.getElementById('domainList');
+                
+                if (data.data && data.data.length > 0) {
+                    document.getElementById('domainCount').textContent = data.data.length;
+                    
+                    domainList.innerHTML = `
+                        <div class="domain-item selected" onclick="selectDomain('auto')">
+                            <div class="domain-name">🎯 Auto-Detect</div>
+                            <div class="domain-meta">Automatically route to best domain</div>
+                        </div>
+                    `;
+                    
+                    data.data.forEach(domain => {
+                        const item = document.createElement('div');
+                        item.className = 'domain-item';
+                        item.onclick = () => selectDomain(domain.id);
+                        item.innerHTML = `
+                            <div class="domain-name">${domain.name || domain.id}</div>
+                            <div class="domain-meta">${domain.id}</div>
+                        `;
+                        domainList.appendChild(item);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load domains:', error);
+            }
+        }
+        
+        // Select domain
+        function selectDomain(domainId) {
+            selectedDomain = domainId;
+            document.querySelectorAll('.domain-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            event.target.closest('.domain-item').classList.add('selected');
+        }
+        
+        // Add message to chat
+        function addMessage(role, content) {
+            const messages = document.getElementById('messages');
+            const message = document.createElement('div');
+            message.className = `message ${role}`;
+            message.innerHTML = `
+                <div class="message-header">${role === 'user' ? 'You' : 'Assistant'}</div>
+                <div class="message-content">${content}</div>
+            `;
+            messages.appendChild(message);
+            messages.scrollTop = messages.scrollHeight;
+        }
+        
+        // Send message
+        async function sendMessage() {
+            const input = document.getElementById('promptInput');
+            const sendBtn = document.getElementById('sendBtn');
+            const prompt = input.value.trim();
+            
+            if (!prompt) return;
+            
+            // Disable input
+            input.disabled = true;
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<span class="loading"></span>';
+            
+            // Add user message
+            addMessage('user', prompt);
+            input.value = '';
+            
+            try {
+                const startTime = Date.now();
+                
+                const response = await fetch(`${API_BASE}/v1/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model: selectedDomain,
+                        messages: [
+                            { role: 'user', content: prompt }
+                        ],
+                        max_tokens: 500,
+                        temperature: 0.7
+                    })
+                });
+                
+                const data = await response.json();
+                const responseTime = Date.now() - startTime;
+                
+                // Update stats
+                messageCount++;
+                responseTimes.push(responseTime);
+                document.getElementById('messageCount').textContent = messageCount;
+                const avgTime = responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length;
+                document.getElementById('responseTime').textContent = Math.round(avgTime) + 'ms';
+                
+                // Add assistant message
+                if (data.choices && data.choices[0]) {
+                    addMessage('assistant', data.choices[0].message.content);
+                }
+            } catch (error) {
+                addMessage('assistant', `Error: ${error.message}`);
+            } finally {
+                // Re-enable input
+                input.disabled = false;
+                sendBtn.disabled = false;
+                sendBtn.textContent = 'Send';
+                input.focus();
+            }
+        }
+        
+        // Initialize
+        async function init() {
+            const isOnline = await checkStatus();
+            if (isOnline) {
+                await loadDomains();
+            }
+        }
+        
+        init();
+        setInterval(checkStatus, 5000); // Check status every 5 seconds
+    </script>
+</body>
+</html>

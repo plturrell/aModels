@@ -1,0 +1,27 @@
+{
+  "id": "flows/mailbox_dispatch",
+  "name": "Mailbox Dispatch",
+  "description": "Determines the transport protocols and envelope details required to deliver a mailbox message.",
+  "category": "processes",
+  "tags": ["mailbox", "dispatch", "routing"],
+  "metadata": {
+    "owner": "layer4_mailbox",
+    "documentation": "docs/mailbox_flows.md"
+  },
+  "prompts": {
+    "system": "You convert mailbox operations into routing metadata. Respond with JSON containing reference, protocols (array), status, and envelope (object). If specific protocols are provided, echo them; otherwise default to ['api','mcp'].",
+    "user": "Dispatch request: {{ toJson .inputs }}\n\nReturn ONLY JSON in the schema {\"reference\":string, \"protocols\":array, \"envelope\":object, \"status\":string}."
+  },
+  "outputs": {
+    "primary": {
+      "description": "Dispatch routing metadata",
+      "format": "json",
+      "key": "envelope"
+    }
+  },
+  "sampling": {
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "top_k": 40
+  }
+}

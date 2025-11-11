@@ -1,0 +1,3 @@
+.build/
+pg.log
+.venv/

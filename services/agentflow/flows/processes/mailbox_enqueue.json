@@ -1,0 +1,27 @@
+{
+  "id": "flows/mailbox_enqueue",
+  "name": "Mailbox Enqueue",
+  "description": "Ensures an inbox exists for the target agent and prepares dispatch metadata for downstream transports.",
+  "category": "processes",
+  "tags": ["mailbox", "dispatcher", "agents"],
+  "metadata": {
+    "owner": "layer4_mailbox",
+    "documentation": "docs/mailbox_flows.md"
+  },
+  "prompts": {
+    "system": "You are the Layer-4 mailbox orchestrator. Given the JSON input describing the factory, owner, payload and optional protocols, respond with a JSON object containing the fields reference (string), protocols (array of lower-case protocol identifiers), envelope (object echoing relevant dispatch metadata) and status (string). Use uuid-like values for references when none supplied. Preserve payload_base64 without modification.",
+    "user": "Input payload: {{ toJson .inputs }}\n\nReturn ONLY valid JSON matching the schema {\"reference\":string, \"protocols\":array, \"envelope\":object, \"status\":string}."
+  },
+  "outputs": {
+    "primary": {
+      "description": "JSON response containing reference, protocols and envelope metadata",
+      "format": "json",
+      "key": "envelope"
+    }
+  },
+  "sampling": {
+    "temperature": 0.1,
+    "top_p": 0.9,
+    "top_k": 40
+  }
+}

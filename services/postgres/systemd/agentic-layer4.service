@@ -1,0 +1,15 @@
+[Unit]
+Description=Agentic Layer4 Postgres gRPC Service
+After=agentic-postgres.service
+Requires=agentic-postgres.service
+
+[Service]
+Type=simple
+WorkingDirectory=/Users/user/Library/CloudStorage/Dropbox/agenticAiETH/agenticAiETH_layer4_Postgres
+Environment=POSTGRES_DSN=postgres://user@localhost:5432/postgres?sslmode=disable
+Environment=GRPC_PORT=50055
+ExecStart=%h/Library/CloudStorage/Dropbox/agenticAiETH/agenticAiETH_layer4_Postgres/scripts/run_layer4_postgres_service.sh
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

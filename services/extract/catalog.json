@@ -1,0 +1,32 @@
+{
+  "projects": [
+    {
+      "id": "sgmi-demo",
+      "name": "sgmi-demo"
+    },
+    {
+      "id": "sgmi-full",
+      "name": "sgmi-full"
+    }
+  ],
+  "systems": [
+    {
+      "id": "sgmi-demo-system",
+      "name": "sgmi-demo-system"
+    },
+    {
+      "id": "sgmi-full-system",
+      "name": "sgmi-full-system"
+    }
+  ],
+  "information_systems": [
+    {
+      "id": "sgmi-demo-info",
+      "name": "sgmi-demo-info"
+    },
+    {
+      "id": "sgmi-full-info",
+      "name": "sgmi-full-info"
+    }
+  ]
+}

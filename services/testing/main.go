@@ -1,0 +1,81 @@
+//go:build ignore
+// +build ignore
+
+// Package disabled: conflicts with package testing in same directory
+// Move this file to services/testing/cmd/main.go or rename other files
+package main
+
+import (
+	"context"
+	"database/sql"
+	"flag"
+	"log"
+	"net/http"
+	"os"
+	"time"
+
+	_ "github.com/lib/pq"
+	
+	"github.com/plturrell/aModels/services/testing"
+)
+
+func main() {
+	var (
+		port           = flag.String("port", "8082", "HTTP server port")
+		dbDSN          = flag.String("db", os.Getenv("TEST_DB_DSN"), "Database DSN")
+		extractURL     = flag.String("extract-url", os.Getenv("EXTRACT_SERVICE_URL"), "Extract service URL")
+	)
+	flag.Parse()
+
+	logger := log.New(os.Stdout, "[testing] ", log.LstdFlags)
+
+	if *dbDSN == "" {
+		logger.Fatalf("Database DSN required (set TEST_DB_DSN or use -db flag)")
+	}
+
+	if *extractURL == "" {
+		*extractURL = "http://localhost:8081"
+	}
+
+	// Connect to database
+	db, err := sql.Open("postgres", *dbDSN)
+	if err != nil {
+		logger.Fatalf("failed to connect to database: %v", err)
+	}
+	defer db.Close()
+
+	// Verify database connection
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		logger.Fatalf("failed to ping database: %v", err)
+	}
+
+	// Create Extract client
+	extractClient := testing.NewHTTPExtractClient(*extractURL)
+
+	// Create sample generator
+	generator := testing.NewSampleGenerator(db, extractClient, logger)
+
+	// Create test service
+	testService := testing.NewTestService(generator, logger)
+
+	// Register routes
+	mux := http.NewServeMux()
+	testService.RegisterRoutes(mux)
+
+	// Health check
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
+
+	addr := ":" + *port
+	logger.Printf("Testing service listening on %s", addr)
+	logger.Printf("Extract service: %s", *extractURL)
+	
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		logger.Fatalf("server exited with error: %v", err)
+	}
+}
+

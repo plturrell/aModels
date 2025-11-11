@@ -1,0 +1,145 @@
+{
+  "xsappname": "amodels-catalog",
+  "tenant-mode": "dedicated",
+  "description": "Security configuration for aModels Catalog Service on SAP BTP",
+  "scopes": [
+    {
+      "name": "$XSAPPNAME.Display",
+      "description": "Display catalog data elements and products"
+    },
+    {
+      "name": "$XSAPPNAME.Edit",
+      "description": "Edit catalog data elements and products"
+    },
+    {
+      "name": "$XSAPPNAME.Admin",
+      "description": "Administrative access to catalog service"
+    },
+    {
+      "name": "$XSAPPNAME.DataProduct.Create",
+      "description": "Create new data products"
+    },
+    {
+      "name": "$XSAPPNAME.DataProduct.Read",
+      "description": "Read data products"
+    },
+    {
+      "name": "$XSAPPNAME.DataProduct.Update",
+      "description": "Update data products"
+    },
+    {
+      "name": "$XSAPPNAME.DataProduct.Delete",
+      "description": "Delete data products"
+    },
+    {
+      "name": "$XSAPPNAME.BreakDetection.Read",
+      "description": "Read break detection results"
+    },
+    {
+      "name": "$XSAPPNAME.BreakDetection.Admin",
+      "description": "Administrative access to break detection"
+    },
+    {
+      "name": "$XSAPPNAME.Analytics.Read",
+      "description": "Read analytics and dashboard data"
+    },
+    {
+      "name": "$XSAPPNAME.Domain.Read",
+      "description": "Read access to domain intelligence data"
+    },
+    {
+      "name": "$XSAPPNAME.Domain.Write",
+      "description": "Write access to domain intelligence data"
+    },
+    {
+      "name": "$XSAPPNAME.Privacy.Low",
+      "description": "Access to low-privacy data (higher epsilon, less noise)"
+    },
+    {
+      "name": "$XSAPPNAME.Privacy.Medium",
+      "description": "Access to medium-privacy data (standard epsilon)"
+    },
+    {
+      "name": "$XSAPPNAME.Privacy.High",
+      "description": "Access to high-privacy data (lower epsilon, more noise)"
+    }
+  ],
+  "role-templates": [
+    {
+      "name": "CatalogViewer",
+      "description": "View catalog data",
+      "scope-references": [
+        "$XSAPPNAME.Display",
+        "$XSAPPNAME.DataProduct.Read",
+        "$XSAPPNAME.BreakDetection.Read",
+        "$XSAPPNAME.Analytics.Read"
+      ]
+    },
+    {
+      "name": "CatalogEditor",
+      "description": "Edit catalog data",
+      "scope-references": [
+        "$XSAPPNAME.Display",
+        "$XSAPPNAME.Edit",
+        "$XSAPPNAME.DataProduct.Read",
+        "$XSAPPNAME.DataProduct.Create",
+        "$XSAPPNAME.DataProduct.Update",
+        "$XSAPPNAME.BreakDetection.Read"
+      ]
+    },
+    {
+      "name": "CatalogAdmin",
+      "description": "Full administrative access",
+      "scope-references": [
+        "$XSAPPNAME.Display",
+        "$XSAPPNAME.Edit",
+        "$XSAPPNAME.Admin",
+        "$XSAPPNAME.DataProduct.Create",
+        "$XSAPPNAME.DataProduct.Read",
+        "$XSAPPNAME.DataProduct.Update",
+        "$XSAPPNAME.DataProduct.Delete",
+        "$XSAPPNAME.BreakDetection.Read",
+        "$XSAPPNAME.BreakDetection.Admin",
+        "$XSAPPNAME.Analytics.Read",
+        "$XSAPPNAME.Domain.Read",
+        "$XSAPPNAME.Privacy.Low",
+        "$XSAPPNAME.Privacy.Medium"
+      ]
+    }
+  ],
+  "role-collections": [
+    {
+      "name": "aModels_Catalog_Viewer",
+      "description": "View-only access to catalog service",
+      "role-template-references": [
+        "$XSAPPNAME.CatalogViewer"
+      ]
+    },
+    {
+      "name": "aModels_Catalog_Editor",
+      "description": "Editor access to catalog service",
+      "role-template-references": [
+        "$XSAPPNAME.CatalogEditor"
+      ]
+    },
+    {
+      "name": "aModels_Catalog_Admin",
+      "description": "Administrative access to catalog service",
+      "role-template-references": [
+        "$XSAPPNAME.CatalogAdmin"
+      ]
+    }
+  ],
+  "oauth2-configuration": {
+    "redirect-uris": [
+      "https://*.cfapps.*.hana.ondemand.com/**",
+      "https://*.cfapps.*.us10.hana.ondemand.com/**",
+      "https://*.cfapps.*.eu10.hana.ondemand.com/**"
+    ],
+    "system-attributes": [
+      "xs.system.attributes.xs.rolecollections"
+    ],
+    "token-validity": 3600
+  }
+}
+
