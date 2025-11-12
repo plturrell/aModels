@@ -6,6 +6,7 @@ package main
 //go:generate cp -R ../../ui/dist/. ui/dist
 
 import (
+    "bytes"
 	"context"
 	"embed"
 	"encoding/json"
@@ -42,6 +43,9 @@ type shellConfig struct {
 	DMSEndpoint    string
 	FlowEndpoint   string
 	RuntimeEndpoint string
+	TrainingServiceURL string
+	GooseServiceURL    string
+	DeepResearchURL    string
 }
 
 func (s *shellServer) handleRuntimeAnalytics(w http.ResponseWriter, r *http.Request) {
@@ -63,6 +67,34 @@ func (s *shellServer) handleRuntimeAnalytics(w http.ResponseWriter, r *http.Requ
 type shellServer struct {
 	cfg        shellConfig
 	httpClient *http.Client
+}
+
+type AIQueryRequest struct {
+	Type       string                 `json:"type"`
+	Query      string                 `json:"query"`
+	Context    map[string]interface{} `json:"context"`
+	Parameters map[string]interface{} `json:"parameters"`
+}
+
+type AICitation struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	Snippet string `json:"snippet"`
+}
+
+type AIMetadata struct {
+	Latency int64    `json:"latency"`
+	Tokens  int      `json:"tokens"`
+	Route   []string `json:"route"`
+}
+
+type AIQueryResponse struct {
+	Data       interface{}  `json:"data"`
+	Model      string       `json:"model"`
+	Confidence float64      `json:"confidence"`
+	Citations  []AICitation `json:"citations,omitempty"`
+	Metadata   AIMetadata   `json:"metadata"`
 }
 
 func init() {
@@ -92,6 +124,7 @@ func main() {
 	mux.HandleFunc("/api/training/dataset", app.handleTrainingDataset)
 	mux.HandleFunc("/api/runtime/analytics/dashboard", app.handleRuntimeAnalytics)
 	mux.HandleFunc("/api/sgmi/raw", app.handleSgmiRaw)
+	mux.HandleFunc("/api/ai/query", app.handleAIQuery)
 
 	// Proxy LocalAI chat requests to LocalAI service
 	if app.cfg.LocalAIBaseURL != "" {
@@ -230,6 +263,26 @@ func newShellServer() *shellServer {
 	dmsEndpoint := strings.TrimSpace(os.Getenv("SHELL_DMS_ENDPOINT"))
 	flowEndpoint := strings.TrimSpace(os.Getenv("SHELL_AGENTFLOW_ENDPOINT"))
 	runtimeEndpoint := strings.TrimSpace(os.Getenv("SHELL_RUNTIME_ENDPOINT"))
+	trainingServiceURL := strings.TrimSpace(os.Getenv("SHELL_TRAINING_SERVICE_URL"))
+	if trainingServiceURL == "" {
+		trainingServiceURL = strings.TrimSpace(os.Getenv("TRAINING_SERVICE_URL"))
+	}
+	trainingServiceURL = strings.TrimSuffix(trainingServiceURL, "/")
+
+	gooseServiceURL := strings.TrimSpace(os.Getenv("SHELL_GOOSE_SERVICE_URL"))
+	if gooseServiceURL == "" {
+		gooseServiceURL = strings.TrimSpace(os.Getenv("GOOSE_SERVER_URL"))
+	}
+	gooseServiceURL = strings.TrimSuffix(gooseServiceURL, "/")
+
+	deepResearchURL := strings.TrimSpace(os.Getenv("SHELL_DEEP_RESEARCH_URL"))
+	if deepResearchURL == "" {
+		deepResearchURL = strings.TrimSpace(os.Getenv("DEEP_RESEARCH_URL"))
+		if deepResearchURL == "" {
+			deepResearchURL = strings.TrimSpace(os.Getenv("DEEPAGENTS_URL"))
+		}
+	}
+	deepResearchURL = strings.TrimSuffix(deepResearchURL, "/")
 
 	if sgmiEndpoint == "" && gatewayURL != "" {
 		sgmiEndpoint = gatewayURL + "/shell/sgmi/raw"
@@ -257,6 +310,9 @@ func newShellServer() *shellServer {
 			DMSEndpoint:    strings.TrimSuffix(dmsEndpoint, "/"),
 			FlowEndpoint:   strings.TrimSuffix(flowEndpoint, "/"),
 			RuntimeEndpoint: strings.TrimSuffix(runtimeEndpoint, "/"),
+			TrainingServiceURL: strings.TrimSuffix(trainingServiceURL, "/"),
+			GooseServiceURL:    strings.TrimSuffix(gooseServiceURL, "/"),
+			DeepResearchURL:    strings.TrimSuffix(deepResearchURL, "/"),
 		},
 		httpClient: &http.Client{Timeout: 15 * time.Second},
 	}
@@ -864,4 +920,239 @@ func trimProxyPath(pathValue string, prefix string) string {
 		pathValue = "/" + pathValue
 	}
 	return pathValue
+}
+
+func (s *shellServer) handleAIQuery(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var reqPayload AIQueryRequest
+	if err := json.NewDecoder(r.Body).Decode(&reqPayload); err != nil {
+		http.Error(w, fmt.Sprintf("invalid request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	start := time.Now()
+
+	var (
+		data    interface{}
+		model   string
+		conf    float64
+		sources []string
+		err    error
+	)
+
+	switch strings.ToLower(reqPayload.Type) {
+	case "gnn":
+		data, conf, sources, err = s.queryGNN(ctx, reqPayload)
+		model = "GNN"
+	case "goose":
+		data, conf, sources, err = s.runGooseTask(ctx, reqPayload)
+		model = "Goose"
+	case "deep-research":
+		data, conf, sources, err = s.runDeepResearch(ctx, reqPayload)
+		model = "DeepResearch"
+	default:
+		err = fmt.Errorf("unsupported query type: %s", reqPayload.Type)
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	latency := time.Since(start).Milliseconds()
+	reply := AIQueryResponse{
+		Data:       data,
+		Model:      model,
+		Confidence: conf,
+		Metadata: AIMetadata{
+			Latency: latency,
+			Tokens:  0,
+			Route:   []string{model},
+		},
+	}
+
+	if cit := buildCitations(sources); len(cit) > 0 {
+		reply.Citations = cit
+	}
+
+	respondJSON(w, reply)
+}
+
+func (s *shellServer) queryGNN(ctx context.Context, req AIQueryRequest) (interface{}, float64, []string, error) {
+	if s.cfg.TrainingServiceURL == "" {
+		return nil, 0, nil, errors.New("training service URL not configured")
+	}
+
+	var gnnPayload map[string]interface{}
+	if err := json.Unmarshal([]byte(req.Query), &gnnPayload); err != nil {
+		return nil, 0, nil, fmt.Errorf("invalid GNN query payload: %w", err)
+	}
+
+	task, _ := gnnPayload["task"].(string)
+	graph, _ := gnnPayload["graph"].(map[string]interface{})
+
+	endpoint := s.cfg.TrainingServiceURL
+	switch task {
+	case "embeddings":
+		endpoint += "/gnn/embeddings"
+	case "classification":
+		endpoint += "/gnn/classify"
+	case "link-prediction":
+		endpoint += "/gnn/predict-links"
+	default:
+		endpoint += "/gnn/structural-insights"
+	}
+
+	body := map[string]interface{}{}
+	if graph != nil {
+		for k, v := range graph {
+			body[k] = v
+		}
+	}
+
+	data, err := s.postJSON(ctx, endpoint, body)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+
+	return data, extractConfidence(data), extractSources(data), nil
+}
+
+func (s *shellServer) runGooseTask(ctx context.Context, req AIQueryRequest) (interface{}, float64, []string, error) {
+	if s.cfg.GooseServiceURL == "" {
+		return nil, 0, nil, errors.New("goose service URL not configured")
+	}
+
+	payload := map[string]interface{}{
+		"task": req.Query,
+	}
+	if len(req.Context) > 0 {
+		payload["context"] = req.Context
+	}
+	if len(req.Parameters) > 0 {
+		payload["parameters"] = req.Parameters
+	}
+
+	endpoint := strings.TrimSuffix(s.cfg.GooseServiceURL, "/") + "/api/tasks/execute"
+	data, err := s.postJSON(ctx, endpoint, payload)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+
+	return data, extractConfidence(data), extractSources(data), nil
+}
+
+func (s *shellServer) runDeepResearch(ctx context.Context, req AIQueryRequest) (interface{}, float64, []string, error) {
+	if s.cfg.DeepResearchURL == "" {
+		return nil, 0, nil, errors.New("deep research service URL not configured")
+	}
+
+	payload := map[string]interface{}{
+		"query": req.Query,
+	}
+
+	if scope, ok := req.Context["scope"]; ok {
+		payload["scope"] = scope
+	}
+	if sources, ok := req.Context["sources"]; ok {
+		payload["sources"] = sources
+	}
+
+	endpoint := strings.TrimSuffix(s.cfg.DeepResearchURL, "/") + "/research"
+	data, err := s.postJSON(ctx, endpoint, payload)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+
+	return data, extractConfidence(data), extractSources(data), nil
+}
+
+func (s *shellServer) postJSON(ctx context.Context, endpoint string, payload interface{}) (interface{}, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("%s returned %d: %s", endpoint, resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+
+	var result interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	return result, nil
+}
+
+func extractConfidence(data interface{}) float64 {
+	if m, ok := data.(map[string]interface{}); ok {
+		if v, ok := m["confidence"].(float64); ok {
+			return v
+		}
+		if meta, ok := m["metadata"].(map[string]interface{}); ok {
+			if v, ok := meta["confidence"].(float64); ok {
+				return v
+			}
+		}
+	}
+	return 0
+}
+
+func extractSources(data interface{}) []string {
+	var sources []string
+	if m, ok := data.(map[string]interface{}); ok {
+		if arr, ok := m["sources"].([]interface{}); ok {
+			for _, item := range arr {
+				switch v := item.(type) {
+				case string:
+					sources = append(sources, v)
+				case map[string]interface{}:
+					if title, ok := v["title"].(string); ok {
+						sources = append(sources, title)
+					}
+				}
+			}
+		}
+	}
+	return sources
+}
+
+func buildCitations(sources []string) []AICitation {
+	if len(sources) == 0 {
+		return nil
+	}
+	citations := make([]AICitation, 0, len(sources))
+	for idx, src := range sources {
+		src = strings.TrimSpace(src)
+		if src == "" {
+			continue
+		}
+		citations = append(citations, AICitation{
+			ID:    fmt.Sprintf("source-%d", idx+1),
+			Title: src,
+		})
+	}
+	if len(citations) == 0 {
+		return nil
+	}
+	return citations
 }

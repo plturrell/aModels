@@ -57,7 +57,7 @@ func (p *SQLitePersistence) SaveTable(tableName string, data []map[string]any) e
 	}
 	createTableSQL.WriteString(")")
 
-	_, err := p.db.Exec(createTableSQL.String())
+	_, err = p.db.Exec(createTableSQL.String())
 	if err != nil {
 		return fmt.Errorf("failed to create table: %w", err)
 	}

@@ -8,11 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/plturrell/aModels/services/extract/pkg/clients"
 )
 
 // MarkItDownIntegration provides integration with markitdown service for document conversion.
 type MarkItDownIntegration struct {
-	client        *MarkItDownClient
+	client        *clients.MarkItDownClient
 	logger        *log.Logger
 	enabled       bool
 	fallbackToOCR bool
@@ -24,7 +26,7 @@ func NewMarkItDownIntegration(
 	logger *log.Logger,
 	metricsCollector func(service, endpoint string, statusCode int, latency time.Duration, correlationID string),
 ) *MarkItDownIntegration {
-	client := NewMarkItDownClient(baseURL, logger, metricsCollector)
+	client := clients.NewMarkItDownClient(baseURL, logger, metricsCollector)
 	
 	enabled := os.Getenv("MARKITDOWN_ENABLED")
 	if enabled == "" {

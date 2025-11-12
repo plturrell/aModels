@@ -31,7 +31,7 @@ export function useAI<T = any>(options: UseAIOptions = {}): UseAIState<T> {
     setError(null);
 
     try {
-      const result = await aiService.query(request);
+      const result = await aiService.query(request, abortControllerRef.current.signal);
       setData(result.data as T);
       return result.data as T;
     } catch (err) {
@@ -75,7 +75,7 @@ export function useGooseTask() {
       type: 'goose',
       query: request.task,
       context: request.context,
-      parameters: { autoRemediate: request.autoRemediate }
+      parameters: request.autoRemediate != null ? { autoRemediate: request.autoRemediate } : undefined
     });
   }, [execute]);
 

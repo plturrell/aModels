@@ -6,7 +6,7 @@ func min(a, b float64) float64 {
 	return math.Min(a, b)
 }
 
-func sqrt(x float64) float64 {
+func Sqrt(x float64) float64 {
 	if x <= 0 {
 		if x == 0 {
 			return 0

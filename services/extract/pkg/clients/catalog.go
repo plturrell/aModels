@@ -296,7 +296,7 @@ func (c *CatalogClient) registerWithRetry(ctx context.Context, url string, jsonD
 		lastErr = err
 		
 		// Check if circuit breaker is open
-		correlationID := getCorrelationID(ctx)
+		correlationID = getCorrelationID(ctx)
 		if err.Error() == "circuit breaker is open (too many failures)" {
 			if c.logger != nil {
 				c.logger.Printf("[%s] Catalog service circuit breaker is OPEN, skipping request", correlationID)

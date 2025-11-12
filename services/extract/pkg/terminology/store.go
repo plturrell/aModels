@@ -1,6 +1,10 @@
 package terminology
 
 import (
+	"github.com/plturrell/aModels/services/extract/pkg/storage"
+)
+
+import (
 	"github.com/plturrell/aModels/services/extract/pkg/graph"
 	"context"
 	"fmt"
@@ -59,12 +63,12 @@ type RoleEvolution struct {
 
 // Neo4jTerminologyStore implements TerminologyStore using Neo4j.
 type Neo4jTerminologyStore struct {
-	neo4jPersistence *Neo4jPersistence
+	neo4jPersistence *storage.Neo4jPersistence
 	logger           *log.Logger
 }
 
 // NewNeo4jTerminologyStore creates a new Neo4j terminology store.
-func NewNeo4jTerminologyStore(neo4jPersistence *Neo4jPersistence, logger *log.Logger) *Neo4jTerminologyStore {
+func NewNeo4jTerminologyStore(neo4jPersistence *storage.Neo4jPersistence, logger *log.Logger) *Neo4jTerminologyStore {
 	return &Neo4jTerminologyStore{
 		neo4jPersistence: neo4jPersistence,
 		logger:           logger,

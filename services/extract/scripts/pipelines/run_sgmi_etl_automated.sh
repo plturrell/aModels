@@ -7,7 +7,10 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd)
 REPO_ROOT=$(cd "${ROOT_DIR}/../.." && pwd)
-DATA_ROOT="${REPO_ROOT}/data/training/sgmi"
+# Support custom data root for Docker mounts (non-conflicting path)
+# Default to REPO_ROOT/data for backward compatibility
+SGMI_DATA_ROOT="${SGMI_DATA_ROOT:-${REPO_ROOT}/data}"
+DATA_ROOT="${SGMI_DATA_ROOT}/training/sgmi"
 LOG_DIR="${REPO_ROOT}/logs/sgmi_pipeline"
 
 mkdir -p "${LOG_DIR}"
@@ -145,8 +148,13 @@ build_payload() {
     export SGMI_VIEW_SUMMARY_OUT="${VIEW_SUMMARY_OUT}"
     
     # Build payload using Python script
-    if ! python3 "${SCRIPT_DIR}/sgmi_view_builder.py" "${tmp_payload}" 2>&1; then
+    log "Running Python script: ${SCRIPT_DIR}/sgmi_view_builder.py"
+    if ! python3 "${SCRIPT_DIR}/sgmi_view_builder.py" "${tmp_payload}" 2>&1 | tee /tmp/python_output.log; then
         error "Failed to build SGMI payload"
+        if [ -f /tmp/python_output.log ]; then
+            error "Python script error output:"
+            cat /tmp/python_output.log >&2
+        fi
         rm -f "${tmp_payload}"
         rm -rf "${view_tmp_dir}"
         return 1

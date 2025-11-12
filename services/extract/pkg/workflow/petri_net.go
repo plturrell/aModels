@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/plturrell/aModels/services/extract/pkg/graph"
+	"github.com/plturrell/aModels/services/extract/pkg/integrations"
 )
 
 // PetriNet represents a Petri net structure for workflow modeling.
@@ -69,7 +70,7 @@ func NewPetriNetConverter(logger *log.Logger) *PetriNetConverter {
 
 // ConvertControlMToPetriNet converts Control-M jobs into a Petri net.
 func (pnc *PetriNetConverter) ConvertControlMToPetriNet(
-	jobs []ControlMJob,
+	jobs []integrations.ControlMJob,
 	sqlQueries map[string][]string, // jobName -> SQL queries
 ) *PetriNet {
 	net := &PetriNet{

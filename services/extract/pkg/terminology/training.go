@@ -1,6 +1,10 @@
 package terminology
 
 import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
+)
+
+import (
 	"context"
 	"encoding/json"
 	"log"
@@ -12,7 +16,7 @@ import (
 // BatchTerminologyTrainer performs periodic batch refinement from knowledge graph.
 type BatchTerminologyTrainer struct {
 	terminologyLearner *TerminologyLearner
-	neo4jPersistence   *Neo4jPersistence
+	neo4jPersistence   *storage.Neo4jPersistence
 	logger             *log.Logger
 	trainingInterval   time.Duration
 	lastTraining       time.Time
@@ -21,7 +25,7 @@ type BatchTerminologyTrainer struct {
 // NewBatchTerminologyTrainer creates a new batch terminology trainer.
 func NewBatchTerminologyTrainer(
 	terminologyLearner *TerminologyLearner,
-	neo4jPersistence *Neo4jPersistence,
+	neo4jPersistence *storage.Neo4jPersistence,
 	logger *log.Logger,
 	trainingInterval time.Duration,
 ) *BatchTerminologyTrainer {
@@ -40,7 +44,7 @@ func (btt *BatchTerminologyTrainer) TrainFromKnowledgeGraph(ctx context.Context)
 
 	// Query knowledge graph for terminology examples
 	query := `
-		MATCH (n:Node)
+		MATCH (n:graph.Node)
 		WHERE n.label IS NOT NULL
 		RETURN n.id AS id, n.label AS label, n.type AS type, n.properties_json AS props
 		ORDER BY n.updated_at DESC
@@ -68,14 +72,14 @@ func (btt *BatchTerminologyTrainer) TrainFromKnowledgeGraph(ctx context.Context)
 		return nil
 	}
 
-	nodes := []Node{}
+	nodes := []graph.Node{}
 	for _, record := range records {
 		id, _ := record.Get("id")
 		label, _ := record.Get("label")
 		nodeType, _ := record.Get("type")
 		propsJSON, _ := record.Get("props")
 
-		node := Node{
+		node := graph.Node{
 			ID:    getString(id),
 			Label: getString(label),
 			Type:  getString(nodeType),

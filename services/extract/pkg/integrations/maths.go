@@ -1,12 +1,10 @@
 package integrations
 
 import (
-	"github.com/plturrell/aModels/services/extract/pkg/utils"
-)
-
-import (
 	"log"
 	"os"
+
+	"github.com/plturrell/aModels/services/extract/pkg/utils"
 )
 
 // MathematicalProcessor handles mathematical computations for data quality and analysis

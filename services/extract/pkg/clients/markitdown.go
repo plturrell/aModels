@@ -3,9 +3,7 @@ package clients
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"mime/multipart"
 	"net/http"

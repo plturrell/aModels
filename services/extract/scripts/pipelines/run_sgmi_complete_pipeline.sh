@@ -8,7 +8,10 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SCRIPTS_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 REPO_ROOT=$(cd "${ROOT_DIR}/../.." && pwd)
-DATA_ROOT="${REPO_ROOT}/data/training/sgmi"
+# Support custom data root for Docker mounts (non-conflicting path)
+# Default to REPO_ROOT/data for backward compatibility
+SGMI_DATA_ROOT="${SGMI_DATA_ROOT:-${REPO_ROOT}/data}"
+DATA_ROOT="${SGMI_DATA_ROOT}/training/sgmi"
 LOG_DIR="${REPO_ROOT}/logs/sgmi_pipeline"
 
 mkdir -p "${LOG_DIR}"

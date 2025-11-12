@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/plturrell/aModels/pkg/localai"
-	"github.com/plturrell/aModels/services/extract/pkg/extraction"
 	"github.com/plturrell/aModels/services/extract/pkg/utils"
 )
 
@@ -28,7 +27,7 @@ type ModelFusionFramework struct {
 	localaiClient            *localai.Client
 	localaiURL               string
 	weights                  ModelWeights
-	domainDetector           *extraction.DomainDetector         // Phase 8.2: Domain detector for domain-aware weights
+	domainDetector           interface{}         // Phase 8.2: Domain detector for domain-aware weights
 	domainWeights            map[string]ModelWeights // Phase 8.2: domain_id -> optimized weights
 	batchSize                int                    // Batch size for LocalAI predictions
 }
@@ -143,12 +142,12 @@ func isRetryableError(err error) bool {
 // NewModelFusionFramework creates a new model fusion framework.
 func NewModelFusionFramework(logger *log.Logger) *ModelFusionFramework {
 	localaiURL := os.Getenv("LOCALAI_URL")
-	var domainDetector *extraction.DomainDetector
+	var domainDetector interface{}
 	var localaiClient *localai.Client
 	useLocalAI := false
 	
 	if localaiURL != "" {
-		domainDetector = extraction.NewDomainDetector(localaiURL, logger)
+		domainDetector = nil(localaiURL, logger)
 		// Initialize LocalAI client with connection pooling if URL is provided
 		pooledHTTPClient := createPooledHTTPClient(logger)
 		localaiClient = localai.NewClientWithHTTPClient(localaiURL, pooledHTTPClient)

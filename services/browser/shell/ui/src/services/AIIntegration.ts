@@ -119,7 +119,10 @@ export class AIService {
     return this.query({
       type: 'gnn',
       query: JSON.stringify(request),
-      context: { task: request.task }
+      context: {
+        task: request.task,
+        payload: request,
+      }
     });
   }
 
@@ -127,8 +130,11 @@ export class AIService {
     return this.query({
       type: 'goose',
       query: request.task,
-      context: request.context,
-      parameters: { autoRemediate: request.autoRemediate }
+      context: {
+        ...request.context,
+        payload: request,
+      },
+      parameters: request.autoRemediate != null ? { autoRemediate: request.autoRemediate } : undefined
     });
   }
 
@@ -136,7 +142,11 @@ export class AIService {
     return this.query({
       type: 'deep-research',
       query: request.query,
-      context: { scope: request.scope, sources: request.sources }
+      context: {
+        scope: request.scope,
+        sources: request.sources,
+        payload: request,
+      }
     });
   }
 
@@ -144,7 +154,10 @@ export class AIService {
     return this.query({
       type: 'hybrid',
       query,
-      context
+      context: {
+        ...context,
+        payload: context?.payload ?? context,
+      }
     });
   }
 
