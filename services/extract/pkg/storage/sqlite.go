@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/plturrell/aModels/services/extract/pkg/utils"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -29,14 +30,25 @@ func (p *SQLitePersistence) SaveTable(tableName string, data []map[string]any) e
 		return nil
 	}
 
+	// Sanitize table name to prevent SQL injection
+	sanitizedTableName, err := utils.SanitizeIdentifier(tableName)
+	if err != nil {
+		return fmt.Errorf("invalid table name: %w", err)
+	}
+
 	// Create table
 	var columns []string
 	for key := range data[0] {
-		columns = append(columns, key)
+		// Sanitize column names
+		sanitizedCol, err := utils.SanitizeIdentifier(key)
+		if err != nil {
+			return fmt.Errorf("invalid column name %s: %w", key, err)
+		}
+		columns = append(columns, sanitizedCol)
 	}
 
 	var createTableSQL strings.Builder
-	createTableSQL.WriteString(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (", tableName))
+	createTableSQL.WriteString(fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (", sanitizedTableName))
 	for i, col := range columns {
 		createTableSQL.WriteString(fmt.Sprintf("%s TEXT", col))
 		if i < len(columns)-1 {
@@ -56,13 +68,13 @@ func (p *SQLitePersistence) SaveTable(tableName string, data []map[string]any) e
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	if _, err := tx.Exec(fmt.Sprintf("DELETE FROM %s", tableName)); err != nil {
+	if _, err := tx.Exec(fmt.Sprintf("DELETE FROM %s", sanitizedTableName)); err != nil {
 		tx.Rollback()
-		return fmt.Errorf("failed to clear table %s: %w", tableName, err)
+		return fmt.Errorf("failed to clear table %s: %w", sanitizedTableName, err)
 	}
 
 	var insertSQL strings.Builder
-	insertSQL.WriteString(fmt.Sprintf("INSERT INTO %s (", tableName))
+	insertSQL.WriteString(fmt.Sprintf("INSERT INTO %s (", sanitizedTableName))
 	insertSQL.WriteString(strings.Join(columns, ", "))
 	insertSQL.WriteString(") VALUES (")
 	for i := range columns {

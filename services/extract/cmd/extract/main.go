@@ -32,6 +32,8 @@ import (
     handlers "github.com/plturrell/aModels/services/extract/internal/handlers"
     "github.com/plturrell/aModels/services/extract/internal/processing"
 
+    "github.com/plturrell/aModels/services/extract/internal/middleware"
+    "github.com/plturrell/aModels/services/extract/internal/observability"
     "github.com/plturrell/aModels/services/extract/pkg/catalog"
     "github.com/plturrell/aModels/services/extract/pkg/clients"
     "github.com/plturrell/aModels/services/extract/pkg/embeddings"
@@ -44,6 +46,7 @@ import (
     "github.com/plturrell/aModels/services/extract/pkg/servers"
     "github.com/plturrell/aModels/services/extract/pkg/storage"
     "github.com/plturrell/aModels/services/extract/pkg/terminology"
+    "github.com/plturrell/aModels/services/extract/pkg/utils"
     "github.com/plturrell/aModels/services/extract/pkg/workflow"
 )
 
@@ -454,7 +457,41 @@ func main() {
 		}
 	}()
 
+	// Initialize OpenTelemetry tracing
+	tracerProvider, err := observability.InitTracing("extract-service", logger)
+	if err != nil {
+		logger.Printf("failed to initialize tracing: %v", err)
+	} else if tracerProvider != nil {
+		defer tracerProvider.Shutdown(context.Background())
+	}
+
+	// Initialize structured logging
+	structuredLogger := middleware.NewStructuredLogger(logger)
+
+	// Initialize health checker
+	healthChecker := middleware.NewHealthChecker(logger)
+	// Register health checks
+	if server.neo4jPersistence != nil && server.neo4jPersistence.driver != nil {
+		// Note: Neo4j driver doesn't expose *sql.DB, so we'll check it differently
+		healthChecker.RegisterCheck("neo4j", func(ctx context.Context) error {
+			return server.neo4jPersistence.driver.VerifyConnectivity(ctx)
+		}, 5*time.Second)
+	}
+
+	// Initialize authentication middleware
+	authConfig := middleware.LoadAuthConfig()
+	authMiddleware := middleware.NewAuthMiddleware(authConfig, logger)
+	if authConfig.Enabled {
+		logger.Printf("authentication enabled (type=%s)", authConfig.AuthType)
+	} else {
+		logger.Println("authentication disabled")
+	}
+
 	mux := http.NewServeMux()
+	
+	// Health check endpoints (registered before middleware)
+	mux.HandleFunc("/health", healthChecker.HandleHealth)
+	mux.HandleFunc("/ready", healthChecker.HandleReady)
 	mux.HandleFunc("/healthz", server.handleHealthz)
 	mux.HandleFunc("/extract", server.handleExtract)
 	mux.HandleFunc("/generate/training", server.handleGenerateTraining)
@@ -494,12 +531,19 @@ func main() {
 	mux.HandleFunc("/ui", server.handleWebUI)
 	mux.HandleFunc("/metrics/improvements", server.handleImprovementsMetrics) // Metrics for all 6 improvements
 
+	// Apply middleware chain
+	var handler http.Handler = mux
+	handler = middleware.LoggingMiddleware(structuredLogger)(handler)
+	if authConfig.Enabled {
+		handler = authMiddleware.Middleware(handler)
+	}
+
 	if *explorer {
 		server.startExplorer()
 	} else {
 		addr := ":" + cfg.Server.Port
 		logger.Printf("extract service listening on %s (proxying %s)", addr, server.langextractURL)
-		if err := http.ListenAndServe(addr, mux); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err := http.ListenAndServe(addr, handler); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatalf("server exited with error: %v", err)
 		}
 	}
@@ -4108,7 +4152,13 @@ func (s *extractServer) generateTableExtract(ctx context.Context, input tableGen
 
 	var generated []string
 	for _, table := range tables {
-		query := fmt.Sprintf(`SELECT * FROM "%s"."%s" LIMIT %d`, schema, table, limit)
+		// Sanitize schema and table names to prevent SQL injection
+		sanitizedSchema, sanitizedTable, err := utils.SanitizeSchemaAndTable(schema, table)
+		if err != nil {
+			s.logger.Printf("table %s.%s skipped (invalid identifier): %v", schema, table, err)
+			continue
+		}
+		query := fmt.Sprintf(`SELECT * FROM "%s"."%s" LIMIT %d`, sanitizedSchema, sanitizedTable, limit)
 		rows, err := db.QueryContext(ctx, query)
 		if err != nil {
 			s.logger.Printf("table %s skipped (query error): %v", table, err)
