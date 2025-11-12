@@ -253,7 +253,7 @@ class GNNNodeClassifier:
         edges: List[Dict[str, Any]],
         labels: Optional[Dict[str, str]] = None,
         label_key: str = "type"
-    ) -> Tuple[Optional[Data], Optional[torch.Tensor]]:
+    ) -> Tuple[Optional[Data], Optional["torch.Tensor"]]:
         """Prepare training data with labels.
         
         Args:

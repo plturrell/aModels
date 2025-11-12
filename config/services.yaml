@@ -1,0 +1,251 @@
+# aModels Services Registry
+# Comprehensive service configuration with dependencies, health checks, and startup order
+
+infrastructure:
+  redis:
+    name: "Redis"
+    port: 6379
+    health_endpoint: "tcp://localhost:6379"
+    health_command: "redis-cli ping"
+    docker_service: "redis"
+    startup_timeout: 30
+    required: true
+    
+  postgres:
+    name: "PostgreSQL"
+    port: 5432
+    health_endpoint: "postgresql://postgres:postgres@localhost:5432/amodels?sslmode=disable"
+    health_command: "pg_isready -h localhost -p 5432 -U postgres"
+    docker_service: "postgres"
+    startup_timeout: 60
+    required: true
+    
+  neo4j:
+    name: "Neo4j"
+    ports: [7474, 7687]
+    health_endpoint: "http://localhost:7474"
+    health_command: "cypher-shell -u neo4j -p amodels123 'RETURN 1'"
+    docker_service: "neo4j"
+    startup_timeout: 90
+    required: true
+    
+  elasticsearch:
+    name: "Elasticsearch"
+    ports: [9200, 9300]
+    health_endpoint: "http://localhost:9200/_cluster/health"
+    docker_service: "elasticsearch"
+    startup_timeout: 120
+    required: false  # Optional for some services
+
+core_services:
+  localai:
+    name: "LocalAI"
+    port: 8081
+    internal_port: 8080
+    health_endpoint: "http://localhost:8081/healthz"
+    docker_service: "localai"
+    startup_timeout: 180
+    depends_on: [redis, postgres]
+    required: true
+    env_file: ".env.localai"
+    
+  transformers:
+    name: "Transformers Service"
+    port: 9090
+    health_endpoint: "http://localhost:9090/health"
+    docker_service: "transformers"
+    startup_timeout: 120
+    depends_on: []
+    required: false
+    gpu_required: true
+    
+  catalog:
+    name: "Catalog Service"
+    port: 8084
+    health_endpoint: "http://localhost:8084/health"
+    docker_service: "catalog"
+    go_binary: "services/catalog"
+    startup_timeout: 90
+    depends_on: [neo4j, redis, postgres]
+    required: true
+    env:
+      NEO4J_URI: "bolt://localhost:7687"
+      NEO4J_USERNAME: "neo4j"
+      NEO4J_PASSWORD: "amodels123"
+      REDIS_URL: "redis://localhost:6379/0"
+      POSTGRES_DSN: "postgresql://postgres:postgres@localhost:5432/amodels?sslmode=disable"
+
+application_services:
+  extract:
+    name: "Extract Service"
+    port: 8083
+    internal_port: 8082
+    health_endpoint: "http://localhost:8083/health"
+    docker_service: "extract"
+    go_binary: "services/extract/cmd/extract"
+    startup_timeout: 90
+    depends_on: [elasticsearch, neo4j, postgres, catalog]
+    required: true
+    env:
+      PORT: "8082"
+      NEO4J_URI: "bolt://localhost:7687"
+      NEO4J_USERNAME: "neo4j"
+      NEO4J_PASSWORD: "amodels123"
+      POSTGRES_CATALOG_DSN: "postgresql://postgres:postgres@localhost:5432/amodels?sslmode=disable"
+      
+  graph:
+    name: "Graph Server"
+    ports: [8080, 19080]
+    health_endpoint: "http://localhost:8080/health"
+    docker_service: "graph"
+    go_binary: "services/graph/cmd/graph-server"
+    startup_timeout: 90
+    depends_on: [neo4j, localai]
+    required: true
+    gpu_required: true
+    env:
+      NEO4J_URI: "bolt://localhost:7687"
+      NEO4J_USERNAME: "neo4j"
+      NEO4J_PASSWORD: "amodels123"
+      LOCALAI_URL: "http://localhost:8081"
+      
+  search_inference:
+    name: "Search Inference"
+    port: 8090
+    health_endpoint: "http://localhost:8090/health"
+    docker_service: "search-inference"
+    go_binary: "services/search/search-inference/cmd/search-server"
+    startup_timeout: 90
+    depends_on: [elasticsearch, localai]
+    required: false
+    env:
+      ELASTICSEARCH_HOST: "http://localhost:9200"
+      LOCALAI_BASE_URL: "http://localhost:8081"
+      
+  deepagents:
+    name: "Deep Agents Service"
+    port: 9004
+    health_endpoint: "http://localhost:9004/healthz"
+    docker_service: "deepagents"
+    python_service: true
+    startup_timeout: 90
+    depends_on: [postgres, redis, localai]
+    required: false
+    env:
+      DEEPAGENTS_PORT: "9004"
+      EXTRACT_SERVICE_URL: "http://localhost:8083"
+      LOCALAI_URL: "http://localhost:8081"
+      
+  runtime:
+    name: "Runtime Analytics Server"
+    port: 8098
+    health_endpoint: "http://localhost:8098/healthz"
+    go_binary: "services/runtime/cmd/server"
+    startup_timeout: 60
+    depends_on: [catalog]
+    required: false
+    env:
+      RUNTIME_ADDR: ":8098"
+      CATALOG_URL: "http://localhost:8084"
+      
+  orchestration:
+    name: "Orchestration Server"
+    port: 8085
+    health_endpoint: "http://localhost:8085/healthz"
+    docker_service: "orchestration"
+    go_binary: "services/orchestration/cmd/server"
+    startup_timeout: 60
+    depends_on: []
+    required: false
+    env:
+      ORCHESTRATION_PORT: "8085"
+      
+  training:
+    name: "Training Service"
+    port: 8087
+    health_endpoint: "http://localhost:8087/health"
+    docker_service: "training-service"
+    python_service: true
+    startup_timeout: 90
+    depends_on: [postgres, redis, localai, extract]
+    required: false
+    env:
+      PORT: "8080"
+      EXTRACT_SERVICE_URL: "http://localhost:8083"
+      LOCALAI_URL: "http://localhost:8081"
+      
+  dms:
+    name: "Document Management Service"
+    port: 8096
+    health_endpoint: "http://localhost:8096/docs"
+    docker_service: "dms"
+    python_service: true
+    startup_timeout: 90
+    depends_on: [postgres, redis, neo4j, extract, catalog]
+    required: false
+    env:
+      DMS_POSTGRES_DSN: "postgresql+psycopg://postgres:postgres@localhost:5432/dms"
+      DMS_REDIS_URL: "redis://localhost:6379/0"
+      DMS_NEO4J_URI: "neo4j://localhost:7687"
+      DMS_NEO4J_USER: "neo4j"
+      DMS_NEO4J_PASSWORD: "amodels123"
+      
+  postgres_lang:
+    name: "PostgreSQL Lang Service"
+    port: 50051
+    protocol: "grpc"
+    health_endpoint: "grpc://localhost:50051"
+    go_binary: "services/postgres/cmd/server"
+    startup_timeout: 60
+    depends_on: [postgres]
+    required: false
+    env:
+      GRPC_PORT: "50051"
+      POSTGRES_DSN: "postgresql://postgres:postgres@localhost:5432/amodels?sslmode=disable"
+      
+  regulatory_audit:
+    name: "BCBS239 Regulatory Audit Server"
+    port: 8099
+    health_endpoint: "http://localhost:8099/healthz"
+    go_binary: "services/regulatory/cmd/audit-server"
+    startup_timeout: 90
+    depends_on: [neo4j, localai]
+    required: false
+    env:
+      AUDIT_SERVER_ADDR: ":8099"
+      NEO4J_URL: "bolt://localhost:7687"
+      NEO4J_USER: "neo4j"
+      NEO4J_PASSWORD: "amodels123"
+      LOCALAI_URL: "http://localhost:8081"
+      GNN_SERVICE_URL: "http://localhost:8081"
+      GOOSE_SERVER_URL: "http://localhost:8082"
+      DEEPAGENTS_URL: "http://localhost:9004"
+
+gateway_services:
+  gateway:
+    name: "API Gateway"
+    port: 8000
+    health_endpoint: "http://localhost:8000/healthz"
+    python_service: true
+    startup_timeout: 60
+    depends_on: [catalog, localai]
+    required: false
+
+# Startup profiles for different scenarios
+profiles:
+  minimal:
+    description: "Minimal setup with only infrastructure and core services"
+    services: [redis, postgres, neo4j, localai, catalog]
+    
+  development:
+    description: "Full development stack without GPU services"
+    services: [redis, postgres, neo4j, elasticsearch, localai, catalog, extract, search_inference, runtime, orchestration]
+    
+  full:
+    description: "Complete system with all services"
+    services: [redis, postgres, neo4j, elasticsearch, localai, transformers, catalog, extract, graph, search_inference, deepagents, runtime, orchestration, training, dms, postgres_lang, regulatory_audit, gateway]
+    
+  docker:
+    description: "Docker Compose managed services"
+    mode: "docker-compose"
+    compose_file: "infrastructure/docker/brev/docker-compose.yml"

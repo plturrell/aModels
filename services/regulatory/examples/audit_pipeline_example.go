@@ -7,7 +7,7 @@ import (
 	"os"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"github.com/plturrell/aModels/services/graph"
+	graphneo4j "github.com/plturrell/aModels/services/graph/pkg/clients/neo4j"
 	"github.com/plturrell/aModels/services/orchestration/agents"
 	"github.com/plturrell/aModels/services/regulatory"
 )
@@ -41,7 +41,7 @@ func basicAuditExample(ctx context.Context, logger *log.Logger) {
 	driver := setupNeo4j(ctx)
 	defer driver.Close(ctx)
 
-	graphClient := graph.NewNeo4jGraphClient(driver, logger)
+	graphClient := graphneo4j.NewNeo4jGraphClient(driver, logger)
 	bcbs239GraphClient := regulatory.NewBCBS239GraphClient(driver, graphClient, logger)
 
 	localAIClient := agents.NewLocalAIClient("http://localhost:8080", nil, logger)
@@ -92,7 +92,7 @@ func deepResearchExample(ctx context.Context, logger *log.Logger) {
 	driver := setupNeo4j(ctx)
 	defer driver.Close(ctx)
 
-	graphClient := graph.NewNeo4jGraphClient(driver, logger)
+	graphClient := graphneo4j.NewNeo4jGraphClient(driver, logger)
 	bcbs239GraphClient := regulatory.NewBCBS239GraphClient(driver, graphClient, logger)
 
 	localAIClient := agents.NewLocalAIClient("http://localhost:8080", nil, logger)
@@ -151,7 +151,7 @@ func gooseRemediationExample(ctx context.Context, logger *log.Logger) {
 	driver := setupNeo4j(ctx)
 	defer driver.Close(ctx)
 
-	graphClient := graph.NewNeo4jGraphClient(driver, logger)
+	graphClient := graphneo4j.NewNeo4jGraphClient(driver, logger)
 	bcbs239GraphClient := regulatory.NewBCBS239GraphClient(driver, graphClient, logger)
 
 	localAIClient := agents.NewLocalAIClient("http://localhost:8080", nil, logger)
@@ -213,7 +213,7 @@ func fullPipelineExample(ctx context.Context, logger *log.Logger) {
 	driver := setupNeo4j(ctx)
 	defer driver.Close(ctx)
 
-	graphClient := graph.NewNeo4jGraphClient(driver, logger)
+	graphClient := graphneo4j.NewNeo4jGraphClient(driver, logger)
 	bcbs239GraphClient := regulatory.NewBCBS239GraphClient(driver, graphClient, logger)
 
 	localAIClient := agents.NewLocalAIClient("http://localhost:8080", nil, logger)

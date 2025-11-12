@@ -704,7 +704,8 @@ func (ae *AdvancedExtractor) classifyTableWithAdvancedSAPRPT(tableName, context,
 	columnsJSON, _ := json.Marshal(columns)
 	metadataJSON, _ := json.Marshal(metadata)
 
-	cmd := exec.Command("python3", "./scripts/sap_rpt_advanced.py",
+	cmd := exec.Command("python3", "./scripts/classification/sap_rpt_classifier.py",
+		"--mode", "multi-task",
 		"--table-name", tableName,
 		"--columns", string(columnsJSON),
 		"--context", context,
@@ -822,7 +823,8 @@ func (ae *AdvancedExtractor) classifyTableWithFullSAPRPT(tableName, context, sou
 		}
 	}
 
-	cmd := exec.Command("python3", "./scripts/classify_table_sap_rpt_full.py",
+	cmd := exec.Command("python3", "./scripts/classification/sap_rpt_classifier.py",
+		"--mode", "full",
 		"--table-name", tableName,
 		"--columns", string(columnsJSON),
 		"--context", context,

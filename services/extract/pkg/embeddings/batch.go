@@ -193,7 +193,7 @@ func (beg *BatchEmbeddingGenerator) generateRelationalTableEmbedding(ctx context
 		}
 	}
 
-	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed.py",
+	cmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed.py",
 		"--artifact-type", "table",
 		"--table-name", node.Label,
 		"--columns", string(columnsJSON),
@@ -230,7 +230,7 @@ func (beg *BatchEmbeddingGenerator) generateSemanticTableEmbedding(ctx context.C
 		return nil, fmt.Errorf("marshal columns: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
+	cmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed_sap_rpt.py",
 		"--artifact-type", "table",
 		"--table-name", node.Label,
 		"--columns", string(columnsJSON),

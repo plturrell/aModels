@@ -6,7 +6,7 @@ import (
 	"log"
 
 	"github.com/plturrell/aModels/services/catalog/research"
-	"github.com/plturrell/aModels/services/catalog/third_party/goose"
+	"github.com/pressly/goose/v3"
 )
 
 // IntegratedAutonomousSystem integrates IntelligenceLayer with Goose, Deep Research,

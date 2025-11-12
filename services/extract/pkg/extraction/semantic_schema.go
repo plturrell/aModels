@@ -398,7 +398,7 @@ func (ssa *SemanticSchemaAnalyzer) calculateSemanticSimilarityWithDomain(
 
 	// Generate embedding for column/table
 	query := fmt.Sprintf("%s %s", columnName, tableName)
-	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
+	cmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed_sap_rpt.py",
 		"--artifact-type", "text",
 		"--text", query,
 	)
@@ -415,7 +415,7 @@ func (ssa *SemanticSchemaAnalyzer) calculateSemanticSimilarityWithDomain(
 
 	// Calculate similarity to domain tags
 	for _, tag := range domainTags {
-		tagCmd := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
+		tagCmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed_sap_rpt.py",
 			"--artifact-type", "text",
 			"--text", tag,
 		)
@@ -450,7 +450,7 @@ func (ssa *SemanticSchemaAnalyzer) calculateSemanticSimilarity(
 		// Query the Extract service for similar columns
 		query := fmt.Sprintf("%s %s", columnName, tableName)
 
-		cmd := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
+		cmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed_sap_rpt.py",
 			"--artifact-type", "text",
 			"--text", query,
 		)
@@ -476,7 +476,7 @@ func (ssa *SemanticSchemaAnalyzer) calculateSemanticSimilarity(
 
 		// Calculate similarity to known patterns
 		for patternName, patternText := range knownPatterns {
-			patternCmd := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
+			patternCmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed_sap_rpt.py",
 				"--artifact-type", "text",
 				"--text", patternText,
 			)
@@ -507,7 +507,7 @@ func (ssa *SemanticSchemaAnalyzer) calculateTableSimilarity(
 	targetTable string,
 ) (float64, error) {
 	// Generate embeddings for both tables
-	sourceCmd := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
+	sourceCmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed_sap_rpt.py",
 		"--artifact-type", "text",
 		"--text", sourceTable,
 	)
@@ -522,7 +522,7 @@ func (ssa *SemanticSchemaAnalyzer) calculateTableSimilarity(
 		return 0.0, fmt.Errorf("failed to unmarshal source embedding: %w", err)
 	}
 
-	targetCmd := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
+	targetCmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed_sap_rpt.py",
 		"--artifact-type", "text",
 		"--text", targetTable,
 	)

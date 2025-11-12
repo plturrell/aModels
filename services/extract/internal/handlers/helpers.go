@@ -35,7 +35,7 @@ func WriteJSONFile(path string, payload any) error {
 func DeriveOCRCommand() []string {
 	scriptPath := os.Getenv("DEEPSEEK_OCR_SCRIPT")
 	if scriptPath == "" {
-		scriptPath = "./scripts/deepseek_ocr_cli.py"
+		scriptPath = "./scripts/utils/deepseek_ocr_cli.py"
 	}
 
 	python := os.Getenv("OCR_PYTHON")

@@ -22,6 +22,11 @@ import (
 	postgresv1 "github.com/plturrell/aModels/services/postgres/pkg/gen/v1"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/plturrell/aModels/services/graph"
+	graphcatalog "github.com/plturrell/aModels/services/graph/pkg/clients/catalog"
+	graphneo4j "github.com/plturrell/aModels/services/graph/pkg/clients/neo4j"
+	graphterminology "github.com/plturrell/aModels/services/graph/pkg/clients/terminology"
+	graphmurex "github.com/plturrell/aModels/services/graph/pkg/integrations/murex"
+	graphmodels "github.com/plturrell/aModels/services/graph/pkg/models"
 	"github.com/langchain-ai/langgraph-go/pkg/config"
 	"google.golang.org/protobuf/encoding/protojson"
 	proto "google.golang.org/protobuf/proto"
@@ -81,7 +86,7 @@ func main() {
 	}
 
 	// Initialize Murex integration if configured
-	var murexHandler *graph.MurexHandler
+	var murexHandler *graphmurex.MurexHandler
 	neo4jURI := strings.TrimSpace(os.Getenv("NEO4J_URI"))
 	neo4jUsername := strings.TrimSpace(os.Getenv("NEO4J_USERNAME"))
 	neo4jPassword := strings.TrimSpace(os.Getenv("NEO4J_PASSWORD"))
@@ -98,10 +103,10 @@ func main() {
 			defer driver.Close(context.Background())
 
 			// Create Neo4j graph client
-			graphClient := graph.NewNeo4jGraphClient(driver, log.Default())
+			graphClient := graphneo4j.NewNeo4jGraphClient(driver, log.Default())
 
 			// Create domain model mapper
-			mapper := graph.NewDefaultModelMapper()
+			mapper := graphmodels.NewDefaultModelMapper()
 
 			// Configure Murex integration
 			murexConfig := map[string]interface{}{
@@ -114,26 +119,26 @@ func main() {
 
 			// Create Murex integration via adapter
 			murexConnector := adaptersconnectors.NewMurexAdapter(murexConfig, log.Default())
-			murexIntegration := graph.NewMurexIntegration(murexConnector, mapper, graphClient, log.Default())
+			murexIntegration := graphmurex.NewMurexIntegration(murexConnector, mapper, graphClient, log.Default())
 
 			// Create terminology extractor
-			terminologyExtractor := graph.NewMurexTerminologyExtractor(murexConnector, log.Default())
+			terminologyExtractor := graphmurex.NewMurexTerminologyExtractor(murexConnector, log.Default())
 
 			// Initialize catalog service client (HTTP-based integration)
 			catalogServiceURL := strings.TrimSpace(os.Getenv("CATALOG_SERVICE_URL"))
 			if catalogServiceURL == "" {
 				catalogServiceURL = "http://localhost:8084" // Default catalog service URL
 			}
-			catalogClient := graph.NewCatalogClient(catalogServiceURL, log.Default())
+			catalogClient := graphcatalog.NewCatalogClient(catalogServiceURL, log.Default())
 			if catalogServiceURL != "" {
 				log.Printf("Catalog service client initialized (url=%s)", catalogServiceURL)
 			}
 
 			// Optional catalog populator (now uses HTTP client instead of direct registry)
-			var catalogPopulator *graph.MurexCatalogPopulator
+			var catalogPopulator *graphmurex.MurexCatalogPopulator
 			// Note: registry is nil - using HTTP client only
 			// For backward compatibility, we could create a registry, but HTTP is preferred
-			catalogPopulator = graph.NewMurexCatalogPopulator(
+			catalogPopulator = graphmurex.NewMurexCatalogPopulator(
 				terminologyExtractor,
 				nil, // No direct registry - using HTTP
 				catalogClient,
@@ -141,12 +146,12 @@ func main() {
 			)
 
 			// Terminology learner integration
-			var terminologyLearner *graph.MurexTerminologyLearnerIntegration
+			var terminologyLearner *graphmurex.MurexTerminologyLearnerIntegration
 			extractServiceURL := strings.TrimSpace(os.Getenv("EXTRACT_SERVICE_URL"))
 			if extractServiceURL == "" { extractServiceURL = extractHTTPURL }
 			if extractServiceURL != "" {
-				httpLearnerClient := graph.NewHTTPTerminologyLearnerClient(extractServiceURL, log.Default())
-				terminologyLearner = graph.NewMurexTerminologyLearnerIntegration(
+				httpLearnerClient := graphterminology.NewHTTPTerminologyLearnerClient(extractServiceURL, log.Default())
+				terminologyLearner = graphmurex.NewMurexTerminologyLearnerIntegration(
 					terminologyExtractor,
 					httpLearnerClient,
 					log.Default(),
@@ -155,7 +160,7 @@ func main() {
 			}
 
 			// Create handler
-			murexHandler = graph.NewMurexHandler(murexIntegration, terminologyExtractor, catalogPopulator, terminologyLearner, log.Default())
+			murexHandler = graphmurex.NewMurexHandler(murexIntegration, terminologyExtractor, catalogPopulator, terminologyLearner, log.Default())
 			log.Printf("Murex integration initialized (base_url=%s)", murexBaseURL)
 		}
 	}
@@ -676,14 +681,14 @@ func main() {
 	}
 
 	// Phase 1.2: Graph API Endpoints for Visualization and Exploration
-	var graphClient *graph.Neo4jGraphClient
+	var graphClient *graphneo4j.Neo4jGraphClient
 	if neo4jURI != "" {
 		driver, err := neo4j.NewDriverWithContext(neo4jURI, neo4j.BasicAuth(neo4jUsername, neo4jPassword, ""))
 		if err != nil {
 			log.Printf("warn: failed to create Neo4j driver for graph API: %v", err)
 		} else {
 			defer driver.Close(context.Background())
-			graphClient = graph.NewNeo4jGraphClient(driver, log.Default())
+			graphClient = graphneo4j.NewNeo4jGraphClient(driver, log.Default())
 			log.Println("Graph API Neo4j client initialized")
 		}
 	}

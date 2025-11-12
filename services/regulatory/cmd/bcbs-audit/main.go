@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"github.com/plturrell/aModels/services/graph"
+	graphneo4j "github.com/plturrell/aModels/services/graph/pkg/clients/neo4j"
 	"github.com/plturrell/aModels/services/orchestration/agents"
 	"github.com/plturrell/aModels/services/regulatory"
 )
@@ -85,7 +85,7 @@ func main() {
 	logger.Println("✓ Connected to Neo4j")
 	
 	// Setup compliance stack
-	graphClient := graph.NewNeo4jGraphClient(driver, logger)
+	graphClient := graphneo4j.NewNeo4jGraphClient(driver, logger)
 	bcbs239GraphClient := regulatory.NewBCBS239GraphClient(driver, graphClient, logger)
 	
 	localAIClient := agents.NewLocalAIClient(*localaiURL, nil, logger)

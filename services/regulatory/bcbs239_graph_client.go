@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
-	"github.com/plturrell/aModels/services/graph"
+	graphneo4j "github.com/plturrell/aModels/services/graph/pkg/clients/neo4j"
 )
 
 // BCBS239GraphClient provides BCBS 239-specific graph operations.
 type BCBS239GraphClient struct {
 	driver         neo4j.DriverWithContext
-	graphClient    *graph.Neo4jGraphClient
+	graphClient    *graphneo4j.Neo4jGraphClient
 	queryTemplates *BCBS239QueryTemplates
 	logger         *log.Logger
 }
@@ -21,7 +21,7 @@ type BCBS239GraphClient struct {
 // NewBCBS239GraphClient creates a new BCBS 239 graph client.
 func NewBCBS239GraphClient(
 	driver neo4j.DriverWithContext,
-	graphClient *graph.Neo4jGraphClient,
+	graphClient *graphneo4j.Neo4jGraphClient,
 	logger *log.Logger,
 ) *BCBS239GraphClient {
 	return &BCBS239GraphClient{

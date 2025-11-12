@@ -636,7 +636,7 @@ func (mff *ModelFusionFramework) predictWithRelationalTransformer(
 	artifactData map[string]any,
 ) (*FusionModelPrediction, error) {
 	// Call embedding script
-	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed.py",
+	cmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed.py",
 		"--artifact-type", artifactType,
 	)
 
@@ -678,7 +678,7 @@ func (mff *ModelFusionFramework) predictWithSAPRPT(
 		text = tableName
 	}
 
-	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
+	cmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed_sap_rpt.py",
 		"--artifact-type", "text",
 		"--text", text,
 	)

@@ -19,7 +19,7 @@ func generateEmbedding(ctx context.Context, sql string) ([]float32, error) {
 // Phase 3: Uses connection pooling (handled by Python script)
 // Phase 10: Enhanced with LNN terminology layer
 func generateSemanticEmbedding(ctx context.Context, text string) ([]float32, error) {
-	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
+	cmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed_sap_rpt.py",
 		"--artifact-type", "text",
 		"--text", text,
 	)
@@ -65,7 +65,7 @@ func GetGlobalTerminologyLearner() *TerminologyLearner {
 // generateSQLEmbedding generates embedding for SQL query
 // Phase 10: Enhanced with LNN terminology layer
 func generateSQLEmbedding(ctx context.Context, sql string) ([]float32, error) {
-	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed.py", "--artifact-type", "sql", "--sql", sql)
+	cmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed.py", "--artifact-type", "sql", "--sql", sql)
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -125,7 +125,7 @@ func generateTableEmbedding(ctx context.Context, node Node) ([]float32, []float3
 	}
 
 	// Generate RelationalTransformer embedding
-	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed.py",
+	cmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed.py",
 		"--artifact-type", "table",
 		"--table-name", node.Label,
 		"--columns", string(columnsJSON),
@@ -156,7 +156,7 @@ func generateTableEmbedding(ctx context.Context, node Node) ([]float32, []float3
 	// Try to generate sap-rpt-1-oss semantic embedding if enabled
 	var semanticEmbedding []float32
 	if os.Getenv("USE_SAP_RPT_EMBEDDINGS") == "true" {
-		cmdSemantic := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
+		cmdSemantic := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed_sap_rpt.py",
 			"--artifact-type", "table",
 			"--table-name", node.Label,
 			"--columns", string(columnsJSON),
@@ -206,7 +206,7 @@ func generateColumnEmbedding(ctx context.Context, node Node) ([]float32, error) 
 		}
 	}
 
-	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed.py",
+	cmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed.py",
 		"--artifact-type", "column",
 		"--column-name", node.Label,
 		"--column-type", columnType,
@@ -287,7 +287,7 @@ func generateJobEmbedding(ctx context.Context, job ControlMJob) ([]float32, erro
 		}
 	}
 
-	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed.py",
+	cmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed.py",
 		"--artifact-type", "job",
 		"--job-name", job.JobName,
 		"--command", job.Command,
@@ -330,7 +330,7 @@ func generateSequenceEmbedding(ctx context.Context, sequence TableProcessSequenc
 		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed.py",
+	cmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed.py",
 		"--artifact-type", "sequence",
 		"--sequence-id", sequence.SequenceID,
 		"--tables", string(tablesJSON),
@@ -362,7 +362,7 @@ func generatePetriNetEmbedding(ctx context.Context, petriNet *PetriNet) ([]float
 		return nil, fmt.Errorf("failed to marshal Petri net: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, "python3", "./scripts/embed.py",
+	cmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed.py",
 		"--artifact-type", "petri_net",
 		"--petri-net", string(petriNetJSON),
 	)

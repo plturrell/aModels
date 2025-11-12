@@ -11,11 +11,17 @@ import { GraphModule } from "./modules/Graph/GraphModule";
 import { LocalAIModule } from "./modules/LocalAI/LocalAIModule";
 import { DMSModule } from "./modules/DMS/DMSModule";
 import { SAPModule } from "./modules/SAP/SAPModule";
+import { ExtractModule } from "./modules/Extract/ExtractModule";
+import { TrainingModule } from "./modules/Training/TrainingModule";
+import { PostgresModule } from "./modules/Postgres/PostgresModule";
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import StorageIcon from '@mui/icons-material/Storage';
 import CloudIcon from '@mui/icons-material/Cloud';
 import HomeIcon from '@mui/icons-material/Home';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import SchoolIcon from '@mui/icons-material/School';
+import DatabaseIcon from '@mui/icons-material/Database';
 import theme from "./theme-sap";
 
 const drawerWidth = 240;
@@ -46,6 +52,12 @@ function App() {
         return <DMSModule />;
       case 'sap':
         return <SAPModule />;
+      case 'extract':
+        return <ExtractModule />;
+      case 'training':
+        return <TrainingModule />;
+      case 'postgres':
+        return <PostgresModule />;
       case 'home':
       default:
         return (
@@ -62,6 +74,9 @@ function App() {
   const navigationItems: Array<{ id: ShellModuleId; label: string; icon: React.ReactNode }> = [
     { id: 'home', label: 'Home', icon: <HomeIcon /> },
     { id: 'graph', label: 'Graph', icon: <AccountTreeIcon /> },
+    { id: 'extract', label: 'Extract', icon: <AutoAwesomeIcon /> },
+    { id: 'training', label: 'Training', icon: <SchoolIcon /> },
+    { id: 'postgres', label: 'Postgres', icon: <DatabaseIcon /> },
     { id: 'localai', label: 'LocalAI', icon: <SmartToyIcon /> },
     { id: 'dms', label: 'DMS', icon: <StorageIcon /> },
     { id: 'sap', label: 'SAP', icon: <CloudIcon /> },

@@ -26,7 +26,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class GraphAutoencoder(nn.Module):
+class GraphAutoencoder(nn.Module if nn is not None else object):
     """Graph Autoencoder for anomaly detection.
     
     Encodes and reconstructs graphs to detect anomalies based on reconstruction error.

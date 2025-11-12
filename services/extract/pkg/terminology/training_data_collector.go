@@ -60,7 +60,8 @@ func (tdc *TrainingDataCollector) CollectTableClassification(
 	}
 
 	// Call Python script to collect training data
-	cmd := exec.Command("python3", "./scripts/classify_table_sap_rpt_full.py",
+	cmd := exec.Command("python3", "./scripts/classification/sap_rpt_classifier.py",
+		"--mode", "full",
 		"--table-name", tableName,
 		"--columns", string(columnsJSON),
 		"--context", context,

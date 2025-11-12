@@ -1,4 +1,4 @@
-go 1.23
+go 1.18
 
 use (
 	.
@@ -7,6 +7,10 @@ use (
 	./services/runtime
 	./services/search/search-inference
 	./services/stdlib
+	./services/extract
+	./services/catalog
+	./pkg/localai
+	./pkg/sap
 )
 
 // Removed mono-repo dependencies - not available in standalone aModels repo

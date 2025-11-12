@@ -4,7 +4,8 @@ import (
 	"math"
 )
 
-func calculateEntropy(values []string) float64 {
+// CalculateEntropy calculates the Shannon entropy of a set of values
+func CalculateEntropy(values []string) float64 {
 	if len(values) == 0 {
 		return 0.0
 	}
@@ -24,7 +25,8 @@ func calculateEntropy(values []string) float64 {
 	return entropy
 }
 
-func calculateKLDivergence(p, q map[string]float64) float64 {
+// CalculateKLDivergence calculates the Kullback-Leibler divergence between two distributions
+func CalculateKLDivergence(p, q map[string]float64) float64 {
 	klDivergence := 0.0
 	for value, pValue := range p {
 		qValue, ok := q[value]

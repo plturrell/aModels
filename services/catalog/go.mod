@@ -1,15 +1,23 @@
 module github.com/plturrell/aModels/services/catalog
 
-go 1.23
+go 1.18
 
 require (
+	github.com/SAP/go-hdb v1.14.9
 	github.com/golang-jwt/jwt/v5 v5.2.1
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/lib/pq v1.10.9
+	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
+	github.com/plturrell/aModels/pkg/sap v0.0.0-00010101000000-000000000000
+	github.com/plturrell/aModels/services/catalog/third_party/goose v0.0.0-00010101000000-000000000000
+	github.com/plturrell/aModels/services/extract v0.0.0-00010101000000-000000000000
+	github.com/plturrell/aModels/services/orchestration v0.0.0-00010101000000-000000000000
 	github.com/pressly/goose/v3 v3.21.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/redis/go-redis/v9 v9.16.0
+	golang.org/x/time v0.14.0
 )
 
 require (
@@ -25,11 +33,23 @@ require (
 	github.com/sethvargo/go-retry v0.2.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
-	golang.org/x/sync v0.13.0 // indirect
-	golang.org/x/sys v0.35.0 // indirect
-	google.golang.org/protobuf v1.36.8 // indirect
+	golang.org/x/sync v0.17.0 // indirect
+	golang.org/x/sys v0.37.0 // indirect
+	golang.org/x/text v0.30.0 // indirect
+	google.golang.org/protobuf v1.36.10 // indirect
 )
 
-replace github.com/plturrell/aModels/services/catalog => .
-
 replace github.com/pressly/goose/v3 => ./third_party/goose
+
+replace github.com/plturrell/aModels/pkg/sap => ../../pkg/sap
+
+replace github.com/plturrell/aModels/services/extract => ../extract
+
+replace github.com/plturrell/aModels/services/orchestration => ../orchestration
+
+replace github.com/SAP/go-hdb => ../../infrastructure/third_party/go-hdb
+
+replace github.com/plturrell/aModels => ../../
+
+replace github.com/plturrell/aModels/services/catalog/third_party/goose => ./third_party/goose
+

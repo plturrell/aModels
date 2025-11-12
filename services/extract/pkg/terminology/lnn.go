@@ -1314,9 +1314,10 @@ func (wes *WordEmbeddingService) generateWordEmbedding(text string) ([]float32, 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	
-	scriptPath := "./scripts/embed_word2vec.py"
+	// Note: These scripts are optional - if they don't exist, the service falls back to hash-based embeddings
+	scriptPath := "./scripts/embeddings/embed_word2vec.py"
 	if wes.modelType == "fasttext" {
-		scriptPath = "./scripts/embed_fasttext.py"
+		scriptPath = "./scripts/embeddings/embed_fasttext.py"
 	}
 	
 	cmd := exec.CommandContext(ctx, "python3", scriptPath,

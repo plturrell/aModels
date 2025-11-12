@@ -46,6 +46,10 @@ const SERVICE_DISPLAY_NAMES: Record<string, string> = {
   deepagents: "DeepAgents",
   sap_bdc: "SAP BDC",
   layer4_browser: "Layer4 Browser",
+  training: "Training Service",
+  training_service: "Training Service",
+  postgres: "PostgreSQL",
+  postgresql: "PostgreSQL",
 };
 
 const getServiceIcon = (status: string) => {

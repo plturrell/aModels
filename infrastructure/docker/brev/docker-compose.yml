@@ -183,6 +183,12 @@ services:
     volumes:
       - neo4jdata:/data
       - neo4jlogs:/logs
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "amodels123", "RETURN 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   postgres:
     image: ankane/pgvector:latest
@@ -271,9 +277,12 @@ services:
     ports:
       - "8083:8082"
     depends_on:
-      - elasticsearch
-      - neo4j
-      - postgres
+      elasticsearch:
+        condition: service_started
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
 
   graph:
     build:
@@ -296,8 +305,10 @@ services:
       - "8080:8080"
       - "19080:19080"
     depends_on:
-      - extract
-      - neo4j
+      extract:
+        condition: service_started
+      neo4j:
+        condition: service_healthy
     deploy:
       resources:
         reservations:
@@ -370,9 +381,12 @@ services:
     ports:
       - "8084:8084"
     depends_on:
-      - neo4j
-      - redis
-      - postgres
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8084/health"]
       interval: 30s
@@ -438,11 +452,16 @@ services:
     ports:
       - "${DMS_PORT:-8096}:8080"  # Default to 8096 on host to avoid conflicts; set DMS_PORT=8080 for production
     depends_on:
-      - postgres
-      - redis
-      - neo4j
-      - extract
-      - catalog
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      neo4j:
+        condition: service_healthy
+      extract:
+        condition: service_started
+      catalog:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/docs').read()"]
       interval: 30s

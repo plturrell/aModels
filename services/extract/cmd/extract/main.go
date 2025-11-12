@@ -1,63 +1,63 @@
 package main
 
 import (
-    "bytes"
-    "context"
-    "crypto/sha256"
-    "database/sql"
-    "encoding/csv"
-    "encoding/json"
-    "errors"
-    "flag"
-    "fmt"
-    "io"
-    "log"
-    "net/http"
-    "os"
-    "os/exec"
-    "path/filepath"
-    "regexp"
-    "sort"
-    "strconv"
-    "strings"
-    "time"
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/csv"
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 
-    _ "github.com/Chahine-tech/sql-parser-go/pkg/parser"
-    _ "github.com/SAP/go-hdb/driver"
-    "github.com/lib/pq"
-    extractpb "github.com/plturrell/aModels/services/extract/gen/extractpb"
+	_ "github.com/Chahine-tech/sql-parser-go/pkg/parser"
+	_ "github.com/SAP/go-hdb/driver"
+	"github.com/lib/pq"
+	extractpb "github.com/plturrell/aModels/services/extract/gen/extractpb"
 
-    telemetryclient "github.com/plturrell/aModels/services/extract/internal/agents/telemetry"
-    "github.com/plturrell/aModels/services/extract/internal/config"
-    handlers "github.com/plturrell/aModels/services/extract/internal/handlers"
-    "github.com/plturrell/aModels/services/extract/internal/processing"
+	telemetryclient "github.com/plturrell/aModels/services/extract/internal/agents/telemetry"
+	"github.com/plturrell/aModels/services/extract/internal/config"
+	handlers "github.com/plturrell/aModels/services/extract/internal/handlers"
+	"github.com/plturrell/aModels/services/extract/internal/processing"
 
-    "github.com/plturrell/aModels/services/extract/internal/middleware"
-    "github.com/plturrell/aModels/services/extract/internal/observability"
-    "github.com/plturrell/aModels/services/extract/pkg/catalog"
-    "github.com/plturrell/aModels/services/extract/pkg/clients"
-    "github.com/plturrell/aModels/services/extract/pkg/embeddings"
-    "github.com/plturrell/aModels/services/extract/pkg/extraction"
-    "github.com/plturrell/aModels/services/extract/pkg/graph"
-    "github.com/plturrell/aModels/services/extract/pkg/integrations"
-    "github.com/plturrell/aModels/services/extract/pkg/monitoring"
-    "github.com/plturrell/aModels/services/extract/pkg/persistence"
-    "github.com/plturrell/aModels/services/extract/pkg/schema"
-    "github.com/plturrell/aModels/services/extract/pkg/servers"
-    "github.com/plturrell/aModels/services/extract/pkg/storage"
-    "github.com/plturrell/aModels/services/extract/pkg/terminology"
-    "github.com/plturrell/aModels/services/extract/pkg/utils"
-    "github.com/plturrell/aModels/services/extract/pkg/workflow"
+	"github.com/plturrell/aModels/services/extract/internal/middleware"
+	"github.com/plturrell/aModels/services/extract/internal/observability"
+	"github.com/plturrell/aModels/services/extract/pkg/catalog"
+	"github.com/plturrell/aModels/services/extract/pkg/clients"
+	"github.com/plturrell/aModels/services/extract/pkg/embeddings"
+	"github.com/plturrell/aModels/services/extract/pkg/extraction"
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
+	"github.com/plturrell/aModels/services/extract/pkg/integrations"
+	"github.com/plturrell/aModels/services/extract/pkg/monitoring"
+	"github.com/plturrell/aModels/services/extract/pkg/persistence"
+	"github.com/plturrell/aModels/services/extract/pkg/schema"
+	"github.com/plturrell/aModels/services/extract/pkg/servers"
+	"github.com/plturrell/aModels/services/extract/pkg/storage"
+	"github.com/plturrell/aModels/services/extract/pkg/terminology"
+	"github.com/plturrell/aModels/services/extract/pkg/utils"
+	"github.com/plturrell/aModels/services/extract/pkg/workflow"
 )
 
 const (
-    // Server configuration
-    defaultPort       = "8081"
-    defaultGRPCPort   = "9090"
-    defaultFlightAddr = ":8815"
+	// Server configuration
+	defaultPort       = "8081"
+	defaultGRPCPort   = "9090"
+	defaultFlightAddr = ":8815"
 
-    // External service URLs
-    defaultLangextractURL = "http://langextract-api:5000"
+	// External service URLs
+	defaultLangextractURL = "http://langextract-api:5000"
 
 	// Extraction defaults
 	defaultPromptDescription = "Extract the key entities (people, projects, dates, locations) from the document text."
@@ -130,7 +130,7 @@ func main() {
 
 		// AgentFlow client for direct integration
 		agentFlowClient: clients.NewAgentFlowClient(logger),
-		
+
 		// Metrics collector for all improvements
 		metricsCollector: monitoring.GetMetricsCollector(logger),
 	}
@@ -233,12 +233,12 @@ func main() {
 
 	// Initialize pgvector (primary store for structured queries)
 	if pgVectorDSN := os.Getenv("POSTGRES_VECTOR_DSN"); pgVectorDSN != "" {
-		pgpersistence.VectorPersistence, err := persistence.NewPgpersistence.VectorPersistence(pgVectorDSN, logger)
+		pgPersistence, err := persistence.NewPgVectorPersistence(pgVectorDSN, logger)
 		if err != nil {
 			logger.Printf("failed to initialize pgvector persistence: %v", err)
 		} else {
-			primaryStore = pgpersistence.VectorPersistence
-			vectorStores = append(vectorStores, pgpersistence.VectorPersistence)
+			primaryStore = pgPersistence
+			vectorStores = append(vectorStores, pgPersistence)
 			logger.Println("pgvector persistence enabled")
 		}
 	}
@@ -336,13 +336,13 @@ func main() {
 	// Initialize MarkItDown integration
 	markitdownMetricsCollector := func(service, endpoint string, statusCode int, latency time.Duration, correlationID string) {
 		if logger != nil {
-			logger.Printf("[%s] MarkItDown integration: %s %s -> %d (latency: %v)", 
+			logger.Printf("[%s] MarkItDown integration: %s %s -> %d (latency: %v)",
 				correlationID, service, endpoint, statusCode, latency)
 		}
 	}
 	server.markitdownIntegration = integrations.NewMarkItDownIntegration("", logger, markitdownMetricsCollector)
 	if server.markitdownIntegration.enabled {
-		logger.Printf("MarkItDown integration enabled (service URL: %s)", 
+		logger.Printf("MarkItDown integration enabled (service URL: %s)",
 			os.Getenv("MARKITDOWN_SERVICE_URL"))
 	}
 
@@ -436,7 +436,7 @@ func main() {
 	// In production, this would integrate with Prometheus or similar
 	metricsCollector = func(service, endpoint string, statusCode int, latency time.Duration, correlationID string) {
 		if logger != nil {
-			logger.Printf("[%s] Catalog integration: %s %s -> %d (latency: %v)", 
+			logger.Printf("[%s] Catalog integration: %s %s -> %d (latency: %v)",
 				correlationID, service, endpoint, statusCode, latency)
 		}
 	}
@@ -488,7 +488,7 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	
+
 	// Health check endpoints (registered before middleware)
 	mux.HandleFunc("/health", healthChecker.HandleHealth)
 	mux.HandleFunc("/ready", healthChecker.HandleReady)
@@ -501,7 +501,7 @@ func main() {
 	mux.HandleFunc("/workflow/petri-to-langgraph", server.handlePetriNetToLangGraph)                  // Convert Petri net to LangGraph
 	mux.HandleFunc("/workflow/petri-to-langgraph-advanced", server.handlePetriNetToAdvancedLangGraph) // Convert Petri net to advanced LangGraph (Phase 7.3)
 	mux.HandleFunc("/workflow/petri-to-agentflow", server.handlePetriNetToAgentFlow)                  // Convert Petri net to AgentFlow
-	mux.HandleFunc("/agentflow/run", server.handleAgentFlowRun)                                      // Direct AgentFlow execution
+	mux.HandleFunc("/agentflow/run", server.handleAgentFlowRun)                                       // Direct AgentFlow execution
 	// Phase 10: Terminology learning endpoints
 	mux.HandleFunc("/terminology/domains", server.handleTerminologyDomains)     // List learned domains
 	mux.HandleFunc("/terminology/roles", server.handleTerminologyRoles)         // List learned roles
@@ -583,12 +583,12 @@ type extractServer struct {
 	tablePersistence       persistence.TablePersistence
 	vectorPersistence      persistence.VectorPersistence
 	graphPersistence       persistence.GraphPersistence
-	neo4jPersistence       *storage.Neo4jPersistence      // Direct Neo4j access for queries
+	neo4jPersistence       *storage.Neo4jPersistence          // Direct Neo4j access for queries
 	realTimeGleanExporter  *persistence.RealTimeGleanExporter // Real-time Glean synchronization
 	flight                 *servers.ExtractFlightServer
 	semanticSchemaAnalyzer *extraction.SemanticSchemaAnalyzer // Phase 8.1: Semantic schema understanding
 	selfHealingSystem      *monitoring.SelfHealingSystem      // Phase 9.2: Self-healing system
-	sapBDCIntegration      *integrations.SAPBDCIntegration      // SAP Business Data Cloud integration
+	sapBDCIntegration      *integrations.SAPBDCIntegration    // SAP Business Data Cloud integration
 	hanaReplication        *schema.HANAReplication
 	postgresReplication    *schema.PostgresReplication
 	metricsCollector       *monitoring.MetricsCollector // Metrics for all improvements
@@ -825,7 +825,7 @@ func (s *extractServer) handleGenerateTraining(w http.ResponseWriter, r *http.Re
 // Node and Edge types are now in pkg/graph/types.go
 
 type signavioAgentMetricsResponse struct {
-	SessionID string                     `json:"session_id"`
+	SessionID string                      `json:"session_id"`
 	Metrics   signavioAgentMetricsSummary `json:"metrics"`
 	Events    []signavioAgentMetricEvent  `json:"events"`
 }
@@ -843,10 +843,10 @@ type signavioAgentMetricsSummary struct {
 }
 
 type signavioAgentMetricEvent struct {
-	Timestamp time.Time                               `json:"timestamp"`
-	SessionID string                                  `json:"session_id"`
-	Type      telemetryclient.AgentMetricEventKind     `json:"type"`
-	Payload   map[string]any                          `json:"payload"`
+	Timestamp time.Time                            `json:"timestamp"`
+	SessionID string                               `json:"session_id"`
+	Type      telemetryclient.AgentMetricEventKind `json:"type"`
+	Payload   map[string]any                       `json:"payload"`
 }
 
 func (s *extractServer) handleSignavioAgentMetrics(w http.ResponseWriter, r *http.Request) {
@@ -1151,7 +1151,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		// Link Control-M jobs to SQL queries and tables
 		for _, job := range allControlMJobs {
 			jobID := fmt.Sprintf("control-m:%s", job.JobName)
-			
+
 			// Link to SQL queries if available
 			if sqlQueryIDs, ok := sqlQueryIDsByJob[job.JobName]; ok {
 				for _, sqlQueryID := range sqlQueryIDs {
@@ -1600,27 +1600,61 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	columnDtypes := make([]string, 0)
+	// Extract raw column types
+	rawColumnDtypes := make([]string, 0)
 	for _, node := range nodes {
 		if node.Type != "column" || node.Props == nil {
 			continue
 		}
 		if dtype, ok := node.Props["type"].(string); ok && dtype != "" {
-			columnDtypes = append(columnDtypes, dtype)
+			rawColumnDtypes = append(rawColumnDtypes, dtype)
 		}
 	}
 
-	metadataEntropy := calculateEntropy(columnDtypes)
+	// Normalize to canonical types for quality metrics calculation
+	// This ensures actual distribution keys match ideal distribution keys
+	normalizedDtypes := make([]string, 0, len(rawColumnDtypes))
+	typeNormalizationStats := make(map[string]int)
+	for _, rawType := range rawColumnDtypes {
+		canonicalType := utils.NormalizeToCanonicalType(rawType)
+		normalizedDtypes = append(normalizedDtypes, canonicalType)
+		typeNormalizationStats[canonicalType]++
+	}
 
+	// Calculate entropy on normalized types (improves diversity perception)
+	metadataEntropy := utils.CalculateEntropy(normalizedDtypes)
+
+	// Calculate distribution on normalized canonical types
+	// This aligns with ideal distribution which uses canonical types
 	actualDistribution := make(map[string]float64)
-	totalColumns := float64(len(columnDtypes))
-	for _, dtype := range columnDtypes {
+	totalColumns := float64(len(normalizedDtypes))
+
+	// Initialize all canonical types to ensure they're represented
+	canonicalTypes := []string{"string", "number", "boolean", "date", "array", "object"}
+	for _, ct := range canonicalTypes {
+		actualDistribution[ct] = 0.0
+	}
+
+	// Count normalized types
+	for _, dtype := range normalizedDtypes {
 		actualDistribution[dtype]++
 	}
+
+	// Normalize to probabilities
 	if totalColumns > 0 {
-		for dtype, count := range actualDistribution {
-			actualDistribution[dtype] = count / totalColumns
+		for dtype := range actualDistribution {
+			actualDistribution[dtype] = actualDistribution[dtype] / totalColumns
 		}
+	}
+
+	// Log type normalization statistics for debugging
+	if s.logger != nil && len(rawColumnDtypes) > 0 {
+		statsParts := make([]string, 0, len(typeNormalizationStats))
+		for canonical, count := range typeNormalizationStats {
+			statsParts = append(statsParts, fmt.Sprintf("%d→%s", count, canonical))
+		}
+		s.logger.Printf("Type normalization: %d columns normalized to canonical types: %s",
+			len(rawColumnDtypes), strings.Join(statsParts, ", "))
 	}
 
 	idealDistribution := req.IdealDistribution
@@ -1634,14 +1668,14 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			"object":  defaultObjectRatio,
 		}
 	}
-	klDivergence := calculateKLDivergence(actualDistribution, idealDistribution)
+	klDivergence := utils.CalculateKLDivergence(actualDistribution, idealDistribution)
 
 	// Interpret metrics and determine actionable insights
 	thresholds := processing.DefaultMetricsThresholds()
 	interpretation := processing.InterpretMetrics(
 		metadataEntropy,
 		klDivergence,
-		len(columnDtypes),
+		len(normalizedDtypes),
 		actualDistribution,
 		idealDistribution,
 		thresholds,
@@ -1661,7 +1695,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			"metrics": map[string]any{
 				"metadata_entropy": metadataEntropy,
 				"kl_divergence":    klDivergence,
-				"column_count":     len(columnDtypes),
+				"column_count":     len(normalizedDtypes),
 			},
 		})
 		return
@@ -1692,7 +1726,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 				nodes[i].Props["kl_divergence"] = klDivergence
 				nodes[i].Props["actual_distribution"] = actualDistribution
 				nodes[i].Props["ideal_distribution"] = idealDistribution
-				nodes[i].Props["column_count"] = len(columnDtypes)
+				nodes[i].Props["column_count"] = len(normalizedDtypes)
 				// Store metrics timestamp for tracking over time
 				nodes[i].Props["metrics_calculated_at"] = time.Now().UTC().Format(time.RFC3339Nano)
 				break
@@ -1707,19 +1741,19 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		consistencyStart := time.Now()
 		consistencyResult := ValidateConsistency(ctx, projectID, s.logger)
 		consistencyDuration := time.Since(consistencyStart)
-		
+
 		// Record consistency metrics
 		if s.metricsCollector != nil {
 			s.metricsCollector.RecordConsistency(consistencyResult, consistencyDuration)
 		}
-		
+
 		if !consistencyResult.Consistent {
 			s.logger.Printf("WARNING: Consistency validation found %d issues after replication", len(consistencyResult.Issues))
 			for _, issue := range consistencyResult.Issues {
 				s.logger.Printf("  [%s] %s: %s", issue.Severity, issue.Type, issue.Message)
 			}
 		} else {
-			s.logger.Printf("Consistency validation passed: nodes variance=%d, edges variance=%d", 
+			s.logger.Printf("Consistency validation passed: nodes variance=%d, edges variance=%d",
 				consistencyResult.Metrics.NodeVariance, consistencyResult.Metrics.EdgeVariance)
 		}
 	}
@@ -2138,7 +2172,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 						}
 					}
 
-					cmdSemantic := exec.CommandContext(ctx, "python3", "./scripts/embed_sap_rpt.py",
+					cmdSemantic := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed_sap_rpt.py",
 						"--artifact-type", "column",
 						"--column-name", node.Label,
 						"--column-type", columnType,
@@ -2313,7 +2347,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		}, map[string]any{
 			"metadata_entropy": metadataEntropy,
 			"kl_divergence":    klDivergence,
-			"column_count":     float64(len(columnDtypes)),
+			"column_count":     float64(len(normalizedDtypes)),
 		})
 
 		analysisCtx, analysisCancel := context.WithTimeout(ctx, 90*time.Second) // Increased timeout for retries
@@ -2341,7 +2375,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			"kl_divergence":       klDivergence,
 			"actual_distribution": actualDistribution,
 			"ideal_distribution":  idealDistribution,
-			"column_count":        len(columnDtypes),
+			"column_count":        len(normalizedDtypes),
 		},
 		"quality": map[string]any{
 			"score":               interpretation.QualityScore,
@@ -2423,7 +2457,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 				"kl_divergence":          klDivergence,
 				"actual_distribution":    actualDistribution,
 				"ideal_distribution":     idealDistribution,
-				"column_count":           len(columnDtypes),
+				"column_count":           len(normalizedDtypes),
 				"root_node_id":           rootID,
 				"signavio_process_count": signavioMetadata.ProcessCount,
 			},
@@ -4392,7 +4426,7 @@ func _deriveOCRCommand() []string {
 	}
 	script := strings.TrimSpace(os.Getenv("DEEPSEEK_OCR_SCRIPT"))
 	if script == "" {
-		script = "./scripts/deepseek_ocr_cli.py"
+		script = "./scripts/utils/deepseek_ocr_cli.py"
 	}
 	if _, err := os.Stat(script); err != nil {
 		return nil
@@ -4803,13 +4837,13 @@ func (s *extractServer) populateExecutionTracking(ctx context.Context, req *Extr
 		"completed",
 		extractionStartTime,
 		map[string]any{
-			"project_id":      req.ProjectID,
-			"system_id":       req.SystemID,
-			"node_count":      len(nodes),
-			"edge_count":      len(edges),
-			"control_m_jobs":  len(allControlMJobs),
-			"sql_queries":     len(req.SqlQueries),
-			"hive_ddls":       len(req.HiveDDLs),
+			"project_id":     req.ProjectID,
+			"system_id":      req.SystemID,
+			"node_count":     len(nodes),
+			"edge_count":     len(edges),
+			"control_m_jobs": len(allControlMJobs),
+			"sql_queries":    len(req.SqlQueries),
+			"hive_ddls":      len(req.HiveDDLs),
 		},
 	); err != nil {
 		s.logger.Printf("failed to create extraction execution node: %v", err)
@@ -4819,7 +4853,7 @@ func (s *extractServer) populateExecutionTracking(ctx context.Context, req *Extr
 	for _, job := range allControlMJobs {
 		jobID := fmt.Sprintf("control-m:%s", job.JobName)
 		executionID := fmt.Sprintf("execution:control-m:%s:%d", job.JobName, extractionStartTime.Unix())
-		
+
 		if err := s.neo4jPersistence.CreateExecution(
 			ctx,
 			executionID,
@@ -4838,8 +4872,8 @@ func (s *extractServer) populateExecutionTracking(ctx context.Context, req *Extr
 			"job_name":        job.JobName,
 			"application":     job.Application,
 			"sub_application": job.SubApplication,
-			"host":           job.Host,
-			"task_type":      job.TaskType,
+			"host":            job.Host,
+			"task_type":       job.TaskType,
 		}
 		if err := s.neo4jPersistence.CreateExecutionMetrics(ctx, executionID, metrics); err != nil {
 			s.logger.Printf("failed to create execution metrics for %s: %v", executionID, err)
@@ -4852,7 +4886,7 @@ func (s *extractServer) populateExecutionTracking(ctx context.Context, req *Extr
 		h.Write([]byte(sql))
 		sqlQueryID := fmt.Sprintf("sql:%x", h.Sum(nil))
 		executionID := fmt.Sprintf("execution:sql:%d:%d", i, extractionStartTime.Unix())
-		
+
 		if err := s.neo4jPersistence.CreateExecution(
 			ctx,
 			executionID,
@@ -4879,7 +4913,7 @@ func (s *extractServer) populateDataQualityMetrics(ctx context.Context, interpre
 	// Create quality issues for each issue identified
 	for i, issue := range interpretation.Issues {
 		issueID := fmt.Sprintf("quality-issue:%d:%d", i, time.Now().Unix())
-		
+
 		// Determine severity based on quality level
 		severity := "medium"
 		if interpretation.QualityLevel == "critical" {
@@ -4919,11 +4953,11 @@ func (s *extractServer) populateDataQualityMetrics(ctx context.Context, interpre
 			severity,
 			issue,
 			map[string]any{
-				"quality_score": interpretation.QualityScore,
-				"quality_level": interpretation.QualityLevel,
+				"quality_score":    interpretation.QualityScore,
+				"quality_level":    interpretation.QualityLevel,
 				"metadata_entropy": interpretation.MetadataEntropy,
-				"kl_divergence":   interpretation.KLDivergence,
-				"column_count":    interpretation.ColumnCount,
+				"kl_divergence":    interpretation.KLDivergence,
+				"column_count":     interpretation.ColumnCount,
 			},
 		); err != nil {
 			s.logger.Printf("failed to create quality issue node: %v", err)
@@ -4939,7 +4973,7 @@ func (s *extractServer) populateDataQualityMetrics(ctx context.Context, interpre
 				break
 			}
 		}
-		
+
 		if entityID != "" {
 			metricID := fmt.Sprintf("quality-metric:%s:%d", entityID, time.Now().Unix())
 			// Store as PerformanceMetric with metric_type="quality_score"
@@ -4950,10 +4984,10 @@ func (s *extractServer) populateDataQualityMetrics(ctx context.Context, interpre
 				"quality_score",
 				interpretation.QualityScore,
 				map[string]any{
-					"quality_level": interpretation.QualityLevel,
+					"quality_level":    interpretation.QualityLevel,
 					"metadata_entropy": interpretation.MetadataEntropy,
-					"kl_divergence":   interpretation.KLDivergence,
-					"column_count":    interpretation.ColumnCount,
+					"kl_divergence":    interpretation.KLDivergence,
+					"column_count":     interpretation.ColumnCount,
 				},
 			); err != nil {
 				s.logger.Printf("failed to create quality metric: %v", err)
@@ -4969,7 +5003,7 @@ func (s *extractServer) populatePerformanceMetrics(ctx context.Context, req *Ext
 	}
 
 	metrics := s.metricsCollector.GetMetrics()
-	
+
 	// Create performance metrics for Neo4j batch processing
 	if neo4jMetrics, ok := metrics["neo4j_batch"].(map[string]interface{}); ok {
 		if totalNodes, ok := neo4jMetrics["total_nodes"].(int64); ok && totalNodes > 0 {
@@ -4977,7 +5011,7 @@ func (s *extractServer) populatePerformanceMetrics(ctx context.Context, req *Ext
 			if entityID == "" {
 				entityID = req.SystemID
 			}
-			
+
 			metricID := fmt.Sprintf("perf-metric:neo4j-batch:%d", time.Now().Unix())
 			// Parse duration string (e.g., "100ms")
 			var avgBatchTimeMs float64
@@ -4986,7 +5020,7 @@ func (s *extractServer) populatePerformanceMetrics(ctx context.Context, req *Ext
 					avgBatchTimeMs = float64(d.Milliseconds())
 				}
 			}
-			
+
 			if err := s.neo4jPersistence.CreatePerformanceMetric(
 				ctx,
 				metricID,
@@ -4994,11 +5028,11 @@ func (s *extractServer) populatePerformanceMetrics(ctx context.Context, req *Ext
 				"neo4j_batch_time",
 				avgBatchTimeMs,
 				map[string]any{
-					"total_batches": neo4jMetrics["total_batches"],
-					"total_nodes":   totalNodes,
-					"total_edges":   neo4jMetrics["total_edges"],
+					"total_batches":  neo4jMetrics["total_batches"],
+					"total_nodes":    totalNodes,
+					"total_edges":    neo4jMetrics["total_edges"],
 					"avg_batch_size": neo4jMetrics["avg_batch_size"],
-					"batch_errors":  neo4jMetrics["batch_errors"],
+					"batch_errors":   neo4jMetrics["batch_errors"],
 				},
 			); err != nil {
 				s.logger.Printf("failed to create Neo4j batch performance metric: %v", err)
@@ -5012,7 +5046,7 @@ func (s *extractServer) populatePerformanceMetrics(ctx context.Context, req *Ext
 		if entityID == "" {
 			entityID = req.SystemID
 		}
-		
+
 		metricID := fmt.Sprintf("perf-metric:validation:%d", time.Now().Unix())
 		// Parse duration string
 		var validationTimeMs float64
@@ -5021,7 +5055,7 @@ func (s *extractServer) populatePerformanceMetrics(ctx context.Context, req *Ext
 				validationTimeMs = float64(d.Milliseconds())
 			}
 		}
-		
+
 		if err := s.neo4jPersistence.CreatePerformanceMetric(
 			ctx,
 			metricID,
@@ -5032,8 +5066,8 @@ func (s *extractServer) populatePerformanceMetrics(ctx context.Context, req *Ext
 				"total_validated": validationMetrics["total_validated"],
 				"nodes_validated": validationMetrics["nodes_validated"],
 				"edges_validated": validationMetrics["edges_validated"],
-				"nodes_rejected": validationMetrics["nodes_rejected"],
-				"edges_rejected": validationMetrics["edges_rejected"],
+				"nodes_rejected":  validationMetrics["nodes_rejected"],
+				"edges_rejected":  validationMetrics["edges_rejected"],
 			},
 		); err != nil {
 			s.logger.Printf("failed to create validation performance metric: %v", err)
@@ -5045,7 +5079,7 @@ func (s *extractServer) populatePerformanceMetrics(ctx context.Context, req *Ext
 	if entityID == "" {
 		entityID = req.SystemID
 	}
-	
+
 	if entityID != "" {
 		nodeCountMetricID := fmt.Sprintf("perf-metric:node-count:%d", time.Now().Unix())
 		if err := s.neo4jPersistence.CreatePerformanceMetric(
@@ -5069,14 +5103,14 @@ func (s *extractServer) handleImprovementsMetrics(w http.ResponseWriter, r *http
 		handlers.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	
+
 	if s.metricsCollector == nil {
 		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{
 			"error": "Metrics collector not initialized",
 		})
 		return
 	}
-	
+
 	metrics := s.metricsCollector.GetMetrics()
 	handlers.WriteJSON(w, http.StatusOK, metrics)
 }

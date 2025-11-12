@@ -80,7 +80,7 @@ func (mme *MultiModalExtractor) ExtractFromImage(imagePath string, prompt string
 		prompt = "<image>\n<|grounding|>Convert the document to markdown."
 	}
 
-	cmd := exec.Command("python3", "./scripts/unified_multimodal_extraction.py",
+	cmd := exec.Command("python3", "./scripts/embeddings/unified_multimodal_extraction.py",
 		"--mode", "ocr",
 		"--image-path", imagePath,
 		"--prompt", prompt,
@@ -108,7 +108,7 @@ func (mme *MultiModalExtractor) ExtractFromImageBase64(imageBase64 string, promp
 		return nil, fmt.Errorf("multi-modal extraction not enabled")
 	}
 
-	cmd := exec.Command("python3", "./scripts/unified_multimodal_extraction.py",
+	cmd := exec.Command("python3", "./scripts/embeddings/unified_multimodal_extraction.py",
 		"--mode", "ocr",
 		"--image-base64", imageBase64,
 		"--prompt", prompt,
@@ -158,7 +158,7 @@ func (mme *MultiModalExtractor) GenerateUnifiedEmbeddings(
 		args = append(args, "--columns", string(columnsJSON))
 	}
 
-	cmd := exec.Command("python3", append([]string{"./scripts/unified_multimodal_extraction.py"}, args...)...)
+	cmd := exec.Command("python3", append([]string{"./scripts/embeddings/unified_multimodal_extraction.py"}, args...)...)
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -215,7 +215,7 @@ func (mme *MultiModalExtractor) ExtractUnified(
 		args = append(args, "--training-data", trainingDataPath)
 	}
 
-	cmd := exec.Command("python3", append([]string{"./scripts/unified_multimodal_extraction.py"}, args...)...)
+	cmd := exec.Command("python3", append([]string{"./scripts/embeddings/unified_multimodal_extraction.py"}, args...)...)
 
 	output, err := cmd.Output()
 	if err != nil {

@@ -33,7 +33,7 @@ type ddlColumn struct {
 }
 
 func parseHiveDDL(ctx context.Context, ddl string) (ddlParseResult, error) {
-	cmd := exec.CommandContext(ctx, "python3", "./scripts/parse_hive_ddl.py", "--ddl", ddl)
+	cmd := exec.CommandContext(ctx, "python3", "./scripts/utils/parse_hive_ddl.py", "--ddl", ddl)
 
 	output, err := cmd.Output()
 	if err != nil {
