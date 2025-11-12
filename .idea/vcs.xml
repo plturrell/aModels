@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/Glean" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/arrow" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/arrow/cpp/submodules/parquet-testing" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/arrow/testing" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/coralnpu" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/elasticsearch" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/go-arrow" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/go-arrow/arrow-testing" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/go-arrow/parquet-testing" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/go-hdb" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/go-llama.cpp" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/go-llama.cpp/llama.cpp" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/goose" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/langchain" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/langextract" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/langflow" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/langgraph" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/markitdown" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/infrastructure/third_party/sql-parser-go" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/models/open_deep_research" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/services/framework" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/services/plot" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/services/runtime" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/services/stdlib" vcs="Git" />
+  </component>
+</project>
