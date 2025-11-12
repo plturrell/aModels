@@ -16,7 +16,7 @@ func sqrt(x float64) float64 {
 	return math.Sqrt(x)
 }
 
-func cosineSimilarity(a, b []float32) float64 {
+func CosineSimilarity(a, b []float32) float64 {
 	if len(a) != len(b) {
 		return 0.0
 	}

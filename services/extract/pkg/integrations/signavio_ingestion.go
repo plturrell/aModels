@@ -1,6 +1,10 @@
 package integrations
 
 import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
+)
+
+import (
 	"bytes"
 	"crypto/sha1"
 	"encoding/xml"
@@ -157,9 +161,9 @@ func parseSignavioProcesses(data []byte) ([]SignavioModel, error) {
 	return models, nil
 }
 
-func signavioModelsToGraph(models []SignavioModel, sourceLabel string) ([]Node, []Edge) {
-	nodes := make([]Node, 0)
-	edges := make([]Edge, 0)
+func signavioModelsToGraph(models []SignavioModel, sourceLabel string) ([]graph.Node, []graph.Edge) {
+	nodes := make([]graph.Node, 0)
+	edges := make([]graph.Edge, 0)
 
 	for _, model := range models {
 		processNodeID := fmt.Sprintf("signavio:process:%s", stableSignavioID(model.ID, model.Name))
@@ -174,7 +178,7 @@ func signavioModelsToGraph(models []SignavioModel, sourceLabel string) ([]Node, 
 			processProps["source"] = sourceLabel
 		}
 
-		nodes = append(nodes, Node{
+		nodes = append(nodes, graph.Node{
 			ID:    processNodeID,
 			Type:  "signavio-process",
 			Label: fallbackSignavioLabel(model.Name, model.ID),
@@ -203,7 +207,7 @@ func signavioModelsToGraph(models []SignavioModel, sourceLabel string) ([]Node, 
 		laneNodeIDs := make(map[string]string)
 		for _, lane := range model.Lanes {
 			laneID := fmt.Sprintf("signavio:lane:%s", stableSignavioID(lane.ID, lane.Name))
-			nodes = append(nodes, Node{
+			nodes = append(nodes, graph.Node{
 				ID:    laneID,
 				Type:  "signavio-lane",
 				Label: fallbackSignavioLabel(lane.Name, lane.ID),
@@ -212,7 +216,7 @@ func signavioModelsToGraph(models []SignavioModel, sourceLabel string) ([]Node, 
 				},
 			})
 
-			edges = append(edges, Edge{
+			edges = append(edges, graph.Edge{
 				SourceID: processNodeID,
 				TargetID: laneID,
 				Label:    "HAS_LANE",
@@ -228,7 +232,7 @@ func signavioModelsToGraph(models []SignavioModel, sourceLabel string) ([]Node, 
 			}
 			for _, ref := range lane.FlowNodeRefs {
 				if targetNodeID, ok := nodeIDs[ref]; ok {
-					edges = append(edges, Edge{
+					edges = append(edges, graph.Edge{
 						SourceID: laneNodeID,
 						TargetID: targetNodeID,
 						Label:    "CONTAINS",
@@ -254,7 +258,7 @@ func signavioModelsToGraph(models []SignavioModel, sourceLabel string) ([]Node, 
 				props["condition"] = flow.Condition
 			}
 
-			edges = append(edges, Edge{
+			edges = append(edges, graph.Edge{
 				SourceID: sourceNodeID,
 				TargetID: targetNodeID,
 				Label:    "SIGNAVIO_FLOW",
@@ -266,7 +270,7 @@ func signavioModelsToGraph(models []SignavioModel, sourceLabel string) ([]Node, 
 	return nodes, edges
 }
 
-func addSignavioComponent(nodes *[]Node, edges *[]Edge, nodeIDs map[string]string, processNodeID, rawID, name, nodeType string, props map[string]any) {
+func addSignavioComponent(nodes *[]graph.Node, edges *[]graph.Edge, nodeIDs map[string]string, processNodeID, rawID, name, nodeType string, props map[string]any) {
 	normalizedID := fmt.Sprintf("signavio:node:%s", stableSignavioID(rawID, name))
 	if props == nil {
 		props = map[string]any{}
@@ -274,14 +278,14 @@ func addSignavioComponent(nodes *[]Node, edges *[]Edge, nodeIDs map[string]strin
 	if rawID != "" {
 		props["bpmn_id"] = rawID
 	}
-	*nodes = append(*nodes, Node{
+	*nodes = append(*nodes, graph.Node{
 		ID:    normalizedID,
 		Type:  nodeType,
 		Label: fallbackSignavioLabel(name, rawID),
 		Props: props,
 	})
 	nodeIDs[rawID] = normalizedID
-	*edges = append(*edges, Edge{
+	*edges = append(*edges, graph.Edge{
 		SourceID: processNodeID,
 		TargetID: normalizedID,
 		Label:    "HAS_COMPONENT",

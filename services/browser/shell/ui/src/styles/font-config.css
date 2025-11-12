@@ -1,0 +1,77 @@
+/**
+ * Font Configuration for Week 2 UX Excellence
+ * Optimized font loading and performance
+ */
+
+/* Preload critical fonts */
+<link rel="preload" href="/third_party/Web_Fonts/WOFF2/Inter-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/third_party/Web_Fonts/WOFF2/Inter-Medium.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/third_party/Web_Fonts/WOFF2/Inter-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/third_party/Web_Fonts/WOFF2/JetBrainsMono-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/third_party/Fonts/SAP-icons.woff2" as="font" type="font/woff2" crossorigin>
+
+/* Font display strategy */
+:root {
+  /* Critical fonts - preload immediately */
+  --font-critical: 'Inter', sans-serif;
+  --font-code: 'JetBrains Mono', monospace;
+  --font-icons: 'SAP-icons';
+  
+  /* Fallback fonts */
+  --font-fallback-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  --font-fallback-mono: 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+  
+  /* Font loading strategy */
+  --font-display-critical: swap;
+  --font-display-optional: optional;
+  --font-display-fallback: fallback;
+}
+
+/* Performance optimizations */
+.font-optimized {
+  font-display: var(--font-display-critical);
+  font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+  font-variant-ligatures: common-ligatures;
+  text-rendering: optimizeLegibility;
+  -webkit-font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+  -webkit-font-variant-ligatures: common-ligatures;
+  -webkit-text-rendering: optimizeLegibility;
+}
+
+/* Font loading states */
+.font-loading .font-sans {
+  font-family: var(--font-fallback-sans);
+}
+
+.font-loaded .font-sans {
+  font-family: var(--font-critical);
+}
+
+.font-loading .font-mono {
+  font-family: var(--font-fallback-mono);
+}
+
+.font-loaded .font-mono {
+  font-family: var(--font-code);
+}
+
+/* Responsive font optimization */
+@media (max-width: 768px) {
+  :root {
+    --font-feature-settings: 'kern' 1;
+    text-rendering: optimizeSpeed;
+  }
+}
+
+/* Dark mode font rendering */
+[data-theme="dark"] {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Font performance metrics */
+.font-metrics {
+  font-optical-sizing: auto;
+  font-variation-settings: normal;
+}

@@ -6,6 +6,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import App from './App';
 import theme from './theme';
 import './index.css';
+import './styles/main.css';
 import { initSentry } from './monitoring/sentry';
 
 // Initialize error tracking

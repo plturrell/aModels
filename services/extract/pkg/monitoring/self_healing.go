@@ -10,6 +10,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/plturrell/aModels/services/extract/pkg/extraction"
 )
 
 // SelfHealingSystem provides automatic error detection and recovery.
@@ -20,7 +22,7 @@ type SelfHealingSystem struct {
 	circuitBreakers   map[string]*CircuitBreaker
 	fallbackHandlers  map[string]FallbackHandler
 	healthMonitors    map[string]*HealthMonitor
-	domainDetector    *DomainDetector         // Phase 9.2: Domain detector for domain health
+	domainDetector    *extraction.DomainDetector         // Phase 9.2: Domain detector for domain health
 	domainHealthCache map[string]DomainHealth // Phase 9.2: domain_id -> health score
 	mu                sync.RWMutex
 }
@@ -93,7 +95,7 @@ func NewSelfHealingSystem(logger *log.Logger) *SelfHealingSystem {
 	localaiURL := os.Getenv("LOCALAI_URL")
 	var domainDetector *DomainDetector
 	if localaiURL != "" {
-		domainDetector = NewDomainDetector(localaiURL, logger)
+		domainDetector = extraction.NewDomainDetector(localaiURL, logger)
 	}
 
 	return &SelfHealingSystem{

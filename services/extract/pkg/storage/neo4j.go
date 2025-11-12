@@ -1,7 +1,4 @@
 package storage
-import (
-	"github.com/plturrell/aModels/services/extract/pkg/graph"
-)
 
 import (
 	"context"
@@ -10,6 +7,7 @@ import (
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 )
 
 // Neo4jPersistence is the persistence layer for Neo4j.

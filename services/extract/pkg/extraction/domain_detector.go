@@ -61,7 +61,7 @@ func (dd *DomainDetector) DetectDomain(text string) (string, string) {
 }
 
 // AssociateDomainsWithNodes associates domains with extracted nodes based on content
-func (dd *DomainDetector) AssociateDomainsWithNodes(nodes []graph.graph.Node) {
+func (dd *DomainDetector) AssociateDomainsWithNodes(nodes []graph.Node) {
 	if dd == nil || dd.detector == nil {
 		return
 	}
@@ -96,7 +96,7 @@ func (dd *DomainDetector) AssociateDomainsWithNodes(nodes []graph.graph.Node) {
 }
 
 // AssociateDomainsWithEdges associates domains with extracted edges based on source/target nodes
-func (dd *DomainDetector) AssociateDomainsWithEdges(edges []graph.graph.Edge, nodes map[string]*graph.Node) {
+func (dd *DomainDetector) AssociateDomainsWithEdges(edges []graph.Edge, nodes map[string]*graph.Node) {
 	if dd == nil || dd.detector == nil {
 		return
 	}

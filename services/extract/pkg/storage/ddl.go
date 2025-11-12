@@ -1,7 +1,4 @@
 package storage
-import (
-	"github.com/plturrell/aModels/services/extract/pkg/graph"
-)
 
 import (
 	"context"
@@ -9,6 +6,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 )
 
 type ddlParseResult struct {
@@ -75,7 +74,7 @@ func ddlToGraph(parsed ddlParseResult) ([]graph.Node, []graph.Edge) {
 		if schemaName != "" {
 			schemaID := fmt.Sprintf("schema:%s", schemaName)
 			if !schemaNodes[schemaID] {
-				nodes = append(nodes, Node{
+				nodes = append(nodes, graph.Node{
 					ID:    schemaID,
 					Type:  "database",
 					Label: schemaName,
@@ -86,7 +85,7 @@ func ddlToGraph(parsed ddlParseResult) ([]graph.Node, []graph.Edge) {
 				schemaNodes[schemaID] = true
 			}
 			// Create CONTAINS relationship from schema to table
-			edges = append(edges, Edge{
+			edges = append(edges, graph.Edge{
 				SourceID: schemaID,
 				TargetID: tableID,
 				Label:    "CONTAINS",
@@ -110,7 +109,7 @@ func ddlToGraph(parsed ddlParseResult) ([]graph.Node, []graph.Edge) {
 			tableProps["partitioned_by"] = table.PartitionedBy
 		}
 
-		nodes = append(nodes, Node{
+		nodes = append(nodes, graph.Node{
 			ID:    tableID,
 			Type:  "table",
 			Label: table.TableName,
@@ -124,7 +123,7 @@ func ddlToGraph(parsed ddlParseResult) ([]graph.Node, []graph.Edge) {
 
 			columnID := fmt.Sprintf("%s.%s", tableID, column.Name)
 			columnProps := map[string]any{
-				"type":     normalizeColumnType(column.Type),
+				"type":     strings.ToLower(strings.TrimSpace(column.Type)),
 				"nullable": column.Nullable,
 			}
 			if column.Default != nil {
@@ -149,7 +148,7 @@ func ddlToGraph(parsed ddlParseResult) ([]graph.Node, []graph.Edge) {
 							refTableID = fmt.Sprintf("%s.%s", refSchema, refTable)
 						}
 						// Create REFERENCES edge from source table to referenced table
-						edges = append(edges, Edge{
+						edges = append(edges, graph.Edge{
 							SourceID: tableID,
 							TargetID: refTableID,
 							Label:    "REFERENCES",
@@ -164,7 +163,7 @@ func ddlToGraph(parsed ddlParseResult) ([]graph.Node, []graph.Edge) {
 					parts := strings.Split(refStr, ".")
 					if len(parts) >= 2 {
 						refTableID := strings.Join(parts[:len(parts)-1], ".")
-						edges = append(edges, Edge{
+						edges = append(edges, graph.Edge{
 							SourceID: tableID,
 							TargetID: refTableID,
 							Label:    "REFERENCES",
@@ -177,13 +176,13 @@ func ddlToGraph(parsed ddlParseResult) ([]graph.Node, []graph.Edge) {
 				}
 			}
 
-			nodes = append(nodes, Node{
+			nodes = append(nodes, graph.Node{
 				ID:    columnID,
 				Type:  "column",
 				Label: column.Name,
 				Props: mapOrNil(columnProps),
 			})
-			edges = append(edges, Edge{
+			edges = append(edges, graph.Edge{
 				SourceID: tableID,
 				TargetID: columnID,
 				Label:    "HAS_COLUMN",

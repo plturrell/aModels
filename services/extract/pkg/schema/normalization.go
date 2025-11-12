@@ -7,8 +7,8 @@ import (
 )
 
 type normalizationInput struct {
-	Nodes               []graph.graph.Node
-	Edges               []graph.graph.Edge
+	Nodes               []graph.Node
+	Edges               []graph.Edge
 	ProjectID           string
 	SystemID            string
 	InformationSystemID string
@@ -16,8 +16,8 @@ type normalizationInput struct {
 }
 
 type normalizationResult struct {
-	Nodes      []graph.graph.Node
-	Edges      []graph.graph.Edge
+	Nodes      []graph.Node
+	Edges      []graph.Edge
 	RootNodeID string
 	Stats      map[string]any
 	Warnings   []string
@@ -164,14 +164,14 @@ func normalizeGraph(input normalizationInput) normalizationResult {
 		addCatalogContainmentEdge(edgeMap, &edgeOrder, rootID, input.InformationSystemID)
 	}
 
-	finalNodes := make([]graph.graph.Node, 0, len(nodeOrder))
+	finalNodes := make([]graph.Node, 0, len(nodeOrder))
 	for _, id := range nodeOrder {
 		if node, ok := nodeMap[id]; ok {
 			finalNodes = append(finalNodes, node)
 		}
 	}
 
-	finalEdges := make([]graph.graph.Edge, 0, len(edgeOrder))
+	finalEdges := make([]graph.Edge, 0, len(edgeOrder))
 	for _, key := range edgeOrder {
 		if edge, ok := edgeMap[key]; ok {
 			finalEdges = append(finalEdges, edge)

@@ -1,16 +1,17 @@
 import { useState, lazy, Suspense } from 'react';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
-import { ShortcutsDialog } from './components/ShortcutsDialog';
+import { DarkModeToggle } from './components/common/DarkModeToggle';
+import { ShortcutsDialog } from './components/common/ShortcutsDialog';
 import { ThemeProvider, CssBaseline, Typography, Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, AppBar, Toolbar } from "@mui/material";
-import { WorkbenchLayout } from "./components/WorkbenchLayout";
-import { SessionsPanel } from "./components/SessionsPanel";
-import { AgentLogPanel } from "./components/AgentLogPanel";
-import { Canvas } from "./components/Canvas";
-import { CommandPalette } from "./components/CommandPalette";
-import { ErrorBoundary } from "./components/ErrorBoundary";
-import { ModernHomePage } from "./components/ModernHomePage";
-import { ModuleLoader } from "./components/ModuleLoader";
-import { SkipLink } from "./components/SkipLink";
+import { WorkbenchLayout } from "./components/layout/WorkbenchLayout";
+import { SessionsPanel } from "./components/shell/SessionsPanel";
+import { AgentLogPanel } from "./components/shell/AgentLogPanel";
+import { Canvas } from "./components/shell/Canvas";
+import { CommandPalette } from "./components/shell/CommandPalette";
+import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { ModernHomePage } from "./components/dashboard/ModernHomePage";
+import { ModuleLoader } from "./components/layout/ModuleLoader";
+import { SkipLink } from './components/accessibility/SkipLink';
 import { useShellStore, ShellModuleId } from "./state/useShellStore";
 // Lazy load modules for better performance
 const GraphModule = lazy(() => import('./modules/Graph/GraphModule').then(m => ({ default: m.GraphModule })));
@@ -97,9 +98,10 @@ function App() {
         <Box sx={{ display: 'flex', height: '100vh' }} role="application" aria-label="aModels Shell Application">
           <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }} component="header" role="banner">
             <Toolbar>
-              <Typography variant="h6" noWrap component="div">
+              <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
                 aModels Shell
               </Typography>
+              <DarkModeToggle />
             </Toolbar>
           </AppBar>
           <Drawer

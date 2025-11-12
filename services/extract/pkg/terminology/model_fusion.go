@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/plturrell/aModels/pkg/localai"
+	"github.com/plturrell/aModels/services/extract/pkg/extraction"
+	"github.com/plturrell/aModels/services/extract/pkg/utils"
 )
 
 // ModelFusionFramework combines predictions from multiple models for better accuracy.
@@ -26,7 +28,7 @@ type ModelFusionFramework struct {
 	localaiClient            *localai.Client
 	localaiURL               string
 	weights                  ModelWeights
-	domainDetector           *DomainDetector         // Phase 8.2: Domain detector for domain-aware weights
+	domainDetector           *extraction.DomainDetector         // Phase 8.2: Domain detector for domain-aware weights
 	domainWeights            map[string]ModelWeights // Phase 8.2: domain_id -> optimized weights
 	batchSize                int                    // Batch size for LocalAI predictions
 }
@@ -141,12 +143,12 @@ func isRetryableError(err error) bool {
 // NewModelFusionFramework creates a new model fusion framework.
 func NewModelFusionFramework(logger *log.Logger) *ModelFusionFramework {
 	localaiURL := os.Getenv("LOCALAI_URL")
-	var domainDetector *DomainDetector
+	var domainDetector *extraction.DomainDetector
 	var localaiClient *localai.Client
 	useLocalAI := false
 	
 	if localaiURL != "" {
-		domainDetector = NewDomainDetector(localaiURL, logger)
+		domainDetector = extraction.NewDomainDetector(localaiURL, logger)
 		// Initialize LocalAI client with connection pooling if URL is provided
 		pooledHTTPClient := createPooledHTTPClient(logger)
 		localaiClient = localai.NewClientWithHTTPClient(localaiURL, pooledHTTPClient)
@@ -877,7 +879,7 @@ func (mff *ModelFusionFramework) calculatePredictionSimilarity(
 ) float64 {
 	// If both have embeddings, use cosine similarity
 	if len(pred1.Embedding) > 0 && len(pred2.Embedding) > 0 {
-		return cosineSimilarity(pred1.Embedding, pred2.Embedding)
+		return utils.CosineSimilarity(pred1.Embedding, pred2.Embedding)
 	}
 
 	// Otherwise, compare predictions directly

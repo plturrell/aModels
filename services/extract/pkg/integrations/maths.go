@@ -1,6 +1,10 @@
 package integrations
 
 import (
+	"github.com/plturrell/aModels/services/extract/pkg/utils"
+)
+
+import (
 	"log"
 	"os"
 )
@@ -46,7 +50,7 @@ func (mp *MathematicalProcessor) ComputeStatistics(values []float64) map[string]
 	}
 	variance /= float64(len(values))
 	stats["variance"] = variance
-	stats["std_dev"] = sqrt(variance)
+	stats["std_dev"] = utils.Sqrt(variance)
 
 	// Min/Max
 	min := values[0]
@@ -99,7 +103,7 @@ func (mp *MathematicalProcessor) ComputeCorrelation(x, y []float64) float64 {
 		return 0.0
 	}
 
-	denominator := sqrt(varSumX * varSumY)
+	denominator := utils.Sqrt(varSumX * varSumY)
 	if denominator == 0 {
 		return 0.0
 	}

@@ -1,7 +1,6 @@
 package embeddings
 
 import (
-	"github.com/plturrell/aModels/services/extract/pkg/graph"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +8,9 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
+	"github.com/plturrell/aModels/services/extract/pkg/terminology"
 )
 
 // generateEmbedding generates embedding for SQL query (legacy function, kept for backward compatibility)
@@ -51,15 +53,15 @@ func generateSemanticEmbedding(ctx context.Context, text string) ([]float32, err
 }
 
 // globalTerminologyLearner is a global reference to the terminology learner (set during initialization)
-var globalTerminologyLearner *TerminologyLearner
+var globalTerminologyLearner *terminology.TerminologyLearner
 
 // SetGlobalTerminologyLearner sets the global terminology learner (Phase 10).
-func SetGlobalTerminologyLearner(learner *TerminologyLearner) {
+func SetGlobalTerminologyLearner(learner *terminology.TerminologyLearner) {
 	globalTerminologyLearner = learner
 }
 
 // GetGlobalTerminologyLearner returns the global terminology learner (Phase 10).
-func GetGlobalTerminologyLearner() *TerminologyLearner {
+func GetGlobalTerminologyLearner() *terminology.TerminologyLearner {
 	return globalTerminologyLearner
 }
 

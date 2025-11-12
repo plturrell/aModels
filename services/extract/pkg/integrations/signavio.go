@@ -40,14 +40,14 @@ type SignavioMetadata struct {
 	Errors       []string                 `json:"errors,omitempty"`
 }
 
-func loadSignavioArtifacts(paths []string, logger *log.Logger) ([]graph.graph.Node, []graph.graph.Edge, SignavioMetadata) {
+func loadSignavioArtifacts(paths []string, logger *log.Logger) ([]graph.Node, []graph.Edge, SignavioMetadata) {
 	metadata := SignavioMetadata{}
 	if len(paths) == 0 {
 		return nil, nil, metadata
 	}
 
-	var nodes []graph.graph.Node
-	var edges []graph.graph.Edge
+	var nodes []graph.Node
+	var edges []graph.Edge
 	nodeIDs := make(map[string]struct{})
 	edgeIDs := make(map[string]struct{})
 
@@ -71,8 +71,8 @@ func loadSignavioArtifacts(paths []string, logger *log.Logger) ([]graph.graph.No
 
 		ext := strings.ToLower(filepath.Ext(path))
 		var (
-			processNodes     []graph.graph.Node
-			processEdges     []graph.graph.Edge
+			processNodes     []graph.Node
+			processEdges     []graph.Edge
 			processSummaries []SignavioProcessSummary
 		)
 
@@ -125,7 +125,7 @@ func loadSignavioArtifacts(paths []string, logger *log.Logger) ([]graph.graph.No
 	return nodes, edges, metadata
 }
 
-func parseSignavioJSON(data []byte, path string) ([]graph.graph.Node, []graph.graph.Edge, []SignavioProcessSummary, error) {
+func parseSignavioJSON(data []byte, path string) ([]graph.Node, []graph.Edge, []SignavioProcessSummary, error) {
 	type jsonElement struct {
 		ID            string            `json:"id"`
 		Type          string            `json:"type"`
@@ -157,8 +157,8 @@ func parseSignavioJSON(data []byte, path string) ([]graph.graph.Node, []graph.gr
 	}
 
 	sourceFile := filepath.Base(path)
-	var nodes []graph.graph.Node
-	var edges []graph.graph.Edge
+	var nodes []graph.Node
+	var edges []graph.Edge
 	summaries := make([]SignavioProcessSummary, 0, len(payload.Processes))
 
 	for _, proc := range payload.Processes {
@@ -261,12 +261,12 @@ func parseSignavioJSON(data []byte, path string) ([]graph.graph.Node, []graph.gr
 	return nodes, edges, summaries, nil
 }
 
-func parseSignavioBPMN(data []byte, path string) ([]graph.graph.Node, []graph.graph.Edge, []SignavioProcessSummary, error) {
+func parseSignavioBPMN(data []byte, path string) ([]graph.Node, []graph.Edge, []SignavioProcessSummary, error) {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	sourceFile := filepath.Base(path)
 
-	var nodes []graph.graph.Node
-	var edges []graph.graph.Edge
+	var nodes []graph.Node
+	var edges []graph.Edge
 	var summaries []SignavioProcessSummary
 	nodeIndex := make(map[string]*graph.Node)
 

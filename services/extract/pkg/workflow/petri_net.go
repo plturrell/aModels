@@ -1,13 +1,12 @@
 package workflow
-import (
-	"github.com/plturrell/aModels/services/extract/pkg/graph"
-)
 
 import (
 	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
+
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 )
 
 // PetriNet represents a Petri net structure for workflow modeling.
@@ -330,7 +329,7 @@ func (pnc *PetriNetConverter) PetriNetToGraphNodes(net *PetriNet) ([]graph.Node,
 	rootID := fmt.Sprintf("petri_net:%s", net.ID)
 
 	// Root node for the Petri net
-	nodes = append(nodes, Node{
+	nodes = append(nodes, graph.Node{
 		ID:    rootID,
 		Type:  "petri_net",
 		Label: net.Name,
@@ -347,7 +346,7 @@ func (pnc *PetriNetConverter) PetriNetToGraphNodes(net *PetriNet) ([]graph.Node,
 	// Places as nodes
 	for _, place := range net.Places {
 		placeNodeID := fmt.Sprintf("petri_place:%s", place.ID)
-		nodes = append(nodes, Node{
+		nodes = append(nodes, graph.Node{
 			ID:    placeNodeID,
 			Type:  "petri_place",
 			Label: place.Label,
@@ -360,7 +359,7 @@ func (pnc *PetriNetConverter) PetriNetToGraphNodes(net *PetriNet) ([]graph.Node,
 		})
 
 		// Connect place to Petri net root
-		edges = append(edges, Edge{
+		edges = append(edges, graph.Edge{
 			SourceID: rootID,
 			TargetID: placeNodeID,
 			Label:    "HAS_PLACE",
@@ -370,7 +369,7 @@ func (pnc *PetriNetConverter) PetriNetToGraphNodes(net *PetriNet) ([]graph.Node,
 	// Transitions as nodes
 	for _, transition := range net.Transitions {
 		transitionNodeID := fmt.Sprintf("petri_transition:%s", transition.ID)
-		nodes = append(nodes, Node{
+		nodes = append(nodes, graph.Node{
 			ID:    transitionNodeID,
 			Type:  "petri_transition",
 			Label: transition.Label,
@@ -383,7 +382,7 @@ func (pnc *PetriNetConverter) PetriNetToGraphNodes(net *PetriNet) ([]graph.Node,
 		})
 
 		// Connect transition to Petri net root
-		edges = append(edges, Edge{
+		edges = append(edges, graph.Edge{
 			SourceID: rootID,
 			TargetID: transitionNodeID,
 			Label:    "HAS_TRANSITION",
@@ -392,7 +391,7 @@ func (pnc *PetriNetConverter) PetriNetToGraphNodes(net *PetriNet) ([]graph.Node,
 		// Subprocesses as nodes
 		for _, subProcess := range transition.SubProcesses {
 			subProcessNodeID := fmt.Sprintf("petri_subprocess:%s", subProcess.ID)
-			nodes = append(nodes, Node{
+			nodes = append(nodes, graph.Node{
 				ID:    subProcessNodeID,
 				Type:  "petri_subprocess",
 				Label: subProcess.Label,
@@ -405,7 +404,7 @@ func (pnc *PetriNetConverter) PetriNetToGraphNodes(net *PetriNet) ([]graph.Node,
 			})
 
 			// Connect subprocess to transition
-			edges = append(edges, Edge{
+			edges = append(edges, graph.Edge{
 				SourceID: transitionNodeID,
 				TargetID: subProcessNodeID,
 				Label:    "HAS_SUBPROCESS",
@@ -433,7 +432,7 @@ func (pnc *PetriNetConverter) PetriNetToGraphNodes(net *PetriNet) ([]graph.Node,
 		}
 
 		if sourceNodeID != "" && targetNodeID != "" {
-			edges = append(edges, Edge{
+			edges = append(edges, graph.Edge{
 				SourceID: sourceNodeID,
 				TargetID: targetNodeID,
 				Label:    "PETRI_ARC",

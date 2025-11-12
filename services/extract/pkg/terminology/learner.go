@@ -29,8 +29,8 @@ func NewTerminologyLearner(store TerminologyStore, logger *log.Logger) *Terminol
 // LearnFromExtraction learns terminology from an extraction run.
 func (tl *TerminologyLearner) LearnFromExtraction(
 	ctx context.Context,
-	nodes []graph.graph.Node,
-	edges []graph.graph.Edge,
+	nodes []graph.Node,
+	edges []graph.Edge,
 ) error {
 	tl.mu.Lock()
 	defer tl.mu.Unlock()

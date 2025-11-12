@@ -136,7 +136,7 @@ func (job ControlMJob) Properties() map[string]any {
 		props["schedule"] = schedule
 	}
 
-	return mapOrNil(props)
+	return storage.MapOrNil(props)
 }
 
 func (c InCond) Properties() map[string]any {
@@ -146,7 +146,7 @@ func (c InCond) Properties() map[string]any {
 	if odate := decodeODate(c.ODate); len(odate) > 0 {
 		props["odate"] = odate
 	}
-	return mapOrNil(props)
+	return storage.MapOrNil(props)
 }
 
 func (c OutCond) Properties() map[string]any {
@@ -156,7 +156,7 @@ func (c OutCond) Properties() map[string]any {
 	if odate := decodeODate(c.ODate); len(odate) > 0 {
 		props["odate"] = odate
 	}
-	return mapOrNil(props)
+	return storage.MapOrNil(props)
 }
 
 func decodeODate(raw string) map[string]any {

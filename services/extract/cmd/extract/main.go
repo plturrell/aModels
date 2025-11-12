@@ -43,7 +43,6 @@ import (
 	"github.com/plturrell/aModels/services/extract/pkg/monitoring"
 	"github.com/plturrell/aModels/services/extract/pkg/persistence"
 	"github.com/plturrell/aModels/services/extract/pkg/schema"
-	"github.com/plturrell/aModels/services/extract/pkg/servers"
 	"github.com/plturrell/aModels/services/extract/pkg/storage"
 	"github.com/plturrell/aModels/services/extract/pkg/terminology"
 	"github.com/plturrell/aModels/services/extract/pkg/utils"

@@ -1,7 +1,4 @@
 package clients
-import (
-	"github.com/plturrell/aModels/services/extract/pkg/graph"
-)
 
 import (
 	"bytes"
@@ -15,6 +12,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 )
 
 // CorrelationIDKey is the context key for correlation ID.
@@ -411,13 +410,13 @@ func (c *CatalogClient) RegisterDataElementsBulk(ctx context.Context, elements [
 }
 
 // enrichMetadataWithAI enriches node metadata using DeepAgents.
-func (c *CatalogClient) enrichMetadataWithAI(ctx context.Context, node Node, projectID, systemID string) (*DataElementRequest, error) {
+func (c *CatalogClient) enrichMetadataWithAI(ctx context.Context, node graph.Node, projectID, systemID string) (*DataElementRequest, error) {
 	if c.deepAgentsClient == nil || !c.aiEnrichmentEnabled {
 		return nil, nil // Not enabled, return nil to use basic conversion
 	}
 
 	// Build context for AI analysis
-	contextStr := fmt.Sprintf("Node: %s (Type: %s, Label: %s)", node.ID, node.Type, node.Label)
+	contextStr := fmt.Sprintf("graph.Node: %s (Type: %s, Label: %s)", node.ID, node.Type, node.Label)
 	if node.Props != nil {
 		contextStr += "\nProperties: "
 		for k, v := range node.Props {
@@ -441,7 +440,7 @@ func (c *CatalogClient) enrichMetadataWithAI(ctx context.Context, node Node, pro
 }
 
 // ConvertNodeToDataElementWithAI converts with optional AI enrichment.
-func (c *CatalogClient) ConvertNodeToDataElementWithAI(ctx context.Context, node Node, projectID, systemID string) DataElementRequest {
+func (c *CatalogClient) ConvertNodeToDataElementWithAI(ctx context.Context, node graph.Node, projectID, systemID string) DataElementRequest {
 	// Try AI enrichment first
 	if c.aiEnrichmentEnabled && c.deepAgentsClient != nil {
 		enriched, err := c.enrichMetadataWithAI(ctx, node, projectID, systemID)
@@ -461,7 +460,7 @@ func (c *CatalogClient) ConvertNodeToDataElementWithAI(ctx context.Context, node
 }
 
 // ConvertNodeToDataElement converts an extracted node to a catalog data element request.
-func ConvertNodeToDataElement(node Node, projectID, systemID string) DataElementRequest {
+func ConvertNodeToDataElement(node graph.Node, projectID, systemID string) DataElementRequest {
 	// Generate identifier from node ID
 	identifier := fmt.Sprintf("http://amodels.org/catalog/data-element/%s", node.ID)
 

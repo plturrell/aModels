@@ -27,7 +27,7 @@ func NewIncrementalTerminologyUpdater(terminologyLearner *TerminologyLearner, lo
 }
 
 // UpdateFromExtraction updates terminology from an extraction run.
-func (itu *IncrementalTerminologyUpdater) UpdateFromExtraction(ctx context.Context, nodes []graph.graph.Node, edges []graph.graph.Edge) error {
+func (itu *IncrementalTerminologyUpdater) UpdateFromExtraction(ctx context.Context, nodes []graph.Node, edges []graph.Edge) error {
 	itu.mu.Lock()
 	defer itu.mu.Unlock()
 

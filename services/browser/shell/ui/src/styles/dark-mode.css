@@ -1,0 +1,205 @@
+/**
+ * Dark Mode Implementation
+ * Week 2: UX Excellence & Polish
+ */
+
+/* Dark mode toggle button */
+.theme-toggle {
+  position: relative;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 50%;
+  transition: background-color var(--transition-fast);
+  color: var(--text-secondary);
+}
+
+.theme-toggle:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.theme-toggle-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  transition: transform var(--transition-normal);
+}
+
+.theme-toggle:hover .theme-toggle-icon {
+  transform: rotate(15deg);
+}
+
+/* Dark mode specific styles */
+[data-theme="dark"] {
+  /* Override Material-UI colors */
+  --mui-palette-primary-main: #3b82f6;
+  --mui-palette-secondary-main: #6366f1;
+  --mui-palette-error-main: #ef4444;
+  --mui-palette-warning-main: #f59e0b;
+  --mui-palette-info-main: #06b6d4;
+  --mui-palette-success-main: #10b981;
+  
+  --mui-palette-background-paper: var(--bg-card);
+  --mui-palette-background-default: var(--bg-primary);
+  --mui-palette-text-primary: var(--text-primary);
+  --mui-palette-text-secondary: var(--text-secondary);
+  --mui-palette-divider: var(--border-primary);
+}
+
+/* Dark mode component overrides */
+[data-theme="dark"] .MuiPaper-root {
+  background-color: var(--bg-card);
+  border-color: var(--border-primary);
+}
+
+[data-theme="dark"] .MuiAppBar-root {
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+[data-theme="dark"] .MuiDrawer-paper {
+  background-color: var(--bg-secondary);
+  border-right: 1px solid var(--border-primary);
+}
+
+[data-theme="dark"] .MuiButton-root {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .MuiButton-contained {
+  background-color: var(--accent-primary);
+  color: white;
+}
+
+[data-theme="dark"] .MuiButton-contained:hover {
+  background-color: var(--accent-secondary);
+}
+
+[data-theme="dark"] .MuiTextField-root .MuiOutlinedInput-root {
+  background-color: var(--bg-card);
+  border-color: var(--border-primary);
+}
+
+[data-theme="dark"] .MuiTextField-root .MuiOutlinedInput-root:hover {
+  border-color: var(--border-secondary);
+}
+
+[data-theme="dark"] .MuiTextField-root .MuiOutlinedInput-root.Mui-focused {
+  border-color: var(--accent-primary);
+}
+
+[data-theme="dark"] .MuiChip-root {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .MuiChip-root.MuiChip-filled {
+  background-color: var(--accent-primary);
+  color: white;
+}
+
+/* Dark mode specific components */
+.dark-mode-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1000;
+  background: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 50%;
+  padding: 0.75rem;
+  box-shadow: var(--shadow-md);
+  transition: all var(--transition-normal);
+}
+
+.dark-mode-toggle:hover {
+  box-shadow: var(--shadow-lg);
+  transform: scale(1.05);
+}
+
+/* Dark mode graph styles */
+[data-theme="dark"] .graph-container {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+}
+
+[data-theme="dark"] .graph-node {
+  fill: var(--accent-primary);
+  stroke: var(--border-secondary);
+}
+
+[data-theme="dark"] .graph-edge {
+  stroke: var(--border-secondary);
+}
+
+[data-theme="dark"] .graph-label {
+  fill: var(--text-primary);
+}
+
+/* Dark mode loading states */
+[data-theme="dark"] .loading-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--bg-secondary) 0%,
+    var(--bg-tertiary) 20%,
+    var(--bg-secondary) 40%,
+    var(--bg-secondary) 100%
+  );
+}
+
+/* Dark mode code blocks */
+[data-theme="dark"] .code-block {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-primary);
+  color: var(--text-primary);
+}
+
+/* Dark mode tooltips */
+[data-theme="dark"] .tooltip {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Dark mode dropdowns */
+[data-theme="dark"] .dropdown-menu {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-primary);
+  box-shadow: var(--shadow-lg);
+}
+
+[data-theme="dark"] .dropdown-item {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .dropdown-item:hover {
+  background-color: var(--bg-hover);
+}
+
+/* High contrast dark mode support */
+@media (prefers-contrast: high) {
+  [data-theme="dark"] {
+    --border-primary: #525252;
+    --border-secondary: #737373;
+  }
+}
+
+/* System preference detection */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-tertiary: #334155;
+    --text-primary: #f8fafc;
+    --text-secondary: #cbd5e1;
+    --border-primary: #334155;
+    --border-secondary: #475569;
+  }
+}
+
+/* Smooth theme transition */
+.theme-transitioning * {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease !important;
+}

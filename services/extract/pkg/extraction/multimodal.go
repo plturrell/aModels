@@ -288,9 +288,9 @@ func (mme *MultiModalExtractor) ConvertExtractedTableToNodes(
 	table ExtractedTable,
 	tableName string,
 	sourceID string,
-) ([]graph.graph.Node, []graph.graph.Edge) {
-	nodes := []graph.graph.Node{}
-	edges := []graph.graph.Edge{}
+) ([]graph.Node, []graph.Edge) {
+	nodes := []graph.Node{}
+	edges := []graph.Edge{}
 
 	// Create table node
 	tableNode := graph.Node{

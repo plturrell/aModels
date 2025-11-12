@@ -46,7 +46,7 @@ func (s *SAPBDCIntegration) ExtractFromSAPBDC(
 	database string,
 	projectID string,
 	systemID string,
-) ([]graph.graph.Node, []graph.graph.Edge, error) {
+) ([]graph.Node, []graph.Edge, error) {
 	s.logger.Printf("Extracting from SAP BDC: formation=%s, source=%s", formationID, sourceSystem)
 
 	// Call SAP BDC service
@@ -165,9 +165,9 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 	schema *SAPBDCSchema,
 	projectID string,
 	systemID string,
-) ([]graph.graph.Node, []graph.graph.Edge) {
-	nodes := []graph.graph.Node{}
-	edges := []graph.graph.Edge{}
+) ([]graph.Node, []graph.Edge) {
+	nodes := []graph.Node{}
+	edges := []graph.Edge{}
 
 	// Create database/schema node
 	dbNode := graph.Node{

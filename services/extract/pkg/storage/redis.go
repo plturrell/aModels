@@ -1,7 +1,4 @@
 package storage
-import (
-	"github.com/plturrell/aModels/services/extract/pkg/graph"
-)
 
 import (
 	"context"
@@ -11,6 +8,9 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
+	"github.com/plturrell/aModels/services/extract/pkg/persistence"
+	"github.com/plturrell/aModels/services/extract/pkg/utils"
 )
 
 // RedisPersistence is the persistence layer for Redis.
@@ -106,7 +106,7 @@ func (p *RedisPersistence) GetVector(key string) ([]float32, map[string]any, err
 
 // SearchSimilar performs basic similarity search using Redis SCAN and cosine similarity.
 // This is a fallback implementation - for production use pgvector or OpenSearch.
-func (p *RedisPersistence) SearchSimilar(queryVector []float32, artifactType string, limit int, threshold float32) ([]VectorSearchResult, error) {
+func (p *RedisPersistence) SearchSimilar(queryVector []float32, artifactType string, limit int, threshold float32) ([]persistence.VectorSearchResult, error) {
 	ctx := context.Background()
 
 	// SCAN for all keys matching pattern
@@ -126,7 +126,7 @@ func (p *RedisPersistence) SearchSimilar(queryVector []float32, artifactType str
 
 	// Calculate cosine similarity for each vector
 	type scoredResult struct {
-		result VectorSearchResult
+		result persistence.VectorSearchResult
 		score  float32
 	}
 	scoredResults := []scoredResult{}
@@ -145,7 +145,7 @@ func (p *RedisPersistence) SearchSimilar(queryVector []float32, artifactType str
 		}
 
 		// Calculate cosine similarity
-		score := float32(cosineSimilarity(queryVector, vector))
+		score := float32(utils.CosineSimilarity(queryVector, vector))
 		if score >= threshold {
 			artifactType := ""
 			artifactID := ""
@@ -163,7 +163,7 @@ func (p *RedisPersistence) SearchSimilar(queryVector []float32, artifactType str
 			}
 
 			scoredResults = append(scoredResults, scoredResult{
-				result: VectorSearchResult{
+				result: persistence.VectorSearchResult{
 					Key:          key,
 					ArtifactType: artifactType,
 					ArtifactID:   artifactID,
@@ -191,7 +191,7 @@ func (p *RedisPersistence) SearchSimilar(queryVector []float32, artifactType str
 		scoredResults = scoredResults[:limit]
 	}
 
-	results := make([]VectorSearchResult, len(scoredResults))
+	results := make([]persistence.VectorSearchResult, len(scoredResults))
 	for i, sr := range scoredResults {
 		results[i] = sr.result
 	}
@@ -201,7 +201,7 @@ func (p *RedisPersistence) SearchSimilar(queryVector []float32, artifactType str
 
 // SearchByText performs text-based search using Redis SCAN and metadata matching.
 // This is a basic implementation - for production use OpenSearch.
-func (p *RedisPersistence) SearchByText(query string, artifactType string, limit int) ([]VectorSearchResult, error) {
+func (p *RedisPersistence) SearchByText(query string, artifactType string, limit int) ([]persistence.VectorSearchResult, error) {
 	ctx := context.Background()
 
 	pattern := "*"
@@ -219,7 +219,7 @@ func (p *RedisPersistence) SearchByText(query string, artifactType string, limit
 	}
 
 	queryLower := strings.ToLower(query)
-	results := []VectorSearchResult{}
+	results := []persistence.VectorSearchResult{}
 
 	for _, key := range allKeys {
 		vector, metadata, err := p.GetVector(key)
@@ -270,7 +270,7 @@ func (p *RedisPersistence) SearchByText(query string, artifactType string, limit
 				}
 			}
 
-			results = append(results, VectorSearchResult{
+			results = append(results, persistence.VectorSearchResult{
 				Key:          key,
 				ArtifactType: artifactType,
 				ArtifactID:   artifactID,

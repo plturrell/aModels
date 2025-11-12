@@ -15,7 +15,7 @@ import (
 type CrossSystemExtractor struct {
 	logger             *log.Logger
 	domainDetector     *DomainDetector // Phase 8.3: Domain detector for domain normalization
-	terminologyLearner *TerminologyLearner // Phase 10: LNN-based terminology learning
+	terminologyLearner *terminology.TerminologyLearner // Phase 10: LNN-based terminology learning
 }
 
 // NewCrossSystemExtractor creates a new cross-system extractor.
@@ -34,7 +34,7 @@ func NewCrossSystemExtractor(logger *log.Logger) *CrossSystemExtractor {
 }
 
 // SetTerminologyLearner sets the terminology learner (Phase 10).
-func (cse *CrossSystemExtractor) SetTerminologyLearner(learner *TerminologyLearner) {
+func (cse *CrossSystemExtractor) SetTerminologyLearner(learner *terminology.TerminologyLearner) {
 	cse.terminologyLearner = learner
 }
 

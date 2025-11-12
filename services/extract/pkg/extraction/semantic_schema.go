@@ -19,7 +19,7 @@ type SemanticSchemaAnalyzer struct {
 	useGloveEmbeddings  bool
 	extractServiceURL   string
 	domainDetector      *DomainDetector     // Phase 8.1: Domain detector for domain-aware analysis
-	terminologyLearner  *TerminologyLearner // Phase 10: LNN-based terminology learning
+	terminologyLearner  *terminology.TerminologyLearner // Phase 10: LNN-based terminology learning
 }
 
 // NewSemanticSchemaAnalyzer creates a new semantic schema analyzer.
@@ -41,7 +41,7 @@ func NewSemanticSchemaAnalyzer(logger *log.Logger) *SemanticSchemaAnalyzer {
 }
 
 // SetTerminologyLearner sets the terminology learner (Phase 10).
-func (ssa *SemanticSchemaAnalyzer) SetTerminologyLearner(learner *TerminologyLearner) {
+func (ssa *SemanticSchemaAnalyzer) SetTerminologyLearner(learner *terminology.TerminologyLearner) {
 	ssa.terminologyLearner = learner
 }
 

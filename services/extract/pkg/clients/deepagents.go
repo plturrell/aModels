@@ -1,7 +1,4 @@
 package clients
-import (
-	"github.com/plturrell/aModels/services/extract/pkg/graph"
-)
 
 import (
 	"bytes"
@@ -13,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 )
 
 // DeepAgentsClient handles communication with the DeepAgents service.
@@ -478,7 +477,7 @@ func (c *DeepAgentsClient) checkHealth(ctx context.Context) bool {
 }
 
 // FormatGraphSummary formats a knowledge graph for analysis.
-func FormatGraphSummary(nodes []Node, edges []Edge, quality map[string]any, metrics map[string]any) string {
+func FormatGraphSummary(nodes []graph.Node, edges []graph.Edge, quality map[string]any, metrics map[string]any) string {
 	var summary strings.Builder
 
 	summary.WriteString(fmt.Sprintf("Knowledge Graph Summary:\n"))

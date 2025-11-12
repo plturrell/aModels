@@ -55,7 +55,7 @@ type TestingEndpoint struct {
 // AdvancedExtractor performs advanced extraction from parsed code.
 type AdvancedExtractor struct {
 	logger             *log.Logger
-	terminologyLearner *TerminologyLearner // Phase 10: LNN-based terminology learning
+	terminologyLearner *terminology.TerminologyLearner // Phase 10: LNN-based terminology learning
 }
 
 // NewAdvancedExtractor creates a new advanced extractor.
@@ -67,7 +67,7 @@ func NewAdvancedExtractor(logger *log.Logger) *AdvancedExtractor {
 }
 
 // SetTerminologyLearner sets the terminology learner (Phase 10).
-func (ae *AdvancedExtractor) SetTerminologyLearner(learner *TerminologyLearner) {
+func (ae *AdvancedExtractor) SetTerminologyLearner(learner *terminology.TerminologyLearner) {
 	ae.terminologyLearner = learner
 }
 

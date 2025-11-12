@@ -54,7 +54,7 @@ func NewBatchEmbeddingGenerator(logger *log.Logger, cache *EmbeddingCache, batch
 // GenerateBatchTableEmbeddings generates embeddings for multiple tables in batch
 func (beg *BatchEmbeddingGenerator) GenerateBatchTableEmbeddings(
 	ctx context.Context,
-	nodes []graph.graph.Node,
+	nodes []graph.Node,
 ) (map[string]BatchEmbeddingResult, error) {
 	results := make(map[string]BatchEmbeddingResult)
 	
@@ -256,7 +256,7 @@ func (beg *BatchEmbeddingGenerator) generateSemanticTableEmbedding(ctx context.C
 // GenerateBatchColumnEmbeddings generates embeddings for multiple columns in batch
 func (beg *BatchEmbeddingGenerator) GenerateBatchColumnEmbeddings(
 	ctx context.Context,
-	nodes []graph.graph.Node,
+	nodes []graph.Node,
 ) (map[string]BatchEmbeddingResult, error) {
 	results := make(map[string]BatchEmbeddingResult)
 	

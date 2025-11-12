@@ -2,6 +2,6 @@
  * Loading Components - Loading states and skeletons
  */
 
-export { CardSkeleton } from './CardSkeleton';
-export { GraphSkeleton } from './GraphSkeleton';
-export { TableSkeleton } from './TableSkeleton';
+export { CardSkeleton } from './loading-states/CardSkeleton';
+export { GraphSkeleton } from './loading-states/GraphSkeleton';
+export { TableSkeleton } from './loading-states/TableSkeleton';
