@@ -1,6 +1,7 @@
 package terminology
 
 import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 	"context"
 	"log"
 	"sync"
@@ -26,7 +27,7 @@ func NewIncrementalTerminologyUpdater(terminologyLearner *TerminologyLearner, lo
 }
 
 // UpdateFromExtraction updates terminology from an extraction run.
-func (itu *IncrementalTerminologyUpdater) UpdateFromExtraction(ctx context.Context, nodes []Node, edges []Edge) error {
+func (itu *IncrementalTerminologyUpdater) UpdateFromExtraction(ctx context.Context, nodes []graph.graph.Node, edges []graph.graph.Edge) error {
 	itu.mu.Lock()
 	defer itu.mu.Unlock()
 

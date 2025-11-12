@@ -8,7 +8,9 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": false,
+    "strictNullChecks": false,
     "noImplicitAny": false,
+    // TODO: Re-enable strict mode after fixing type errors (see IMPROVEMENTS.md)
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",

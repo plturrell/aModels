@@ -1,0 +1,5 @@
+case_id,event_name,performed_by,event_time,amount
+C-1001,Order Created,Alice,2024-10-01T09:03:11Z,1500.25
+C-1001,Order Approved,Bob,2024-10-01T10:15:44Z,1500.25
+C-1002,Order Created,Alice,2024-10-02T12:01:05Z,980.00
+C-1002,Order Rejected,Charlie,2024-10-02T13:47:33Z,980.00

@@ -1,6 +1,7 @@
 package terminology
 
 import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 	"context"
 	"fmt"
 	"log"
@@ -11,7 +12,7 @@ import (
 
 // TerminologyStore interface for storing and retrieving learned terminology.
 type TerminologyStore interface {
-	StoreTerminology(ctx context.Context, nodes []Node, edges []Edge, timestamp time.Time) error
+	StoreTerminology(ctx context.Context, nodes []graph.graph.Node, edges []graph.graph.Edge, timestamp time.Time) error
 	LoadTerminology(ctx context.Context) (*StoredTerminology, error)
 	GetTerminologyEvolution(ctx context.Context, startTime, endTime time.Time) (*TerminologyEvolution, error)
 }
@@ -73,8 +74,8 @@ func NewNeo4jTerminologyStore(neo4jPersistence *Neo4jPersistence, logger *log.Lo
 // StoreTerminology stores terminology in Neo4j.
 func (nts *Neo4jTerminologyStore) StoreTerminology(
 	ctx context.Context,
-	nodes []Node,
-	edges []Edge,
+	nodes []graph.graph.Node,
+	edges []graph.graph.Edge,
 	timestamp time.Time,
 ) error {
 	if nts.neo4jPersistence == nil {
@@ -280,7 +281,7 @@ func (nts *Neo4jTerminologyStore) GetTerminologyEvolution(
 
 // Helper functions
 
-func extractTerminologyNodes(nodes []Node, timestamp time.Time) []map[string]any {
+func extractTerminologyNodes(nodes []graph.graph.Node, timestamp time.Time) []map[string]any {
 	terminologyNodes := []map[string]any{}
 
 	for _, node := range nodes {

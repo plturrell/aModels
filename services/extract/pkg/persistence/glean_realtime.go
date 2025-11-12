@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 )
 
 // RealTimeGleanExporter handles real-time synchronization of graph data to Glean.
@@ -29,8 +30,8 @@ type RealTimeGleanExporter struct {
 
 // ExportTask represents a graph export task for real-time processing.
 type ExportTask struct {
-	Nodes     []Node
-	Edges     []Edge
+	Nodes     []graph.Node
+	Edges     []graph.Edge
 	BatchFile string
 	CreatedAt time.Time
 	ProjectID string
@@ -103,7 +104,7 @@ func NewRealTimeGleanExporter(
 
 // ExportGraph exports graph data to Glean in real-time.
 // This method is non-blocking - it queues the export for async processing.
-func (r *RealTimeGleanExporter) ExportGraph(ctx context.Context, nodes []Node, edges []Edge, projectID, systemID string) error {
+func (r *RealTimeGleanExporter) ExportGraph(ctx context.Context, nodes []graph.Node, edges []graph.Edge, projectID, systemID string) error {
 	if !r.enabled {
 		return nil // Real-time export disabled, skip silently
 	}

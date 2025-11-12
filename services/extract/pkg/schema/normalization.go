@@ -1,13 +1,14 @@
 package schema
 
 import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 	"fmt"
 	"strings"
 )
 
 type normalizationInput struct {
-	Nodes               []Node
-	Edges               []Edge
+	Nodes               []graph.graph.Node
+	Edges               []graph.graph.Edge
 	ProjectID           string
 	SystemID            string
 	InformationSystemID string
@@ -15,8 +16,8 @@ type normalizationInput struct {
 }
 
 type normalizationResult struct {
-	Nodes      []Node
-	Edges      []Edge
+	Nodes      []graph.graph.Node
+	Edges      []graph.graph.Edge
 	RootNodeID string
 	Stats      map[string]any
 	Warnings   []string
@@ -31,7 +32,7 @@ func normalizeGraph(input normalizationInput) normalizationResult {
 	originalNodeCount := len(input.Nodes)
 	originalEdgeCount := len(input.Edges)
 
-	nodeMap := make(map[string]Node)
+	nodeMap := make(map[string]graph.Node)
 	nodeOrder := make([]string, 0, originalNodeCount)
 	droppedNodes := 0
 
@@ -43,7 +44,7 @@ func normalizeGraph(input normalizationInput) normalizationResult {
 			continue
 		}
 
-		normalized := Node{
+		normalized := graph.Node{
 			ID:    id,
 			Type:  canonicalType(node.Type),
 			Label: canonicalLabel(node.Label, id),
@@ -62,7 +63,7 @@ func normalizeGraph(input normalizationInput) normalizationResult {
 		nodeOrder = append(nodeOrder, id)
 	}
 
-	edgeMap := make(map[string]Edge)
+	edgeMap := make(map[string]graph.Edge)
 	edgeOrder := make([]string, 0, originalEdgeCount)
 	droppedEdges := 0
 
@@ -88,7 +89,7 @@ func normalizeGraph(input normalizationInput) normalizationResult {
 		}
 
 		key := edgeKey(src, dst, label)
-		normalized := Edge{
+		normalized := graph.Edge{
 			SourceID: src,
 			TargetID: dst,
 			Label:    label,
@@ -163,14 +164,14 @@ func normalizeGraph(input normalizationInput) normalizationResult {
 		addCatalogContainmentEdge(edgeMap, &edgeOrder, rootID, input.InformationSystemID)
 	}
 
-	finalNodes := make([]Node, 0, len(nodeOrder))
+	finalNodes := make([]graph.graph.Node, 0, len(nodeOrder))
 	for _, id := range nodeOrder {
 		if node, ok := nodeMap[id]; ok {
 			finalNodes = append(finalNodes, node)
 		}
 	}
 
-	finalEdges := make([]Edge, 0, len(edgeOrder))
+	finalEdges := make([]graph.graph.Edge, 0, len(edgeOrder))
 	for _, key := range edgeOrder {
 		if edge, ok := edgeMap[key]; ok {
 			finalEdges = append(finalEdges, edge)
@@ -262,14 +263,14 @@ func edgeKey(src, dst, label string) string {
 	return src + "->" + dst + "#" + label
 }
 
-func ensureCatalogNode(c *Catalog, nodeMap map[string]Node, order *[]string, id, kind string) (nodeAdded bool, catalogUpdated bool) {
+func ensureCatalogNode(c *Catalog, nodeMap map[string]graph.Node, order *[]string, id, kind string) (nodeAdded bool, catalogUpdated bool) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return false, false
 	}
 
 	if _, ok := nodeMap[id]; !ok {
-		nodeMap[id] = Node{
+		nodeMap[id] = graph.Node{
 			ID:    id,
 			Type:  kind,
 			Label: id,
@@ -299,7 +300,7 @@ func ensureCatalogNode(c *Catalog, nodeMap map[string]Node, order *[]string, id,
 	return nodeAdded, catalogUpdated
 }
 
-func addCatalogContainmentEdge(edgeMap map[string]Edge, order *[]string, rootID, nodeID string) bool {
+func addCatalogContainmentEdge(edgeMap map[string]graph.Edge, order *[]string, rootID, nodeID string) bool {
 	nodeID = strings.TrimSpace(nodeID)
 	if nodeID == "" || nodeID == rootID {
 		return false
@@ -309,7 +310,7 @@ func addCatalogContainmentEdge(edgeMap map[string]Edge, order *[]string, rootID,
 	if _, exists := edgeMap[key]; exists {
 		return false
 	}
-	edgeMap[key] = Edge{
+	edgeMap[key] = graph.Edge{
 		SourceID: nodeID,
 		TargetID: rootID,
 		Label:    label,
@@ -318,7 +319,7 @@ func addCatalogContainmentEdge(edgeMap map[string]Edge, order *[]string, rootID,
 	return true
 }
 
-func selectRootNode(nodeMap map[string]Node, order []string) string {
+func selectRootNode(nodeMap map[string]graph.Node, order []string) string {
 	if len(order) == 0 {
 		return ""
 	}
@@ -338,12 +339,12 @@ func selectRootNode(nodeMap map[string]Node, order []string) string {
 
 // fixOrphanColumns creates missing HAS_COLUMN edges for orphan columns
 // It uses multiple strategies to match columns to their parent tables
-func fixOrphanColumns(nodeMap map[string]Node, edgeMap map[string]Edge, edgeOrder *[]string) []string {
+func fixOrphanColumns(nodeMap map[string]graph.Node, edgeMap map[string]graph.Edge, edgeOrder *[]string) []string {
 	var warnings []string
 
 	// Build index of tables and columns
-	tableMap := make(map[string]Node)
-	columnMap := make(map[string]Node)
+	tableMap := make(map[string]graph.Node)
+	columnMap := make(map[string]graph.Node)
 	for id, node := range nodeMap {
 		if node.Type == "table" {
 			tableMap[id] = node
@@ -372,7 +373,7 @@ func fixOrphanColumns(nodeMap map[string]Node, edgeMap map[string]Edge, edgeOrde
 		}
 
 		// Try to find parent table using multiple strategies
-		var parentTable *Node
+		var parentTable *graph.Node
 
 		// Strategy 1: Direct prefix match (table.column or schema.table.column)
 		parts := strings.Split(colID, ".")
@@ -443,7 +444,7 @@ func fixOrphanColumns(nodeMap map[string]Node, edgeMap map[string]Edge, edgeOrde
 			label := "HAS_COLUMN"
 			key := edgeKey(parentTable.ID, colID, label)
 			if _, exists := edgeMap[key]; !exists {
-				edgeMap[key] = Edge{
+				edgeMap[key] = graph.Edge{
 					SourceID: parentTable.ID,
 					TargetID: colID,
 					Label:    label,

@@ -1,4 +1,7 @@
 package servers
+import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
+)
 
 import (
 	"context"
@@ -78,7 +81,7 @@ func (s *extractFlightServer) Shutdown() {
 	s.core.Shutdown()
 }
 
-func (s *extractFlightServer) UpdateGraph(nodes []Node, edges []Edge) {
+func (s *extractFlightServer) UpdateGraph(nodes []graph.Node, edges []graph.Edge) {
 	if s == nil || s.service == nil {
 		return
 	}
@@ -90,14 +93,14 @@ type extractFlightService struct {
 	allocator memory.Allocator
 
 	mu    sync.RWMutex
-	nodes []Node
-	edges []Edge
+	nodes []graph.Node
+	edges []graph.Edge
 }
 
-func (s *extractFlightService) UpdateGraph(nodes []Node, edges []Edge) {
+func (s *extractFlightService) UpdateGraph(nodes []graph.Node, edges []graph.Edge) {
 	s.mu.Lock()
-	s.nodes = append([]Node(nil), nodes...)
-	s.edges = append([]Edge(nil), edges...)
+	s.nodes = append([]graph.Node(nil), nodes...)
+	s.edges = append([]graph.Edge(nil), edges...)
 	s.mu.Unlock()
 }
 
@@ -156,16 +159,16 @@ func (s *extractFlightService) DoGet(ticket *flight.Ticket, stream flight.Flight
 	}
 }
 
-func (s *extractFlightService) snapshotNodes() []Node {
+func (s *extractFlightService) snapshotNodes() []graph.Node {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return append([]Node(nil), s.nodes...)
+	return append([]graph.Node(nil), s.nodes...)
 }
 
-func (s *extractFlightService) snapshotEdges() []Edge {
+func (s *extractFlightService) snapshotEdges() []graph.Edge {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return append([]Edge(nil), s.edges...)
+	return append([]graph.Edge(nil), s.edges...)
 }
 
 func (s *extractFlightService) flightInfos() ([]*flight.FlightInfo, error) {
@@ -197,7 +200,7 @@ func (s *extractFlightService) flightInfos() ([]*flight.FlightInfo, error) {
 	return []*flight.FlightInfo{nodeInfo, edgeInfo}, nil
 }
 
-func (s *extractFlightService) writeNodes(stream flight.FlightService_DoGetServer, nodes []Node) error {
+func (s *extractFlightService) writeNodes(stream flight.FlightService_DoGetServer, nodes []graph.Node) error {
 	// Optimize: Stream large datasets in batches instead of single record
 	const batchSize = 1000
 	if len(nodes) <= batchSize {
@@ -243,7 +246,7 @@ func (s *extractFlightService) writeNodes(stream flight.FlightService_DoGetServe
 	return nil
 }
 
-func (s *extractFlightService) writeEdges(stream flight.FlightService_DoGetServer, edges []Edge) error {
+func (s *extractFlightService) writeEdges(stream flight.FlightService_DoGetServer, edges []graph.Edge) error {
 	// Optimize: Stream large datasets in batches instead of single record
 	const batchSize = 1000
 	if len(edges) <= batchSize {
@@ -289,7 +292,7 @@ func (s *extractFlightService) writeEdges(stream flight.FlightService_DoGetServe
 	return nil
 }
 
-func buildNodeRecord(allocator memory.Allocator, nodes []Node) (arrow.Record, error) {
+func buildNodeRecord(allocator memory.Allocator, nodes []graph.Node) (arrow.Record, error) {
 	builder := array.NewRecordBuilder(allocator, nodeSchema)
 	defer builder.Release()
 
@@ -316,7 +319,7 @@ func buildNodeRecord(allocator memory.Allocator, nodes []Node) (arrow.Record, er
 	return builder.NewRecord(), nil
 }
 
-func buildEdgeRecord(allocator memory.Allocator, edges []Edge) (arrow.Record, error) {
+func buildEdgeRecord(allocator memory.Allocator, edges []graph.Edge) (arrow.Record, error) {
 	builder := array.NewRecordBuilder(allocator, edgeSchema)
 	defer builder.Release()
 

@@ -1,0 +1,172 @@
+[
+  {
+    "id": "PI-1000",
+    "processDefinitionId": "PD-1",
+    "processDefinitionName": "Order-to-Cash",
+    "startTime": 1762914795720,
+    "endTime": 1762921995720,
+    "status": "completed",
+    "durationMs": 7200000,
+    "initiator": "user1@example.com",
+    "businessKey": "ORDER-2000",
+    "variables": {
+      "customer_id": "CUST-1",
+      "order_value": 100.0,
+      "region": "EMEA",
+      "priority": "high"
+    }
+  },
+  {
+    "id": "PI-1001",
+    "processDefinitionId": "PD-2",
+    "processDefinitionName": "Procure-to-Pay",
+    "startTime": 1762824795720,
+    "endTime": null,
+    "status": "running",
+    "durationMs": 7260000,
+    "initiator": "user2@example.com",
+    "businessKey": "ORDER-2001",
+    "variables": {
+      "customer_id": "CUST-2",
+      "order_value": 117.3,
+      "region": "APAC",
+      "priority": "medium"
+    }
+  },
+  {
+    "id": "PI-1002",
+    "processDefinitionId": "PD-3",
+    "processDefinitionName": "Hire-to-Retire",
+    "startTime": 1762734795720,
+    "endTime": 1762742115720,
+    "status": "failed",
+    "durationMs": 7320000,
+    "initiator": "user3@example.com",
+    "businessKey": "ORDER-2002",
+    "variables": {
+      "customer_id": "CUST-3",
+      "order_value": 134.6,
+      "region": "AMER",
+      "priority": "low"
+    }
+  },
+  {
+    "id": "PI-1003",
+    "processDefinitionId": "PD-4",
+    "processDefinitionName": "Lead-to-Opportunity",
+    "startTime": 1762644795720,
+    "endTime": 1762652175720,
+    "status": "suspended",
+    "durationMs": 7380000,
+    "initiator": "user4@example.com",
+    "businessKey": "ORDER-2003",
+    "variables": {
+      "customer_id": "CUST-4",
+      "order_value": 151.9,
+      "region": "EMEA",
+      "priority": "high"
+    }
+  },
+  {
+    "id": "PI-1004",
+    "processDefinitionId": "PD-5",
+    "processDefinitionName": "Issue-to-Resolution",
+    "startTime": 1762554795720,
+    "endTime": 1762562235720,
+    "status": "completed",
+    "durationMs": 7440000,
+    "initiator": "user5@example.com",
+    "businessKey": "ORDER-2004",
+    "variables": {
+      "customer_id": "CUST-5",
+      "order_value": 169.2,
+      "region": "APAC",
+      "priority": "medium"
+    }
+  },
+  {
+    "id": "PI-1005",
+    "processDefinitionId": "PD-1",
+    "processDefinitionName": "Order-to-Cash",
+    "startTime": 1762464795720,
+    "endTime": null,
+    "status": "running",
+    "durationMs": 7500000,
+    "initiator": "user6@example.com",
+    "businessKey": "ORDER-2005",
+    "variables": {
+      "customer_id": "CUST-6",
+      "order_value": 186.5,
+      "region": "AMER",
+      "priority": "low"
+    }
+  },
+  {
+    "id": "PI-1006",
+    "processDefinitionId": "PD-2",
+    "processDefinitionName": "Procure-to-Pay",
+    "startTime": 1762374795720,
+    "endTime": 1762382355720,
+    "status": "failed",
+    "durationMs": 7560000,
+    "initiator": "user7@example.com",
+    "businessKey": "ORDER-2006",
+    "variables": {
+      "customer_id": "CUST-7",
+      "order_value": 203.8,
+      "region": "EMEA",
+      "priority": "high"
+    }
+  },
+  {
+    "id": "PI-1007",
+    "processDefinitionId": "PD-3",
+    "processDefinitionName": "Hire-to-Retire",
+    "startTime": 1762284795720,
+    "endTime": 1762292415720,
+    "status": "suspended",
+    "durationMs": 7620000,
+    "initiator": "user8@example.com",
+    "businessKey": "ORDER-2007",
+    "variables": {
+      "customer_id": "CUST-8",
+      "order_value": 221.1,
+      "region": "APAC",
+      "priority": "medium"
+    }
+  },
+  {
+    "id": "PI-1008",
+    "processDefinitionId": "PD-4",
+    "processDefinitionName": "Lead-to-Opportunity",
+    "startTime": 1762194795720,
+    "endTime": 1762202475720,
+    "status": "completed",
+    "durationMs": 7680000,
+    "initiator": "user9@example.com",
+    "businessKey": "ORDER-2008",
+    "variables": {
+      "customer_id": "CUST-9",
+      "order_value": 238.4,
+      "region": "AMER",
+      "priority": "low"
+    }
+  },
+  {
+    "id": "PI-1009",
+    "processDefinitionId": "PD-5",
+    "processDefinitionName": "Issue-to-Resolution",
+    "startTime": 1762104795720,
+    "endTime": null,
+    "status": "running",
+    "durationMs": 7740000,
+    "initiator": "user10@example.com",
+    "businessKey": "ORDER-2009",
+    "variables": {
+      "customer_id": "CUST-10",
+      "order_value": 255.7,
+      "region": "EMEA",
+      "priority": "high"
+    }
+  }
+]

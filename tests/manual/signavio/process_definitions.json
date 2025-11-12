@@ -1,0 +1,35 @@
+[
+  {
+    "id": "PD-1",
+    "name": "Order-to-Cash",
+    "version": "v2.1",
+    "category": "Finance",
+    "description": "End-to-end order processing and payment collection",
+    "createdDate": 1705276800000,
+    "modifiedDate": 1727740800000,
+    "instanceCount": 1245,
+    "avgDurationMs": 7200000
+  },
+  {
+    "id": "PD-2",
+    "name": "Procure-to-Pay",
+    "version": "v1.8",
+    "category": "Procurement",
+    "description": "Purchase requisition to payment workflow",
+    "createdDate": 1706745600000,
+    "modifiedDate": 1726358400000,
+    "instanceCount": 987,
+    "avgDurationMs": 10800000
+  },
+  {
+    "id": "PD-3",
+    "name": "Hire-to-Retire",
+    "version": "v3.0",
+    "category": "HR",
+    "description": "Employee lifecycle management process",
+    "createdDate": 1698796800000,
+    "modifiedDate": 1724112000000,
+    "instanceCount": 543,
+    "avgDurationMs": 172800000
+  }
+]

@@ -1,6 +1,7 @@
 package embeddings
 
 import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -53,7 +54,7 @@ func NewBatchEmbeddingGenerator(logger *log.Logger, cache *EmbeddingCache, batch
 // GenerateBatchTableEmbeddings generates embeddings for multiple tables in batch
 func (beg *BatchEmbeddingGenerator) GenerateBatchTableEmbeddings(
 	ctx context.Context,
-	nodes []Node,
+	nodes []graph.graph.Node,
 ) (map[string]BatchEmbeddingResult, error) {
 	results := make(map[string]BatchEmbeddingResult)
 	
@@ -97,10 +98,10 @@ func (beg *BatchEmbeddingGenerator) GenerateBatchTableEmbeddings(
 			// Cache successful results
 			if result.Error == nil {
 				// Find the node for this result
-				var node Node
+				var node graph.Node
 				for _, item := range batch {
 					if item.ID == result.ID {
-						if n, ok := item.Data.(Node); ok {
+						if n, ok := item.Data.(graph.Node); ok {
 							node = n
 							break
 						}
@@ -131,7 +132,7 @@ func (beg *BatchEmbeddingGenerator) processBatchTableEmbeddings(
 		go func(idx int, it BatchItem) {
 			defer wg.Done()
 			
-			node, ok := it.Data.(Node)
+			node, ok := it.Data.(graph.Node)
 			if !ok {
 				results[idx].Error = fmt.Errorf("invalid node data")
 				return
@@ -166,7 +167,7 @@ func (beg *BatchEmbeddingGenerator) processBatchTableEmbeddings(
 }
 
 // generateRelationalTableEmbedding generates relational embedding for a table
-func (beg *BatchEmbeddingGenerator) generateRelationalTableEmbedding(ctx context.Context, node Node) ([]float32, error) {
+func (beg *BatchEmbeddingGenerator) generateRelationalTableEmbedding(ctx context.Context, node graph.Node) ([]float32, error) {
 	columns := []map[string]any{}
 	if node.Props != nil {
 		if cols, ok := node.Props["columns"].([]map[string]any); ok {
@@ -217,7 +218,7 @@ func (beg *BatchEmbeddingGenerator) generateRelationalTableEmbedding(ctx context
 }
 
 // generateSemanticTableEmbedding generates semantic embedding for a table
-func (beg *BatchEmbeddingGenerator) generateSemanticTableEmbedding(ctx context.Context, node Node) ([]float32, error) {
+func (beg *BatchEmbeddingGenerator) generateSemanticTableEmbedding(ctx context.Context, node graph.Node) ([]float32, error) {
 	columns := []map[string]any{}
 	if node.Props != nil {
 		if cols, ok := node.Props["columns"].([]map[string]any); ok {
@@ -255,7 +256,7 @@ func (beg *BatchEmbeddingGenerator) generateSemanticTableEmbedding(ctx context.C
 // GenerateBatchColumnEmbeddings generates embeddings for multiple columns in batch
 func (beg *BatchEmbeddingGenerator) GenerateBatchColumnEmbeddings(
 	ctx context.Context,
-	nodes []Node,
+	nodes []graph.graph.Node,
 ) (map[string]BatchEmbeddingResult, error) {
 	results := make(map[string]BatchEmbeddingResult)
 	
@@ -297,7 +298,7 @@ func (beg *BatchEmbeddingGenerator) GenerateBatchColumnEmbeddings(
 			go func(it BatchItem) {
 				defer wg.Done()
 				
-				node, ok := it.Data.(Node)
+				node, ok := it.Data.(graph.Node)
 				if !ok {
 					resultChan <- BatchEmbeddingResult{
 						ID:    it.ID,

@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -45,7 +46,7 @@ func (s *SAPBDCIntegration) ExtractFromSAPBDC(
 	database string,
 	projectID string,
 	systemID string,
-) ([]Node, []Edge, error) {
+) ([]graph.graph.Node, []graph.graph.Edge, error) {
 	s.logger.Printf("Extracting from SAP BDC: formation=%s, source=%s", formationID, sourceSystem)
 
 	// Call SAP BDC service
@@ -164,12 +165,12 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 	schema *SAPBDCSchema,
 	projectID string,
 	systemID string,
-) ([]Node, []Edge) {
-	nodes := []Node{}
-	edges := []Edge{}
+) ([]graph.graph.Node, []graph.graph.Edge) {
+	nodes := []graph.graph.Node{}
+	edges := []graph.graph.Edge{}
 
 	// Create database/schema node
-	dbNode := Node{
+	dbNode := graph.Node{
 		ID:    fmt.Sprintf("sap_bdc:%s:%s", schema.Database, schema.Schema),
 		Type:  "database",
 		Label: fmt.Sprintf("%s.%s", schema.Database, schema.Schema),
@@ -185,7 +186,7 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 
 	// Process tables
 	for _, table := range schema.Tables {
-		tableNode := Node{
+		tableNode := graph.Node{
 			ID:    fmt.Sprintf("sap_bdc:table:%s:%s:%s", schema.Database, schema.Schema, table.Name),
 			Type:  "table",
 			Label: table.Name,
@@ -208,7 +209,7 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 		nodes = append(nodes, tableNode)
 
 		// Create edge from database to table
-		edges = append(edges, Edge{
+		edges = append(edges, graph.Edge{
 			SourceID: dbNode.ID,
 			TargetID: tableNode.ID,
 			Label:    "CONTAINS",
@@ -217,7 +218,7 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 
 		// Process columns
 		for _, column := range table.Columns {
-			columnNode := Node{
+			columnNode := graph.Node{
 				ID:    fmt.Sprintf("sap_bdc:column:%s:%s:%s:%s", schema.Database, schema.Schema, table.Name, column.Name),
 				Type:  "column",
 				Label: column.Name,
@@ -249,7 +250,7 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 			nodes = append(nodes, columnNode)
 
 			// Create edge from table to column
-			edges = append(edges, Edge{
+			edges = append(edges, graph.Edge{
 				SourceID: tableNode.ID,
 				TargetID: columnNode.ID,
 				Label:    "HAS_COLUMN",
@@ -260,7 +261,7 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 		// Process foreign keys
 		for _, fk := range table.ForeignKeys {
 			referencedTableID := fmt.Sprintf("sap_bdc:table:%s:%s:%s", schema.Database, schema.Schema, fk.ReferencedTable)
-			edges = append(edges, Edge{
+			edges = append(edges, graph.Edge{
 				SourceID: tableNode.ID,
 				TargetID: referencedTableID,
 				Label:    "REFERENCES",
@@ -276,7 +277,7 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 
 	// Process views
 	for _, view := range schema.Views {
-		viewNode := Node{
+		viewNode := graph.Node{
 			ID:    fmt.Sprintf("sap_bdc:view:%s:%s:%s", schema.Database, schema.Schema, view.Name),
 			Type:  "view",
 			Label: view.Name,
@@ -300,7 +301,7 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 		nodes = append(nodes, viewNode)
 
 		// Create edge from database to view
-		edges = append(edges, Edge{
+		edges = append(edges, graph.Edge{
 			SourceID: dbNode.ID,
 			TargetID: viewNode.ID,
 			Label:    "CONTAINS",
@@ -309,7 +310,7 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 
 		// Process view columns
 		for _, column := range view.Columns {
-			columnNode := Node{
+			columnNode := graph.Node{
 				ID:    fmt.Sprintf("sap_bdc:column:%s:%s:%s:%s", schema.Database, schema.Schema, view.Name, column.Name),
 				Type:  "column",
 				Label: column.Name,
@@ -329,7 +330,7 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 			nodes = append(nodes, columnNode)
 
 			// Create edge from view to column
-			edges = append(edges, Edge{
+			edges = append(edges, graph.Edge{
 				SourceID: viewNode.ID,
 				TargetID: columnNode.ID,
 				Label:    "HAS_COLUMN",

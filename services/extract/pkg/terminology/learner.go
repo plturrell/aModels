@@ -1,6 +1,7 @@
 package terminology
 
 import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 	"context"
 	"fmt"
 	"log"
@@ -28,8 +29,8 @@ func NewTerminologyLearner(store TerminologyStore, logger *log.Logger) *Terminol
 // LearnFromExtraction learns terminology from an extraction run.
 func (tl *TerminologyLearner) LearnFromExtraction(
 	ctx context.Context,
-	nodes []Node,
-	edges []Edge,
+	nodes []graph.graph.Node,
+	edges []graph.graph.Edge,
 ) error {
 	tl.mu.Lock()
 	defer tl.mu.Unlock()

@@ -1,4 +1,7 @@
 package storage
+import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
+)
 
 import (
 	"context"
@@ -112,7 +115,7 @@ func flattenProperties(props map[string]any) map[string]any {
 // SaveGraph saves a graph to Neo4j.
 // Improvement 2: Retry logic is applied at the caller level
 // Improvement 5: Optimized with batch transaction processing
-func (p *Neo4jPersistence) SaveGraph(nodes []Node, edges []Edge) error {
+func (p *Neo4jPersistence) SaveGraph(nodes []graph.Node, edges []graph.Edge) error {
 	ctx := context.Background()
 	
 	// Improvement 5: Use batch processing for large datasets
@@ -135,7 +138,7 @@ func (p *Neo4jPersistence) SaveGraph(nodes []Node, edges []Edge) error {
 }
 
 // saveNodesInBatches saves nodes in batches for better performance
-func (p *Neo4jPersistence) saveNodesInBatches(ctx context.Context, nodes []Node, batchSize int) error {
+func (p *Neo4jPersistence) saveNodesInBatches(ctx context.Context, nodes []graph.Node, batchSize int) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	
 	for i := 0; i < len(nodes); i += batchSize {
@@ -230,7 +233,7 @@ func (p *Neo4jPersistence) saveNodesInBatches(ctx context.Context, nodes []Node,
 }
 
 // saveEdgesInBatches saves edges in batches for better performance
-func (p *Neo4jPersistence) saveEdgesInBatches(ctx context.Context, edges []Edge, batchSize int) error {
+func (p *Neo4jPersistence) saveEdgesInBatches(ctx context.Context, edges []graph.Edge, batchSize int) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	
 	for i := 0; i < len(edges); i += batchSize {

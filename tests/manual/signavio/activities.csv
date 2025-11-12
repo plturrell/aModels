@@ -1,0 +1,4 @@
+activityName,activityType,assignee,durationMs,endTime,id,processInstanceId,startTime,status
+Receive Order,userTask,sales.team@example.com,600000,1762904595761,PI-1000-ACT-1,PI-1000,1762903995761,completed
+Validate Credit,serviceTask,,300000,1762904895761,PI-1000-ACT-2,PI-1000,1762904595761,completed
+Approve Order,userTask,manager@example.com,6300000,1762911195761,PI-1000-ACT-3,PI-1000,1762904895761,completed

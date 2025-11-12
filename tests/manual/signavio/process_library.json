@@ -1,0 +1,32 @@
+{
+  "processes": [
+    {
+      "process_id": "PROC-ONBOARD-001",
+      "name": "Employee Onboarding",
+      "description": "Standard onboarding process for new hires across regions.",
+      "source": "signavio",
+      "bpmn_file": "docs/processes/employee_onboarding.bpmn",
+      "last_synced": "2024-10-05T09:15:00Z",
+      "tags": ["HR", "Onboarding"],
+      "metrics": {
+        "average_cycle_time_days": 5.2,
+        "variant_count": 4,
+        "case_volume": 320
+      }
+    },
+    {
+      "process_id": "PROC-INVOICE-003",
+      "name": "Invoice Reconciliation",
+      "description": "Matching supplier invoices with purchase orders and goods receipts.",
+      "source": "signavio",
+      "bpmn_file": "docs/processes/invoice_reconciliation.bpmn",
+      "last_synced": "2024-10-05T10:02:00Z",
+      "tags": ["Finance", "AP"],
+      "metrics": {
+        "average_cycle_time_days": 3.7,
+        "variant_count": 6,
+        "case_volume": 540
+      }
+    }
+  ]
+}

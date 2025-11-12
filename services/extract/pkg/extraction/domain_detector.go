@@ -1,6 +1,7 @@
 package extraction
 
 import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 	"context"
 	"log"
 
@@ -60,7 +61,7 @@ func (dd *DomainDetector) DetectDomain(text string) (string, string) {
 }
 
 // AssociateDomainsWithNodes associates domains with extracted nodes based on content
-func (dd *DomainDetector) AssociateDomainsWithNodes(nodes []Node) {
+func (dd *DomainDetector) AssociateDomainsWithNodes(nodes []graph.graph.Node) {
 	if dd == nil || dd.detector == nil {
 		return
 	}
@@ -95,7 +96,7 @@ func (dd *DomainDetector) AssociateDomainsWithNodes(nodes []Node) {
 }
 
 // AssociateDomainsWithEdges associates domains with extracted edges based on source/target nodes
-func (dd *DomainDetector) AssociateDomainsWithEdges(edges []Edge, nodes map[string]*Node) {
+func (dd *DomainDetector) AssociateDomainsWithEdges(edges []graph.graph.Edge, nodes map[string]*graph.Node) {
 	if dd == nil || dd.detector == nil {
 		return
 	}

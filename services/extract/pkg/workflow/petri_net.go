@@ -1,4 +1,7 @@
 package workflow
+import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
+)
 
 import (
 	"encoding/json"
@@ -321,9 +324,9 @@ func (pnc *PetriNetConverter) ConvertSQLToPetriNetSubprocess(
 }
 
 // PetriNetToGraphNodes converts a Petri net into knowledge graph nodes and edges.
-func (pnc *PetriNetConverter) PetriNetToGraphNodes(net *PetriNet) ([]Node, []Edge, string) {
-	nodes := []Node{}
-	edges := []Edge{}
+func (pnc *PetriNetConverter) PetriNetToGraphNodes(net *PetriNet) ([]graph.Node, []graph.Edge, string) {
+	nodes := []graph.Node{}
+	edges := []graph.Edge{}
 	rootID := fmt.Sprintf("petri_net:%s", net.ID)
 
 	// Root node for the Petri net

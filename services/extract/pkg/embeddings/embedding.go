@@ -1,6 +1,7 @@
 package embeddings
 
 import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -94,7 +95,7 @@ func generateSQLEmbedding(ctx context.Context, sql string) ([]float32, error) {
 
 // generateTableEmbedding generates embedding for table schema
 // Returns both RelationalTransformer and sap-rpt-1-oss embeddings if available
-func generateTableEmbedding(ctx context.Context, node Node) ([]float32, []float32, error) {
+func generateTableEmbedding(ctx context.Context, node graph.Node) ([]float32, []float32, error) {
 	// Extract columns from node properties or edges
 	columns := []map[string]any{}
 	if node.Props != nil {
@@ -184,13 +185,13 @@ func generateTableEmbedding(ctx context.Context, node Node) ([]float32, []float3
 }
 
 // generateTableEmbeddingLegacy generates single embedding (for backward compatibility)
-func generateTableEmbeddingLegacy(ctx context.Context, node Node) ([]float32, error) {
+func generateTableEmbeddingLegacy(ctx context.Context, node graph.Node) ([]float32, error) {
 	relational, _, err := generateTableEmbedding(ctx, node)
 	return relational, err
 }
 
 // generateColumnEmbedding generates embedding for column definition
-func generateColumnEmbedding(ctx context.Context, node Node) ([]float32, error) {
+func generateColumnEmbedding(ctx context.Context, node graph.Node) ([]float32, error) {
 	columnType := "string"
 	if node.Props != nil {
 		if t, ok := node.Props["type"].(string); ok && t != "" {

@@ -1,6 +1,7 @@
 package integrations
 
 import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 	"bytes"
 	"encoding/json"
 	"encoding/xml"
@@ -39,14 +40,14 @@ type SignavioMetadata struct {
 	Errors       []string                 `json:"errors,omitempty"`
 }
 
-func loadSignavioArtifacts(paths []string, logger *log.Logger) ([]Node, []Edge, SignavioMetadata) {
+func loadSignavioArtifacts(paths []string, logger *log.Logger) ([]graph.graph.Node, []graph.graph.Edge, SignavioMetadata) {
 	metadata := SignavioMetadata{}
 	if len(paths) == 0 {
 		return nil, nil, metadata
 	}
 
-	var nodes []Node
-	var edges []Edge
+	var nodes []graph.graph.Node
+	var edges []graph.graph.Edge
 	nodeIDs := make(map[string]struct{})
 	edgeIDs := make(map[string]struct{})
 
@@ -70,8 +71,8 @@ func loadSignavioArtifacts(paths []string, logger *log.Logger) ([]Node, []Edge, 
 
 		ext := strings.ToLower(filepath.Ext(path))
 		var (
-			processNodes     []Node
-			processEdges     []Edge
+			processNodes     []graph.graph.Node
+			processEdges     []graph.graph.Edge
 			processSummaries []SignavioProcessSummary
 		)
 
@@ -124,7 +125,7 @@ func loadSignavioArtifacts(paths []string, logger *log.Logger) ([]Node, []Edge, 
 	return nodes, edges, metadata
 }
 
-func parseSignavioJSON(data []byte, path string) ([]Node, []Edge, []SignavioProcessSummary, error) {
+func parseSignavioJSON(data []byte, path string) ([]graph.graph.Node, []graph.graph.Edge, []SignavioProcessSummary, error) {
 	type jsonElement struct {
 		ID            string            `json:"id"`
 		Type          string            `json:"type"`
@@ -156,8 +157,8 @@ func parseSignavioJSON(data []byte, path string) ([]Node, []Edge, []SignavioProc
 	}
 
 	sourceFile := filepath.Base(path)
-	var nodes []Node
-	var edges []Edge
+	var nodes []graph.graph.Node
+	var edges []graph.graph.Edge
 	summaries := make([]SignavioProcessSummary, 0, len(payload.Processes))
 
 	for _, proc := range payload.Processes {
@@ -215,7 +216,7 @@ func parseSignavioJSON(data []byte, path string) ([]Node, []Edge, []SignavioProc
 				summary.Labels[elementID] = elementLabel
 			}
 
-			nodes = append(nodes, Node{
+			nodes = append(nodes, graph.Node{
 				ID:    nodeID,
 				Type:  fmt.Sprintf("signavio_%s", elementType),
 				Label: elementLabel,
@@ -246,7 +247,7 @@ func parseSignavioJSON(data []byte, path string) ([]Node, []Edge, []SignavioProc
 				edgeProps["label"] = flow.Name
 			}
 
-			edges = append(edges, Edge{
+			edges = append(edges, graph.Edge{
 				SourceID: fmt.Sprintf("%s:%s", processID, flow.SourceRef),
 				TargetID: fmt.Sprintf("%s:%s", processID, flow.TargetRef),
 				Label:    "signavio_sequence_flow",
@@ -260,14 +261,14 @@ func parseSignavioJSON(data []byte, path string) ([]Node, []Edge, []SignavioProc
 	return nodes, edges, summaries, nil
 }
 
-func parseSignavioBPMN(data []byte, path string) ([]Node, []Edge, []SignavioProcessSummary, error) {
+func parseSignavioBPMN(data []byte, path string) ([]graph.graph.Node, []graph.graph.Edge, []SignavioProcessSummary, error) {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	sourceFile := filepath.Base(path)
 
-	var nodes []Node
-	var edges []Edge
+	var nodes []graph.graph.Node
+	var edges []graph.graph.Edge
 	var summaries []SignavioProcessSummary
-	nodeIndex := make(map[string]*Node)
+	nodeIndex := make(map[string]*graph.Node)
 
 	var currentProcess *SignavioProcessSummary
 	processStack := make([]*SignavioProcessSummary, 0)
@@ -328,7 +329,7 @@ func parseSignavioBPMN(data []byte, path string) ([]Node, []Edge, []SignavioProc
 					continue
 				}
 				edgeKey := fmt.Sprintf("%s:%s->%s", currentProcess.ID, sourceRef, targetRef)
-				edges = append(edges, Edge{
+				edges = append(edges, graph.Edge{
 					SourceID: fmt.Sprintf("%s:%s", currentProcess.ID, sourceRef),
 					TargetID: fmt.Sprintf("%s:%s", currentProcess.ID, targetRef),
 					Label:    "signavio_sequence_flow",
@@ -363,7 +364,7 @@ func parseSignavioBPMN(data []byte, path string) ([]Node, []Edge, []SignavioProc
 				"source_file":  sourceFile,
 			}
 
-			node := Node{
+			node := graph.Node{
 				ID:    nodeKey,
 				Type:  fmt.Sprintf("signavio_%s", elementType),
 				Label: elementName,

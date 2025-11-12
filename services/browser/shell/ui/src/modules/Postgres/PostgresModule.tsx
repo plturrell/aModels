@@ -21,10 +21,10 @@ import {
   CircularProgress,
   Chip,
   Stack,
-  Grid,
   Card,
   CardContent,
 } from '@mui/material';
+import { GridLegacy as Grid } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import InfoIcon from '@mui/icons-material/Info';
 import { fetchJSON } from '../../api/client';

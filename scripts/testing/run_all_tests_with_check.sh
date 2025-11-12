@@ -13,7 +13,7 @@ echo ""
 
 # Step 0: Check services
 echo "Running Step 0: Service Health Check..."
-if ! ./testing/00_check_services.sh; then
+if ! ./scripts/testing/00_check_services.sh; then
     echo ""
     echo "❌ Service health check failed!"
     echo "Please fix service issues before running tests."
@@ -32,5 +32,5 @@ export EXTRACT_SERVICE_URL="${EXTRACT_SERVICE_URL:-http://localhost:19080}"
 export TRAINING_SERVICE_URL="${TRAINING_SERVICE_URL:-http://localhost:8080}"
 
 # Run all tests
-./testing/run_all_tests_working.sh
+./scripts/testing/run_all_tests.sh
 

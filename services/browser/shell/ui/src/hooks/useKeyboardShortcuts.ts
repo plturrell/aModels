@@ -3,7 +3,7 @@
  * Provides global keyboard shortcuts for common actions
  */
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, DependencyList, useCallback } from 'react';
 
 export interface KeyboardShortcut {
   key: string;

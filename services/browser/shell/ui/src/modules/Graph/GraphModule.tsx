@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useToast } from '../../hooks/useToast';
 import {
   Box,
   Paper,
@@ -46,6 +47,7 @@ import {
   GraphEdge,
 } from '../../api/graph';
 import { GraphData } from '../../types/graph';
+import { GraphSkeleton } from '../../components/loading-states';
 
 interface GraphModuleProps {
   projectId?: string;
@@ -53,6 +55,7 @@ interface GraphModuleProps {
 }
 
 export function GraphModule({ projectId, systemId }: GraphModuleProps) {
+  const toast = useToast();
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -192,7 +195,7 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
 
       // Display query results (could be enhanced with a results table)
       console.log('Query results:', response);
-      alert(`Query executed in ${response.execution_time_ms}ms. Found ${response.data.length} results.`);
+      toast.success(`Query executed in ${response.execution_time_ms}ms. Found ${response.data.length} results.`);
     } catch (err: any) {
       setError(err.message || 'Failed to execute query');
       console.error('Graph query error:', err);
@@ -220,7 +223,7 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
 
       if (response.shortest_path) {
         setSelectedNodes(response.shortest_path.nodes);
-        alert(`Found path with length ${response.shortest_path.length}`);
+        toast.success(`Found path with length ${response.shortest_path.length}`);
       } else {
         setError('No path found between the specified nodes');
       }
@@ -277,6 +280,8 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
                   sx={{ mb: 2 }}
                   required
                   size="small"
+                  aria-label="Enter project identifier to load graph"
+                  aria-required="true"
                 />
                 <TextField
                   fullWidth
@@ -317,7 +322,8 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
                   variant="contained"
                   onClick={loadGraph}
                   disabled={loading || !formProjectId}
-                  size="small"
+                  aria-label="Load graph visualization for entered project ID"
+                  aria-busy={loading}
                   sx={{ mb: 1 }}
                 >
                   {loading ? <CircularProgress size={20} /> : 'Load Graph'}
@@ -352,12 +358,10 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
             </Stack>
           </Grid>
           <Grid item xs={12} md={7}>
-            <Paper sx={{ p: 2, height: '600px' }}>
-              {loading && graphData.nodes.length === 0 ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                  <CircularProgress />
-                </Box>
-              ) : (
+            {loading && graphData.nodes.length === 0 ? (
+              <GraphSkeleton />
+            ) : (
+              <Paper sx={{ p: 2, height: '600px' }}>
                 <GraphVisualization
                   graphData={graphData}
                   layout={layout}
@@ -366,8 +370,8 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
                   selectedNodes={selectedNodes}
                   height={600}
                 />
-              )}
-            </Paper>
+              </Paper>
+            )}
           </Grid>
           <Grid item xs={12} md={3}>
             <GraphExplorer
@@ -693,7 +697,7 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
         </Grid>
       )}
 
-      {activeTab === 13 && (
+      {activeTab === 14 && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
             <Paper sx={{ p: 3 }}>

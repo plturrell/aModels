@@ -29,6 +29,18 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-mui': ['@mui/material', '@mui/icons-material'],
+          'vendor-charts': ['@nivo/core', '@nivo/network', 'recharts'],
+          'vendor-graph': ['cytoscape', 'react-cytoscapejs'],
+        }
+      }
+    },
+    chunkSizeWarningLimit: 1000,
+    sourcemap: false
   },
 });

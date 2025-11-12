@@ -2,6 +2,8 @@ package persistence
 
 import (
 	"errors"
+	"fmt"
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 	_ "github.com/neo4j/neo4j-go-driver/v5/neo4j"
@@ -9,14 +11,14 @@ import (
 )
 
 type GraphPersistence interface {
-	SaveGraph(nodes []Node, edges []Edge) error
+	SaveGraph(nodes []graph.Node, edges []graph.Edge) error
 }
 
 type compositeGraphPersistence struct {
 	stores []GraphPersistence
 }
 
-func newCompositeGraphPersistence(stores ...GraphPersistence) GraphPersistence {
+func NewCompositeGraphPersistence(stores ...GraphPersistence) GraphPersistence {
 	if len(stores) == 0 {
 		return nil
 	}
@@ -26,18 +28,18 @@ func newCompositeGraphPersistence(stores ...GraphPersistence) GraphPersistence {
 	return compositeGraphPersistence{stores: append([]GraphPersistence(nil), stores...)}
 }
 
-func (c compositeGraphPersistence) SaveGraph(nodes []Node, edges []Edge) error {
+func (c compositeGraphPersistence) SaveGraph(nodes []graph.Node, edges []graph.Edge) error {
 	var errs []error
-	for _, store := range c.stores {
+	for i, store := range c.stores {
 		if store == nil {
 			continue
 		}
 		if err := store.SaveGraph(nodes, edges); err != nil {
-			errs = append(errs, err)
+			errs = append(errs, fmt.Errorf("store %d failed: %w", i, err))
 		}
 	}
 	if len(errs) > 0 {
-		return errors.Join(errs...)
+		return fmt.Errorf("composite persistence errors: %w", errors.Join(errs...))
 	}
 	return nil
 }

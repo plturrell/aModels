@@ -1,4 +1,7 @@
 package storage
+import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
+)
 
 import (
 	"context"
@@ -51,9 +54,9 @@ func parseHiveDDL(ctx context.Context, ddl string) (ddlParseResult, error) {
 	return parsed, nil
 }
 
-func ddlToGraph(parsed ddlParseResult) ([]Node, []Edge) {
-	var nodes []Node
-	var edges []Edge
+func ddlToGraph(parsed ddlParseResult) ([]graph.Node, []graph.Edge) {
+	var nodes []graph.Node
+	var edges []graph.Edge
 	schemaNodes := make(map[string]bool) // Track created schema nodes
 
 	for _, table := range parsed.Tables {

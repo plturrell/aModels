@@ -1,0 +1,4 @@
+avgDurationMs,category,createdDate,description,id,instanceCount,modifiedDate,name,version
+7200000,Finance,1705276800000,End-to-end order processing and payment collection,PD-1,1245,1727740800000,Order-to-Cash,v2.1
+10800000,Procurement,1706745600000,Purchase requisition to payment workflow,PD-2,987,1726358400000,Procure-to-Pay,v1.8
+172800000,HR,1698796800000,Employee lifecycle management process,PD-3,543,1724112000000,Hire-to-Retire,v3.0

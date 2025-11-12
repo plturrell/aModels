@@ -20,6 +20,7 @@ import {
   Stack,
   List,
   ListItem,
+  ListItemButton,
   ListItemText,
   Divider,
   Card,
@@ -622,14 +623,13 @@ export function NarrativeInsights({
               {storylines.storylines && Array.isArray(storylines.storylines) && storylines.storylines.length > 0 ? (
                 <List>
                   {storylines.storylines.map((sid: string) => (
-                    <ListItem
+                    <ListItemButton
                       key={sid}
-                      component="button"
                       onClick={() => setSelectedStoryline(sid)}
                       selected={selectedStoryline === sid}
                     >
                       <ListItemText primary={sid} />
-                    </ListItem>
+                    </ListItemButton>
                   ))}
                 </List>
               ) : storylines.storylines && typeof storylines.storylines === 'object' ? (

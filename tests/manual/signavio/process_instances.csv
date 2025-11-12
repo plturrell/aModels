@@ -1,0 +1,11 @@
+businessKey,durationMs,endTime,id,initiator,processDefinitionId,processDefinitionName,startTime,status,variables_customer_id,variables_order_value,variables_priority,variables_region
+ORDER-2000,7200000,1762921995720,PI-1000,user1@example.com,PD-1,Order-to-Cash,1762914795720,completed,CUST-1,100.0,high,EMEA
+ORDER-2001,7260000,,PI-1001,user2@example.com,PD-2,Procure-to-Pay,1762824795720,running,CUST-2,117.3,medium,APAC
+ORDER-2002,7320000,1762742115720,PI-1002,user3@example.com,PD-3,Hire-to-Retire,1762734795720,failed,CUST-3,134.6,low,AMER
+ORDER-2003,7380000,1762652175720,PI-1003,user4@example.com,PD-4,Lead-to-Opportunity,1762644795720,suspended,CUST-4,151.9,high,EMEA
+ORDER-2004,7440000,1762562235720,PI-1004,user5@example.com,PD-5,Issue-to-Resolution,1762554795720,completed,CUST-5,169.2,medium,APAC
+ORDER-2005,7500000,,PI-1005,user6@example.com,PD-1,Order-to-Cash,1762464795720,running,CUST-6,186.5,low,AMER
+ORDER-2006,7560000,1762382355720,PI-1006,user7@example.com,PD-2,Procure-to-Pay,1762374795720,failed,CUST-7,203.8,high,EMEA
+ORDER-2007,7620000,1762292415720,PI-1007,user8@example.com,PD-3,Hire-to-Retire,1762284795720,suspended,CUST-8,221.1,medium,APAC
+ORDER-2008,7680000,1762202475720,PI-1008,user9@example.com,PD-4,Lead-to-Opportunity,1762194795720,completed,CUST-9,238.4,low,AMER
+ORDER-2009,7740000,,PI-1009,user10@example.com,PD-5,Issue-to-Resolution,1762104795720,running,CUST-10,255.7,high,EMEA

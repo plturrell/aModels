@@ -1,0 +1,34 @@
+[
+  {
+    "id": "PI-1000-ACT-1",
+    "processInstanceId": "PI-1000",
+    "activityName": "Receive Order",
+    "activityType": "userTask",
+    "startTime": 1762903995761,
+    "endTime": 1762904595761,
+    "durationMs": 600000,
+    "assignee": "sales.team@example.com",
+    "status": "completed"
+  },
+  {
+    "id": "PI-1000-ACT-2",
+    "processInstanceId": "PI-1000",
+    "activityName": "Validate Credit",
+    "activityType": "serviceTask",
+    "startTime": 1762904595761,
+    "endTime": 1762904895761,
+    "durationMs": 300000,
+    "status": "completed"
+  },
+  {
+    "id": "PI-1000-ACT-3",
+    "processInstanceId": "PI-1000",
+    "activityName": "Approve Order",
+    "activityType": "userTask",
+    "startTime": 1762904895761,
+    "endTime": 1762911195761,
+    "durationMs": 6300000,
+    "assignee": "manager@example.com",
+    "status": "completed"
+  }
+]

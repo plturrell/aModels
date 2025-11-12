@@ -1,4 +1,7 @@
 package clients
+import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
+)
 
 import (
 	"bytes"

@@ -143,7 +143,7 @@ export function SearchModule() {
     try {
       const response = await generateDashboard(query, searchResponse);
       if (response.dashboard.enriched && response.dashboard.specification) {
-        setDashboard(response.dashboard.specification as Record<string, unknown>);
+        setDashboard(response.dashboard.specification as unknown as Record<string, unknown>);
         setDashboardResponse(response);
         setSelectedTab(4); // Switch to dashboard tab
       } else {
@@ -168,7 +168,7 @@ export function SearchModule() {
         setNarrative(response.narrative.markdown);
       }
       if (response.dashboard.enriched && response.dashboard.specification) {
-        setDashboard(response.dashboard.specification as Record<string, unknown>);
+        setDashboard(response.dashboard.specification as unknown as Record<string, unknown>);
       }
       setNarrativeResponse({ narrative: response.narrative, search_metadata: response.search_metadata });
       setDashboardResponse({ dashboard: response.dashboard, search_metadata: response.search_metadata });
@@ -501,7 +501,7 @@ export function SearchModule() {
                   <GraphContextPanel
                     entityId={selectedEntityId}
                     entityLabel={selectedEntityLabel}
-                    projectId={searchResponse?.metadata?.project_id}
+                    projectId={(searchResponse?.metadata as any)?.project_id}
                     onNodeClick={(nodeId) => {
                       // Could navigate to graph module or show details
                       console.log('Node clicked:', nodeId);
@@ -687,7 +687,7 @@ export function SearchModule() {
                 <Divider />
                 <DashboardRenderer
                   specification={dashboard as any}
-                  data={searchResponse?.visualization}
+                  data={searchResponse?.visualization as any}
                 />
               </Stack>
             </Paper>

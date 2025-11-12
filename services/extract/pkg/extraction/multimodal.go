@@ -1,6 +1,7 @@
 package extraction
 
 import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -287,12 +288,12 @@ func (mme *MultiModalExtractor) ConvertExtractedTableToNodes(
 	table ExtractedTable,
 	tableName string,
 	sourceID string,
-) ([]Node, []Edge) {
-	nodes := []Node{}
-	edges := []Edge{}
+) ([]graph.graph.Node, []graph.graph.Edge) {
+	nodes := []graph.graph.Node{}
+	edges := []graph.graph.Edge{}
 
 	// Create table node
-	tableNode := Node{
+	tableNode := graph.Node{
 		ID:    fmt.Sprintf("table:%s", tableName),
 		Type:  "table",
 		Label: tableName,
@@ -308,7 +309,7 @@ func (mme *MultiModalExtractor) ConvertExtractedTableToNodes(
 
 	// Create column nodes
 	for i, header := range table.Headers {
-		colNode := Node{
+		colNode := graph.Node{
 			ID:    fmt.Sprintf("column:%s:%s", tableName, header),
 			Type:  "column",
 			Label: header,
@@ -323,7 +324,7 @@ func (mme *MultiModalExtractor) ConvertExtractedTableToNodes(
 		nodes = append(nodes, colNode)
 
 		// Create HAS_COLUMN edge
-		edge := Edge{
+		edge := graph.Edge{
 			SourceID: tableNode.ID,
 			TargetID: colNode.ID,
 			Label:    "HAS_COLUMN",

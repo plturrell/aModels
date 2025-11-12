@@ -1,0 +1,13 @@
+{
+  "generated_at": "2025-11-12T15:07:21.441104+00:00",
+  "metrics": {
+    "view_count": 34,
+    "total_columns": 5549,
+    "avg_information_loss": 0.073,
+    "avg_type_coverage": 0.387,
+    "avg_source_similarity": 1.0,
+    "views_with_joins": 9,
+    "views_missing_sources": 12
+  },
+  "notes": "Derived from sgmi_view_builder.py; regenerated on every SGMI ingest run."
+}

@@ -289,3 +289,33 @@ fix-permissions: ## Fix script permissions
 	@echo "$(GREEN)Fixing script permissions...$(NC)"
 	@find $(SCRIPTS_DIR) -name '*.sh' -exec chmod +x {} \;
 	@echo "$(GREEN)Permissions fixed$(NC)"
+
+# Testing Targets
+.PHONY: test test-unit test-integration test-e2e test-performance test-benchmarks
+
+test: test-unit test-integration
+	@echo "✅ All tests passed"
+
+test-unit:
+	@echo "Running unit tests..."
+	@cd tests/scripts && ./run_unit_tests.sh
+
+test-integration:
+	@echo "Running integration tests..."
+	@cd tests/scripts && ./run_integration_tests.sh
+
+test-e2e:
+	@echo "Running E2E tests..."
+	@cd tests/scripts && ./run_e2e_tests.sh
+
+test-performance:
+	@echo "Running performance tests..."
+	@cd tests/scripts && ./run_performance_tests.sh
+
+test-benchmarks:
+	@echo "Running benchmarks..."
+	@cd tests/scripts && ./run_benchmarks.sh
+
+test-all:
+	@echo "Running ALL tests..."
+	@cd tests/scripts && ./run_all_tests.sh --check

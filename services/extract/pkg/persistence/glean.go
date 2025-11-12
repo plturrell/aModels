@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 )
 
 // GleanPersistence exports graph facts into JSON batches compatible with the
@@ -78,7 +79,7 @@ func NewGleanPersistence(exportDir, predicatePrefix string, logger *log.Logger) 
 //	glean write --schema <schema-path> --db <name/instance> <batch-file>
 //
 // followed by `glean finish`.
-func (g *GleanPersistence) SaveGraph(nodes []Node, edges []Edge) error {
+func (g *GleanPersistence) SaveGraph(nodes []graph.Node, edges []graph.Edge) error {
 	g.warnIfSchemaMissing()
 	if len(nodes) == 0 && len(edges) == 0 && !g.includeEmptyBatches {
 		return nil
@@ -138,7 +139,7 @@ func (g *GleanPersistence) warnIfSchemaMissing() {
 	})
 }
 
-func (g *GleanPersistence) buildBatch(nodes []Node, edges []Edge) ([]gleanPredicate, error) {
+func (g *GleanPersistence) buildBatch(nodes []graph.Node, edges []graph.Edge) ([]gleanPredicate, error) {
 	nodeFacts := make([]gleanFact, 0, len(nodes))
 	for _, node := range nodes {
 		if node.ID == "" {
@@ -306,12 +307,12 @@ func encodeProperties(props map[string]any) (string, error) {
 	return string(data), nil
 }
 
-func dedupeNodes(nodes []Node) []Node {
+func dedupeNodes(nodes []graph.Node) []graph.Node {
 	if len(nodes) == 0 {
 		return nil
 	}
 	seen := make(map[string]struct{}, len(nodes))
-	result := make([]Node, 0, len(nodes))
+	result := make([]graph.Node, 0, len(nodes))
 	for _, node := range nodes {
 		if node.ID == "" {
 			continue
@@ -325,12 +326,12 @@ func dedupeNodes(nodes []Node) []Node {
 	return result
 }
 
-func dedupeEdges(edges []Edge) []Edge {
+func dedupeEdges(edges []graph.Edge) []graph.Edge {
 	if len(edges) == 0 {
 		return nil
 	}
 	seen := make(map[string]struct{}, len(edges))
-	result := make([]Edge, 0, len(edges))
+	result := make([]graph.Edge, 0, len(edges))
 	for _, edge := range edges {
 		if edge.SourceID == "" || edge.TargetID == "" {
 			continue

@@ -1,0 +1,77 @@
+{
+  "domain_detection": {
+    "stats": {
+      "avg_latency_ms": 0,
+      "p95_latency_ms": 0,
+      "p99_latency_ms": 0,
+      "min_latency_ms": 0,
+      "max_latency_ms": 0,
+      "throughput": 0
+    },
+    "successful": 0,
+    "failed": 10,
+    "errors": [
+      "[Errno -2] Name or service not known"
+    ]
+  },
+  "model_inference": {
+    "stats": {
+      "avg_latency_ms": 0,
+      "p95_latency_ms": 0,
+      "p99_latency_ms": 0,
+      "min_latency_ms": 0,
+      "max_latency_ms": 0,
+      "throughput": 0
+    },
+    "successful": 0,
+    "failed": 10,
+    "errors": [
+      "[Errno -2] Name or service not known"
+    ]
+  },
+  "routing": {
+    "stats": {
+      "avg_latency_ms": 0,
+      "p95_latency_ms": 0,
+      "p99_latency_ms": 0,
+      "min_latency_ms": 0,
+      "max_latency_ms": 0,
+      "throughput": 0
+    },
+    "successful": 0,
+    "failed": 10,
+    "errors": [
+      "[Errno -2] Name or service not known"
+    ]
+  },
+  "extraction": {
+    "stats": {
+      "avg_latency_ms": 0,
+      "p95_latency_ms": 0,
+      "p99_latency_ms": 0,
+      "min_latency_ms": 0,
+      "max_latency_ms": 0,
+      "throughput": 0
+    },
+    "successful": 0,
+    "failed": 10,
+    "errors": [
+      "[Errno -2] Name or service not known"
+    ]
+  },
+  "embedding": {
+    "stats": {
+      "avg_latency_ms": 0,
+      "p95_latency_ms": 0,
+      "p99_latency_ms": 0,
+      "min_latency_ms": 0,
+      "max_latency_ms": 0,
+      "throughput": 0
+    },
+    "successful": 0,
+    "failed": 10,
+    "errors": [
+      "[Errno -2] Name or service not known"
+    ]
+  }
+}

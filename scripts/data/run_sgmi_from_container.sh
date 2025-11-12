@@ -29,7 +29,7 @@ cd "${REPO_ROOT}/services/extract/scripts"
 export SGMI_JSON_FILES="${DATA_ROOT}/json_with_changes.json"
 export SGMI_DDL_FILES="${DATA_ROOT}/hive-ddl/sgmisit_all_tables_statement.hql:${DATA_ROOT}/hive-ddl/sgmisitetl_all_tables_statement.hql:${DATA_ROOT}/hive-ddl/sgmisitstg_all_tables_statement.hql:${DATA_ROOT}/hive-ddl/sgmisit_view.hql"
 export SGMI_CONTROLM_FILES="${DATA_ROOT}/SGMI-controlm/catalyst migration prod 640.xml"
-python3 sgmi_view_builder.py "${TMP_PAYLOAD}"
+python3 pipelines/sgmi_view_builder.py "${TMP_PAYLOAD}"
 
 # Convert host paths to container paths
 echo "   Converting paths to container format..."
@@ -75,7 +75,7 @@ try:
     with open('/tmp/sgmi_payload.json') as f:
         payload = json.load(f)
     
-    r = requests.post('http://localhost:8082/graph', json=payload, timeout=60)
+    r = requests.post('http://localhost:8082/knowledge-graph', json=payload, timeout=60)
     print(f"Status: {r.status_code}")
     
     if r.status_code == 200:

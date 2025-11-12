@@ -193,7 +193,7 @@ func main() {
 		server.realTimeGleanExporter = realTimeGleanExporter
 	}
 
-	server.graphPersistence = persistence.NewCompositepersistence.GraphPersistence(graphPersistences...)
+	server.graphPersistence = persistence.NewCompositeGraphPersistence(graphPersistences...)
 
 	if hr := schema.NewHANASchemaReplication(logger); hr != nil {
 		server.hanaReplication = hr

@@ -1,4 +1,7 @@
 package storage
+import (
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
+)
 
 import (
 	"context"
@@ -287,7 +290,7 @@ func (p *RedisPersistence) SearchByText(query string, artifactType string, limit
 }
 
 // SaveSchema stores graph nodes and edges as JSON payloads under deterministic keys.
-func (p *RedisPersistence) SaveSchema(nodes []Node, edges []Edge) error {
+func (p *RedisPersistence) SaveSchema(nodes []graph.Node, edges []graph.Edge) error {
 	ctx := context.Background()
 	pipe := p.client.Pipeline()
 
