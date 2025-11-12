@@ -1,10 +1,10 @@
 {
   "type": "record",
-  "name": "Agent_Telemetry",
+  "name": "Process_Instances",
   "namespace": "com.signavio.test",
   "fields": [
     {
-      "name": "agent_run_id",
+      "name": "id",
       "type": [
         "null",
         "string"
@@ -12,7 +12,7 @@
       "default": null
     },
     {
-      "name": "agent_name",
+      "name": "processDefinitionId",
       "type": [
         "null",
         "string"
@@ -20,7 +20,7 @@
       "default": null
     },
     {
-      "name": "task_id",
+      "name": "processDefinitionName",
       "type": [
         "null",
         "string"
@@ -28,15 +28,7 @@
       "default": null
     },
     {
-      "name": "task_description",
-      "type": [
-        "null",
-        "string"
-      ],
-      "default": null
-    },
-    {
-      "name": "start_time",
+      "name": "startTime",
       "type": [
         "null",
         "long"
@@ -44,7 +36,7 @@
       "default": null
     },
     {
-      "name": "end_time",
+      "name": "endTime",
       "type": [
         "null",
         "long"
@@ -60,15 +52,7 @@
       "default": null
     },
     {
-      "name": "outcome_summary",
-      "type": [
-        "null",
-        "string"
-      ],
-      "default": null
-    },
-    {
-      "name": "latency_ms",
+      "name": "durationMs",
       "type": [
         "null",
         "long"
@@ -76,7 +60,7 @@
       "default": null
     },
     {
-      "name": "notes",
+      "name": "initiator",
       "type": [
         "null",
         "string"
@@ -84,7 +68,7 @@
       "default": null
     },
     {
-      "name": "service_name",
+      "name": "businessKey",
       "type": [
         "null",
         "string"
@@ -92,7 +76,7 @@
       "default": null
     },
     {
-      "name": "workflow_name",
+      "name": "variables_customer_id",
       "type": [
         "null",
         "string"
@@ -100,7 +84,15 @@
       "default": null
     },
     {
-      "name": "workflow_version",
+      "name": "variables_order_value",
+      "type": [
+        "null",
+        "double"
+      ],
+      "default": null
+    },
+    {
+      "name": "variables_region",
       "type": [
         "null",
         "string"
@@ -108,39 +100,7 @@
       "default": null
     },
     {
-      "name": "agent_type",
-      "type": [
-        "null",
-        "string"
-      ],
-      "default": null
-    },
-    {
-      "name": "agent_state",
-      "type": [
-        "null",
-        "string"
-      ],
-      "default": null
-    },
-    {
-      "name": "tools_used",
-      "type": [
-        "null",
-        "string"
-      ],
-      "default": null
-    },
-    {
-      "name": "llm_calls",
-      "type": [
-        "null",
-        "string"
-      ],
-      "default": null
-    },
-    {
-      "name": "process_steps",
+      "name": "variables_priority",
       "type": [
         "null",
         "string"

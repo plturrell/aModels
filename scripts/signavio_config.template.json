@@ -1,0 +1,16 @@
+{
+  "base_url": "https://ingestion-eu.signavio.com",
+  "api_key": "your-signavio-api-key-here",
+  "tenant_id": "your-tenant-id-here",
+  "endpoints": {
+    "process_instances": "/api/v1/process-instances",
+    "process_definitions": "/api/v1/process-definitions",
+    "activities": "/api/v1/process-instances/{instanceId}/activities",
+    "ingestion": "/ingestion/api/v1/datasets/{dataset}/upload"
+  },
+  "defaults": {
+    "timeout_seconds": 30,
+    "max_retries": 3,
+    "page_size": 100
+  }
+}
