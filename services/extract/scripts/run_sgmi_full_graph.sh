@@ -4,7 +4,8 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
-REPO_ROOT=$(cd "${ROOT_DIR}/.." && pwd)
+# Go up from services/extract to get to repo root (aModels)
+REPO_ROOT=$(cd "${ROOT_DIR}/../.." && pwd)
 DATA_ROOT="${REPO_ROOT}/data/training/sgmi"
 LOG_DIR="${REPO_ROOT}/logs/sgmi_pipeline"
 
@@ -12,20 +13,38 @@ mkdir -p "${LOG_DIR}"
 
 target_url=${1:-http://localhost:19080/knowledge-graph}
 
-json_tables=(
-  "${DATA_ROOT}/json_with_changes.json"
-)
-
-hive_ddls=(
-  "${DATA_ROOT}/hive-ddl/sgmisit_all_tables_statement.hql"
-  "${DATA_ROOT}/hive-ddl/sgmisitetl_all_tables_statement.hql"
-  "${DATA_ROOT}/hive-ddl/sgmisitstg_all_tables_statement.hql"
-  "${DATA_ROOT}/hive-ddl/sgmisit_view.hql"
-)
-
-controlm_files=(
-  "${DATA_ROOT}/sgmi-controlm/catalyst migration prod 640.xml"
-)
+# Determine if we're running inside a container or on host
+# If /workspace exists, we're in a container; otherwise use host paths
+if [[ -d "/workspace" ]]; then
+    # Running inside container - use container paths
+    CONTAINER_DATA_ROOT="/workspace/data/training/sgmi"
+    json_tables=(
+      "${CONTAINER_DATA_ROOT}/json_with_changes.json"
+    )
+    hive_ddls=(
+      "${CONTAINER_DATA_ROOT}/hive-ddl/sgmisit_all_tables_statement.hql"
+      "${CONTAINER_DATA_ROOT}/hive-ddl/sgmisitetl_all_tables_statement.hql"
+      "${CONTAINER_DATA_ROOT}/hive-ddl/sgmisitstg_all_tables_statement.hql"
+      "${CONTAINER_DATA_ROOT}/hive-ddl/sgmisit_view.hql"
+    )
+    controlm_files=(
+      "${CONTAINER_DATA_ROOT}/SGMI-controlm/catalyst migration prod 640.xml"
+    )
+else
+    # Running on host - use host paths (will be converted to container paths)
+    json_tables=(
+      "${DATA_ROOT}/json_with_changes.json"
+    )
+    hive_ddls=(
+      "${DATA_ROOT}/hive-ddl/sgmisit_all_tables_statement.hql"
+      "${DATA_ROOT}/hive-ddl/sgmisitetl_all_tables_statement.hql"
+      "${DATA_ROOT}/hive-ddl/sgmisitstg_all_tables_statement.hql"
+      "${DATA_ROOT}/hive-ddl/sgmisit_view.hql"
+    )
+    controlm_files=(
+      "${DATA_ROOT}/SGMI-controlm/catalyst migration prod 640.xml"
+    )
+fi
 
 default_view_store="${REPO_ROOT}/agenticAiETH_layer4_AgentFlow/store"
 view_registry_out=${SGMI_VIEW_REGISTRY_OUT:-${default_view_store}/sgmi_view_lineage.json}
@@ -60,6 +79,40 @@ export SGMI_VIEW_REGISTRY_OUT="${view_registry_out}"
 export SGMI_VIEW_SUMMARY_OUT="${view_summary_out}"
 
 python3 "${SCRIPT_DIR}/sgmi_view_builder.py" "${tmp_payload}"
+
+# Convert host paths to container paths if running from host
+# The extract service expects paths accessible from inside the container
+if [[ ! -d "/workspace" ]]; then
+    # We're on the host - convert paths in payload to container paths
+    python3 <<'PYTHON'
+import json
+import sys
+
+payload_file = sys.argv[1]
+with open(payload_file, 'r') as f:
+    payload = json.load(f)
+
+# Convert host paths to container paths
+def convert_path(path):
+    if path.startswith('/home/aModels/data/'):
+        return path.replace('/home/aModels/data/', '/workspace/data/')
+    elif path.startswith('${REPO_ROOT}/data/'):
+        return path.replace('${REPO_ROOT}/data/', '/workspace/data/')
+    return path
+
+# Convert all file paths
+if 'json_tables' in payload:
+    payload['json_tables'] = [convert_path(p) for p in payload['json_tables']]
+if 'hive_ddls' in payload:
+    payload['hive_ddls'] = [convert_path(p) for p in payload['hive_ddls']]
+if 'control_m_files' in payload:
+    payload['control_m_files'] = [convert_path(p) for p in payload['control_m_files']]
+
+with open(payload_file, 'w') as f:
+    json.dump(payload, f, indent=2)
+PYTHON
+    "${tmp_payload}"
+fi
 
 timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 echo "[${timestamp}] Submitting SGMI full payload to ${target_url}" >&2

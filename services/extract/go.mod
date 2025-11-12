@@ -1,8 +1,9 @@
 module github.com/plturrell/aModels/services/extract
 
-go 1.23
+go 1.18
 
 require (
+	ai_benchmarks/services/shared v0.0.0-00010101000000-000000000000
 	github.com/Chahine-tech/sql-parser-go v0.0.0-20250711162409-da324d384ca3
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/SAP/go-hdb v1.14.9
@@ -11,11 +12,12 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
+	github.com/plturrell/aModels/pkg/localai v0.0.0-00010101000000-000000000000
 	github.com/plturrell/aModels/services/postgres v0.0.0
 	github.com/pressly/goose/v3 v3.21.1
 	github.com/redis/go-redis/v9 v9.16.0
 	google.golang.org/grpc v1.76.0
-	google.golang.org/protobuf v1.36.8
+	google.golang.org/protobuf v1.36.10
 )
 
 replace github.com/plturrell/aModels/services/postgres => ../postgres
@@ -27,6 +29,8 @@ replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration => .
 replace github.com/Chahine-tech/sql-parser-go => ../../infrastructure/third_party/sql-parser-go
 
 replace github.com/plturrell/aModels/pkg/localai => ../../pkg/localai
+
+replace github.com/plturrell/aModels => ../..
 
 replace ai_benchmarks/services/shared => ../shared
 
@@ -42,12 +46,14 @@ require (
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
+	github.com/plturrell/aModels v0.0.0-00010101000000-000000000000 // indirect
 	github.com/sethvargo/go-retry v0.2.4 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/yuin/gopher-lua v1.1.0 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
-	go.opentelemetry.io/otel v1.38.0 // indirect
-	go.opentelemetry.io/otel/sdk/metric v1.38.0 // indirect
+	go.opentelemetry.io/otel/metric v1.38.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.38.0 // indirect
+	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/mod v0.29.0 // indirect

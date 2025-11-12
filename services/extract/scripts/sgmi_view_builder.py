@@ -306,6 +306,44 @@ def _sources_from_projection(
     return sources
 
 
+def _detect_transformation_type(expr: exp.Expression | None) -> tuple[str, str]:
+    """Detect transformation type and function from expression."""
+    if expr is None:
+        return "direct_copy", ""
+    
+    if isinstance(expr, exp.Func):
+        func_name = (expr.sql_name() or "").upper()
+        if func_name in {"SUM", "COUNT", "AVG", "MAX", "MIN", "STDDEV", "VARIANCE", "COUNT_DISTINCT"}:
+            return "aggregation", func_name
+        if func_name in {"COALESCE", "NVL", "IFNULL"}:
+            return "conditional", func_name
+        return "function", func_name
+    
+    if isinstance(expr, exp.Case):
+        return "conditional", "CASE"
+    
+    if isinstance(expr, exp.Cast):
+        return "cast", "CAST"
+    
+    if isinstance(expr, exp.Binary):
+        return "transformed", ""
+    
+    if isinstance(expr, exp.Column):
+        return "direct_copy", ""
+    
+    return "transformed", ""
+
+
+def _extract_expression_sql(expr: exp.Expression | None) -> str:
+    """Extract SQL representation of expression."""
+    if expr is None:
+        return ""
+    try:
+        return expr.sql(dialect="hive")
+    except Exception:
+        return str(expr) if expr else ""
+
+
 def _column_info(
     select: exp.Select,
     lookup: dict[tuple[str, str], str],
@@ -325,18 +363,31 @@ def _column_info(
             if source.table:
                 source_tables.add(source.table)
         resolved_type = _resolve_type(sources, lookup)
+        inferred_type = _infer_expression_type(inner_expr)
         if resolved_type == "STRING" or not sources:
-            inferred_type = _infer_expression_type(inner_expr)
             if inferred_type != "STRING" or not sources:
                 resolved_type = inferred_type
 
-        columns_info.append(
-            {
-                "name": alias,
-                "type": resolved_type,
-                "sources": [source.as_dict() for source in sources],
-            }
-        )
+        # Detect transformation type and function
+        transformation_type, function = _detect_transformation_type(inner_expr)
+        
+        # Extract expression SQL
+        expression_sql = _extract_expression_sql(inner_expr)
+
+        column_info = {
+            "name": alias,
+            "type": resolved_type,
+            "inferred_type": inferred_type,
+            "sources": [source.as_dict() for source in sources],
+            "transformation_type": transformation_type,
+            "expression": expression_sql,
+        }
+        
+        if function:
+            column_info["function"] = function
+        
+        columns_info.append(column_info)
+    
     joins = _collect_join_details(select, alias_map)
     table_details = _collect_tables(select, alias_map)
     return columns_info, source_tables, joins, table_details
@@ -461,18 +512,30 @@ def build_payload(
 
         view_sql_queries.append(f"INSERT INTO {view_name} {select_sql}")
         metrics = _column_metrics(columns_info, joins, source_tables)
-        view_lineage.append(
-            {
-                "view": view_name,
-                "select": select_sql,
-                "select_hash": md5(select_sql.encode("utf-8")).hexdigest(),
-                "columns": columns_info,
-                "source_tables": sorted(set(source_tables)),
-                "joins": joins,
-                "tables": table_details,
-                "metrics": metrics,
-            }
-        )
+        
+        # Add transformation metadata to view lineage
+        view_lineage_entry = {
+            "view": view_name,
+            "select": select_sql,
+            "select_hash": md5(select_sql.encode("utf-8")).hexdigest(),
+            "columns": columns_info,
+            "source_tables": sorted(set(source_tables)),
+            "joins": joins,
+            "tables": table_details,
+            "metrics": metrics,
+        }
+        
+        # Add transformation summary
+        transformation_types = [col.get("transformation_type", "direct_copy") for col in columns_info]
+        view_lineage_entry["transformation_summary"] = {
+            "aggregation_count": transformation_types.count("aggregation"),
+            "conditional_count": transformation_types.count("conditional"),
+            "cast_count": transformation_types.count("cast"),
+            "join_count": len(joins),
+            "function_count": sum(1 for col in columns_info if col.get("function")),
+        }
+        
+        view_lineage.append(view_lineage_entry)
 
     if view_registry_out:
         _write_json_atomic(Path(view_registry_out), view_lineage)
@@ -489,6 +552,7 @@ def build_payload(
         "project_id": "sgmi-full",
         "system_id": "sgmi-full-system",
         "information_system_id": "sgmi-full-info",
+        "view_lineage": view_lineage,  # Include view lineage in payload
     }
     return payload
 

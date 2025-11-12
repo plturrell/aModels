@@ -39,18 +39,20 @@ type TrainingConfig struct {
 
 // PersistenceConfig holds persistence layer configuration
 type PersistenceConfig struct {
-	SQLitePath    string
-	RedisAddr     string
-	RedisPassword string
-	RedisDB       int
-	Neo4jURI      string
-	Neo4jUsername string
-	Neo4jPassword string
-	DocStorePath  string
-	PostgresDSN   string
-	HanaHost      string
-	HanaUser      string
-	HanaPassword  string
+	SQLitePath                  string
+	RedisAddr                   string
+	RedisPassword               string
+	RedisDB                     int
+	Neo4jURI                    string
+	Neo4jUsername               string
+	Neo4jPassword               string
+	DocStorePath                string
+	PostgresDSN                 string
+	HanaHost                    string
+	HanaUser                    string
+	HanaPassword                string
+	EnableCatalogSchemaIntegration bool
+	CatalogResourceBaseURI      string
 }
 
 // SAPRPTConfig holds sap-rpt-1-oss configuration
@@ -94,18 +96,20 @@ func LoadConfig() (*Config, error) {
 			OutputDir: getEnv("TRAINING_OUTPUT_DIR", defaultTrainingDir),
 		},
 		Persistence: PersistenceConfig{
-			SQLitePath:    os.Getenv("SQLITE_PATH"),
-			RedisAddr:     os.Getenv("REDIS_ADDR"),
-			RedisPassword: os.Getenv("REDIS_PASSWORD"),
-			RedisDB:       parseIntEnv("REDIS_DB", 0),
-			Neo4jURI:      os.Getenv("NEO4J_URI"),
-			Neo4jUsername: os.Getenv("NEO4J_USERNAME"),
-			Neo4jPassword: os.Getenv("NEO4J_PASSWORD"),
-			DocStorePath:  os.Getenv("DOCUMENT_STORE_PATH"),
-			PostgresDSN:   os.Getenv("POSTGRES_CATALOG_DSN"),
-			HanaHost:      os.Getenv("HANA_HOST"),
-			HanaUser:      os.Getenv("HANA_USER"),
-			HanaPassword:  os.Getenv("HANA_PASSWORD"),
+			SQLitePath:                  os.Getenv("SQLITE_PATH"),
+			RedisAddr:                   os.Getenv("REDIS_ADDR"),
+			RedisPassword:               os.Getenv("REDIS_PASSWORD"),
+			RedisDB:                     parseIntEnv("REDIS_DB", 0),
+			Neo4jURI:                    os.Getenv("NEO4J_URI"),
+			Neo4jUsername:               os.Getenv("NEO4J_USERNAME"),
+			Neo4jPassword:               os.Getenv("NEO4J_PASSWORD"),
+			DocStorePath:                os.Getenv("DOCUMENT_STORE_PATH"),
+			PostgresDSN:                 os.Getenv("POSTGRES_CATALOG_DSN"),
+			HanaHost:                    os.Getenv("HANA_HOST"),
+			HanaUser:                    os.Getenv("HANA_USER"),
+			HanaPassword:                os.Getenv("HANA_PASSWORD"),
+			EnableCatalogSchemaIntegration: parseBoolEnv("EXTRACT_ENABLE_CATALOG_SCHEMA", true),
+			CatalogResourceBaseURI:      getEnv("EXTRACT_CATALOG_BASE_URI", "http://amodels.org/catalog"),
 		},
 		Telemetry: TelemetryConfig{
 			Enabled:      parseBoolEnv("POSTGRES_LANG_SERVICE_ENABLED", true),
