@@ -342,9 +342,9 @@ func main() {
 	}
 	markitdownClient := clients.NewMarkItDownClient("", logger, markitdownMetricsCollector)
 	server.markitdownIntegration = integrations.NewMarkItDownIntegration(markitdownClient, logger)
-	if server.markitdownIntegration.enabled {
-		logger.Printf("MarkItDown integration enabled (service URL: %s)",
-			os.Getenv("MARKITDOWN_SERVICE_URL"))
+	// MarkItDown integration is initialized above
+	if server.markitdownIntegration != nil {
+		logger.Printf("MarkItDown integration initialized")
 	}
 
 	// Phase 8.1: Initialize semantic schema analyzer
@@ -352,7 +352,7 @@ func main() {
 	logger.Println("Semantic schema analyzer initialized (Phase 8.1)")
 
 	// Phase 10: Initialize terminology learner with LNN
-	terminologyStore := NewNeo4jTerminologyStore(server.neo4jPersistence, logger)
+	terminologyStore := terminology.NewNeo4jTerminologyStore(server.neo4jPersistence, logger)
 	terminologyLearner := terminology.NewTerminologyLearner(terminologyStore, logger)
 
 	// Load existing terminology from store
@@ -361,7 +361,7 @@ func main() {
 	}
 
 	// Set global terminology learner for embedding enhancement
-	SetGlobalTerminologyLearner(terminologyLearner)
+	embeddings.SetGlobalTerminologyLearner(terminologyLearner)
 
 	// Wire terminology learner to components
 	server.semanticSchemaAnalyzer.SetTerminologyLearner(terminologyLearner)
@@ -383,7 +383,7 @@ func main() {
 			func() error {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
-				return server.neo4jPersistence.driver.VerifyConnectivity(ctx)
+				return server.neo4jPersistence.Driver().VerifyConnectivity(ctx)
 			},
 		)
 	}

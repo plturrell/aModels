@@ -1,252 +1,135 @@
 # Telemetry Exporter Service
 
-Production-ready service for exporting agent telemetry to Signavio Process Intelligence via real APIs. No mocks, no test files - production integration only.
+The Telemetry Exporter service aggregates and exports OpenTelemetry traces from all agent services to file storage and Signavio Process Intelligence.
 
-## Overview
+## Features
 
-The Telemetry Exporter Service provides on-demand API endpoints to:
-- Export agent execution telemetry from multiple sources to Signavio
-- Discover agent sessions from Extract service and agent telemetry service
-- Track export status for idempotency
-- Support unified workflow from multiple telemetry sources
-
-## Architecture
-
-- **Unified Discovery**: Coordinates telemetry retrieval from multiple sources
-- **Signavio Exporter**: Handles upload to Signavio Ingestion API
-- **Telemetry Formatter**: Converts agent telemetry to Signavio format
-- **REST API**: On-demand export endpoints
+- **File Export**: Exports traces in JSON Lines and Protobuf formats with automatic rotation
+- **Signavio Export**: Converts OTLP traces to Signavio format and uploads via API
+- **Continuous Export**: Background worker for automatic trace export
+- **On-Demand Export**: REST API for manual trace export requests
+- **Multi-Exporter Support**: Simultaneously export to multiple destinations
 
 ## Configuration
 
 ### Environment Variables
 
-```bash
-# Server
-TELEMETRY_EXPORTER_PORT=8085
+#### General Configuration
+- `OTEL_EXPORT_MODE`: Export mode - `continuous`, `on-demand`, or `both` (default: `both`)
+- `OTEL_EXPORT_FLUSH_INTERVAL`: Flush interval for continuous export (default: `30s`)
 
-# Signavio
-SIGNAVIO_API_URL=https://ingestion-eu.signavio.com
-SIGNAVIO_API_KEY=your_api_key
-SIGNAVIO_TENANT_ID=your_tenant_id
-SIGNAVIO_DATASET=agent-telemetry
-SIGNAVIO_TIMEOUT=30s
-SIGNAVIO_MAX_RETRIES=3
+#### File Export
+- `OTEL_EXPORT_FILE_ENABLED`: Enable file export (default: `true`)
+- `OTEL_EXPORT_FILE_PATH`: Directory for trace files (default: `/app/data/traces`)
+- `OTEL_EXPORT_FILE_MAX_SIZE`: Maximum file size in bytes before rotation (default: `104857600` = 100MB)
+- `OTEL_EXPORT_FILE_MAX_FILES`: Maximum number of files to keep (default: `10`)
 
-# Source Services
-EXTRACT_SERVICE_URL=http://localhost:8081
-AGENT_METRICS_BASE_URL=http://localhost:9000  # Optional
-
-# Agent Identification
-AGENT_NAME=my-agent  # Optional, defaults to hostname
-SERVICE_NAME=my-service  # Alternative to AGENT_NAME
-```
-
-### Required Configuration
-
-- `SIGNAVIO_API_KEY`: Signavio API key (required)
-- `SIGNAVIO_DATASET`: Dataset name for Signavio (required)
-- `EXTRACT_SERVICE_URL`: Extract service URL (required)
+#### Signavio Export
+- `OTEL_EXPORT_SIGNAVIO_ENABLED`: Enable Signavio export (default: `false`)
+- `SIGNAVIO_API_URL`: Signavio ingestion API base URL
+- `SIGNAVIO_API_KEY`: Signavio API key
+- `SIGNAVIO_TENANT_ID`: Signavio tenant ID
+- `SIGNAVIO_DATASET`: Signavio dataset name
+- `SIGNAVIO_BATCH_SIZE`: Batch size for uploads (default: `100`)
+- `SIGNAVIO_TIMEOUT`: Request timeout (default: `30s`)
+- `SIGNAVIO_MAX_RETRIES`: Maximum retry attempts (default: `3`)
 
 ## API Endpoints
 
-### Export Single Session
+### POST /api/v1/traces/export
+Export traces on demand.
 
-```bash
-POST /export/session/{session-id}?source=extract|agent_telemetry
-
-# Optional: Override dataset
-curl -X POST http://localhost:8085/export/session/abc123?source=extract \
-  -H "Content-Type: application/json" \
-  -d '{"dataset": "custom-dataset"}'
+**Request Body:**
+```json
+{
+  "time_range": {
+    "start_time": "2024-01-01T00:00:00Z",
+    "end_time": "2024-01-01T23:59:59Z"
+  },
+  "service_filter": ["extract-service", "graph-service"],
+  "agent_type_filter": ["langgraph", "deepagents"],
+  "export_format": "file",
+  "destination": "/app/data/traces/export"
+}
 ```
 
 **Response:**
 ```json
 {
-  "status": "success",
-  "session_id": "abc123",
-  "source": "extract",
-  "exported_at": "2025-01-15T10:30:00Z"
+  "export_id": "export-1234567890",
+  "status": "pending",
+  "export_time": "2024-01-01T12:00:00Z"
 }
 ```
 
-### Export Batch
-
-```bash
-POST /export/batch
-
-curl -X POST http://localhost:8085/export/batch \
-  -H "Content-Type: application/json" \
-  -d '{
-    "session_ids": ["session1", "session2", "session3"],
-    "source": "extract",
-    "dataset": "agent-telemetry"
-  }'
-```
+### GET /api/v1/traces/export/{export_id}
+Get export status.
 
 **Response:**
 ```json
 {
-  "status": "success",
-  "total_count": 3,
-  "exported_count": 3,
-  "exported_at": "2025-01-15T10:30:00Z",
-  "results": [
-    {"session_id": "session1", "status": "ready"},
-    {"session_id": "session2", "status": "ready"},
-    {"session_id": "session3", "status": "ready"}
-  ]
+  "export_id": "export-1234567890",
+  "status": "completed",
+  "file_location": "/app/data/traces/export-1234567890.jsonl",
+  "record_count": 1500,
+  "export_time": "2024-01-01T12:00:00Z"
 }
 ```
 
-### Check Export Status
+### GET /health
+Health check endpoint.
 
-```bash
-GET /export/status/{session-id}
+## File Export Format
 
-curl http://localhost:8085/export/status/abc123
-```
-
-**Response:**
+### JSON Lines Format
+Each line is a JSON-encoded `ExportTraceServiceRequest`:
 ```json
-{
-  "session_id": "abc123",
-  "exported": true
-}
+{"resourceSpans":[...]}
+{"resourceSpans":[...]}
 ```
 
-### List Sessions
-
-```bash
-GET /export/sessions
-
-curl http://localhost:8085/export/sessions
+### Protobuf Format
+Length-prefixed protobuf messages:
+```
+[4-byte length][protobuf message][4-byte length][protobuf message]...
 ```
 
-**Response:**
-```json
-{
-  "sessions": [],
-  "message": "Session discovery not yet implemented - provide session IDs manually"
-}
-```
+## Signavio Integration
 
-### Health Check
+The service converts OTLP traces to Signavio telemetry records with:
+- Agent run ID, name, and type
+- Task ID and description
+- Start/end times and latency
+- Status and outcome summary
+- Tool usage statistics
+- LLM call metrics
+- Process step information
+- Prompt metrics
 
-```bash
-GET /health
+See [Signavio Integration Guide](./docs/SIGNAVIO_INTEGRATION.md) for detailed configuration.
 
-curl http://localhost:8085/health
-```
+## Development
 
-**Response:**
-```json
-{
-  "status": "healthy",
-  "service": "telemetry-exporter",
-  "signavio": "connected"
-}
-```
-
-## Usage
-
-### Build
-
+### Building
 ```bash
 cd services/telemetry-exporter
-go build -o bin/telemetry-exporter ./cmd/telemetry-exporter
+go build ./cmd/server
 ```
 
-### Run
+### Running
+```bash
+./server
+```
+
+### Testing
+```bash
+go test ./...
+```
+
+## Docker
+
+The service is included in `docker-compose.yml` and runs on port 8083.
 
 ```bash
-# Using environment variables
-export SIGNAVIO_API_KEY=your_key
-export SIGNAVIO_DATASET=agent-telemetry
-export EXTRACT_SERVICE_URL=http://localhost:8081
-./bin/telemetry-exporter
-
-# Or with command-line flags
-./bin/telemetry-exporter -port 8085
+docker compose up telemetry-exporter
 ```
-
-### Export Agent Telemetry
-
-```bash
-# Export a single session from Extract service
-curl -X POST http://localhost:8085/export/session/session_abc123?source=extract
-
-# Export from agent telemetry service
-curl -X POST http://localhost:8085/export/session/session_abc123?source=agent_telemetry
-
-# Export multiple sessions
-curl -X POST http://localhost:8085/export/batch \
-  -H "Content-Type: application/json" \
-  -d '{
-    "session_ids": ["session1", "session2"],
-    "source": "extract"
-  }'
-```
-
-## Data Sources
-
-### Extract Service
-
-- **Endpoint**: `GET /signavio/agent-metrics/{session-id}`
-- **Source**: `extract`
-- Returns agent telemetry with metrics and events
-
-### Agent Telemetry Service
-
-- **Endpoint**: `GET /agent_metrics/{session-id}/events`
-- **Source**: `agent_telemetry`
-- Returns raw telemetry events
-
-## Telemetry Format
-
-Exported telemetry includes:
-
-- **Basic Fields**: agent_run_id, agent_name, task_id, start_time, end_time, status
-- **Metrics**: outcome_summary, latency_ms, notes
-- **Enhanced Fields** (as JSON):
-  - `tools_used`: Tool usage statistics
-  - `llm_calls`: LLM/model call statistics
-  - `process_steps`: Process step events
-
-## Idempotency
-
-The service tracks exported sessions to prevent duplicate exports. Re-exporting the same session will be skipped automatically.
-
-## Error Handling
-
-- Comprehensive error handling with retries for Signavio uploads
-- Proper HTTP status codes
-- Detailed error messages in responses
-- Logging for debugging
-
-## Integration
-
-- **Testing Service**: Reuses `testing.SignavioClient` for Signavio uploads
-- **Extract Service**: Calls `/signavio/agent-metrics/{session-id}` endpoint
-- **Agent Telemetry Service**: Uses agent telemetry client pattern
-- **Signavio API**: Production Ingestion API with multipart/form-data
-
-## Production Considerations
-
-- No test files or mock data generated
-- All API calls use production endpoints
-- Proper error handling and retries
-- Idempotent operations
-- Graceful shutdown
-- Health check endpoint
-- Comprehensive logging
-
-## Future Enhancements
-
-- Automatic session discovery from event streams
-- Database-backed session tracking
-- Scheduled batch exports
-- Export status persistence
-- Metrics and observability
-
