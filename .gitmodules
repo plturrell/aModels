@@ -37,3 +37,6 @@
 [submodule "models/open_deep_research"]
 	path = models/open_deep_research
 	url = https://github.com/langchain-ai/open_deep_research.git
+[submodule "infrastructure/third_party/gogs"]
+	path = infrastructure/third_party/gogs
+	url = https://github.com/gogs/gogs.git
