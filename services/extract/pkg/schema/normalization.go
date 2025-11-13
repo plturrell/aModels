@@ -2,6 +2,7 @@ package schema
 
 import (
 	"github.com/plturrell/aModels/services/extract/pkg/graph"
+	"github.com/plturrell/aModels/services/extract/pkg/catalog"
 	"fmt"
 	"strings"
 )
@@ -12,7 +13,7 @@ type normalizationInput struct {
 	ProjectID           string
 	SystemID            string
 	InformationSystemID string
-	Catalog             *Catalog
+	Catalog             *catalog.Catalog
 }
 
 type normalizationResult struct {
@@ -263,7 +264,7 @@ func edgeKey(src, dst, label string) string {
 	return src + "->" + dst + "#" + label
 }
 
-func ensureCatalogNode(c *Catalog, nodeMap map[string]graph.Node, order *[]string, id, kind string) (nodeAdded bool, catalogUpdated bool) {
+func ensureCatalogNode(c *catalog.Catalog, nodeMap map[string]graph.Node, order *[]string, id, kind string) (nodeAdded bool, catalogUpdated bool) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return false, false

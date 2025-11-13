@@ -29,19 +29,36 @@ export interface AIResponse<T = any> {
   };
 }
 
+export interface GNNGraphNode {
+  id: string;
+  label?: string;
+  type?: string;
+  properties?: Record<string, any>;
+  [key: string]: unknown;
+}
+
+export interface GNNGraphEdge {
+  source_id?: string;
+  target_id?: string;
+  source?: string;
+  target?: string;
+  label?: string;
+  type?: string;
+  properties?: Record<string, any>;
+  [key: string]: unknown;
+}
+
 export interface GNNRequest {
   graph: {
-    nodes: Array<{
-      id: string;
-      properties: Record<string, any>;
-    }>;
-    edges: Array<{
-      source: string;
-      target: string;
-      properties: Record<string, any>;
-    }>;
+    nodes: GNNGraphNode[];
+    edges: GNNGraphEdge[];
   };
   task: 'embeddings' | 'classification' | 'link-prediction' | 'structural-insights';
+  top_k?: number;
+  graph_level?: boolean;
+  insight_type?: string;
+  threshold?: number;
+  [key: string]: unknown;
 }
 
 export interface GooseRequest {

@@ -31,6 +31,11 @@ func NewNeo4jPersistence(uri, username, password string, enableCatalogSchema boo
 	}, nil
 }
 
+// Driver returns the Neo4j driver instance.
+func (p *Neo4jPersistence) Driver() neo4j.DriverWithContext {
+	return p.driver
+}
+
 // generateResourceURI generates a Resource URI for a node, matching catalog service format.
 func (p *Neo4jPersistence) generateResourceURI(nodeID string) string {
 	baseURI := p.catalogResourceBaseURI

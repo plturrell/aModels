@@ -4,6 +4,9 @@ import (
 	"log"
 	"sync"
 	"time"
+	
+	"github.com/plturrell/aModels/services/extract/pkg/schema"
+	"github.com/plturrell/aModels/services/extract/pkg/utils"
 )
 
 // MetricsCollector collects metrics for all improvements
@@ -70,7 +73,7 @@ func GetMetricsCollector(logger *log.Logger) *MetricsCollector {
 }
 
 // RecordValidation records validation metrics
-func (m *MetricsCollector) RecordValidation(result ValidationResult, duration time.Duration) {
+func (m *MetricsCollector) RecordValidation(result utils.ValidationResult, duration time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	
@@ -108,7 +111,7 @@ func (m *MetricsCollector) RecordRetry(success bool, duration time.Duration) {
 }
 
 // RecordConsistency records consistency check metrics
-func (m *MetricsCollector) RecordConsistency(result ConsistencyResult, duration time.Duration) {
+func (m *MetricsCollector) RecordConsistency(result schema.ConsistencyResult, duration time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	

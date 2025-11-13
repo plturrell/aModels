@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"ai_benchmarks/services/shared/pkg/domain"
+	"github.com/plturrell/aModels/services/extract/pkg/terminology"
 )
 
 // CrossSystemExtractor extracts patterns across multiple systems and platforms.
@@ -15,7 +16,7 @@ import (
 type CrossSystemExtractor struct {
 	logger             *log.Logger
 	domainDetector     *DomainDetector // Phase 8.3: Domain detector for domain normalization
-	terminologyLearner *terminology.TerminologyLearner.TerminologyLearner // Phase 10: LNN-based terminology learning
+	terminologyLearner *terminology.TerminologyLearner // Phase 10: LNN-based terminology learning
 }
 
 // NewCrossSystemExtractor creates a new cross-system extractor.
@@ -34,7 +35,7 @@ func NewCrossSystemExtractor(logger *log.Logger) *CrossSystemExtractor {
 }
 
 // SetTerminologyLearner sets the terminology learner (Phase 10).
-func (cse *CrossSystemExtractor) SetTerminologyLearner(learner *terminology.TerminologyLearner.TerminologyLearner) {
+func (cse *CrossSystemExtractor) SetTerminologyLearner(learner *terminology.TerminologyLearner) {
 	cse.terminologyLearner = learner
 }
 

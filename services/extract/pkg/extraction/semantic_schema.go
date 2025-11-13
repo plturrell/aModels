@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
+
+	"github.com/plturrell/aModels/services/extract/pkg/terminology"
 )
 
 // SemanticSchemaAnalyzer performs deep semantic understanding of schemas and data lineage.
@@ -19,7 +22,7 @@ type SemanticSchemaAnalyzer struct {
 	useGloveEmbeddings  bool
 	extractServiceURL   string
 	domainDetector      *DomainDetector     // Phase 8.1: Domain detector for domain-aware analysis
-	terminologyLearner  *terminology.TerminologyLearner.TerminologyLearner // Phase 10: LNN-based terminology learning
+	terminologyLearner  *terminology.TerminologyLearner // Phase 10: LNN-based terminology learning
 }
 
 // NewSemanticSchemaAnalyzer creates a new semantic schema analyzer.
@@ -41,7 +44,7 @@ func NewSemanticSchemaAnalyzer(logger *log.Logger) *SemanticSchemaAnalyzer {
 }
 
 // SetTerminologyLearner sets the terminology learner (Phase 10).
-func (ssa *SemanticSchemaAnalyzer) SetTerminologyLearner(learner *terminology.TerminologyLearner.TerminologyLearner) {
+func (ssa *SemanticSchemaAnalyzer) SetTerminologyLearner(learner *terminology.TerminologyLearner) {
 	ssa.terminologyLearner = learner
 }
 
@@ -430,7 +433,7 @@ func (ssa *SemanticSchemaAnalyzer) calculateSemanticSimilarityWithDomain(
 			continue
 		}
 
-		similarity := cosineSimilarity(embedding, tagEmbedding)
+		similarity := calculateCosineSimilarity(embedding, tagEmbedding)
 		similarities[tag] = similarity
 	}
 
@@ -491,8 +494,8 @@ func (ssa *SemanticSchemaAnalyzer) calculateSemanticSimilarity(
 				continue
 			}
 
-			// Calculate cosine similarity
-			similarity := cosineSimilarity(embedding, patternEmbedding)
+		// Calculate cosine similarity
+		similarity := calculateCosineSimilarity(embedding, patternEmbedding)
 			similarities[patternName] = similarity
 		}
 	}
@@ -538,7 +541,7 @@ func (ssa *SemanticSchemaAnalyzer) calculateTableSimilarity(
 	}
 
 	// Calculate cosine similarity
-	similarity := cosineSimilarity(sourceEmbedding, targetEmbedding)
+	similarity := calculateCosineSimilarity(sourceEmbedding, targetEmbedding)
 	return similarity, nil
 }
 
@@ -655,4 +658,26 @@ func (ssa *SemanticSchemaAnalyzer) extractLineageClues(
 	}
 
 	return clues
+}
+
+// calculateCosineSimilarity calculates cosine similarity between two embeddings
+func calculateCosineSimilarity(a, b []float32) float64 {
+	if len(a) != len(b) || len(a) == 0 {
+		return 0.0
+	}
+	
+	var dotProduct float64
+	var normA, normB float64
+	
+	for i := 0; i < len(a); i++ {
+		dotProduct += float64(a[i]) * float64(b[i])
+		normA += float64(a[i]) * float64(a[i])
+		normB += float64(b[i]) * float64(b[i])
+	}
+	
+	if normA == 0 || normB == 0 {
+		return 0.0
+	}
+	
+	return dotProduct / (math.Sqrt(normA) * math.Sqrt(normB))
 }

@@ -93,7 +93,7 @@ type HealthMonitor struct {
 // NewSelfHealingSystem creates a new self-healing system.
 func NewSelfHealingSystem(logger *log.Logger) *SelfHealingSystem {
 	localaiURL := os.Getenv("LOCALAI_URL")
-	var domainDetector *DomainDetector
+	var domainDetector *extraction.DomainDetector
 	if localaiURL != "" {
 		domainDetector = extraction.NewDomainDetector(localaiURL, logger)
 	}

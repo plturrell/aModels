@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/plturrell/aModels/services/extract/pkg/graph"
@@ -35,7 +37,58 @@ type ddlColumn struct {
 }
 
 func parseHiveDDL(ctx context.Context, ddl string) (ddlParseResult, error) {
-	cmd := exec.CommandContext(ctx, "python3", "./scripts/utils/parse_hive_ddl.py", "--ddl", ddl)
+	// Check if ddl is a file path (contains "/" or starts with "/")
+	// If it's a file path, read the file content
+	ddlContent := ddl
+	if strings.Contains(ddl, "/") || strings.HasPrefix(ddl, "/") {
+		// Check if file exists
+		if _, err := os.Stat(ddl); err == nil {
+			// Read file content
+			content, err := os.ReadFile(ddl)
+			if err != nil {
+				return ddlParseResult{}, fmt.Errorf("read ddl file %q: %w", ddl, err)
+			}
+			ddlContent = string(content)
+		}
+	}
+
+	// Determine Python script path - try multiple locations
+	scriptPaths := []string{
+		"/tmp/parse_hive_ddl.py", // Container temp location
+		"./scripts/utils/parse_hive_ddl.py",
+		"/workspace/services/extract/scripts/utils/parse_hive_ddl.py",
+		filepath.Join(filepath.Dir(os.Args[0]), "../scripts/utils/parse_hive_ddl.py"),
+	}
+
+	var scriptPath string
+	for _, path := range scriptPaths {
+		if _, err := os.Stat(path); err == nil {
+			scriptPath = path
+			break
+		}
+	}
+
+	if scriptPath == "" {
+		// Fallback to relative path
+		scriptPath = "./scripts/utils/parse_hive_ddl.py"
+	}
+
+	// Write DDL content to temp file to avoid "Argument list too long" error
+	// Large DDL files exceed command-line argument limits
+	tmpFile, err := os.CreateTemp("", "ddl_*.sql")
+	if err != nil {
+		return ddlParseResult{}, fmt.Errorf("create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name()) // Clean up temp file
+
+	if _, err := tmpFile.WriteString(ddlContent); err != nil {
+		tmpFile.Close()
+		return ddlParseResult{}, fmt.Errorf("write temp file: %w", err)
+	}
+	tmpFile.Close()
+
+	// Use --ddl-file to pass file path (avoids command-line length limits)
+	cmd := exec.CommandContext(ctx, "python3", scriptPath, "--ddl-file", tmpFile.Name())
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -198,4 +251,10 @@ func mapOrNil(m map[string]any) map[string]any {
 		return nil
 	}
 	return m
+}
+
+// MapOrNil returns nil if the map is empty, otherwise returns the map.
+// This is useful for avoiding empty maps in JSON serialization.
+func MapOrNil(m map[string]any) map[string]any {
+	return mapOrNil(m)
 }

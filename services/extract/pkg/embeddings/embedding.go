@@ -9,8 +9,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/plturrell/aModels/services/extract/pkg/extraction"
 	"github.com/plturrell/aModels/services/extract/pkg/graph"
+	"github.com/plturrell/aModels/services/extract/pkg/integrations"
 	"github.com/plturrell/aModels/services/extract/pkg/terminology"
+	"github.com/plturrell/aModels/services/extract/pkg/workflow"
 )
 
 // generateEmbedding generates embedding for SQL query (legacy function, kept for backward compatibility)
@@ -232,7 +235,7 @@ func generateColumnEmbedding(ctx context.Context, node graph.Node) ([]float32, e
 	return embedding, nil
 }
 
-func generateSignavioProcessEmbedding(ctx context.Context, summary SignavioProcessSummary) ([]float32, error) {
+func generateSignavioProcessEmbedding(ctx context.Context, summary integrations.SignavioProcessSummary) ([]float32, error) {
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("Signavio process %s (%s)", summary.Name, summary.ID))
 	if summary.SourceFile != "" {
@@ -267,7 +270,7 @@ func generateSignavioProcessEmbedding(ctx context.Context, summary SignavioProce
 }
 
 // generateJobEmbedding generates embedding for Control-M job
-func generateJobEmbedding(ctx context.Context, job ControlMJob) ([]float32, error) {
+func generateJobEmbedding(ctx context.Context, job integrations.ControlMJob) ([]float32, error) {
 	conditions := []string{}
 	for _, inCond := range job.InConds {
 		conditions = append(conditions, inCond.Name)
@@ -315,7 +318,7 @@ func generateJobEmbedding(ctx context.Context, job ControlMJob) ([]float32, erro
 }
 
 // generateSequenceEmbedding generates embedding for table process sequence
-func generateSequenceEmbedding(ctx context.Context, sequence TableProcessSequence) ([]float32, error) {
+func generateSequenceEmbedding(ctx context.Context, sequence extraction.TableProcessSequence) ([]float32, error) {
 	tablesJSON, err := json.Marshal(sequence.Tables)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal tables: %w", err)
@@ -358,7 +361,7 @@ func generateSequenceEmbedding(ctx context.Context, sequence TableProcessSequenc
 }
 
 // generatePetriNetEmbedding generates embedding for Petri net workflow
-func generatePetriNetEmbedding(ctx context.Context, petriNet *PetriNet) ([]float32, error) {
+func generatePetriNetEmbedding(ctx context.Context, petriNet *workflow.PetriNet) ([]float32, error) {
 	// Convert PetriNet struct to JSON for Python script
 	petriNetJSON, err := json.Marshal(petriNet)
 	if err != nil {

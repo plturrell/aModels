@@ -60,7 +60,7 @@ export function useGNNAnalysis() {
     return execute({
       type: 'gnn',
       query: JSON.stringify(request),
-      context: { task: request.task }
+      context: { task: request.task, payload: request }
     });
   }, [execute]);
 

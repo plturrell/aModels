@@ -105,7 +105,7 @@ func (nts *Neo4jTerminologyStore) StoreTerminology(
 	}
 
 	// Execute query using Neo4j session
-	session := nts.neo4jPersistence.driver.NewSession(ctx, neo4j.SessionConfig{})
+	session := nts.neo4jPersistence.Driver().NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
 
 	_, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
@@ -142,7 +142,7 @@ func (nts *Neo4jTerminologyStore) LoadTerminology(ctx context.Context) (*StoredT
 	`
 
 	// Execute query using Neo4j session
-	session := nts.neo4jPersistence.driver.NewSession(ctx, neo4j.SessionConfig{})
+	session := nts.neo4jPersistence.Driver().NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
 
 	result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
@@ -221,7 +221,7 @@ func (nts *Neo4jTerminologyStore) GetTerminologyEvolution(
 	}
 
 	// Execute query using Neo4j session
-	session := nts.neo4jPersistence.driver.NewSession(ctx, neo4j.SessionConfig{})
+	session := nts.neo4jPersistence.Driver().NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
 
 	result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {

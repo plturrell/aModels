@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -86,8 +87,8 @@ func createPooledHTTPClient(logger *log.Logger) *http.Client {
 	return client
 }
 
-// retryWithExponentialBackoff retries a function with exponential backoff
-func retryWithExponentialBackoff(ctx context.Context, logger *log.Logger, maxAttempts int, initialBackoff time.Duration, maxBackoff time.Duration, fn func() error) error {
+// RetryWithExponentialBackoff retries a function with exponential backoff
+func RetryWithExponentialBackoff(ctx context.Context, logger *log.Logger, maxAttempts int, initialBackoff time.Duration, maxBackoff time.Duration, fn func() error) error {
 	var lastErr error
 	backoff := initialBackoff
 
@@ -122,8 +123,8 @@ func retryWithExponentialBackoff(ctx context.Context, logger *log.Logger, maxAtt
 	return fmt.Errorf("failed after %d attempts: %w", maxAttempts, lastErr)
 }
 
-// isRetryableError determines if an error is retryable
-func isRetryableError(err error) bool {
+// IsRetryableError determines if an error is retryable
+func IsRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -147,7 +148,9 @@ func NewModelFusionFramework(logger *log.Logger) *ModelFusionFramework {
 	useLocalAI := false
 	
 	if localaiURL != "" {
-		domainDetector = nil(localaiURL, logger)
+		// TODO: Initialize domain detector when implementation is available
+		// domainDetector = NewDomainDetector(localaiURL, logger)
+		domainDetector = nil
 		// Initialize LocalAI client with connection pooling if URL is provided
 		pooledHTTPClient := createPooledHTTPClient(logger)
 		localaiClient = localai.NewClientWithHTTPClient(localaiURL, pooledHTTPClient)
@@ -260,8 +263,22 @@ func (mff *ModelFusionFramework) optimizeWeightsForDomain(
 		return DefaultModelWeights()
 	}
 
-	// Get domain config
-	domainConfig, exists := mff.domainDetector.Config(domainID)
+	// Get domain config - use type assertion for interface{}
+	var domainConfig struct {
+		Keywords []string
+		Tags     []string
+		Layer    string
+	}
+	exists := false
+	
+	// Type assert domainDetector to check if it has Config method
+	if detector, ok := mff.domainDetector.(interface{ Config(string) (struct {
+		Keywords []string
+		Tags     []string
+		Layer    string
+	}, bool) }); ok {
+		domainConfig, exists = detector.Config(domainID)
+	}
 
 	if !exists {
 		return DefaultModelWeights()
@@ -418,7 +435,8 @@ func (mff *ModelFusionFramework) consensusFusion(
 	confidence := consensusRatio
 
 	if consensusRatio >= consensusThreshold {
-		confidence = min(1.0, consensusRatio+0.1)
+		// Use math.Min for float64 comparison
+		confidence = math.Min(1.0, consensusRatio+0.1)
 	}
 
 	return &FusedPrediction{
@@ -769,12 +787,12 @@ func (mff *ModelFusionFramework) predictWithLocalAI(
 	maxBackoff := 2 * time.Second
 
 	var resp *localai.ChatResponse
-	retryErr := retryWithExponentialBackoff(ctx, mff.logger, maxRetries, initialBackoff, maxBackoff, func() error {
+		retryErr := RetryWithExponentialBackoff(ctx, mff.logger, maxRetries, initialBackoff, maxBackoff, func() error {
 		var err error
 		resp, err = mff.localaiClient.ChatCompletion(ctx, req)
 		if err != nil {
 			// Only retry on retryable errors
-			if isRetryableError(err) {
+			if IsRetryableError(err) {
 				return err
 			}
 			// Non-retryable errors should be returned immediately

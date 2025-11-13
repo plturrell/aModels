@@ -25,16 +25,7 @@ import { GridLegacy as Grid } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { GNNPredictionCard } from '../../../components/GNNPredictionCard';
 import { GNNExplanation } from '../../../components/GNNExplanation';
-import {
-  getGNNEmbeddings,
-  classifyNodes,
-  predictLinks,
-  getStructuralInsights,
-  GNNEmbeddingsRequest,
-  GNNClassifyRequest,
-  GNNPredictLinksRequest,
-  GNNStructuralInsightsRequest,
-} from '../../../api/gnn';
+import { useGNNAnalysis } from '../../../hooks/useAI';
 import { GraphNode, GraphEdge } from '../../../types/graph';
 
 export interface GNNInsightsProps {
@@ -50,6 +41,7 @@ export function GNNInsights({
   projectId,
   onNodeClick,
 }: GNNInsightsProps) {
+  const { analyzeGraph, loading: aiLoading, error: aiError } = useGNNAnalysis();
   const [activeTab, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,33 +68,38 @@ export function GNNInsights({
       return;
     }
 
-    setLoading(true);
-    setError(null);
-
     try {
-      const request: GNNClassifyRequest = {
-        nodes: nodes.map((n: GraphNode) => ({
-          id: n.id,
-          type: n.type,
-          label: n.label,
-          properties: n.properties,
-        })),
-        edges: edges.map(e => ({
-          source_id: e.source_id,
-          target_id: e.target_id,
-          label: e.label,
-          type: e.type,
-          properties: e.properties,
-        })),
-      };
+      setLoading(true);
+      setError(null);
 
-      const response = await classifyNodes(request);
-      if (response.classifications) {
-        setClassifications(response.classifications);
+      const response = await analyzeGraph({
+        task: 'classification',
+        graph: {
+          nodes: nodes.map((n: GraphNode) => ({
+            id: n.id,
+            type: n.type,
+            label: n.label,
+            properties: n.properties,
+          })),
+          edges: edges.map(e => ({
+            source_id: e.source_id,
+            target_id: e.target_id,
+            label: e.label,
+            type: e.type,
+            properties: e.properties,
+          })),
+        },
+      });
+
+      const payload = (response as any)?.data ?? response;
+      if (payload?.classifications) {
+        setClassifications(payload.classifications);
         setClassificationExplanation({
           model_info: {
             model_type: 'GNN Node Classifier',
-            confidence: response.classifications.reduce((acc: number, c: any) => acc + c.confidence, 0) / response.classifications.length,
+            confidence:
+              payload.classifications.reduce((acc: number, c: any) => acc + (c.confidence ?? 0), 0) /
+              payload.classifications.length,
           },
         });
       }
@@ -120,30 +117,33 @@ export function GNNInsights({
       return;
     }
 
-    setLoading(true);
-    setError(null);
-
     try {
-      const request: GNNPredictLinksRequest = {
-        nodes: nodes.map((n: GraphNode) => ({
-          id: n.id,
-          type: n.type,
-          label: n.label,
-          properties: n.properties,
-        })),
-        edges: edges.map(e => ({
-          source_id: e.source_id,
-          target_id: e.target_id,
-          label: e.label,
-          type: e.type,
-          properties: e.properties,
-        })),
-        top_k: topK,
-      };
+      setLoading(true);
+      setError(null);
 
-      const response = await predictLinks(request);
-      if (response.predictions) {
-        setLinkPredictions(response.predictions);
+      const response = await analyzeGraph({
+        task: 'link-prediction',
+        graph: {
+          nodes: nodes.map((n: GraphNode) => ({
+            id: n.id,
+            type: n.type,
+            label: n.label,
+            properties: n.properties,
+          })),
+          edges: edges.map(e => ({
+            source_id: e.source_id,
+            target_id: e.target_id,
+            label: e.label,
+            type: e.type,
+            properties: e.properties,
+          })),
+        },
+        top_k: topK,
+      });
+
+      const payload = (response as any)?.data ?? response;
+      if (payload?.predictions) {
+        setLinkPredictions(payload.predictions);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to predict links');
@@ -159,31 +159,34 @@ export function GNNInsights({
       return;
     }
 
-    setLoading(true);
-    setError(null);
-
     try {
-      const request: GNNStructuralInsightsRequest = {
-        nodes: nodes.map((n: GraphNode) => ({
-          id: n.id,
-          type: n.type,
-          label: n.label,
-          properties: n.properties,
-        })),
-        edges: edges.map(e => ({
-          source_id: e.source_id,
-          target_id: e.target_id,
-          label: e.label,
-          type: e.type,
-          properties: e.properties,
-        })),
+      setLoading(true);
+      setError(null);
+
+      const response = await analyzeGraph({
+        task: 'structural-insights',
+        graph: {
+          nodes: nodes.map((n: GraphNode) => ({
+            id: n.id,
+            type: n.type,
+            label: n.label,
+            properties: n.properties,
+          })),
+          edges: edges.map(e => ({
+            source_id: e.source_id,
+            target_id: e.target_id,
+            label: e.label,
+            type: e.type,
+            properties: e.properties,
+          })),
+        },
         insight_type: 'anomalies',
         threshold: anomalyThreshold,
-      };
+      });
 
-      const response = await getStructuralInsights(request);
-      if (response.insights?.anomalies) {
-        setAnomalies(response.insights.anomalies);
+      const payload = (response as any)?.data ?? response;
+      if (payload?.insights?.anomalies) {
+        setAnomalies(payload.insights.anomalies);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to detect anomalies');
@@ -199,29 +202,31 @@ export function GNNInsights({
       return;
     }
 
-    setLoading(true);
-    setError(null);
-
     try {
-      const request: GNNEmbeddingsRequest = {
-        nodes: nodes.map((n: GraphNode) => ({
-          id: n.id,
-          type: n.type,
-          label: n.label,
-          properties: n.properties,
-        })),
-        edges: edges.map(e => ({
-          source_id: e.source_id,
-          target_id: e.target_id,
-          label: e.label,
-          type: e.type,
-          properties: e.properties,
-        })),
-        graph_level: graphLevelEmbedding,
-      };
+      setLoading(true);
+      setError(null);
 
-      const response = await getGNNEmbeddings(request);
-      setEmbeddings(response);
+      const response = await analyzeGraph({
+        task: 'embeddings',
+        graph: {
+          nodes: nodes.map((n: GraphNode) => ({
+            id: n.id,
+            type: n.type,
+            label: n.label,
+            properties: n.properties,
+          })),
+          edges: edges.map(e => ({
+            source_id: e.source_id,
+            target_id: e.target_id,
+            label: e.label,
+            type: e.type,
+            properties: e.properties,
+          })),
+        },
+        graph_level: graphLevelEmbedding,
+      });
+
+      setEmbeddings((response as any)?.data ?? response);
     } catch (err: any) {
       setError(err.message || 'Failed to get embeddings');
       console.error('Embeddings error:', err);

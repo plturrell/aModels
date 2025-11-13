@@ -1,0 +1,27 @@
+=== Neo4j Schema Migration Log (Docker) ===
+Started at: Thu Nov 13 02:02:46 UTC 2025
+Container: neo4j
+User: neo4j
+
+[2025-11-13 02:02:46] [INFO] Starting schema migration using Docker container: neo4j
+[2025-11-13 02:02:46] [INFO] Testing Neo4j connection...
+[2025-11-13 02:02:57] [SUCCESS] Connection successful
+[2025-11-13 02:02:57] [INFO] === Phase 1: Base Schemas ===
+[2025-11-13 02:02:57] [INFO] Executing: /home/aModels/infrastructure/neo4j/schemas/base/001_base_node_constraints.cypher (Phase: Base)
+[2025-11-13 02:02:57] [INFO] Executing: /home/aModels/infrastructure/neo4j/schemas/base/002_base_relationship_indexes.cypher (Phase: Base)
+[2025-11-13 02:02:57] [INFO] Executing: /home/aModels/infrastructure/neo4j/schemas/base/003_composite_indexes.cypher (Phase: Base)
+[2025-11-13 02:02:58] [INFO] === Phase 2: Domain Schemas ===
+[2025-11-13 02:02:58] [INFO] --- Catalog Domain ---
+[2025-11-13 02:02:58] [INFO] Executing: /home/aModels/infrastructure/neo4j/schemas/domain/catalog/001_neo4j_schema.cypher (Phase: Catalog)
+[2025-11-13 02:02:58] [INFO] Executing: /home/aModels/infrastructure/neo4j/schemas/domain/catalog/002_triplestore_schema.cypher (Phase: Catalog)
+[2025-11-13 02:02:58] [INFO] Executing: /home/aModels/infrastructure/neo4j/schemas/domain/catalog/003_execution_tracking.cypher (Phase: Catalog)
+[2025-11-13 02:02:58] [INFO] Executing: /home/aModels/infrastructure/neo4j/schemas/domain/catalog/004_data_quality.cypher (Phase: Catalog)
+[2025-11-13 02:02:58] [INFO] Executing: /home/aModels/infrastructure/neo4j/schemas/domain/catalog/005_performance_metrics.cypher (Phase: Catalog)
+[2025-11-13 02:02:58] [INFO] --- Regulatory Domain ---
+[2025-11-13 02:02:58] [INFO] Executing: /home/aModels/infrastructure/neo4j/schemas/domain/regulatory/001_bcbs239_schema.cypher (Phase: Regulatory)
+[2025-11-13 02:02:58] [INFO] --- Graph Domain ---
+[2025-11-13 02:02:58] [INFO] Executing: /home/aModels/infrastructure/neo4j/schemas/domain/graph/001_fulltext_indexes.cypher (Phase: Graph)
+[2025-11-13 02:02:58] [INFO] Executing: /home/aModels/infrastructure/neo4j/schemas/domain/graph/002_agent_domain_tracking.cypher (Phase: Graph)
+[2025-11-13 02:02:58] [INFO] === Phase 3: Optimizations (Optional) ===
+[2025-11-13 02:02:58] [INFO] Executing: /home/aModels/infrastructure/neo4j/schemas/optimizations/indexes_and_constraints.cypher (Phase: Optimization)
+[2025-11-13 02:02:58] [SUCCESS] Schema migration completed successfully

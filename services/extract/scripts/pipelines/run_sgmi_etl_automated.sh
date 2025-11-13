@@ -7,9 +7,9 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "${SCRIPT_DIR}/../.." && pwd)
 REPO_ROOT=$(cd "${ROOT_DIR}/../.." && pwd)
-# Support custom data root for Docker mounts (non-conflicting path)
-# Default to REPO_ROOT/data for backward compatibility
-SGMI_DATA_ROOT="${SGMI_DATA_ROOT:-${REPO_ROOT}/data}"
+# Support custom data root for Docker mounts
+# Default to extract service data directory (now part of extract service)
+SGMI_DATA_ROOT="${SGMI_DATA_ROOT:-${REPO_ROOT}/services/extract/data}"
 DATA_ROOT="${SGMI_DATA_ROOT}/training/sgmi"
 LOG_DIR="${REPO_ROOT}/logs/sgmi_pipeline"
 
@@ -177,7 +177,13 @@ build_payload() {
     fi
     
     # Convert host paths to container paths if needed
-    if [[ ! -d "/workspace" ]]; then
+    # Check if we're running on host and service is in container
+    local needs_path_conversion=false
+    if [[ ! -d "/workspace" ]] && docker ps --format "{{.Names}}" | grep -q "extract-service"; then
+        needs_path_conversion=true
+    fi
+    
+    if [[ "${needs_path_conversion}" == "true" ]]; then
         log "Converting paths to container format..."
         python3 <<'PYTHON'
 import json
@@ -188,18 +194,39 @@ with open(payload_file, 'r') as f:
     payload = json.load(f)
 
 def convert_path(path):
+    # Convert /home/aModels/... to /workspace/...
     if path.startswith('/home/aModels/data/'):
         return path.replace('/home/aModels/data/', '/workspace/data/')
-    elif '/home/aModels/' in path:
+    elif path.startswith('/home/aModels/'):
         return path.replace('/home/aModels/', '/workspace/')
+    # Also handle relative paths that might be absolute in container
+    elif not path.startswith('/'):
+        # Keep relative paths as-is, they'll be resolved in container
+        return path
     return path
 
 if 'json_tables' in payload:
     payload['json_tables'] = [convert_path(p) for p in payload['json_tables']]
 if 'hive_ddls' in payload:
-    payload['hive_ddls'] = [convert_path(p) for p in payload['hive_ddls']]
+    # For DDLs, check if they're file paths or inline statements
+    converted_ddls = []
+    for ddl in payload['hive_ddls']:
+        if isinstance(ddl, str) and (ddl.startswith('/') or ddl.startswith('./')):
+            converted_ddls.append(convert_path(ddl))
+        else:
+            converted_ddls.append(ddl)  # Keep inline DDL statements as-is
+    payload['hive_ddls'] = converted_ddls
 if 'control_m_files' in payload:
     payload['control_m_files'] = [convert_path(p) for p in payload['control_m_files']]
+if 'sql_queries' in payload:
+    # SQL queries are typically inline, but check for file paths
+    converted_queries = []
+    for query in payload['sql_queries']:
+        if isinstance(query, str) and (query.startswith('/') or query.startswith('./')):
+            converted_queries.append(convert_path(query))
+        else:
+            converted_queries.append(query)  # Keep inline SQL as-is
+    payload['sql_queries'] = converted_queries
 
 with open(payload_file, 'w') as f:
     json.dump(payload, f, indent=2)
@@ -224,6 +251,16 @@ submit_payload() {
     
     log "Submitting SGMI payload to ${endpoint}..."
     
+    # Check if we need to use docker exec (if endpoint is localhost but service is in container)
+    local use_docker=false
+    if [[ "${endpoint}" == *"localhost"* ]] && docker ps --format "{{.Names}}" | grep -q "extract-service"; then
+        # Extract service is in container, but we're on host - use docker exec
+        use_docker=true
+        # Convert endpoint to container-internal URL
+        endpoint=$(echo "${endpoint}" | sed 's|http://localhost:[0-9]*|http://localhost:8082|')
+        log "Using docker exec to submit payload (container endpoint: ${endpoint})"
+    fi
+    
     while [[ ${attempt} -lt ${MAX_RETRIES} ]]; do
         attempt=$((attempt + 1))
         
@@ -236,16 +273,41 @@ submit_payload() {
         local curl_exit
         
         set +e
-        http_status=$(curl -sSL -w "%{http_code}" --max-time ${TIMEOUT} -X POST \
-            -H "Content-Type: application/json" \
-            --data-binary "@${payload_file}" \
-            -o "${tmp_response}" \
-            "${endpoint}" 2>&1)
-        curl_exit=$?
+        if [[ "${use_docker}" == "true" ]]; then
+            # Copy payload to container and submit from inside
+            docker cp "${payload_file}" extract-service:/tmp/sgmi_payload_submit.json > /dev/null 2>&1
+            http_status=$(docker exec extract-service python3 -c "
+import json
+import requests
+import sys
+
+try:
+    with open('/tmp/sgmi_payload_submit.json', 'r') as f:
+        payload = json.load(f)
+    
+    r = requests.post('${endpoint}', json=payload, timeout=${TIMEOUT})
+    print(f'{r.status_code}')
+    print(r.text)
+except Exception as e:
+    print(f'500')
+    print(f'Error: {str(e)}')
+" 2>&1 | tee "${tmp_response}" | head -1)
+            curl_exit=$?
+            # Get the response body (everything after first line)
+            tail -n +2 "${tmp_response}" > "${tmp_response}.body" 2>/dev/null || true
+            mv "${tmp_response}.body" "${tmp_response}" 2>/dev/null || true
+        else
+            http_status=$(curl -sSL -w "%{http_code}" --max-time ${TIMEOUT} -X POST \
+                -H "Content-Type: application/json" \
+                --data-binary "@${payload_file}" \
+                -o "${tmp_response}" \
+                "${endpoint}" 2>&1)
+            curl_exit=$?
+        fi
         set -e
         
         if [[ ${curl_exit} -ne 0 ]]; then
-            warn "curl failed (attempt ${attempt}/${MAX_RETRIES}): ${http_status}"
+            warn "Request failed (attempt ${attempt}/${MAX_RETRIES}): ${http_status}"
             continue
         fi
         

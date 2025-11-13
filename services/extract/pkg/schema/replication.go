@@ -13,9 +13,14 @@ import (
 	"time"
 
 	"github.com/plturrell/aModels/services/extract/pkg/graph"
-	"github.com/plturrell/aModels/services/extract/pkg/utils"
+	"github.com/plturrell/aModels/services/extract/pkg/persistence"
 )
 
+// NOTE: This function references extractServer which is in cmd/extract/main.go
+// It should be moved to that package. For now, it is commented out to fix compilation.
+// TODO: Move replicateSchema to cmd/extract/main.go
+
+/*
 func (s *extractServer) replicateSchema(ctx context.Context, nodes []graph.Node, edges []graph.Edge) {
 	if len(nodes) == 0 && len(edges) == 0 {
 		return
@@ -92,9 +97,10 @@ func (s *extractServer) replicateSchema(ctx context.Context, nodes []graph.Node,
 			s.logger.Printf("failed to replicate schema to postgres after retries: %v", err)
 		}
 	}
-}
+*/
 
-func replicateSchemaToSQLite(p TablePersistence, nodes []graph.Node, edges []graph.Edge) error {
+// ReplicateSchemaToSQLite replicates schema to SQLite via TablePersistence
+func ReplicateSchemaToSQLite(p persistence.TablePersistence, nodes []graph.Node, edges []graph.Edge) error {
 	if p == nil {
 		return nil
 	}

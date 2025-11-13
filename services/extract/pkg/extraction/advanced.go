@@ -59,7 +59,7 @@ type TestingEndpoint struct {
 // AdvancedExtractor performs advanced extraction from parsed code.
 type AdvancedExtractor struct {
 	logger             *log.Logger
-	terminologyLearner *terminology.TerminologyLearner.TerminologyLearner // Phase 10: LNN-based terminology learning
+	terminologyLearner *terminology.TerminologyLearner // Phase 10: LNN-based terminology learning
 }
 
 // NewAdvancedExtractor creates a new advanced extractor.
@@ -71,7 +71,7 @@ func NewAdvancedExtractor(logger *log.Logger) *AdvancedExtractor {
 }
 
 // SetTerminologyLearner sets the terminology learner (Phase 10).
-func (ae *AdvancedExtractor) SetTerminologyLearner(learner *terminology.TerminologyLearner.TerminologyLearner) {
+func (ae *AdvancedExtractor) SetTerminologyLearner(learner *terminology.TerminologyLearner) {
 	ae.terminologyLearner = learner
 }
 
@@ -544,7 +544,15 @@ func (ae *AdvancedExtractor) extractTableSequencesFromControlM(controlMContent, 
 	for _, match := range tableMatches {
 		if len(match) >= 2 {
 			tableName := match[1]
-			if !strings.Contains(tables, tableName) {
+			// Check if tableName is already in tables slice
+			found := false
+			for _, t := range tables {
+				if t == tableName {
+					found = true
+					break
+				}
+			}
+			if !found {
 				tables = append(tables, tableName)
 			}
 		}

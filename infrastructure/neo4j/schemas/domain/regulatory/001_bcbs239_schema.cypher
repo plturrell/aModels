@@ -1,6 +1,10 @@
 -- Regulatory Service: BCBS239 Compliance Schema
 -- This schema models BCBS 239 compliance with principles, controls, and calculations
 
+-- ============================================================================
+-- UP MIGRATION
+-- ============================================================================
+
 -- BCBS239 Principle constraints
 CREATE CONSTRAINT bcbs239_principle_id IF NOT EXISTS FOR (p:BCBS239Principle) REQUIRE p.principle_id IS UNIQUE;
 
@@ -24,8 +28,27 @@ CREATE INDEX bcbs239_calculation_date IF NOT EXISTS FOR (c:RegulatoryCalculation
 CREATE INDEX bcbs239_data_asset_type IF NOT EXISTS FOR (d:DataAsset) ON (d.asset_type);
 
 -- Composite indexes for BCBS239 (included here for domain completeness)
-CREATE INDEX bcbs_principle_area_priority IF NOT EXISTS FOR (p:BCBS239Principle) ON (p.compliance_area, p.priority);
-CREATE INDEX reg_calc_date_framework IF NOT EXISTS FOR (c:RegulatoryCalculation) ON (c.regulatory_framework, c.calculation_date);
-CREATE INDEX reg_calc_status IF NOT EXISTS FOR (c:RegulatoryCalculation) ON (c.status, c.calculation_date);
-CREATE INDEX data_asset_type_id IF NOT EXISTS FOR (d:DataAsset) ON (d.asset_type, d.asset_id);
+CREATE INDEX bcbs239_principle_area_priority IF NOT EXISTS FOR (p:BCBS239Principle) ON (p.compliance_area, p.priority);
+CREATE INDEX bcbs239_calculation_date_framework IF NOT EXISTS FOR (c:RegulatoryCalculation) ON (c.regulatory_framework, c.calculation_date);
+CREATE INDEX bcbs239_calculation_status IF NOT EXISTS FOR (c:RegulatoryCalculation) ON (c.status, c.calculation_date);
+CREATE INDEX bcbs239_data_asset_type_id IF NOT EXISTS FOR (d:DataAsset) ON (d.asset_type, d.asset_id);
 
+-- ============================================================================
+-- DOWN MIGRATION
+-- ============================================================================
+-- Execute these statements in reverse order to rollback this migration
+--
+-- DROP INDEX bcbs239_data_asset_type_id IF EXISTS;
+-- DROP INDEX bcbs239_calculation_status IF EXISTS;
+-- DROP INDEX bcbs239_calculation_date_framework IF EXISTS;
+-- DROP INDEX bcbs239_principle_area_priority IF EXISTS;
+-- DROP INDEX bcbs239_data_asset_type IF EXISTS;
+-- DROP INDEX bcbs239_calculation_date IF EXISTS;
+-- DROP INDEX bcbs239_calculation_framework IF EXISTS;
+-- DROP INDEX bcbs239_control_type IF EXISTS;
+-- DROP INDEX bcbs239_principle_area IF EXISTS;
+-- DROP CONSTRAINT bcbs239_process_id IF EXISTS;
+-- DROP CONSTRAINT bcbs239_data_asset_id IF EXISTS;
+-- DROP CONSTRAINT bcbs239_calculation_id IF EXISTS;
+-- DROP CONSTRAINT bcbs239_control_id IF EXISTS;
+-- DROP CONSTRAINT bcbs239_principle_id IF EXISTS;

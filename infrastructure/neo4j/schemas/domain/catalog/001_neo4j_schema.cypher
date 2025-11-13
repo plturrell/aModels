@@ -1,6 +1,10 @@
 -- Catalog Service: Base Neo4j Schema
 -- This creates the basic structure for storing RDF triples and catalog metadata
 
+-- ============================================================================
+-- UP MIGRATION
+-- ============================================================================
+
 -- Create Resource nodes (for RDF subjects and objects)
 CREATE CONSTRAINT resource_uri IF NOT EXISTS
 FOR (r:Resource) REQUIRE r.uri IS UNIQUE;
@@ -36,3 +40,16 @@ FOR (d:DataElementConcept) ON (d.name);
 -- DataElement -> ValueDomain
 -- Resource -> Resource (for RDF triples)
 
+-- ============================================================================
+-- DOWN MIGRATION
+-- ============================================================================
+-- Execute these statements in reverse order to rollback this migration
+--
+-- DROP INDEX data_element_concept_name IF EXISTS;
+-- DROP INDEX data_element_name IF EXISTS;
+-- DROP INDEX resource_updated_at IF EXISTS;
+-- DROP CONSTRAINT value_domain_id IF EXISTS;
+-- DROP CONSTRAINT data_element_id IF EXISTS;
+-- DROP CONSTRAINT representation_id IF EXISTS;
+-- DROP CONSTRAINT data_element_concept_id IF EXISTS;
+-- DROP CONSTRAINT resource_uri IF EXISTS;

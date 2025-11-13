@@ -1,6 +1,10 @@
 -- Catalog Service: Data Quality Schema
 -- This schema enables tracking of data quality issues and metrics
 
+-- ============================================================================
+-- UP MIGRATION
+-- ============================================================================
+
 -- QualityIssue nodes represent data quality problems
 CREATE CONSTRAINT quality_issue_id IF NOT EXISTS
 FOR (q:QualityIssue) REQUIRE q.id IS UNIQUE;
@@ -33,3 +37,16 @@ FOR (q:QualityMetric) ON (q.metric_type);
 -- QualityMetric -> Node (MEASURES) - links to entity being measured
 -- QualityIssue -> QualityMetric (RELATES_TO) - links issues to aggregated metrics
 
+-- ============================================================================
+-- DOWN MIGRATION
+-- ============================================================================
+-- Execute these statements in reverse order to rollback this migration
+--
+-- DROP INDEX quality_metric_metric_type IF EXISTS;
+-- DROP INDEX quality_metric_entity_id IF EXISTS;
+-- DROP INDEX quality_issue_created_at IF EXISTS;
+-- DROP INDEX quality_issue_entity_id IF EXISTS;
+-- DROP INDEX quality_issue_severity IF EXISTS;
+-- DROP INDEX quality_issue_type IF EXISTS;
+-- DROP CONSTRAINT quality_metric_id IF EXISTS;
+-- DROP CONSTRAINT quality_issue_id IF EXISTS;

@@ -286,6 +286,17 @@ func (awc *AdvancedWorkflowConverter) shouldSpawnDynamically(transition *Transit
 	return false
 }
 
+func parseIntEnv(envVar string, defaultValue int) int {
+	if envVar == "" {
+		return defaultValue
+	}
+	val, err := strconv.Atoi(envVar)
+	if err != nil {
+		return defaultValue
+	}
+	return val
+}
+
 func parseDurationEnv(envVar string, defaultValue time.Duration) time.Duration {
 	if envVar == "" {
 		return defaultValue

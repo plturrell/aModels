@@ -24,7 +24,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import { GraphVisualization, LayoutType } from '../../../components/GraphVisualization';
 import { GraphNode, GraphEdge, GraphData } from '../../../types/graph';
 import { detectCommunities } from '../../../api/graphAnalytics';
-import { getStructuralInsights } from '../../../api/gnn';
+import { useGNNAnalysis } from '../../../hooks/useAI';
 
 export interface PatternVisualizationProps {
   nodes: GraphNode[];
@@ -41,6 +41,7 @@ export function PatternVisualization({
   systemId,
   onNodeClick,
 }: PatternVisualizationProps) {
+  const { analyzeGraph } = useGNNAnalysis();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [layout, setLayout] = useState<LayoutType>('force-directed');
@@ -64,21 +65,24 @@ export function PatternVisualization({
       setCommunities(communityResult);
 
       // Get GNN patterns
-      const insightsResult = await getStructuralInsights({
-        nodes: nodes.map((n: GraphNode) => ({
-          id: n.id,
-          type: n.type,
-          label: n.label,
-          properties: n.properties,
-        })),
-        edges: edges.map(e => ({
-          source_id: e.source_id,
-          target_id: e.target_id,
-          label: e.label,
-          type: e.type,
-          properties: e.properties,
-        })),
+      await analyzeGraph({
+        task: 'structural-insights',
         insight_type: 'patterns',
+        graph: {
+          nodes: nodes.map((n: GraphNode) => ({
+            id: n.id,
+            type: n.type,
+            label: n.label,
+            properties: n.properties,
+          })),
+          edges: edges.map(e => ({
+            source_id: e.source_id,
+            target_id: e.target_id,
+            label: e.label,
+            type: e.type,
+            properties: e.properties,
+          })),
+        },
       });
 
       // Color-code nodes by community/pattern

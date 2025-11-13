@@ -1,16 +1,14 @@
 package terminology
 
 import (
-	"github.com/plturrell/aModels/services/extract/pkg/graph"
-)
-
-import (
 	"context"
 	"encoding/json"
 	"log"
 	"time"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
+	"github.com/plturrell/aModels/services/extract/pkg/storage"
 )
 
 // BatchTerminologyTrainer performs periodic batch refinement from knowledge graph.
@@ -51,7 +49,7 @@ func (btt *BatchTerminologyTrainer) TrainFromKnowledgeGraph(ctx context.Context)
 		LIMIT 10000
 	`
 
-	session := btt.neo4jPersistence.driver.NewSession(ctx, neo4j.SessionConfig{})
+	session := btt.neo4jPersistence.Driver().NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
 
 	result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
@@ -89,7 +87,7 @@ func (btt *BatchTerminologyTrainer) TrainFromKnowledgeGraph(ctx context.Context)
 	}
 
 	// Learn from nodes
-	if err := btt.terminologyLearner.LearnFromExtraction(ctx, nodes, []Edge{}); err != nil {
+	if err := btt.terminologyLearner.LearnFromExtraction(ctx, nodes, []graph.Edge{}); err != nil {
 		return err
 	}
 

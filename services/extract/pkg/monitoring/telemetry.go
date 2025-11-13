@@ -2,7 +2,6 @@ package monitoring
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"sort"
 	"strings"
@@ -59,7 +58,7 @@ func newTelemetryClient(ctx context.Context, cfg telemetryConfig) (*telemetryCli
 
 	dialTimeout := cfg.DialTimeout
 	if dialTimeout <= 0 {
-		dialTimeout = defaultDialTimeout
+		dialTimeout = 5 * time.Second // defaultDialTimeout
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
@@ -76,17 +75,17 @@ func newTelemetryClient(ctx context.Context, cfg telemetryConfig) (*telemetryCli
 
 	callTimeout := cfg.CallTimeout
 	if callTimeout <= 0 {
-		callTimeout = defaultCallTimeout
+		callTimeout = 3 * time.Second // defaultCallTimeout
 	}
 
 	library := strings.TrimSpace(cfg.LibraryType)
 	if library == "" {
-		library = defaultTelemetryLibrary
+		library = "layer4_extract" // defaultTelemetryLibrary
 	}
 
 	operation := strings.TrimSpace(cfg.DefaultOperation)
 	if operation == "" {
-		operation = defaultTelemetryOperation
+		operation = "run_extract" // defaultTelemetryOperation
 	}
 
 	client := &telemetryClient{
@@ -212,6 +211,9 @@ func safeMap(value map[string]any) map[string]any {
 	return value
 }
 
+// NOTE: extractRequest is defined in cmd/extract/main.go
+// This function should be moved to that package or commented out
+/*
 func telemetryInputFromRequest(req extractRequest) map[string]any {
 	summary := map[string]any{
 		"prompt_description":        strings.TrimSpace(req.PromptDescription),

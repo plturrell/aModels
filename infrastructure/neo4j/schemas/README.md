@@ -38,6 +38,21 @@ See `MIGRATION_MANIFEST.md` for the complete execution order and dependencies.
 
 ### Applying All Schemas
 
+**Recommended:** Use the provided execution script with error handling:
+
+```bash
+# Apply all migrations
+./apply_schemas.sh up
+
+# Rollback all migrations
+./apply_schemas.sh down
+
+# Dry run (preview without executing)
+DRY_RUN=true ./apply_schemas.sh up
+```
+
+**Manual execution** (for reference):
+
 ```bash
 # Apply base schemas
 for file in base/*.cypher; do
@@ -66,6 +81,12 @@ See `relationships/README.md` for complete documentation of all relationship typ
 ## Notes
 
 - All schema files use `IF NOT EXISTS` to allow idempotent execution
-- Schema files include both `Up` and `Down` migrations where applicable
+- All schema files include both `UP` and `DOWN` migration sections
 - Some schemas may have dependencies on others - check `MIGRATION_MANIFEST.md`
+- The execution script (`apply_schemas.sh`) provides:
+  - Error handling and automatic rollback on failure
+  - Connection testing before execution
+  - Comprehensive logging to `schema_migration.log`
+  - Dry-run mode for testing
+  - Support for both up and down migrations
 

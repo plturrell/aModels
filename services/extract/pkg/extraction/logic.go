@@ -1,11 +1,5 @@
 package extraction
 
-import (
-	"context"
-	"fmt"
-	"net/http"
-)
-
 type extractError struct {
 	status int
 	err    error
@@ -19,6 +13,10 @@ func (e *extractError) Unwrap() error {
 	return e.err
 }
 
+// NOTE: runExtract function references extractServer, extractRequest, extractResponse
+// which are defined in cmd/extract/main.go. This function should be moved to that package.
+// For now, it is commented out to fix compilation.
+/*
 func (s *extractServer) runExtract(ctx context.Context, req extractRequest) (extractResponse, error) {
 	payload, err := s.buildLangextractPayload(req)
 	if err != nil {
@@ -48,3 +46,4 @@ func (s *extractServer) runExtract(ctx context.Context, req extractRequest) (ext
 		Extractions: resp.Extractions,
 	}, nil
 }
+*/

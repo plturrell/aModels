@@ -25,7 +25,7 @@ import ExploreIcon from '@mui/icons-material/Explore';
 import LinkIcon from '@mui/icons-material/Link';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { GraphNode, GraphEdge } from '../types/graph';
-import { getGNNEmbeddings } from '../api/gnn';
+import { useGNNAnalysis } from '../../hooks/useAI';
 
 export interface Recommendation {
   type: 'entity' | 'path' | 'connection' | 'pattern';
@@ -57,6 +57,7 @@ export function GraphRecommendations({
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { analyzeGraph } = useGNNAnalysis();
 
   const generateRecommendations = useCallback(async () => {
     if (nodes.length === 0) {
@@ -146,24 +147,27 @@ export function GraphRecommendations({
 
       // 4. Pattern-based recommendations (using GNN embeddings if available)
       try {
-        const embeddingResult = await getGNNEmbeddings({
-          nodes: nodes.slice(0, 50).map(n => ({
-            id: n.id,
-            type: n.type,
-            label: n.label,
-            properties: n.properties,
-          })),
-          edges: edges.slice(0, 100).map(e => ({
-            source_id: e.source_id,
-            target_id: e.target_id,
-            label: e.label,
-            type: e.type,
-            properties: e.properties,
-          })),
+        const result = await analyzeGraph({
+          graph: {
+            nodes: nodes.slice(0, 50).map(n => ({
+              id: n.id,
+              label: n.label,
+              type: n.type,
+              properties: n.properties,
+            })),
+            edges: edges.slice(0, 100).map(e => ({
+              source_id: e.source_id,
+              target_id: e.target_id,
+              label: e.label,
+              type: e.type,
+              properties: e.properties,
+            })),
+          },
           graph_level: true,
+          task: 'embeddings',
         });
 
-        if (embeddingResult.graph_embedding) {
+        if (result && (result as any).graph_embedding) {
           recs.push({
             type: 'pattern',
             title: 'Graph Pattern Analysis',
@@ -173,7 +177,6 @@ export function GraphRecommendations({
           });
         }
       } catch (err) {
-        // GNN embeddings optional, continue without them
         console.debug('GNN embeddings not available for recommendations');
       }
 

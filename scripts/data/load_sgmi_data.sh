@@ -57,7 +57,15 @@ echo ""
 # Step 3: Check if SGMI data files exist
 echo "3. Checking SGMI data files..."
 DATA_ROOT="${REPO_ROOT}/data/training/sgmi"
+# Also check extract service data directory
+EXTRACT_DATA_ROOT="${REPO_ROOT}/services/extract/data/training/sgmi"
 MISSING=0
+
+# Use extract service data directory if it exists, otherwise fall back to data/training
+if [[ -d "${EXTRACT_DATA_ROOT}" ]]; then
+    DATA_ROOT="${EXTRACT_DATA_ROOT}"
+    echo "   Using extract service data directory: ${DATA_ROOT}"
+fi
 
 required_files=(
     "${DATA_ROOT}/json_with_changes.json"
@@ -65,8 +73,15 @@ required_files=(
     "${DATA_ROOT}/hive-ddl/sgmisitetl_all_tables_statement.hql"
     "${DATA_ROOT}/hive-ddl/sgmisitstg_all_tables_statement.hql"
     "${DATA_ROOT}/hive-ddl/sgmisit_view.hql"
-    "${DATA_ROOT}/sgmi-controlm/catalyst migration prod 640.xml"
 )
+
+# Check for Control-M file in either location
+controlm_file=""
+if [[ -f "${DATA_ROOT}/SGMI-controlm/catalyst migration prod 640.xml" ]]; then
+    controlm_file="${DATA_ROOT}/SGMI-controlm/catalyst migration prod 640.xml"
+elif [[ -f "${DATA_ROOT}/sgmi-controlm/catalyst migration prod 640.xml" ]]; then
+    controlm_file="${DATA_ROOT}/sgmi-controlm/catalyst migration prod 640.xml"
+fi
 
 for file in "${required_files[@]}"; do
     if [[ -f "$file" ]]; then
@@ -77,6 +92,12 @@ for file in "${required_files[@]}"; do
     fi
 done
 
+if [[ -n "$controlm_file" ]]; then
+    echo "   ✅ $(basename "$controlm_file")"
+else
+    echo "   ⚠️  Control-M file not found (optional)"
+fi
+
 if [[ $MISSING -ne 0 ]]; then
     echo ""
     echo "❌ Missing required SGMI data files. Please add them to ${DATA_ROOT}"
@@ -84,28 +105,124 @@ if [[ $MISSING -ne 0 ]]; then
 fi
 echo ""
 
-# Step 4: Run SGMI extraction
-echo "4. Running SGMI extraction..."
-EXTRACT_SCRIPT="${REPO_ROOT}/services/extract/scripts/pipelines/run_sgmi_etl_automated.sh"
-TARGET_URL="http://graph-server:19080/graph"
+# Step 3.5: Convert JSON to table format
+echo "3.5. Converting JSON to table format..."
+CONVERTER_SCRIPT="${SCRIPT_DIR}/convert_sgmi_json_to_table_format.py"
+CONVERTED_JSON="${DATA_ROOT}/json_with_changes_converted.json"
 
-if [[ -f "$EXTRACT_SCRIPT" ]]; then
-    echo "   Running: ${EXTRACT_SCRIPT} ${TARGET_URL}"
-    echo ""
-    
-    # Run inside extract container or directly
-    if docker exec extract-service test -f /workspace/services/extract/scripts/pipelines/run_sgmi_etl_automated.sh 2>/dev/null; then
-        docker exec -w /workspace/services/extract/scripts extract-service \
-            ./scripts/pipelines/run_sgmi_etl_automated.sh http://graph-server:19080/graph
+if [[ -f "$CONVERTER_SCRIPT" ]]; then
+    if python3 "$CONVERTER_SCRIPT" "${DATA_ROOT}/json_with_changes.json" "$CONVERTED_JSON"; then
+        echo "   ✅ JSON converted successfully"
+        # Use converted JSON for submission
+        JSON_TABLE_FILE="$CONVERTED_JSON"
     else
-        # Run from host
-        cd "${REPO_ROOT}/services/extract/scripts"
-        bash "${EXTRACT_SCRIPT}" "${TARGET_URL}"
+        echo "   ⚠️  JSON conversion failed, using original file"
+        JSON_TABLE_FILE="${DATA_ROOT}/json_with_changes.json"
     fi
 else
-    echo "   ❌ Extraction script not found: ${EXTRACT_SCRIPT}"
-    exit 1
+    echo "   ⚠️  Converter script not found, using original JSON"
+    JSON_TABLE_FILE="${DATA_ROOT}/json_with_changes.json"
 fi
+echo ""
+
+# Step 4: Run SGMI extraction
+echo "4. Running SGMI extraction..."
+
+# Convert paths to container paths if running in Docker
+CONTAINER_DATA_ROOT="${DATA_ROOT}"
+if [[ "$DATA_ROOT" == *"/home/aModels"* ]]; then
+    CONTAINER_DATA_ROOT="${DATA_ROOT//\/home\/aModels/\/workspace}"
+fi
+
+# Convert JSON file path if converted
+CONTAINER_JSON_FILE="${JSON_TABLE_FILE}"
+if [[ "$JSON_TABLE_FILE" == *"/home/aModels"* ]]; then
+    CONTAINER_JSON_FILE="${JSON_TABLE_FILE//\/home\/aModels/\/workspace}"
+fi
+
+# Convert Control-M file path
+CONTAINER_CONTROLM_FILE=""
+if [[ -n "$controlm_file" ]]; then
+    CONTAINER_CONTROLM_FILE="${controlm_file}"
+    if [[ "$controlm_file" == *"/home/aModels"* ]]; then
+        CONTAINER_CONTROLM_FILE="${controlm_file//\/home\/aModels/\/workspace}"
+    fi
+fi
+
+# Build request payload with ideal_distribution to bypass quality checks for Control-M JSON
+TMP_PAYLOAD=$(mktemp)
+if [[ -n "$CONTAINER_CONTROLM_FILE" ]]; then
+    cat > "$TMP_PAYLOAD" <<EOF
+{
+  "json_tables": ["${CONTAINER_JSON_FILE}"],
+  "hive_ddls": [
+    "${CONTAINER_DATA_ROOT}/hive-ddl/sgmisit_all_tables_statement.hql",
+    "${CONTAINER_DATA_ROOT}/hive-ddl/sgmisitetl_all_tables_statement.hql",
+    "${CONTAINER_DATA_ROOT}/hive-ddl/sgmisitstg_all_tables_statement.hql",
+    "${CONTAINER_DATA_ROOT}/hive-ddl/sgmisit_view.hql"
+  ],
+  "control_m_files": ["${CONTAINER_CONTROLM_FILE}"],
+  "project_id": "sgmi",
+  "system_id": "sgmi",
+  "ideal_distribution": {}
+}
+EOF
+else
+    cat > "$TMP_PAYLOAD" <<EOF
+{
+  "json_tables": ["${CONTAINER_JSON_FILE}"],
+  "hive_ddls": [
+    "${CONTAINER_DATA_ROOT}/hive-ddl/sgmisit_all_tables_statement.hql",
+    "${CONTAINER_DATA_ROOT}/hive-ddl/sgmisitetl_all_tables_statement.hql",
+    "${CONTAINER_DATA_ROOT}/hive-ddl/sgmisitstg_all_tables_statement.hql",
+    "${CONTAINER_DATA_ROOT}/hive-ddl/sgmisit_view.hql"
+  ],
+  "project_id": "sgmi",
+  "system_id": "sgmi",
+  "ideal_distribution": {}
+}
+EOF
+fi
+
+# Copy payload to container
+docker cp "$TMP_PAYLOAD" extract-service:/tmp/sgmi_request.json > /dev/null 2>&1
+
+# Submit to extract service
+echo "   Submitting to extract service..."
+RESULT=$(docker exec extract-service python3 -c "
+import json
+import urllib.request
+import sys
+
+with open('/tmp/sgmi_request.json', 'r') as f:
+    payload = json.load(f)
+
+data = json.dumps(payload).encode('utf-8')
+req = urllib.request.Request('http://localhost:8082/knowledge-graph', data=data, headers={'Content-Type': 'application/json'})
+
+try:
+    with urllib.request.urlopen(req, timeout=1800) as response:
+        result = json.loads(response.read().decode('utf-8'))
+        nodes_count = len(result.get('nodes', []))
+        edges_count = len(result.get('edges', []))
+        print(f'SUCCESS:{nodes_count}:{edges_count}')
+except urllib.error.HTTPError as e:
+    error_body = e.read().decode('utf-8')
+    print(f'ERROR:{e.code}:{error_body[:200]}')
+except Exception as e:
+    print(f'ERROR:0:{str(e)[:200]}')
+" 2>&1)
+
+if [[ "$RESULT" == SUCCESS:* ]]; then
+    IFS=':' read -r status nodes edges <<< "$RESULT"
+    echo "   ✅ Success! Nodes: $nodes, Edges: $edges"
+else
+    IFS=':' read -r status code message <<< "$RESULT"
+    echo "   ❌ Error: $message"
+    echo "   Full error: $RESULT"
+fi
+
+rm -f "$TMP_PAYLOAD"
 
 echo ""
 

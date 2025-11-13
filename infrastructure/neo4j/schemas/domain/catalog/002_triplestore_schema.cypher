@@ -1,6 +1,10 @@
 -- Catalog Service: Triplestore Schema
 -- This extends the Neo4j schema with triplestore-specific structures
 
+-- ============================================================================
+-- UP MIGRATION
+-- ============================================================================
+
 -- Create Triple nodes for explicit triple storage
 CREATE CONSTRAINT triple_id IF NOT EXISTS
 FOR (t:Triple) REQUIRE t.id IS UNIQUE;
@@ -24,3 +28,13 @@ FOR (g:Graph) REQUIRE g.uri IS UNIQUE;
 -- Triple -> Resource (object)
 -- Triple -> Graph (context)
 
+-- ============================================================================
+-- DOWN MIGRATION
+-- ============================================================================
+-- Execute these statements in reverse order to rollback this migration
+--
+-- DROP CONSTRAINT graph_uri IF EXISTS;
+-- DROP INDEX triple_object IF EXISTS;
+-- DROP INDEX triple_predicate IF EXISTS;
+-- DROP INDEX triple_subject IF EXISTS;
+-- DROP CONSTRAINT triple_id IF EXISTS;

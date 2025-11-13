@@ -1008,11 +1008,20 @@ func (s *shellServer) queryGNN(ctx context.Context, req AIQueryRequest) (interfa
 		endpoint += "/gnn/structural-insights"
 	}
 
-	body := map[string]interface{}{}
-	if graph != nil {
-		for k, v := range graph {
-			body[k] = v
+	body := make(map[string]interface{})
+	for key, value := range gnnPayload {
+		if key == "task" {
+			continue
 		}
+		if key == "graph" {
+			if graphMap, ok := value.(map[string]interface{}); ok {
+				for gk, gv := range graphMap {
+					body[gk] = gv
+				}
+			}
+			continue
+		}
+		body[key] = value
 	}
 
 	data, err := s.postJSON(ctx, endpoint, body)
@@ -1034,8 +1043,15 @@ func (s *shellServer) runGooseTask(ctx context.Context, req AIQueryRequest) (int
 	if len(req.Context) > 0 {
 		payload["context"] = req.Context
 	}
-	if len(req.Parameters) > 0 {
-		payload["parameters"] = req.Parameters
+	options := map[string]interface{}{
+		"autonomous": true,
+		"domain":     "regulatory_compliance",
+	}
+	for k, v := range req.Parameters {
+		options[k] = v
+	}
+	if len(options) > 0 {
+		payload["options"] = options
 	}
 
 	endpoint := strings.TrimSuffix(s.cfg.GooseServiceURL, "/") + "/api/tasks/execute"

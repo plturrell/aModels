@@ -7,6 +7,26 @@ import (
 	"sync"
 )
 
+// SignavioProcessSummary represents Signavio process metadata
+// NOTE: This is a duplicate definition to avoid import cycle with integrations package
+type SignavioProcessSummary struct {
+	ID           string                       `json:"id"`
+	Name         string                       `json:"name"`
+	SourceFile   string                       `json:"source_file"`
+	ElementCount int                          `json:"element_count"`
+	ElementTypes map[string]int               `json:"element_types"`
+	Elements     []SignavioElementSummary     `json:"elements,omitempty"`
+	Labels       map[string]string            `json:"labels,omitempty"`
+	Properties   map[string]map[string]string `json:"properties,omitempty"`
+}
+
+// SignavioElementSummary represents a Signavio element
+type SignavioElementSummary struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
+	Name string `json:"name"`
+}
+
 // Project represents a project in the catalog.
 type Project struct {
 	ID   string `json:"id"`

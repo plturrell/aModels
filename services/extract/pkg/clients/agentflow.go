@@ -12,6 +12,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/plturrell/aModels/services/extract/pkg/terminology"
+	"github.com/plturrell/aModels/services/extract/pkg/workflow"
 )
 
 // AgentFlowClient provides direct HTTP integration with AgentFlow service
@@ -121,11 +124,11 @@ func (c *AgentFlowClient) RunFlow(ctx context.Context, req *AgentFlowRunRequest)
 	maxBackoff := 2 * time.Second
 
 	var resp *http.Response
-	retryErr := retryWithExponentialBackoff(ctx, c.logger, maxRetries, initialBackoff, maxBackoff, func() error {
+		retryErr := terminology.RetryWithExponentialBackoff(ctx, c.logger, maxRetries, initialBackoff, maxBackoff, func() error {
 		var err error
 		resp, err = c.httpClient.Do(httpReq)
 		if err != nil {
-			if isRetryableError(err) {
+			if terminology.IsRetryableError(err) {
 				return err
 			}
 			return fmt.Errorf("non-retryable error: %w", err)
@@ -176,10 +179,11 @@ func (c *AgentFlowClient) HealthCheck(ctx context.Context) error {
 // ConvertAndRunWorkflow converts a workflow to AgentFlow format and runs it
 func (c *AgentFlowClient) ConvertAndRunWorkflow(
 	ctx context.Context,
-	workflow *AgentFlowWorkflow,
+	wf *workflow.AgentFlowWorkflow,
 	inputValue string,
 	inputs map[string]any,
 ) (*AgentFlowRunResponse, error) {
+	workflow := wf
 	// First, ensure the flow exists by importing it
 	// This would require an import endpoint in AgentFlow, but for now
 	// we'll use the flow_id directly if it exists

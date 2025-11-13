@@ -7,26 +7,38 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
-
-	"github.com/plturrell/aModels/services/extract/pkg/clients"
 )
+
+// MarkItDownClientInterface defines the interface for markitdown client to avoid import cycle
+type MarkItDownClientInterface interface {
+	ConvertFile(ctx context.Context, filePath string) (*MarkItDownResponse, error)
+	ConvertBytes(ctx context.Context, fileData []byte, fileExtension string) (*MarkItDownResponse, error)
+	IsFormatSupported(fileExtension string) bool
+	HealthCheck(ctx context.Context) (bool, error)
+}
+
+// MarkItDownResponse represents the response from markitdown service.
+type MarkItDownResponse struct {
+	TextContent string            `json:"text_content"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
+	Format      string            `json:"format,omitempty"`
+	Error       string            `json:"error,omitempty"`
+}
 
 // MarkItDownIntegration provides integration with markitdown service for document conversion.
 type MarkItDownIntegration struct {
-	client        *clients.MarkItDownClient
+	client        MarkItDownClientInterface
 	logger        *log.Logger
 	enabled       bool
 	fallbackToOCR bool
 }
 
 // NewMarkItDownIntegration creates a new markitdown integration.
+// NOTE: client must be created outside this package to avoid import cycle
 func NewMarkItDownIntegration(
-	baseURL string,
+	client MarkItDownClientInterface,
 	logger *log.Logger,
-	metricsCollector func(service, endpoint string, statusCode int, latency time.Duration, correlationID string),
 ) *MarkItDownIntegration {
-	client := clients.NewMarkItDownClient(baseURL, logger, metricsCollector)
 	
 	enabled := os.Getenv("MARKITDOWN_ENABLED")
 	if enabled == "" {
@@ -41,7 +53,7 @@ func NewMarkItDownIntegration(
 	return &MarkItDownIntegration{
 		client:        client,
 		logger:        logger,
-		enabled:       enabled == "true",
+		enabled:       enabled == "true" && client != nil,
 		fallbackToOCR: fallbackToOCR == "true",
 	}
 }

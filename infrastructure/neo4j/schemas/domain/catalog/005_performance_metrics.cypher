@@ -1,6 +1,10 @@
 -- Catalog Service: Performance Metrics Schema
 -- This schema enables tracking of performance metrics for queries, jobs, and processes
 
+-- ============================================================================
+-- UP MIGRATION
+-- ============================================================================
+
 -- PerformanceMetric nodes store performance measurements
 CREATE CONSTRAINT performance_metric_id IF NOT EXISTS
 FOR (p:PerformanceMetric) REQUIRE p.id IS UNIQUE;
@@ -33,3 +37,16 @@ FOR (q:QueryPerformance) ON (q.timestamp);
 -- QueryPerformance -> Execution (PART_OF) - links query performance to execution
 -- QueryPerformance -> Node (MEASURES) - links to SQL query node
 
+-- ============================================================================
+-- DOWN MIGRATION
+-- ============================================================================
+-- Execute these statements in reverse order to rollback this migration
+--
+-- DROP INDEX query_performance_timestamp IF EXISTS;
+-- DROP INDEX query_performance_execution_id IF EXISTS;
+-- DROP INDEX query_performance_query_id IF EXISTS;
+-- DROP INDEX performance_metric_timestamp IF EXISTS;
+-- DROP INDEX performance_metric_metric_type IF EXISTS;
+-- DROP INDEX performance_metric_entity_id IF EXISTS;
+-- DROP CONSTRAINT query_performance_id IF EXISTS;
+-- DROP CONSTRAINT performance_metric_id IF EXISTS;

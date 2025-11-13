@@ -1,12 +1,18 @@
 package catalog
 
-import (
-	"bufio"
-	"fmt"
-	"os"
-	"strings"
-)
+// NOTE: Imports removed as code is commented out
+// import (
+// 	"bufio"
+// 	"fmt"
+// 	"os"
+// 	"strings"
+// )
 
+// NOTE: These functions reference extractServer which is in cmd/extract/main.go
+// They should be moved to that package. For now, they are commented out to fix compilation.
+// TODO: Move startExplorer and handleExplorerCommand to cmd/extract/main.go
+
+/*
 func (s *extractServer) startExplorer() {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Welcome to the Catalog Explorer!")
@@ -55,3 +61,4 @@ func (s *extractServer) handleExplorerCommand(command string) {
 		fmt.Println("Unknown command. Type 'help' for a list of commands.")
 	}
 }
+*/
