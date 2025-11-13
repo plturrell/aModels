@@ -1,8 +1,5 @@
--- +goose Up
--- Create Neo4j schema for catalog service
+-- Catalog Service: Base Neo4j Schema
 -- This creates the basic structure for storing RDF triples and catalog metadata
--- NOTE: Schema definitions have been centralized in infrastructure/neo4j/schemas/
--- See: infrastructure/neo4j/schemas/domain/catalog/001_neo4j_schema.cypher
 
 -- Create Resource nodes (for RDF subjects and objects)
 CREATE CONSTRAINT resource_uri IF NOT EXISTS
@@ -38,15 +35,4 @@ FOR (d:DataElementConcept) ON (d.name);
 -- DataElementConcept -> Representation -> DataElement
 -- DataElement -> ValueDomain
 -- Resource -> Resource (for RDF triples)
-
--- +goose Down
--- Rollback Neo4j schema
-DROP INDEX data_element_concept_name IF EXISTS;
-DROP INDEX data_element_name IF EXISTS;
-DROP INDEX resource_updated_at IF EXISTS;
-DROP CONSTRAINT value_domain_id IF EXISTS;
-DROP CONSTRAINT data_element_id IF EXISTS;
-DROP CONSTRAINT representation_id IF EXISTS;
-DROP CONSTRAINT data_element_concept_id IF EXISTS;
-DROP CONSTRAINT resource_uri IF EXISTS;
 

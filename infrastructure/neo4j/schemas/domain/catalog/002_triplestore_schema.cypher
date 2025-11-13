@@ -1,8 +1,5 @@
--- +goose Up
--- Create triplestore schema for RDF triple storage
+-- Catalog Service: Triplestore Schema
 -- This extends the Neo4j schema with triplestore-specific structures
--- NOTE: Schema definitions have been centralized in infrastructure/neo4j/schemas/
--- See: infrastructure/neo4j/schemas/domain/catalog/002_triplestore_schema.cypher
 
 -- Create Triple nodes for explicit triple storage
 CREATE CONSTRAINT triple_id IF NOT EXISTS
@@ -26,12 +23,4 @@ FOR (g:Graph) REQUIRE g.uri IS UNIQUE;
 -- Triple -> Resource (subject)
 -- Triple -> Resource (object)
 -- Triple -> Graph (context)
-
--- +goose Down
--- Rollback triplestore schema
-DROP CONSTRAINT graph_uri IF EXISTS;
-DROP INDEX triple_object IF EXISTS;
-DROP INDEX triple_predicate IF EXISTS;
-DROP INDEX triple_subject IF EXISTS;
-DROP CONSTRAINT triple_id IF EXISTS;
 

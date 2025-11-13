@@ -27,11 +27,14 @@ func NewBCBS239GraphSchema(driver neo4j.DriverWithContext) *BCBS239GraphSchema {
 }
 
 // InitializeSchema initializes the Neo4j schema with BCBS 239 specific constraints and indexes.
+// NOTE: Schema definitions have been centralized in infrastructure/neo4j/schemas/domain/regulatory/001_bcbs239_schema.cypher
+// This function maintains backward compatibility but should reference the centralized schema file.
 func (s *BCBS239GraphSchema) InitializeSchema(ctx context.Context) error {
 	session := s.driver.NewSession(ctx, neo4j.SessionConfig{DatabaseName: "neo4j"})
 	defer session.Close(ctx)
 
 	// Define schema initialization queries
+	// See: infrastructure/neo4j/schemas/domain/regulatory/001_bcbs239_schema.cypher
 	queries := []string{
 		// Constraints for unique identifiers
 		"CREATE CONSTRAINT bcbs239_principle_id IF NOT EXISTS FOR (p:BCBS239Principle) REQUIRE p.principle_id IS UNIQUE",

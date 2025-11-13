@@ -1,8 +1,5 @@
--- +goose Up
--- Create Data Quality Schema for Neo4j
+-- Catalog Service: Data Quality Schema
 -- This schema enables tracking of data quality issues and metrics
--- NOTE: Schema definitions have been centralized in infrastructure/neo4j/schemas/
--- See: infrastructure/neo4j/schemas/domain/catalog/004_data_quality.cypher
 
 -- QualityIssue nodes represent data quality problems
 CREATE CONSTRAINT quality_issue_id IF NOT EXISTS
@@ -35,15 +32,4 @@ FOR (q:QualityMetric) ON (q.metric_type);
 -- QualityIssue -> Node (AFFECTS) - links to table/column/view with quality issue
 -- QualityMetric -> Node (MEASURES) - links to entity being measured
 -- QualityIssue -> QualityMetric (RELATES_TO) - links issues to aggregated metrics
-
--- +goose Down
--- Rollback Data Quality Schema
-DROP INDEX quality_metric_metric_type IF EXISTS;
-DROP INDEX quality_metric_entity_id IF EXISTS;
-DROP INDEX quality_issue_created_at IF EXISTS;
-DROP INDEX quality_issue_entity_id IF EXISTS;
-DROP INDEX quality_issue_severity IF EXISTS;
-DROP INDEX quality_issue_type IF EXISTS;
-DROP CONSTRAINT quality_metric_id IF EXISTS;
-DROP CONSTRAINT quality_issue_id IF EXISTS;
 

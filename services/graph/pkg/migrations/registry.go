@@ -1,9 +1,19 @@
 package migrations
 
 // GetAllMigrations returns all registered migrations in order.
+// NOTE: Schema definitions have been centralized in infrastructure/neo4j/schemas/
+// This registry maintains backward compatibility but schemas should be updated from:
+// - base/001_base_node_constraints.cypher
+// - base/002_base_relationship_indexes.cypher
+// - base/003_composite_indexes.cypher
+// - domain/graph/001_fulltext_indexes.cypher
+// - domain/graph/002_agent_domain_tracking.cypher
+// - domain/regulatory/001_bcbs239_schema.cypher
 func GetAllMigrations() []Migration {
 	return []Migration{
 		// Migration 1: Initial schema constraints and indexes
+		// See: infrastructure/neo4j/schemas/base/001_base_node_constraints.cypher
+		// See: infrastructure/neo4j/schemas/base/002_base_relationship_indexes.cypher
 		{
 			Version:     1,
 			Name:        "initial_schema",
@@ -33,6 +43,7 @@ func GetAllMigrations() []Migration {
 		},
 
 		// Migration 2: BCBS239 schema
+		// See: infrastructure/neo4j/schemas/domain/regulatory/001_bcbs239_schema.cypher
 		{
 			Version:     2,
 			Name:        "bcbs239_schema",
@@ -70,6 +81,7 @@ func GetAllMigrations() []Migration {
 		},
 
 		// Migration 3: Composite indexes for performance
+		// See: infrastructure/neo4j/schemas/base/003_composite_indexes.cypher
 		{
 			Version:     3,
 			Name:        "composite_indexes",
@@ -108,6 +120,7 @@ func GetAllMigrations() []Migration {
 		},
 
 		// Migration 4: Full-text indexes
+		// See: infrastructure/neo4j/schemas/domain/graph/001_fulltext_indexes.cypher
 		{
 			Version:     4,
 			Name:        "fulltext_indexes",
@@ -128,6 +141,7 @@ func GetAllMigrations() []Migration {
 		},
 
 		// Migration 5: Agent and domain tracking
+		// See: infrastructure/neo4j/schemas/domain/graph/002_agent_domain_tracking.cypher
 		{
 			Version:     5,
 			Name:        "agent_domain_tracking",

@@ -1,0 +1,74 @@
+-- Data Lineage Relationship Type Definitions
+-- These relationships capture data flow and structural relationships
+
+-- ============================================================================
+-- DATA_FLOW Relationship
+-- ============================================================================
+-- Direction: (source_column)-[:RELATIONSHIP]->(target_column)
+-- Represents data flow between columns, capturing ETL transformation logic
+--
+-- Properties (stored in properties_json):
+--   - transformation_type: "aggregation" | "join" | "filter" | "cast" | "conditional" | "direct_copy" | "transformed"
+--   - sql_expression: SQL fragment creating this relationship
+--   - function: Function applied (e.g., "SUM", "COUNT", "CASE")
+--   - join_type: JOIN type if applicable (e.g., "INNER", "LEFT", "RIGHT")
+--   - join_condition: JOIN condition SQL
+--   - filter_condition: WHERE clause affecting this flow
+--   - sql_query_id: Link to full SQL query (format: "sql:<hash>")
+--   - step_order: Step order in multi-step pipeline (0-based)
+--   - intermediate_table: Intermediate table in multi-step flow
+--
+-- Example:
+--   (:Node {id: "orders.amount"})-[:RELATIONSHIP {
+--     label: "DATA_FLOW",
+--     properties_json: '{"transformation_type":"aggregation","function":"SUM","sql_expression":"SUM(orders.amount)","sql_query_id":"sql:abc123","step_order":1,"intermediate_table":"staging"}'
+--   }]->(:Node {id: "summary.total_amount"})
+
+-- ============================================================================
+-- HAS_COLUMN Relationship
+-- ============================================================================
+-- Direction: (table)-[:RELATIONSHIP]->(column)
+-- Represents table-to-column containment
+--
+-- Properties (stored in properties_json):
+--   - source: Source system identifier
+--
+-- Example:
+--   (:Node {id: "orders", type: "table"})-[:RELATIONSHIP {
+--     label: "HAS_COLUMN",
+--     properties_json: '{"source":"sgmi"}'
+--   }]->(:Node {id: "orders.amount", type: "column"})
+
+-- ============================================================================
+-- CONTAINS Relationship
+-- ============================================================================
+-- Direction: (database)-[:RELATIONSHIP]->(table|view)
+-- Represents database-to-table/view containment
+--
+-- Properties (stored in properties_json):
+--   - source: Source system identifier
+--
+-- Example:
+--   (:Node {id: "sgmi_db", type: "database"})-[:RELATIONSHIP {
+--     label: "CONTAINS",
+--     properties_json: '{"source":"sgmi"}'
+--   }]->(:Node {id: "orders", type: "table"})
+
+-- ============================================================================
+-- REFERENCES Relationship
+-- ============================================================================
+-- Direction: (table)-[:RELATIONSHIP]->(referenced_table)
+-- Represents foreign key relationships
+--
+-- Properties (stored in properties_json):
+--   - source: Source system identifier
+--   - foreign_key: Foreign key name
+--   - column: Foreign key column
+--   - referenced_column: Referenced column
+--
+-- Example:
+--   (:Node {id: "orders", type: "table"})-[:RELATIONSHIP {
+--     label: "REFERENCES",
+--     properties_json: '{"source":"sgmi","foreign_key":"fk_customer","column":"customer_id","referenced_column":"id"}'
+--   }]->(:Node {id: "customers", type: "table"})
+

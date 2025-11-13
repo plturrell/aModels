@@ -1,0 +1,62 @@
+-- Workflow Relationship Type Definitions
+-- These relationships capture Control-M job scheduling and Petri net workflows
+
+-- ============================================================================
+-- SCHEDULES Relationship
+-- ============================================================================
+-- Direction: (calendar)-[:RELATIONSHIP]->(job)
+-- Represents calendar-to-job scheduling relationship
+--
+-- Properties: Typically empty or minimal
+--
+-- Example:
+--   (:Node {id: "control-m-calendar:Daily", type: "control-m-calendar"})-[:RELATIONSHIP {
+--     label: "SCHEDULES"
+--   }]->(:Node {id: "control-m:SGM_GBL_DATHSKP", type: "control-m-job"})
+
+-- ============================================================================
+-- BLOCKS Relationship
+-- ============================================================================
+-- Direction: (condition)-[:RELATIONSHIP]->(job)
+-- Represents condition-to-job blocking relationship (input conditions)
+--
+-- Properties (stored in properties_json):
+--   - Condition-specific properties from Control-M
+--
+-- Example:
+--   (:Node {id: "control-m-cond:START", type: "control-m-condition"})-[:RELATIONSHIP {
+--     label: "BLOCKS",
+--     properties_json: '{"condition_name":"START"}'
+--   }]->(:Node {id: "control-m:Job1", type: "control-m-job"})
+
+-- ============================================================================
+-- RELEASES Relationship
+-- ============================================================================
+-- Direction: (job)-[:RELATIONSHIP]->(condition)
+-- Represents job-to-condition release relationship (output conditions)
+--
+-- Properties (stored in properties_json):
+--   - Condition-specific properties from Control-M
+--
+-- Example:
+--   (:Node {id: "control-m:Job1", type: "control-m-job"})-[:RELATIONSHIP {
+--     label: "RELEASES",
+--     properties_json: '{"condition_name":"DONE"}'
+--   }]->(:Node {id: "control-m-cond:DONE", type: "control-m-condition"})
+
+-- ============================================================================
+-- HAS_PETRI_NET Relationship
+-- ============================================================================
+-- Direction: (root)-[:RELATIONSHIP]->(petri_net_root)
+-- Represents root-to-Petri net relationship
+--
+-- Properties (stored in properties_json):
+--   - petri_net_id: Petri net identifier
+--   - name: Petri net name
+--
+-- Example:
+--   (:Node {id: "root", type: "root"})-[:RELATIONSHIP {
+--     label: "HAS_PETRI_NET",
+--     properties_json: '{"petri_net_id":"pn1","name":"ETL Pipeline"}'
+--   }]->(:Node {id: "petri_net:pn1", type: "petri_net"})
+

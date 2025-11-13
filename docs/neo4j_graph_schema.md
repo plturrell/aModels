@@ -4,6 +4,22 @@
 
 This document describes the complete schema for the SGMI knowledge graph stored in Neo4j, including all node types, relationship types, and their properties. The schema captures data lineage, ETL transformations, Control-M workflows, and multi-step pipeline information.
 
+## Schema Organization
+
+Neo4j schema definitions have been centralized and organized in `infrastructure/neo4j/schemas/`:
+
+- **Base Schemas** (`base/`): Core Node and RELATIONSHIP constraints and indexes
+- **Domain Schemas** (`domain/`): Service-specific schemas organized by domain
+  - `catalog/`: Catalog service schemas (RDF, triplestore, execution tracking, data quality, performance metrics)
+  - `regulatory/`: BCBS239 compliance schemas
+  - `graph/`: Graph service specific schemas (fulltext indexes, agent/domain tracking)
+- **Relationship Definitions** (`relationships/`): Documentation of all relationship types
+- **Optimizations** (`optimizations/`): Performance optimization queries and utilities
+
+For schema execution order and dependencies, see `infrastructure/neo4j/schemas/MIGRATION_MANIFEST.md`.
+
+For relationship type definitions, see `infrastructure/neo4j/schemas/relationships/README.md`.
+
 ## Node Structure
 
 All nodes in the graph share a common base structure:

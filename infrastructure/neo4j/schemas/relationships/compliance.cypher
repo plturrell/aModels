@@ -1,0 +1,108 @@
+-- Compliance Relationship Type Definitions
+-- These relationships capture BCBS239 compliance and regulatory relationships
+
+-- ============================================================================
+-- ENSURED_BY Relationship
+-- ============================================================================
+-- Direction: (principle)-[:ENSURED_BY]->(control)
+-- Links BCBS239 principles to controls that ensure compliance
+--
+-- Properties (stored in properties_json):
+--   - compliance_level: Level of compliance assurance
+--   - validation_date: Date of last validation
+--
+-- Example:
+--   (:BCBS239Principle {principle_id: "P1"})-[:ENSURED_BY {
+--     properties_json: '{"compliance_level":"high","validation_date":"2024-01-01"}'
+--   }]->(:BCBS239Control {control_id: "C1"})
+
+-- ============================================================================
+-- APPLIES_TO Relationship
+-- ============================================================================
+-- Direction: (control)-[:APPLIES_TO]->(target)
+-- Links controls to targets (processes, data assets) they apply to
+--
+-- Properties (stored in properties_json):
+--   - scope: Scope of application
+--   - effective_date: Date control became effective
+--
+-- Example:
+--   (:BCBS239Control {control_id: "C1"})-[:APPLIES_TO {
+--     properties_json: '{"scope":"data_quality","effective_date":"2024-01-01"}'
+--   }]->(:Process {process_id: "P1"})
+
+-- ============================================================================
+-- DEPENDS_ON Relationship
+-- ============================================================================
+-- Direction: (calculation)-[:DEPENDS_ON]->(data_asset)
+-- Links regulatory calculations to data assets they depend on
+--
+-- Properties (stored in properties_json):
+--   - dependency_type: Type of dependency
+--   - required: Whether dependency is required
+--
+-- Example:
+--   (:RegulatoryCalculation {calculation_id: "CALC1"})-[:DEPENDS_ON {
+--     properties_json: '{"dependency_type":"source","required":true}'
+--   }]->(:DataAsset {asset_id: "ASSET1"})
+
+-- ============================================================================
+-- SOURCE_FROM Relationship
+-- ============================================================================
+-- Direction: (calculation)-[:SOURCE_FROM]->(data_asset)
+-- Links calculations to source data assets
+--
+-- Properties (stored in properties_json):
+--   - source_type: Type of source
+--   - extraction_date: Date data was extracted
+--
+-- Example:
+--   (:RegulatoryCalculation {calculation_id: "CALC1"})-[:SOURCE_FROM {
+--     properties_json: '{"source_type":"primary","extraction_date":"2024-01-01"}'
+--   }]->(:DataAsset {asset_id: "ASSET1"})
+
+-- ============================================================================
+-- DERIVED_FROM Relationship
+-- ============================================================================
+-- Direction: (calculation)-[:DERIVED_FROM]->(source_calculation)
+-- Links derived calculations to source calculations
+--
+-- Properties (stored in properties_json):
+--   - derivation_method: Method used for derivation
+--   - derivation_date: Date of derivation
+--
+-- Example:
+--   (:RegulatoryCalculation {calculation_id: "CALC2"})-[:DERIVED_FROM {
+--     properties_json: '{"derivation_method":"aggregation","derivation_date":"2024-01-01"}'
+--   }]->(:RegulatoryCalculation {calculation_id: "CALC1"})
+
+-- ============================================================================
+-- TRANSFORMS Relationship
+-- ============================================================================
+-- Direction: (process)-[:TRANSFORMS]->(data_asset)
+-- Links processes to data assets they transform
+--
+-- Properties (stored in properties_json):
+--   - transformation_type: Type of transformation
+--   - transformation_date: Date of transformation
+--
+-- Example:
+--   (:Process {process_id: "P1"})-[:TRANSFORMS {
+--     properties_json: '{"transformation_type":"etl","transformation_date":"2024-01-01"}'
+--   }]->(:DataAsset {asset_id: "ASSET1"})
+
+-- ============================================================================
+-- VALIDATED_BY Relationship
+-- ============================================================================
+-- Direction: (calculation)-[:VALIDATED_BY]->(control)
+-- Links calculations to validating controls
+--
+-- Properties (stored in properties_json):
+--   - validation_status: Status of validation
+--   - validation_date: Date of validation
+--
+-- Example:
+--   (:RegulatoryCalculation {calculation_id: "CALC1"})-[:VALIDATED_BY {
+--     properties_json: '{"validation_status":"passed","validation_date":"2024-01-01"}'
+--   }]->(:BCBS239Control {control_id: "C1"})
+

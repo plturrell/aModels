@@ -1,8 +1,5 @@
--- +goose Up
--- Create Execution Tracking Schema for Neo4j
+-- Catalog Service: Execution Tracking Schema
 -- This schema enables tracking of job executions, SQL queries, and ETL processes
--- NOTE: Schema definitions have been centralized in infrastructure/neo4j/schemas/
--- See: infrastructure/neo4j/schemas/domain/catalog/003_execution_tracking.cypher
 
 -- Execution nodes represent individual execution instances (jobs, queries, processes)
 CREATE CONSTRAINT execution_id IF NOT EXISTS
@@ -40,16 +37,4 @@ FOR (p:ProcessEvent) ON (p.timestamp);
 -- Execution -> ProcessEvent (HAS_EVENT)
 -- Execution -> Node (EXECUTES) - links to control-m-job, sql-query, etc.
 -- Execution -> Node (AFFECTS) - links to tables/views affected by execution
-
--- +goose Down
--- Rollback Execution Tracking Schema
-DROP INDEX process_event_timestamp IF EXISTS;
-DROP INDEX process_event_event_type IF EXISTS;
-DROP INDEX execution_entity_id IF EXISTS;
-DROP INDEX execution_type IF EXISTS;
-DROP INDEX execution_started_at IF EXISTS;
-DROP INDEX execution_status IF EXISTS;
-DROP CONSTRAINT process_event_id IF EXISTS;
-DROP CONSTRAINT execution_metrics_id IF EXISTS;
-DROP CONSTRAINT execution_id IF EXISTS;
 
