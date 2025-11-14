@@ -56,10 +56,7 @@ def get_model_from_server(model_name: str, target_path: Optional[str] = None) ->
                 print(f"[MODEL_CLIENT] Using cached model: {cached_model_path}")
                 return cached_model_path
         
-        # Determine the actual model name on server
-        server_model_name = model_info.get('name', model_name)
-        
-        # Download model
+        # Download model using the server model name we found
         print(f"[MODEL_CLIENT] Downloading model {server_model_name} from model-server...")
         download_url = f"{MODEL_SERVER_URL}/models/{server_model_name}/download"
         response = requests.get(download_url, timeout=300, stream=True)  # 5 min timeout for large models
@@ -76,14 +73,30 @@ def get_model_from_server(model_name: str, target_path: Optional[str] = None) ->
         with tarfile.open(fileobj=tar_buffer, mode='r:gz') as tar:
             tar.extractall(cache_dir)
         
-        # Verify extraction
-        if os.path.exists(cached_model_path) and os.path.isdir(cached_model_path):
-            config_file = os.path.join(cached_model_path, "config.json")
-            if os.path.exists(config_file):
-                print(f"[MODEL_CLIENT] ✅ Model cached successfully: {cached_model_path}")
-                return cached_model_path
-            else:
-                print(f"[MODEL_CLIENT] ⚠️ Cached model missing config.json")
+        # Verify extraction - check if model was extracted to cache_dir or a subdirectory
+        # The tar might extract to cache_dir/model_name or just cache_dir
+        possible_paths = [
+            cached_model_path,
+            os.path.join(cache_dir, server_model_name),
+        ]
+        
+        extracted_path = None
+        for path in possible_paths:
+            if os.path.exists(path) and os.path.isdir(path):
+                config_file = os.path.join(path, "config.json")
+                if os.path.exists(config_file):
+                    extracted_path = path
+                    break
+        
+        if extracted_path:
+            print(f"[MODEL_CLIENT] ✅ Model cached successfully: {extracted_path}")
+            return extracted_path
+        else:
+            print(f"[MODEL_CLIENT] ⚠️ Cached model missing config.json")
+            # List what was extracted for debugging
+            if os.path.exists(cache_dir):
+                extracted_items = os.listdir(cache_dir)
+                print(f"[MODEL_CLIENT] Extracted items: {extracted_items[:5]}")
         
         return None
         
