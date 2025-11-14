@@ -45,7 +45,9 @@ except ImportError:
 
 # Model registry - paths are model directory names on model-server
 # All models are fetched from model-server and cached locally
+# This registry maps model names used in domains.json to actual model directory names
 MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
+    # Core models used by LocalAI domains
     "phi-3.5-mini": {
         "path": "phi-3.5-mini-instruct-pytorch"
     },
@@ -53,7 +55,7 @@ MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
         "path": "granite-4.0-h-micro-transformers"
     },
     "granite-4.0": {
-        "path": "granite-4.0-h-micro-transformers"
+        "path": "granite-4.0-h-micro-transformers"  # Alias to h-micro
     },
     "vaultgemma-1b": {
         "path": "vaultgemma-1b-transformers"
@@ -70,6 +72,8 @@ MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
     "cwm": {
         "path": "cwm"
     },
+    # Note: gemma-2b-it and gemma-7b-it use TensorRT backends, not hf-transformers
+    # They are handled by LocalAI's TensorRT backend directly
 }
 
 app = FastAPI(title="Transformers GPU Service", version="0.1.0")

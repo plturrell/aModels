@@ -132,19 +132,36 @@ def get_model_from_server(model_name: str, target_path: Optional[str] = None) ->
         # Download model using the server model name we found
         print(f"[MODEL_CLIENT] Downloading model {server_model_name} from model-server...")
         download_url = f"{MODEL_SERVER_URL}/models/{server_model_name}/download"
-        response = requests.get(download_url, timeout=300, stream=True)  # 5 min timeout for large models
+        # Use very long timeout for large models (7GB+ can take 10+ minutes)
+        response = requests.get(download_url, timeout=1800, stream=True)  # 30 min timeout
         
         if response.status_code != 200:
             print(f"[MODEL_CLIENT] Failed to download model: {response.status_code}")
             return None
         
-        # Extract to cache
-        print(f"[MODEL_CLIENT] Extracting model to cache...")
+        # Extract to cache - stream download for large models
+        print(f"[MODEL_CLIENT] Downloading and extracting model to cache...")
         os.makedirs(cached_model_path, exist_ok=True)
         
-        tar_buffer = io.BytesIO(response.content)
-        with tarfile.open(fileobj=tar_buffer, mode='r:gz') as tar:
+        # Stream download to avoid memory issues with large models
+        tar_path = os.path.join(cache_dir, f"{server_model_name}.tar.gz")
+        total_size = 0
+        with open(tar_path, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+                    total_size += len(chunk)
+                    if total_size % (100 * 1024 * 1024) == 0:  # Print every 100MB
+                        print(f"[MODEL_CLIENT] Downloaded {total_size / 1024 / 1024:.1f} MB...")
+        
+        print(f"[MODEL_CLIENT] Download complete ({total_size / 1024 / 1024:.1f} MB). Extracting...")
+        
+        # Extract tar file
+        with tarfile.open(tar_path, mode='r:gz') as tar:
             tar.extractall(cache_dir)
+        
+        # Remove tar file to save space
+        os.remove(tar_path)
         
         # Verify extraction - check if model was extracted to cache_dir or a subdirectory
         # The tar might extract to cache_dir/model_name or just cache_dir
