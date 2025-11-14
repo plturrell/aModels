@@ -237,8 +237,16 @@ def get_model_path(model_name: str, registry_path: str) -> str:
             print(f"[MODEL_CLIENT] Using model-server cache: {cached_path}")
             return cached_path
     
-    # If both fail, raise error
-    raise ValueError(f"Model '{model_name}' not available. Tried: {direct_path} and model-server cache.")
+    # If both fail, try one more time with just the registry path in /models
+    final_path = os.path.join("/models", registry_path)
+    if os.path.exists(final_path):
+        config_file = os.path.join(final_path, "config.json")
+        if os.path.exists(config_file) or any(f.endswith(('.json', '.safetensors', '.bin', '.pt')) for f in os.listdir(final_path) if os.path.isdir(final_path)):
+            print(f"[MODEL_CLIENT] ✅ Using final fallback path: {final_path}")
+            return final_path
+    
+    # If all fail, raise error
+    raise ValueError(f"Model '{model_name}' not available. Tried: {direct_path}, model-server cache, and {final_path}.")
 
 
 def sync_model_files(model_name: str, base_url: str, files: list, target_dir: str):
