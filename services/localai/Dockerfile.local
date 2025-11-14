@@ -38,8 +38,13 @@ RUN (go mod tidy && make build) || \
 # Runtime image
 FROM ubuntu:22.04
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl ffmpeg libopenblas-base espeak-ng && \
+    ca-certificates curl ffmpeg libopenblas-base espeak-ng \
+    python3 python-is-python3 python3-pip && \
     rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies for testing
+RUN pip3 install --no-cache-dir requests
+
 WORKDIR /workspace
 COPY --from=builder /src/local-ai /usr/local/bin/local-ai
 EXPOSE 8080

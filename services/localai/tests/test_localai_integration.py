@@ -21,10 +21,32 @@ from dataclasses import dataclass, asdict
 from datetime import datetime
 import traceback
 
-# Configuration
-LOCALAI_SERVICE_URL = os.getenv("LOCALAI_SERVICE_URL", "http://localhost:8081")
-TRANSFORMERS_SERVICE_URL = os.getenv("TRANSFORMERS_SERVICE_URL", "http://localhost:9090")
-MODEL_SERVER_URL = os.getenv("MODEL_SERVER_URL", "http://model-server:8088")
+# Configuration - Auto-detect Docker environment
+def detect_docker_environment():
+    """Detect if running in Docker and configure service URLs accordingly"""
+    # Check if we're in Docker by looking for /.dockerenv or container hostname
+    in_docker = os.path.exists("/.dockerenv") or os.getenv("container") == "docker"
+    
+    if in_docker:
+        # Running in Docker - use Docker service names
+        return {
+            "localai": "http://localhost:8080",  # Same container
+            "transformers": "http://transformers-service:9090",  # Docker DNS
+            "model_server": "http://model-server:8088"  # Docker DNS
+        }
+    else:
+        # Running on host - use localhost with default ports
+        return {
+            "localai": "http://localhost:8081",
+            "transformers": "http://localhost:9090",
+            "model_server": "http://localhost:8088"
+        }
+
+# Auto-configure service URLs
+_docker_config = detect_docker_environment()
+LOCALAI_SERVICE_URL = os.getenv("LOCALAI_SERVICE_URL", _docker_config["localai"])
+TRANSFORMERS_SERVICE_URL = os.getenv("TRANSFORMERS_SERVICE_URL", _docker_config["transformers"])
+MODEL_SERVER_URL = os.getenv("MODEL_SERVER_URL", _docker_config["model_server"])
 TEST_TIMEOUT = int(os.getenv("TEST_TIMEOUT", "120"))
 RESULTS_DIR = os.getenv("RESULTS_DIR", "/tmp/localai_test_results")
 
@@ -119,6 +141,10 @@ class LocalAITestFramework:
         print("\n" + "="*80)
         print("SERVICE HEALTH TESTS")
         print("="*80)
+        print(f"Environment: {'Docker' if os.path.exists('/.dockerenv') else 'Host'}")
+        print(f"LocalAI URL: {LOCALAI_SERVICE_URL}")
+        print(f"Transformers URL: {TRANSFORMERS_SERVICE_URL}")
+        print(f"Model-Server URL: {MODEL_SERVER_URL}")
         
         services = [
             ("LocalAI", f"{LOCALAI_SERVICE_URL}/healthz"),
@@ -712,13 +738,23 @@ class LocalAITestFramework:
 
 def load_test_queries() -> List[Dict[str, str]]:
     """Load test queries from file or use defaults"""
-    queries_file = os.path.join(os.path.dirname(__file__), "test_queries.json")
+    # Try multiple possible paths for Docker and host environments
+    possible_paths = [
+        os.path.join(os.path.dirname(__file__), "test_queries.json"),
+        "/tmp/test_queries.json",  # Docker copied location
+        "/workspace/services/localai/tests/test_queries.json",  # Docker workspace
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_queries.json"),
+    ]
     
-    if os.path.exists(queries_file):
-        with open(queries_file, 'r') as f:
-            return json.load(f)
+    for queries_file in possible_paths:
+        if os.path.exists(queries_file):
+            try:
+                with open(queries_file, 'r') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, IOError):
+                continue
     
-    # Default test queries
+    # Default test queries if file not found
     return [
         {"query": "Write a SQL query to select all users", "expected_domain": "SQL", "domain": "auto"},
         {"query": "What is a ledger entry?", "expected_domain": "Finance", "domain": "auto"},
@@ -729,12 +765,23 @@ def load_test_queries() -> List[Dict[str, str]]:
 
 def load_domains_config() -> List[Dict]:
     """Load domains configuration"""
-    domains_file = os.path.join(os.path.dirname(__file__), "../config/domains.json")
+    # Try multiple possible paths for Docker and host environments
+    possible_paths = [
+        os.path.join(os.path.dirname(__file__), "../config/domains.json"),
+        "/config/domains.json",  # Docker mounted location
+        "/workspace/services/localai/config/domains.json",  # Docker workspace
+        "/tmp/config/domains.json",  # Docker copied location
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config/domains.json"),
+    ]
     
-    if os.path.exists(domains_file):
-        with open(domains_file, 'r') as f:
-            config = json.load(f)
-            return list(config.get("domains", {}).values())
+    for domains_file in possible_paths:
+        if os.path.exists(domains_file):
+            try:
+                with open(domains_file, 'r') as f:
+                    config = json.load(f)
+                    return list(config.get("domains", {}).values())
+            except (json.JSONDecodeError, IOError):
+                continue
     
     return []
 
@@ -744,10 +791,56 @@ def main():
     print("\n" + "="*80)
     print("LOCALAI INTEGRATION TESTING FRAMEWORK")
     print("="*80)
-    print(f"LocalAI Service: {LOCALAI_SERVICE_URL}")
-    print(f"Transformers Service: {TRANSFORMERS_SERVICE_URL}")
-    print(f"Model Server: {MODEL_SERVER_URL}")
-    print(f"Test Timeout: {TEST_TIMEOUT}s")
+    
+    # Pre-flight checks
+    print("\nPre-flight checks:")
+    print("-"*80)
+    
+    # Check Python version
+    import sys
+    print(f"Python version: {sys.version.split()[0]}")
+    
+    # Check required modules
+    try:
+        import requests
+        print("✅ requests module available")
+    except ImportError:
+        print("❌ requests module not available - install with: pip install requests")
+        sys.exit(1)
+    
+    # Check Docker environment
+    in_docker = os.path.exists("/.dockerenv")
+    print(f"Environment: {'Docker container' if in_docker else 'Host machine'}")
+    
+    # Check service URLs
+    print(f"\nService URLs:")
+    print(f"  LocalAI: {LOCALAI_SERVICE_URL}")
+    print(f"  Transformers: {TRANSFORMERS_SERVICE_URL}")
+    print(f"  Model-Server: {MODEL_SERVER_URL}")
+    print(f"  Test Timeout: {TEST_TIMEOUT}s")
+    
+    # Quick connectivity check
+    print(f"\nQuick connectivity check:")
+    try:
+        import requests
+        r = requests.get(f"{LOCALAI_SERVICE_URL}/healthz", timeout=5)
+        print(f"  ✅ LocalAI reachable: {r.status_code}")
+    except Exception as e:
+        print(f"  ⚠️  LocalAI not reachable: {e}")
+    
+    try:
+        r = requests.get(f"{TRANSFORMERS_SERVICE_URL}/health", timeout=5)
+        print(f"  ✅ Transformers-Service reachable: {r.status_code}")
+    except Exception as e:
+        print(f"  ⚠️  Transformers-Service not reachable: {e}")
+    
+    try:
+        r = requests.get(f"{MODEL_SERVER_URL}/health", timeout=5)
+        print(f"  ✅ Model-Server reachable: {r.status_code}")
+    except Exception as e:
+        print(f"  ⚠️  Model-Server not reachable: {e}")
+    
+    print("")
     
     framework = LocalAITestFramework()
     
