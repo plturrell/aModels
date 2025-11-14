@@ -110,7 +110,8 @@ services:
       - PORT=8080
     volumes:
       - ../../models:/models:ro
-      - ../../services/localai/config:/config:ro
+      - ../../services/localai/config/domains.json:/workspace/config/domains.json:ro
+      - ../../services/localai/config/routing_rules.json:/workspace/config/routing_rules.json:ro
     ports:
       - "8081:8080"
     networks:
