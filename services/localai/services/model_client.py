@@ -37,11 +37,52 @@ def get_model_from_server(model_name: str, target_path: Optional[str] = None) ->
             print(f"[MODEL_CLIENT] Model-server not available: {response.status_code}")
             return None
         
-        # Check if model exists on server
-        model_info_url = f"{MODEL_SERVER_URL}/models/{model_name}"
-        response = requests.get(model_info_url, timeout=10)
+        # Get list of all models and find matching one
+        # Model names on server are directory names, not registry keys
+        models_list_url = f"{MODEL_SERVER_URL}/models"
+        response = requests.get(models_list_url, timeout=10)
         if response.status_code != 200:
+            print(f"[MODEL_CLIENT] Cannot list models from server: {response.status_code}")
+            return None
+        
+        all_models = response.json()
+        
+        # Try to find matching model by name patterns
+        model_name_variants = [
+            model_name,  # Try as-is (e.g., "phi-3.5-mini")
+            f"{model_name}-instruct-pytorch",  # Try with suffix
+            f"{model_name}-transformers",  # Try with transformers suffix
+            f"{model_name}-instruct",  # Try with instruct suffix
+        ]
+        
+        model_info = None
+        server_model_name = None
+        
+        # First try exact matches
+        for model in all_models:
+            model_dir_name = model.get('name', '')
+            if model_dir_name in model_name_variants:
+                model_info = model
+                server_model_name = model_dir_name
+                print(f"[MODEL_CLIENT] Found exact match: {server_model_name}")
+                break
+        
+        # If no exact match, try partial matches
+        if not model_info:
+            for model in all_models:
+                model_dir_name = model.get('name', '').lower()
+                for variant in model_name_variants:
+                    if variant.lower() in model_dir_name or model_dir_name in variant.lower():
+                        model_info = model
+                        server_model_name = model.get('name')
+                        print(f"[MODEL_CLIENT] Found partial match: {server_model_name} (for {model_name})")
+                        break
+                if model_info:
+                    break
+        
+        if not model_info:
             print(f"[MODEL_CLIENT] Model {model_name} not found on server")
+            print(f"[MODEL_CLIENT] Available models: {[m.get('name') for m in all_models[:5]]}")
             return None
         
         # Determine cache path
