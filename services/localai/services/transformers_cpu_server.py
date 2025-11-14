@@ -45,6 +45,8 @@ except ImportError:
 
 # Use /models mount point from Docker volume or model-server
 MODELS_BASE = os.getenv("MODELS_BASE", "/models")
+# Model registry - paths are relative to MODELS_BASE
+# These will be resolved using get_model_path which checks model-server cache first
 MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
     "phi-3.5-mini": {
         "path": os.path.join(MODELS_BASE, "phi-3.5-mini-instruct-pytorch")
@@ -207,8 +209,30 @@ def load_tokenizer(model_key: str):
     
     print(f"[DEBUG] Loading tokenizer for {model_key} from {model_path}")
     
+    # Check if path exists, if not try to find alternative paths
     if not os.path.exists(model_path):
-        raise ValueError(f"model path does not exist: {model_path}")
+        # Try alternative paths
+        alt_paths = [
+            model_path,
+            os.path.join(MODELS_BASE, model_key),
+            cfg["path"],
+        ]
+        found_path = None
+        for alt_path in alt_paths:
+            if os.path.exists(alt_path):
+                found_path = alt_path
+                print(f"[DEBUG] Found model at alternative path: {found_path}")
+                break
+        
+        if not found_path:
+            # List available directories for debugging
+            if os.path.exists(MODELS_BASE):
+                available = [d for d in os.listdir(MODELS_BASE) if os.path.isdir(os.path.join(MODELS_BASE, d))]
+                raise ValueError(f"model path does not exist: {model_path}. Available directories: {available}")
+            else:
+                raise ValueError(f"model path does not exist: {model_path} and MODELS_BASE {MODELS_BASE} does not exist")
+        
+        model_path = found_path
     
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     return tokenizer
@@ -225,8 +249,30 @@ def load_model(model_key: str):
     
     print(f"[DEBUG] Loading model {model_key} from {model_path}")
     
+    # Check if path exists, if not try to find alternative paths
     if not os.path.exists(model_path):
-        raise ValueError(f"model path does not exist: {model_path}")
+        # Try alternative paths
+        alt_paths = [
+            model_path,
+            os.path.join(MODELS_BASE, model_key),
+            cfg["path"],
+        ]
+        found_path = None
+        for alt_path in alt_paths:
+            if os.path.exists(alt_path):
+                found_path = alt_path
+                print(f"[DEBUG] Found model at alternative path: {found_path}")
+                break
+        
+        if not found_path:
+            # List available directories for debugging
+            if os.path.exists(MODELS_BASE):
+                available = [d for d in os.listdir(MODELS_BASE) if os.path.isdir(os.path.join(MODELS_BASE, d))]
+                raise ValueError(f"model path does not exist: {model_path}. Available directories: {available}")
+            else:
+                raise ValueError(f"model path does not exist: {model_path} and MODELS_BASE {MODELS_BASE} does not exist")
+        
+        model_path = found_path
     
     # Use appropriate dtype and device for GPU
     if DEVICE == "cuda":
