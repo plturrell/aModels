@@ -116,37 +116,18 @@ type DocumentProcessingResult struct {
 	ProcessedAt  time.Time
 }
 
-// processAndStoreDocument processes and stores a document
+// processAndStoreDocument processes and stores a document using Gitea-first flow
 func (s *extractServer) processAndStoreDocument(
 	ctx context.Context,
 	filePath, name, description, projectID, systemID, giteaURL, giteaToken string,
 ) (*DocumentProcessingResult, error) {
-	// Get markitdown client
-	var markitdownClient *clients.MarkItDownClient
-	if adapter, ok := s.markitdownIntegration.(*markitdownClientAdapter); ok {
-		markitdownClient = adapter.client
-	}
-
-	// Create document processor
-	docProcessor := git.NewDocumentProcessor(markitdownClient, s.multiModalExtractor, s.logger)
-
-	// Process document
-	result, err := docProcessor.ProcessDocument(ctx, filePath)
-	if err != nil {
-		return nil, fmt.Errorf("process document: %w", err)
-	}
-
-	// Verify document
-	if !docProcessor.VerifyDocumentCompleteness(result) {
-		return nil, fmt.Errorf("document verification failed")
-	}
-
-	// Store in Gitea if configured
 	var giteaRepoURL string
-	if giteaURL != "" && giteaToken != "" {
-		giteaStorage := git.NewGiteaStorage(giteaURL, giteaToken, s.logger)
-		docProcessor.SetGiteaStorage(giteaStorage)
+	var result *git.DocumentProcessingResult
+	var docProcessor *git.DocumentProcessor
 
+	if giteaURL != "" && giteaToken != "" {
+		// Gitea-first flow: upload → clone → process → update
+		giteaStorage := git.NewGiteaStorage(giteaURL, giteaToken, s.logger)
 		storageConfig := git.StorageConfig{
 			Owner:       "extract-service",
 			RepoName:    fmt.Sprintf("%s-documents", projectID),
@@ -158,11 +139,74 @@ func (s *extractServer) processAndStoreDocument(
 			Description: fmt.Sprintf("Documents for project %s", projectID),
 		}
 
-		repoURL, err := docProcessor.StoreProcessedDocument(ctx, result, storageConfig)
+		// Step 1: Upload raw document to Gitea
+		rawBasePath := "raw/documents/"
+		giteaRepo, cloneURL, err := giteaStorage.UploadRawFiles(ctx, storageConfig, []string{filePath}, rawBasePath)
 		if err != nil {
-			s.logger.Printf("Warning: failed to store in Gitea: %v", err)
-		} else {
-			giteaRepoURL = repoURL
+			return nil, fmt.Errorf("upload raw document to Gitea: %w", err)
+		}
+		giteaRepoURL = giteaRepo.HTMLURL
+
+		// Step 2: Clone from Gitea
+		tempDir := filepath.Join(os.TempDir(), "extract-doc-upload")
+		if err := os.MkdirAll(tempDir, 0755); err != nil {
+			return nil, fmt.Errorf("create temp dir: %w", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		clonePath, err := giteaStorage.CloneFromGitea(ctx, cloneURL, storageConfig.Branch, tempDir)
+		if err != nil {
+			return nil, fmt.Errorf("clone from Gitea: %w", err)
+		}
+		defer os.RemoveAll(clonePath)
+
+		// Step 3: Get document path from Gitea clone
+		fileName := filepath.Base(filePath)
+		rawPathInClone := filepath.Join(clonePath, rawBasePath, fileName)
+		if _, err := os.Stat(rawPathInClone); err != nil {
+			return nil, fmt.Errorf("document not found in Gitea clone: %w", err)
+		}
+
+		// Step 4: Process document from Gitea clone
+		var markitdownClient *clients.MarkItDownClient
+		if adapter, ok := s.markitdownIntegration.(*markitdownClientAdapter); ok {
+			markitdownClient = adapter.client
+		}
+
+		docProcessor = git.NewDocumentProcessor(markitdownClient, s.multiModalExtractor, s.logger)
+		docProcessor.SetGiteaStorage(giteaStorage)
+
+		result, err = docProcessor.ProcessDocument(ctx, rawPathInClone)
+		if err != nil {
+			return nil, fmt.Errorf("process document: %w", err)
+		}
+
+		// Verify document
+		if !docProcessor.VerifyDocumentCompleteness(result) {
+			return nil, fmt.Errorf("document verification failed")
+		}
+
+		// Step 5: Update Gitea with processed results
+		_, err = docProcessor.StoreProcessedDocument(ctx, result, storageConfig)
+		if err != nil {
+			s.logger.Printf("Warning: failed to store processed document in Gitea: %v", err)
+		}
+	} else {
+		// No Gitea - process locally (fallback)
+		var markitdownClient *clients.MarkItDownClient
+		if adapter, ok := s.markitdownIntegration.(*markitdownClientAdapter); ok {
+			markitdownClient = adapter.client
+		}
+
+		docProcessor = git.NewDocumentProcessor(markitdownClient, s.multiModalExtractor, s.logger)
+		var err error
+		result, err = docProcessor.ProcessDocument(ctx, filePath)
+		if err != nil {
+			return nil, fmt.Errorf("process document: %w", err)
+		}
+
+		if !docProcessor.VerifyDocumentCompleteness(result) {
+			return nil, fmt.Errorf("document verification failed")
 		}
 	}
 

@@ -34,22 +34,29 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# Use /models mount point from Docker volume
+# Import model client for network-based model access
+try:
+    from model_client import get_model_path
+    MODEL_SERVER_ENABLED = True
+except ImportError:
+    MODEL_SERVER_ENABLED = False
+    def get_model_path(model_name: str, registry_path: str) -> str:
+        return registry_path
+
+# Use /models mount point from Docker volume or model-server
 MODELS_BASE = os.getenv("MODELS_BASE", "/models")
 MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
     "phi-3.5-mini": {
-        "path": os.path.join(
-            MODELS_BASE,
-            "phi",
-            "phi-3-pytorch-phi-3.5-mini-instruct-v2",
-        )
+        "path": os.path.join(MODELS_BASE, "phi-3.5-mini-instruct-pytorch")
     },
     "granite-4.0-h-micro": {
-        "path": os.path.join(
-            MODELS_BASE,
-            "granite",
-            "granite-4.0-transformers-granite",
-        )
+        "path": os.path.join(MODELS_BASE, "granite-4.0-h-micro-transformers")
+    },
+    "granite-4.0": {
+        "path": os.path.join(MODELS_BASE, "granite-4.0-h-micro-transformers")
+    },
+    "vaultgemma-1b": {
+        "path": os.path.join(MODELS_BASE, "vaultgemma-1b-transformers")
     },
     "calm-l": {
         "path": os.path.join(
@@ -58,6 +65,15 @@ MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
             "hf",
             "CALM-L",
         )
+    },
+    "deepseek-ocr": {
+        "path": os.path.join(MODELS_BASE, "DeepSeek-OCR")
+    },
+    "sap-rpt-1": {
+        "path": os.path.join(MODELS_BASE, "sap-rpt-1-oss-main")
+    },
+    "cwm": {
+        "path": os.path.join(MODELS_BASE, "cwm")
     },
 }
 
@@ -185,7 +201,16 @@ def load_tokenizer(model_key: str):
     cfg = MODEL_REGISTRY.get(model_key)
     if not cfg:
         raise ValueError(f"unknown model: {model_key}")
-    tokenizer = AutoTokenizer.from_pretrained(cfg["path"], trust_remote_code=True)
+    
+    # Get model path (from model-server cache or registry)
+    model_path = get_model_path(model_key, cfg["path"])
+    
+    print(f"[DEBUG] Loading tokenizer for {model_key} from {model_path}")
+    
+    if not os.path.exists(model_path):
+        raise ValueError(f"model path does not exist: {model_path}")
+    
+    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     return tokenizer
 
 
@@ -195,7 +220,13 @@ def load_model(model_key: str):
     if not cfg:
         raise ValueError(f"unknown model: {model_key}")
     
-    print(f"[DEBUG] Loading model from {cfg['path']}")
+    # Get model path (from model-server cache or registry)
+    model_path = get_model_path(model_key, cfg["path"])
+    
+    print(f"[DEBUG] Loading model {model_key} from {model_path}")
+    
+    if not os.path.exists(model_path):
+        raise ValueError(f"model path does not exist: {model_path}")
     
     # Use appropriate dtype and device for GPU
     if DEVICE == "cuda":
@@ -209,7 +240,7 @@ def load_model(model_key: str):
         print(f"[DEBUG] Loading on CPU with float32")
     
     model = AutoModelForCausalLM.from_pretrained(
-        cfg["path"],
+        model_path,
         torch_dtype=torch_dtype,
         low_cpu_mem_usage=True,
         device_map=device_map,

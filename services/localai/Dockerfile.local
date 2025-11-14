@@ -24,10 +24,16 @@ COPY services/localai/LocalAI/ /src/
 ENV GOFLAGS=-buildvcs=false
 ENV CGO_LDFLAGS=""
 
+# Generate proto files first (required for build)
+RUN make protogen-go || (echo "Proto generation failed, continuing..." && true)
+
+# Tidy go.mod and download dependencies before build
+RUN go mod tidy && go mod download
+
 # Build
-RUN make build || \
+RUN (go mod tidy && make build) || \
     (echo "Retrying build without VCS" && \
-     GOFLAGS=-buildvcs=false make build)
+     go mod tidy && GOFLAGS=-buildvcs=false make build)
 
 # Runtime image
 FROM ubuntu:22.04

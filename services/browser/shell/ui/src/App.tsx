@@ -21,6 +21,7 @@ const SAPModule = lazy(() => import('./modules/SAP/SAPModule').then(m => ({ defa
 const ExtractModule = lazy(() => import('./modules/Extract/ExtractModule').then(m => ({ default: m.ExtractModule })));
 const TrainingModule = lazy(() => import('./modules/Training/TrainingModule').then(m => ({ default: m.TrainingModule })));
 const PostgresModule = lazy(() => import('./modules/Postgres/PostgresModule').then(m => ({ default: m.PostgresModule })));
+const GiteaModule = lazy(() => import('./modules/Gitea/GiteaModule').then(m => ({ default: m.GiteaModule })));
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import StorageIcon from '@mui/icons-material/Storage';
@@ -28,6 +29,7 @@ import CloudIcon from '@mui/icons-material/Cloud';
 import HomeIcon from '@mui/icons-material/Home';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import SchoolIcon from '@mui/icons-material/School';
+import CodeIcon from '@mui/icons-material/Code';
 import theme from "./theme-sap";
 
 const drawerWidth = 240;
@@ -72,6 +74,8 @@ function App() {
         return <TrainingModule />;
       case 'postgres':
         return <PostgresModule />;
+      case 'gitea':
+        return <GiteaModule />;
       case 'home':
       default:
         return <ModernHomePage />;
@@ -82,6 +86,7 @@ function App() {
     { id: 'home', label: 'Home', icon: <HomeIcon /> },
     { id: 'graph', label: 'Graph', icon: <AccountTreeIcon /> },
     { id: 'extract', label: 'Extract', icon: <AutoAwesomeIcon /> },
+    { id: 'gitea', label: 'Gitea', icon: <CodeIcon /> },
     { id: 'training', label: 'Training', icon: <SchoolIcon /> },
     { id: 'postgres', label: 'Postgres', icon: <StorageIcon /> },
     { id: 'localai', label: 'LocalAI', icon: <SmartToyIcon /> },

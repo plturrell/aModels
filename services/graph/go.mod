@@ -1,6 +1,6 @@
 module github.com/plturrell/aModels/services/graph
 
-go 1.18
+go 1.24
 
 // Core dependencies
 require (

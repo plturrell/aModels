@@ -1,0 +1,31 @@
+version: '3.8'
+
+# Models Service - Dedicated container for model storage
+# This service provides models to other services via Docker network
+
+services:
+  models-storage:
+    image: alpine:latest
+    container_name: models-storage
+    restart: unless-stopped
+    volumes:
+      - /home/aModels/models:/models:ro
+    command: tail -f /dev/null  # Keep container running
+    networks:
+      - models-network
+    labels:
+      - "description=Model storage service for LocalAI and transformers"
+
+networks:
+  models-network:
+    name: models-network
+    driver: bridge
+
+volumes:
+  models-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/aModels/models
+

@@ -554,6 +554,23 @@ def build_payload(
         "information_system_id": "sgmi-full-info",
         "view_lineage": view_lineage,  # Include view lineage in payload
     }
+    
+    # Add Gitea storage configuration if available
+    gitea_url = os.environ.get("GITEA_URL", "")
+    gitea_token = os.environ.get("GITEA_TOKEN", "")
+    if gitea_url or gitea_token:
+        payload["gitea_storage"] = {
+            "enabled": True,
+            "gitea_url": gitea_url,
+            "gitea_token": gitea_token,
+            "owner": os.environ.get("GITEA_OWNER", "extract-service"),
+            "repo_name": os.environ.get("GITEA_REPO_NAME", "sgmi-extracted-code"),
+            "branch": os.environ.get("GITEA_BRANCH", "main"),
+            "base_path": os.environ.get("GITEA_BASE_PATH", ""),
+            "auto_create": os.environ.get("GITEA_AUTO_CREATE", "true").lower() == "true",
+            "description": os.environ.get("GITEA_DESCRIPTION", "SGMI extracted code and documents"),
+        }
+    
     return payload
 
 

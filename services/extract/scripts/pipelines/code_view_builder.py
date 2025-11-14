@@ -101,6 +101,22 @@ def build_payload(
     if view_lineage:
         payload["view_lineage"] = view_lineage
 
+    # Add Gitea storage configuration if available
+    gitea_url = os.environ.get("GITEA_URL", "")
+    gitea_token = os.environ.get("GITEA_TOKEN", "")
+    if gitea_url or gitea_token:
+        payload["gitea_storage"] = {
+            "enabled": True,
+            "gitea_url": gitea_url,
+            "gitea_token": gitea_token,
+            "owner": os.environ.get("GITEA_OWNER", "extract-service"),
+            "repo_name": os.environ.get("GITEA_REPO_NAME", f"{payload.get('project_id', 'sgmi')}-extracted-code"),
+            "branch": os.environ.get("GITEA_BRANCH", "main"),
+            "base_path": os.environ.get("GITEA_BASE_PATH", ""),
+            "auto_create": os.environ.get("GITEA_AUTO_CREATE", "true").lower() == "true",
+            "description": os.environ.get("GITEA_DESCRIPTION", f"Extracted code for project {payload.get('project_id', 'sgmi')}"),
+        }
+
     return payload
 
 
@@ -134,6 +150,7 @@ def main(output_path: Path, config_path: Optional[Path] = None) -> None:
         config = load_config(config_path)
         project_config = config.get("project", {})
         sources = config.get("sources", {})
+        gitea_config = config.get("gitea_storage", {})
         
         json_paths = [Path(p) for p in sources.get("files", [])]
         ddl_paths = []
@@ -158,6 +175,25 @@ def main(output_path: Path, config_path: Optional[Path] = None) -> None:
             project_id=project_config.get("id", ""),
             system_id=project_config.get("system_id", ""),
         )
+        
+        # Add Gitea storage configuration from config file
+        if gitea_config.get("enabled", False):
+            # Expand environment variables in Gitea config
+            gitea_url = os.path.expandvars(gitea_config.get("gitea_url", os.environ.get("GITEA_URL", "")))
+            gitea_token = os.path.expandvars(gitea_config.get("gitea_token", os.environ.get("GITEA_TOKEN", "")))
+            
+            if gitea_url or gitea_token:
+                payload["gitea_storage"] = {
+                    "enabled": True,
+                    "gitea_url": gitea_url,
+                    "gitea_token": gitea_token,
+                    "owner": gitea_config.get("owner", "extract-service"),
+                    "repo_name": gitea_config.get("repo_name", f"{payload.get('project_id', 'sgmi')}-extracted-code"),
+                    "branch": gitea_config.get("branch", "main"),
+                    "base_path": gitea_config.get("base_path", ""),
+                    "auto_create": gitea_config.get("auto_create", True),
+                    "description": gitea_config.get("description", f"Extracted code for project {payload.get('project_id', 'sgmi')}"),
+                }
     else:
         # Fallback to environment variables (backward compatibility)
         json_paths = _collect_env_paths("JSON_FILES")

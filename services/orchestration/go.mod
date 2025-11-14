@@ -1,3 +1,3 @@
 module github.com/plturrell/aModels/services/orchestration
 
-go 1.23
+go 1.24

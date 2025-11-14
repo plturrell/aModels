@@ -370,6 +370,171 @@
         "category": "domain_routing",
         "tags": ["quality", "control", "validation"]
       }
+    },
+    {
+      "id": "rule_ocr_queries",
+      "name": "OCR Query Routing",
+      "description": "Route OCR and image text extraction queries to OCR Agent",
+      "priority": 100,
+      "conditions": [
+        {
+          "type": "query_content",
+          "field": "contains_ocr",
+          "operator": "equals",
+          "value": true,
+          "negate": false,
+          "description": "Query contains OCR keywords"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "0xOCR-ImageTextAgent",
+          "parameters": {
+            "reason": "OCR query detected"
+          },
+          "description": "Route to OCR Image Text Agent"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "domain_routing",
+        "tags": ["ocr", "image", "text", "extraction"]
+      }
+    },
+    {
+      "id": "rule_tabular_data",
+      "name": "Tabular Data Routing",
+      "description": "Route tabular data queries to Tabular Data Agent",
+      "priority": 100,
+      "conditions": [
+        {
+          "type": "query_content",
+          "field": "contains_tabular",
+          "operator": "equals",
+          "value": true,
+          "negate": false,
+          "description": "Query contains tabular data keywords"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "0xTAB-TabularDataAgent",
+          "parameters": {
+            "reason": "Tabular data query detected"
+          },
+          "description": "Route to Tabular Data Agent"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "domain_routing",
+        "tags": ["tabular", "table", "data", "csv", "excel"]
+      }
+    },
+    {
+      "id": "rule_code_generation",
+      "name": "Code Generation Routing",
+      "description": "Route code generation queries to Code World Model Agent",
+      "priority": 95,
+      "conditions": [
+        {
+          "type": "query_content",
+          "field": "contains_code",
+          "operator": "equals",
+          "value": true,
+          "negate": false,
+          "description": "Query contains code generation keywords"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "0xC0DE-CodeWorldModelAgent",
+          "parameters": {
+            "reason": "Code generation query detected"
+          },
+          "description": "Route to Code World Model Agent"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "domain_routing",
+        "tags": ["code", "generation", "programming", "cwm"]
+      }
+    },
+    {
+      "id": "rule_long_context",
+      "name": "Long Context Routing",
+      "description": "Route long context queries to Granite or Phi-3.5",
+      "priority": 90,
+      "conditions": [
+        {
+          "type": "complexity",
+          "field": "context_length",
+          "operator": "greater_than",
+          "value": 2000,
+          "negate": false,
+          "description": "Query requires long context"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "0x5D1A-SubledgerAgent",
+          "parameters": {
+            "reason": "Long context query - using Granite"
+          },
+          "description": "Route to Subledger Agent (Granite) for long context"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "complexity_routing",
+        "tags": ["long_context", "granite", "finance"]
+      }
+    },
+    {
+      "id": "rule_high_quality",
+      "name": "High Quality Routing",
+      "description": "Route high quality requirement queries to best available models",
+      "priority": 85,
+      "conditions": [
+        {
+          "type": "query_content",
+          "field": "content",
+          "operator": "contains",
+          "value": "high quality",
+          "negate": false,
+          "description": "Query requires high quality output"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "0xG7B-Gemma7BAssistant",
+          "parameters": {
+            "reason": "High quality requirement - using best model"
+          },
+          "description": "Route to Gemma 7B Assistant for high quality"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "quality_routing",
+        "tags": ["quality", "high_quality", "best_model"]
+      }
     }
   ],
   "default_domain": "general",

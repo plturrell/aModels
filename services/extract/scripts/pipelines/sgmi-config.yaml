@@ -5,6 +5,7 @@ project:
   id: "sgmi"
   name: "SAP Global Master Index"
   system_id: "sgmi"
+  data_root: "${SGMI_DATA_ROOT:-/home/aModels/services/extract/data}"
 
 sources:
   files:
@@ -27,4 +28,23 @@ ai:
   enabled: true
   model: "cwm"
   localai_url: "http://localai:8080"
+
+# Gitea storage configuration for Gitea-first extraction process
+gitea_storage:
+  enabled: true
+  gitea_url: "${GITEA_URL:-}"
+  gitea_token: "${GITEA_TOKEN:-}"
+  owner: "extract-service"
+  repo_name: "sgmi-extracted-code"
+  branch: "main"
+  base_path: ""
+  auto_create: true
+  description: "SGMI extracted code and documents"
+
+# Verification configuration
+verification:
+  knowledge_graph:
+    query_template: "MATCH (n) WHERE n.project_id = '{project_id}' OR n.system_id = '{system_id}' OR n.id CONTAINS '{project_id}' RETURN count(n) as node_count"
+  catalog:
+    source_filter: "Extract Service"
 

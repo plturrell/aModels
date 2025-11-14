@@ -1,4 +1,4 @@
 module github.com/plturrell/aModels/pkg/catalog/flightcatalog
 
-go 1.21
+go 1.24
 

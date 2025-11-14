@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import httpx
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response, JSONResponse
 from redis import asyncio as aioredis
@@ -1222,6 +1222,307 @@ async def extract_schema_replication(payload: Dict[str, Any]) -> Any:
         raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
     except httpx.RequestError as e:
         raise HTTPException(status_code=502, detail=f"Extract service error: {e}")
+
+
+# Helper function to build Gitea headers from request or query params (backward compatibility)
+def get_gitea_headers(
+    request: Request,
+    gitea_url: Optional[str] = None,
+    gitea_token: Optional[str] = None
+) -> Dict[str, str]:
+    """Get Gitea headers from request headers or query params (for backward compatibility)."""
+    headers = {}
+    
+    # Priority: Request headers > Query params
+    gitea_url_header = request.headers.get("X-Gitea-URL") or gitea_url
+    gitea_token_header = request.headers.get("X-Gitea-Token") or gitea_token
+    
+    if gitea_url_header:
+        headers["X-Gitea-URL"] = gitea_url_header
+    if gitea_token_header:
+        headers["X-Gitea-Token"] = gitea_token_header
+    
+    return headers
+
+
+# Gitea repository management proxy endpoints
+@app.get("/api/gitea/repositories")
+async def gitea_list_repositories(
+    request: Request,
+    owner: Optional[str] = Query(None),
+    gitea_url: Optional[str] = Query(None, description="Deprecated: Use X-Gitea-URL header"),
+    gitea_token: Optional[str] = Query(None, description="Deprecated: Use X-Gitea-Token header")
+) -> Any:
+    """List Gitea repositories."""
+    try:
+        params = {}
+        if owner:
+            params["owner"] = owner
+        
+        gitea_headers = get_gitea_headers(request, gitea_url, gitea_token)
+        
+        r = await client.get(
+            f"{EXTRACT_URL}/gitea/repositories",
+            params=params,
+            headers=gitea_headers
+        )
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Gitea service error: {e}")
+
+
+@app.post("/api/gitea/repositories")
+async def gitea_create_repository(
+    request: Request,
+    payload: Dict[str, Any]
+) -> Any:
+    """Create a new Gitea repository."""
+    try:
+        # Extract Gitea config from payload (backward compatibility) or headers
+        gitea_url = payload.pop("gitea_url", None)
+        gitea_token = payload.pop("gitea_token", None)
+        
+        gitea_headers = get_gitea_headers(request, gitea_url, gitea_token)
+        
+        r = await client.post(
+            f"{EXTRACT_URL}/gitea/repositories",
+            json=payload,
+            headers=gitea_headers
+        )
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Gitea service error: {e}")
+
+
+@app.get("/api/gitea/repositories/{owner}/{repo}")
+async def gitea_get_repository(
+    request: Request,
+    owner: str,
+    repo: str,
+    gitea_url: Optional[str] = Query(None, description="Deprecated: Use X-Gitea-URL header"),
+    gitea_token: Optional[str] = Query(None, description="Deprecated: Use X-Gitea-Token header")
+) -> Any:
+    """Get Gitea repository details."""
+    try:
+        gitea_headers = get_gitea_headers(request, gitea_url, gitea_token)
+        
+        r = await client.get(
+            f"{EXTRACT_URL}/gitea/repositories/{owner}/{repo}",
+            headers=gitea_headers
+        )
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Gitea service error: {e}")
+
+
+@app.delete("/api/gitea/repositories/{owner}/{repo}")
+async def gitea_delete_repository(
+    request: Request,
+    owner: str,
+    repo: str,
+    gitea_url: Optional[str] = Query(None, description="Deprecated: Use X-Gitea-URL header"),
+    gitea_token: Optional[str] = Query(None, description="Deprecated: Use X-Gitea-Token header")
+) -> Any:
+    """Delete a Gitea repository."""
+    try:
+        gitea_headers = get_gitea_headers(request, gitea_url, gitea_token)
+        
+        r = await client.delete(
+            f"{EXTRACT_URL}/gitea/repositories/{owner}/{repo}",
+            headers=gitea_headers
+        )
+        r.raise_for_status()
+        return r.json() if r.content else {}
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Gitea service error: {e}")
+
+
+@app.get("/api/gitea/repositories/{owner}/{repo}/files")
+async def gitea_list_files(
+    request: Request,
+    owner: str,
+    repo: str,
+    path: Optional[str] = Query(None),
+    ref: Optional[str] = Query(None),
+    gitea_url: Optional[str] = Query(None, description="Deprecated: Use X-Gitea-URL header"),
+    gitea_token: Optional[str] = Query(None, description="Deprecated: Use X-Gitea-Token header")
+) -> Any:
+    """List files in a Gitea repository."""
+    try:
+        params = {}
+        if path:
+            params["path"] = path
+        if ref:
+            params["ref"] = ref
+        
+        gitea_headers = get_gitea_headers(request, gitea_url, gitea_token)
+        
+        r = await client.get(
+            f"{EXTRACT_URL}/gitea/repositories/{owner}/{repo}/files",
+            params=params,
+            headers=gitea_headers
+        )
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Gitea service error: {e}")
+
+
+@app.get("/api/gitea/repositories/{owner}/{repo}/files/{file_path:path}")
+async def gitea_get_file_content(
+    request: Request,
+    owner: str,
+    repo: str,
+    file_path: str,
+    ref: Optional[str] = Query(None),
+    gitea_url: Optional[str] = Query(None, description="Deprecated: Use X-Gitea-URL header"),
+    gitea_token: Optional[str] = Query(None, description="Deprecated: Use X-Gitea-Token header")
+) -> Any:
+    """Get file content from a Gitea repository."""
+    try:
+        params = {}
+        if ref:
+            params["ref"] = ref
+        
+        gitea_headers = get_gitea_headers(request, gitea_url, gitea_token)
+        
+        r = await client.get(
+            f"{EXTRACT_URL}/gitea/repositories/{owner}/{repo}/files/{file_path}",
+            params=params,
+            headers=gitea_headers
+        )
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Gitea service error: {e}")
+
+
+@app.post("/api/gitea/repositories/{owner}/{repo}/files")
+async def gitea_create_or_update_file(
+    request: Request,
+    owner: str,
+    repo: str,
+    payload: Dict[str, Any]
+) -> Any:
+    """Create or update a file in a Gitea repository."""
+    try:
+        # Extract Gitea config from payload (backward compatibility) or headers
+        gitea_url = payload.pop("gitea_url", None)
+        gitea_token = payload.pop("gitea_token", None)
+        
+        gitea_headers = get_gitea_headers(request, gitea_url, gitea_token)
+        
+        r = await client.post(
+            f"{EXTRACT_URL}/gitea/repositories/{owner}/{repo}/files",
+            json=payload,
+            headers=gitea_headers
+        )
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Gitea service error: {e}")
+
+
+@app.get("/api/gitea/repositories/{owner}/{repo}/branches")
+async def gitea_list_branches(
+    request: Request,
+    owner: str,
+    repo: str,
+    gitea_url: Optional[str] = Query(None, description="Deprecated: Use X-Gitea-URL header"),
+    gitea_token: Optional[str] = Query(None, description="Deprecated: Use X-Gitea-Token header")
+) -> Any:
+    """List branches in a Gitea repository."""
+    try:
+        gitea_headers = get_gitea_headers(request, gitea_url, gitea_token)
+        
+        r = await client.get(
+            f"{EXTRACT_URL}/gitea/repositories/{owner}/{repo}/branches",
+            headers=gitea_headers
+        )
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Gitea service error: {e}")
+
+
+@app.get("/api/gitea/repositories/{owner}/{repo}/commits")
+async def gitea_list_commits(
+    request: Request,
+    owner: str,
+    repo: str,
+    branch: Optional[str] = Query(None),
+    limit: Optional[int] = Query(None),
+    gitea_url: Optional[str] = Query(None, description="Deprecated: Use X-Gitea-URL header"),
+    gitea_token: Optional[str] = Query(None, description="Deprecated: Use X-Gitea-Token header")
+) -> Any:
+    """List commits in a Gitea repository."""
+    try:
+        params = {}
+        if branch:
+            params["branch"] = branch
+        if limit:
+            params["limit"] = str(limit)
+        
+        gitea_headers = get_gitea_headers(request, gitea_url, gitea_token)
+        
+        r = await client.get(
+            f"{EXTRACT_URL}/gitea/repositories/{owner}/{repo}/commits",
+            params=params,
+            headers=gitea_headers
+        )
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Gitea service error: {e}")
+
+
+@app.post("/api/gitea/repositories/{owner}/{repo}/clone")
+async def gitea_clone_repository(
+    request: Request,
+    owner: str,
+    repo: str,
+    payload: Dict[str, Any]
+) -> Any:
+    """Clone a Gitea repository for processing."""
+    try:
+        # Extract Gitea config from payload (backward compatibility) or headers
+        gitea_url = payload.pop("gitea_url", None)
+        gitea_token = payload.pop("gitea_token", None)
+        
+        gitea_headers = get_gitea_headers(request, gitea_url, gitea_token)
+        
+        r = await client.post(
+            f"{EXTRACT_URL}/gitea/repositories/{owner}/{repo}/clone",
+            json=payload,
+            headers=gitea_headers
+        )
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=e.response.text)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Gitea service error: {e}")
 
 
 @app.post("/knowledge-graph/query")

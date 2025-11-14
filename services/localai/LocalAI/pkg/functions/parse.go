@@ -3,6 +3,7 @@ package functions
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"regexp"
 	"slices"

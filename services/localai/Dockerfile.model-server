@@ -1,0 +1,34 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies for model server
+RUN pip install --no-cache-dir \
+    fastapi \
+    uvicorn[standard] \
+    requests \
+    pydantic
+
+# Copy model server
+COPY services/localai/services/model_server.py /app/model_server.py
+
+# Set environment variables
+ENV MODEL_SERVER_PORT=8088
+ENV PYTHONUNBUFFERED=1
+ENV MODELS_BASE=/home/aModels/models
+
+# Expose port
+EXPOSE 8088
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8088/health')"
+
+# Run the service
+CMD ["python3", "-m", "uvicorn", "model_server:app", "--host", "0.0.0.0", "--port", "8088"]
+

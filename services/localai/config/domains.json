@@ -39,15 +39,23 @@
       "name": "SQL Agent",
       "layer": "layer1",
       "team": "DataTeam",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0x5678",
       "attention_weights": {
         "sql_queries": 0.95,
         "database_ops": 0.9,
         "optimization": 0.85
       },
-      "max_tokens": 512,
-      "temperature": 0.2,
+      "max_tokens": 1024,
+      "temperature": 0.1,
       "tags": [
         "sql",
         "database",
@@ -55,21 +63,54 @@
         "data"
       ],
       "keywords": [
-        "sql",
-        "query",
-        "select",
+        "ALTER TABLE",
+        "CREATE TABLE",
+        "DELETE",
+        "DROP TABLE",
+        "GROUP BY",
+        "HAVING",
+        "INNER JOIN",
+        "INSERT",
+        "JOIN",
+        "LEFT JOIN",
+        "ORDER BY",
+        "RIGHT JOIN",
+        "SELECT",
+        "UNION",
+        "UPDATE",
+        "WHERE clause",
+        "commit",
         "database",
-        "table",
+        "database schema",
+        "foreign key",
+        "index",
         "join",
+        "primary key",
+        "query",
+        "query optimization",
+        "rollback",
+        "select",
+        "sql",
+        "stored procedure",
+        "subquery",
+        "table",
+        "transaction",
         "where"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0x9753-AIPreparationAgent": {
       "name": "AI Preparation Agent",
       "layer": "layer1",
       "team": "DataTeam",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0x9753",
       "attention_weights": {
         "data_preparation": 0.9,
@@ -91,14 +132,21 @@
         "normalize",
         "clean",
         "transform"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0xA1B2-DataProcessAgent": {
       "name": "Data Process Agent",
       "layer": "layer1",
       "team": "DataTeam",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0xA1B2",
       "attention_weights": {
         "data_processing": 0.9,
@@ -120,14 +168,21 @@
         "extract",
         "transform",
         "load"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0xC3D4-StandardizationAgent": {
       "name": "Standardization Agent",
       "layer": "layer1",
       "team": "DataTeam",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0xC3D4",
       "attention_weights": {
         "standardization": 0.95,
@@ -149,14 +204,21 @@
         "format",
         "schema",
         "conform"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0x9ABC-AgentProcessAgent": {
       "name": "Agent Process Agent",
       "layer": "layer1",
       "team": "FoundationTeam",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0x9ABC",
       "attention_weights": {
         "agent_management": 0.95,
@@ -179,14 +241,21 @@
         "spawn",
         "terminate",
         "monitor"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0xB10C-BlockchainAgent": {
       "name": "Blockchain Agent",
       "layer": "layer1",
       "team": "FoundationTeam",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0xB10C",
       "attention_weights": {
         "blockchain_ops": 0.95,
@@ -209,14 +278,21 @@
         "ledger",
         "hash",
         "mine"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0xDEF0-OrchestratorAgent": {
       "name": "Orchestrator Agent",
       "layer": "layer1",
       "team": "FoundationTeam",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0xDEF0",
       "attention_weights": {
         "orchestration": 0.95,
@@ -238,21 +314,28 @@
         "manage",
         "schedule",
         "route"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0xE6A7-SmartContractAgent": {
       "name": "Smart Contract Agent",
       "layer": "layer1",
       "team": "FoundationTeam",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0xE6A7",
       "attention_weights": {
         "smart_contracts": 0.95,
         "deployment": 0.9,
         "execution": 0.85
       },
-      "max_tokens": 512,
+      "max_tokens": 2048,
       "temperature": 0.2,
       "tags": [
         "contract",
@@ -261,21 +344,51 @@
         "deployment"
       ],
       "keywords": [
-        "contract",
-        "solidity",
-        "deploy",
-        "execute",
+        "ABI",
+        "abi",
+        "assert",
         "call",
+        "constructor",
+        "contract",
+        "contract function",
+        "deploy",
+        "deploy contract",
+        "enum",
+        "ethereum",
+        "event",
+        "execute",
+        "fallback function",
         "function",
-        "abi"
-      ],
-      "backend_type": "gguf"
+        "gas",
+        "gas limit",
+        "gas price",
+        "inheritance",
+        "interface",
+        "library",
+        "mapping",
+        "modifier",
+        "receive function",
+        "require",
+        "revert",
+        "smart contract",
+        "solidity",
+        "struct",
+        "web3"
+      ]
     },
     "0x1234-QAValidationAgent": {
       "name": "QA Validation Agent",
       "layer": "layer2",
       "team": "QualityControl",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0x1234",
       "attention_weights": {
         "validation": 0.95,
@@ -283,7 +396,7 @@
         "quality": 0.85
       },
       "max_tokens": 512,
-      "temperature": 0.2,
+      "temperature": 0.1,
       "tags": [
         "qa",
         "validation",
@@ -297,22 +410,29 @@
         "check",
         "verify",
         "assert"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0x7E21-AuditAgent": {
       "name": "Audit Agent",
       "layer": "layer2",
       "team": "QualityControl",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0x7E21",
       "attention_weights": {
         "audit": 0.95,
         "compliance": 0.9,
         "trail": 0.85
       },
-      "max_tokens": 512,
-      "temperature": 0.2,
+      "max_tokens": 1024,
+      "temperature": 0.1,
       "tags": [
         "audit",
         "compliance",
@@ -327,14 +447,21 @@
         "track",
         "record",
         "verify"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0x8642-QualityControlAgent": {
       "name": "Quality Control Agent",
       "layer": "layer2",
       "team": "QualityControl",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0x8642",
       "attention_weights": {
         "quality_control": 0.95,
@@ -342,7 +469,7 @@
         "metrics": 0.85
       },
       "max_tokens": 512,
-      "temperature": 0.2,
+      "temperature": 0.1,
       "tags": [
         "quality",
         "control",
@@ -356,14 +483,21 @@
         "metric",
         "measure",
         "assess"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0xCT00-ControlTowerAgent": {
       "name": "Control Tower Agent",
       "layer": "layer2",
       "team": "QualityControl",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0xCT00",
       "attention_weights": {
         "monitoring": 0.95,
@@ -385,14 +519,21 @@
         "manage",
         "supervise",
         "track"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0xD4C5-RiskControllerAgent": {
       "name": "Risk Controller Agent",
       "layer": "layer2",
       "team": "QualityControl",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0xD4C5",
       "attention_weights": {
         "risk_assessment": 0.95,
@@ -414,21 +555,28 @@
         "control",
         "exposure",
         "threat"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0xE5F6-CalcValidationAgent": {
       "name": "Calculation Validation Agent",
       "layer": "layer2",
       "team": "QualityControl",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0xE5F6",
       "attention_weights": {
         "calculation": 0.95,
         "validation": 0.9,
         "accuracy": 0.85
       },
-      "max_tokens": 512,
+      "max_tokens": 256,
       "temperature": 0.1,
       "tags": [
         "calculation",
@@ -437,20 +585,44 @@
         "math"
       ],
       "keywords": [
+        "accuracy",
+        "arithmetic",
         "calculate",
-        "validate",
+        "check math",
+        "computation",
         "compute",
-        "math",
+        "difference",
+        "equation",
+        "evaluate",
         "formula",
-        "accuracy"
-      ],
-      "backend_type": "gguf"
+        "math",
+        "numerical",
+        "percentage",
+        "precision",
+        "product",
+        "proportion",
+        "quotient",
+        "ratio",
+        "solve",
+        "sum",
+        "validate",
+        "validate calculation",
+        "verify result"
+      ]
     },
     "0xG0V1-GovernanceAgent": {
       "name": "Governance Agent",
       "layer": "layer2",
       "team": "QualityControl",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "phi-3.5-mini",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "phi-3.5-mini",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0xG0V1",
       "attention_weights": {
         "governance": 0.95,
@@ -472,8 +644,7 @@
         "comply",
         "regulate",
         "enforce"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0x5D1A-SubledgerAgent": {
       "name": "Subledger Agent",
@@ -502,14 +673,30 @@
         "finance"
       ],
       "keywords": [
-        "subledger",
-        "ledger",
+        "GL",
         "account",
-        "journal",
-        "entry",
+        "account balance",
+        "accounting entry",
+        "accrual",
+        "adjusting entry",
+        "amortization",
         "balance",
+        "chart of accounts",
+        "closing entry",
+        "credit",
+        "debit",
+        "deferral",
+        "depreciation",
+        "entry",
+        "financial statement",
+        "general ledger",
+        "journal",
+        "journal entry",
+        "ledger",
         "reconcile",
-        "GL"
+        "reconciliation",
+        "subledger",
+        "trial balance"
       ]
     },
     "0xG2B-GemmaAssistant": {
@@ -517,11 +704,11 @@
       "layer": "layer4",
       "team": "FoundationTeam",
       "backend_type": "hf-transformers",
-      "model_name": "gemma-2b-it",
+      "model_name": "phi-3.5-mini",
       "model_path": "",
       "transformers_config": {
         "endpoint": "http://transformers-service:9090/v1/chat/completions",
-        "model_name": "gemma-2b-it",
+        "model_name": "phi-3.5-mini",
         "timeout_seconds": 180
       },
       "fallback_model": "phi-3.5-mini",
@@ -550,15 +737,23 @@
       "name": "Treasury Agent",
       "layer": "layer3",
       "team": "FinanceOperations",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "granite-4.0-h-micro",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "granite-4.0-h-micro",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0x71A2",
       "attention_weights": {
         "treasury": 0.95,
         "cash_management": 0.9,
         "liquidity": 0.85
       },
-      "max_tokens": 512,
-      "temperature": 0.3,
+      "max_tokens": 1024,
+      "temperature": 0.2,
       "tags": [
         "treasury",
         "cash",
@@ -566,28 +761,49 @@
         "finance"
       ],
       "keywords": [
-        "treasury",
+        "bank reconciliation",
+        "capital",
+        "capital allocation",
         "cash",
-        "liquidity",
-        "payment",
+        "cash flow",
+        "cash forecast",
+        "cash position",
+        "debt management",
         "funding",
-        "capital"
-      ],
-      "backend_type": "gguf"
+        "hedging",
+        "investment",
+        "liquidity",
+        "liquidity management",
+        "payment",
+        "payment processing",
+        "risk management",
+        "treasury",
+        "treasury operations",
+        "treasury policy",
+        "working capital"
+      ]
     },
     "0x8F32-InvoiceLangAgent": {
       "name": "Invoice Language Agent",
       "layer": "layer3",
       "team": "FinanceOperations",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "granite-4.0-h-micro",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "granite-4.0-h-micro",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0x8F32",
       "attention_weights": {
         "invoice_processing": 0.95,
         "nlp": 0.9,
         "extraction": 0.85
       },
-      "max_tokens": 512,
-      "temperature": 0.3,
+      "max_tokens": 1024,
+      "temperature": 0.2,
       "tags": [
         "invoice",
         "nlp",
@@ -595,20 +811,43 @@
         "finance"
       ],
       "keywords": [
-        "invoice",
-        "bill",
-        "extract",
-        "parse",
+        "AP",
+        "accounts payable",
         "amount",
-        "vendor"
-      ],
-      "backend_type": "gguf"
+        "amount due",
+        "bill",
+        "discount",
+        "due date",
+        "extract",
+        "invoice",
+        "invoice date",
+        "invoice extraction",
+        "invoice matching",
+        "invoice number",
+        "invoice processing",
+        "line item",
+        "parse",
+        "payment terms",
+        "purchase order",
+        "tax",
+        "vendor",
+        "vendor invoice",
+        "vendor name"
+      ]
     },
     "0x92C8-InvestorRelationsAgent": {
       "name": "Investor Relations Agent",
       "layer": "layer3",
       "team": "FinanceOperations",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "granite-4.0-h-micro",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "granite-4.0-h-micro",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0x92C8",
       "attention_weights": {
         "investor_relations": 0.9,
@@ -630,22 +869,29 @@
         "disclosure",
         "communicate",
         "stakeholder"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0xA7D2-TradeReconAgent": {
       "name": "Trade Reconciliation Agent",
       "layer": "layer3",
       "team": "FinanceOperations",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "granite-4.0-h-micro",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "granite-4.0-h-micro",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0xA7D2",
       "attention_weights": {
         "reconciliation": 0.95,
         "trade_matching": 0.9,
         "settlement": 0.85
       },
-      "max_tokens": 512,
-      "temperature": 0.2,
+      "max_tokens": 1024,
+      "temperature": 0.1,
       "tags": [
         "trade",
         "reconciliation",
@@ -659,8 +905,7 @@
         "settle",
         "confirm",
         "break"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0xF3C0-ESGFinanceAgent": {
       "name": "ESG Finance Agent",
@@ -701,7 +946,15 @@
       "name": "News Intelligence Agent",
       "layer": "layer3",
       "team": "FinanceOperations",
-      "model_path": "/models/gemma-2b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "granite-4.0-h-micro",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "granite-4.0-h-micro",
+        "timeout_seconds": 120
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0xN135",
       "attention_weights": {
         "news_analysis": 0.9,
@@ -723,21 +976,28 @@
         "analyze",
         "intelligence",
         "market"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0xBR0W-BrowserAnalysisAgent": {
       "name": "Browser Analysis Agent",
       "layer": "layer4",
       "team": "BrowserTeam",
-      "model_path": "/models/gemma-7b-q4_k_m.gguf",
+      "backend_type": "hf-transformers",
+      "model_name": "granite-4.0-h-micro",
+      "model_path": "",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "granite-4.0-h-micro",
+        "timeout_seconds": 180
+      },
+      "fallback_model": "phi-3.5-mini",
       "agent_id": "0xBR0W",
       "attention_weights": {
         "web_analysis": 0.95,
         "content_extraction": 0.9,
         "page_understanding": 0.85
       },
-      "max_tokens": 1024,
+      "max_tokens": 2048,
       "temperature": 0.3,
       "tags": [
         "browser",
@@ -758,8 +1018,7 @@
         "content",
         "page",
         "website"
-      ],
-      "backend_type": "gguf"
+      ]
     },
     "0xC0DE-CodeWorldModelAgent": {
       "name": "Code World Model Agent",
@@ -769,7 +1028,7 @@
       "model_name": "cwm",
       "model_path": "/models/cwm",
       "transformers_config": {
-        "endpoint": "http://localhost:5678/v1/chat/completions",
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
         "model_name": "cwm",
         "timeout_seconds": 300
       },
@@ -790,15 +1049,34 @@
         "fastgen"
       ],
       "keywords": [
-        "code",
+        "API",
+        "algorithm",
         "bug",
-        "patch",
-        "refactor",
-        "compile",
-        "stack trace",
-        "function",
         "class",
-        "diff"
+        "code",
+        "code review",
+        "compile",
+        "conditional",
+        "data structure",
+        "debug",
+        "diff",
+        "fix bug",
+        "framework",
+        "function",
+        "generate code",
+        "library",
+        "loop",
+        "method",
+        "patch",
+        "programming",
+        "refactor",
+        "runtime error",
+        "stack trace",
+        "syntax error",
+        "test",
+        "unit test",
+        "variable",
+        "write code"
       ]
     },
     "0xCALM-ContinuousReasoningAgent": {
@@ -809,7 +1087,7 @@
       "model_name": "calm-l",
       "model_path": "/models/calm/CALM-L",
       "transformers_config": {
-        "endpoint": "http://localhost:9090/v1/chat/completions",
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
         "model_name": "calm-l",
         "timeout_seconds": 300
       },
@@ -868,11 +1146,11 @@
       "layer": "layer4",
       "team": "FoundationTeam",
       "backend_type": "hf-transformers",
-      "model_name": "gemma-7b-it",
+      "model_name": "granite-4.0-h-micro",
       "model_path": "",
       "transformers_config": {
         "endpoint": "http://transformers-service:9090/v1/chat/completions",
-        "model_name": "gemma-7b-it",
+        "model_name": "granite-4.0-h-micro",
         "timeout_seconds": 180
       },
       "fallback_model": "phi-3.5-mini",
@@ -898,6 +1176,93 @@
         "summary",
         "explain",
         "7b"
+      ]
+    },
+    "0xOCR-ImageTextAgent": {
+      "name": "OCR Image Text Agent",
+      "layer": "layer4",
+      "team": "VisionTeam",
+      "backend_type": "hf-transformers",
+      "model_name": "deepseek-ocr",
+      "model_path": "/models/DeepSeek-OCR",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "deepseek-ocr",
+        "timeout_seconds": 300
+      },
+      "fallback_model": "phi-3.5-mini",
+      "enabled_env_var": "ENABLE_OCR_DOMAIN",
+      "agent_id": "0xOCR",
+      "attention_weights": {
+        "ocr": 0.98,
+        "text_extraction": 0.95,
+        "image_analysis": 0.9
+      },
+      "max_tokens": 2048,
+      "temperature": 0.1,
+      "tags": [
+        "ocr",
+        "image",
+        "text",
+        "extraction",
+        "vision"
+      ],
+      "keywords": [
+        "ocr",
+        "extract text",
+        "image text",
+        "read image",
+        "text recognition",
+        "optical character",
+        "scan",
+        "document",
+        "pdf",
+        "image",
+        "text from image"
+      ]
+    },
+    "0xTAB-TabularDataAgent": {
+      "name": "Tabular Data Agent",
+      "layer": "layer3",
+      "team": "DataTeam",
+      "backend_type": "hf-transformers",
+      "model_name": "sap-rpt-1",
+      "model_path": "/models/sap-rpt-1-oss-main",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/chat/completions",
+        "model_name": "sap-rpt-1",
+        "timeout_seconds": 300
+      },
+      "fallback_model": "phi-3.5-mini",
+      "enabled_env_var": "ENABLE_TABULAR_DOMAIN",
+      "agent_id": "0xTAB",
+      "attention_weights": {
+        "tabular_data": 0.97,
+        "table_analysis": 0.95,
+        "data_extraction": 0.9
+      },
+      "max_tokens": 4096,
+      "temperature": 0.2,
+      "tags": [
+        "tabular",
+        "table",
+        "data",
+        "sap",
+        "rpt"
+      ],
+      "keywords": [
+        "table",
+        "tabular",
+        "dataframe",
+        "csv",
+        "excel",
+        "spreadsheet",
+        "row",
+        "column",
+        "pivot",
+        "aggregate",
+        "sap",
+        "report"
       ]
     }
   },

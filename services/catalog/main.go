@@ -11,23 +11,22 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
-	"github.com/plturrell/aModels/pkg/sap"
 	"github.com/plturrell/aModels/services/catalog/ai"
 	"github.com/plturrell/aModels/services/catalog/analytics"
 	"github.com/plturrell/aModels/services/catalog/api"
 	"github.com/plturrell/aModels/services/catalog/autonomous"
 	"github.com/plturrell/aModels/services/catalog/breakdetection"
 	"github.com/plturrell/aModels/services/catalog/cache"
-	"github.com/plturrell/aModels/services/catalog/integration"
+	"github.com/plturrell/aModels/services/catalog/discoverability"
 	"github.com/plturrell/aModels/services/catalog/iso11179"
 	"github.com/plturrell/aModels/services/catalog/migrations"
 	"github.com/plturrell/aModels/services/catalog/multimodal"
 	"github.com/plturrell/aModels/services/catalog/observability"
 	"github.com/plturrell/aModels/services/catalog/quality"
 	"github.com/plturrell/aModels/services/catalog/research"
+	"github.com/plturrell/aModels/services/catalog/security"
 	"github.com/plturrell/aModels/services/catalog/streaming"
 	"github.com/plturrell/aModels/services/catalog/triplestore"
-	"github.com/plturrell/aModels/services/catalog/vectorstore"
 	"github.com/plturrell/aModels/services/catalog/workflows"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -187,23 +186,19 @@ func main() {
 	// Initialize Deep Research client for autonomous intelligence
 	deepResearchClient := research.NewDeepResearchClient(deepResearchURL, legacyLogger)
 
-	// Initialize version manager if database is available
-	var versionManager *workflows.VersionManager
+	// Initialize discoverability system if database is available
+	var discoverSystem *discoverability.DiscoverabilitySystem
 	if catalogDBURL != "" {
 		if db, err := sql.Open("postgres", catalogDBURL); err == nil {
 			if err := db.Ping(); err == nil {
-				versionManager = workflows.NewVersionManager(db, legacyLogger)
-				structLogger.Info("Version manager initialized", nil)
+				discoverSystem = discoverability.NewDiscoverabilitySystem(db, legacyLogger)
+				structLogger.Info("Discoverability system initialized", nil)
 			} else {
 				db.Close()
-				structLogger.Warn("Failed to ping database for version manager, continuing without versioning", map[string]interface{}{
-					"error": err.Error(),
-				})
+				structLogger.Warn("Failed to ping database for discoverability system, continuing without discoverability", map[string]interface{}{"error": err.Error()})
 			}
 		} else {
-			structLogger.Warn("Failed to open database for version manager, continuing without versioning", map[string]interface{}{
-				"error": err.Error(),
-			})
+			structLogger.Warn("Failed to open database for discoverability system, continuing without discoverability", map[string]interface{}{"error": err.Error()})
 		}
 	}
 
@@ -217,7 +212,7 @@ func main() {
 		registry,
 		qualityMonitor,
 		reportStore,
-		versionManager,
+		nil,
 		legacyLogger,
 	)
 	structLogger.Info("Unified workflow integration initialized", nil)
@@ -353,25 +348,18 @@ func main() {
 		}
 	}
 
-	// Initialize discoverability system (disabled pending refactor)
-	// var discoverSystem *discoverability.DiscoverabilitySystem
-	// if catalogDB != nil {
-	//     discoverSystem = discoverability.NewDiscoverabilitySystem(catalogDB, legacyLogger)
-	//     structLogger.Info("Discoverability system initialized", nil)
-	// }
-
 	// Initialize API handlers
 	catalogHandlers := api.NewCatalogHandlers(registry, legacyLogger)
 	sparqlHandler := api.NewSPARQLHandler(sparqlEndpoint, legacyLogger)
-	dataProductHandler := api.NewDataProductHandler(unifiedWorkflow, registry, versionManager, legacyLogger)
+	dataProductHandler := api.NewDataProductHandler(unifiedWorkflow, registry, nil, legacyLogger)
 	aiHandlers := api.NewAIHandlers(metadataDiscoverer, qualityPredictor, recommender, legacyLogger)
 
-	// Initialize discoverability handler (disabled pending discoverability system refactor)
-	// var discoverabilityHandler *api.DiscoverabilityHandler
-	// if discoverSystem != nil {
-	//     discoverabilityHandler = api.NewDiscoverabilityHandler(discoverSystem, legacyLogger)
-	//     structLogger.Info("Discoverability handler initialized", nil)
-	// }
+	// Initialize discoverability handler if system is available
+	var discoverabilityHandler *api.DiscoverabilityHandler
+	if discoverSystem != nil {
+		discoverabilityHandler = api.NewDiscoverabilityHandler(discoverSystem, legacyLogger)
+		structLogger.Info("Discoverability handler initialized", nil)
+	}
 
 	// Initialize advanced handlers (Phase 3)
 	var advancedHandlers *api.AdvancedHandlers
@@ -400,7 +388,7 @@ func main() {
 		authMiddleware = xsuaaMiddleware.Middleware
 
 		// Initialize privacy-domain integration for XSUAA
-		privacyDomainIntegration = security.NewPrivacyDomainIntegration(xsuaaMiddleware, legacyLogger)
+		var privacyDomainIntegration = security.NewPrivacyDomainIntegration(xsuaaMiddleware, legacyLogger)
 
 		structLogger.Info("XSUAA authentication middleware initialized", map[string]interface{}{
 			"xsappname": os.Getenv("XS_APP_NAME"),
@@ -586,66 +574,6 @@ func main() {
 		structLogger.Info("Break detection endpoints registered", nil)
 	}
 
-	// HANA Cloud Vector Store endpoints (public information)
-	hanaConnectionString := os.Getenv("HANA_CLOUD_CONNECTION_STRING")
-	if hanaConnectionString != "" {
-		hanaConfig := &vectorstore.HANAConfig{
-			ConnectionString: hanaConnectionString,
-			Schema:           getEnvOrDefault("HANA_CLOUD_SCHEMA", "PUBLIC"),
-			TableName:        getEnvOrDefault("HANA_CLOUD_TABLE_NAME", "PUBLIC_VECTORS"),
-			VectorDimension:  getEnvIntOrDefault("HANA_CLOUD_VECTOR_DIMENSION", 1536),
-			EnableIndexing:   os.Getenv("HANA_CLOUD_ENABLE_INDEXING") != "false",
-		}
-
-		hanaStore, err := vectorstore.NewHANACloudVectorStore(hanaConnectionString, hanaConfig, legacyLogger)
-		if err != nil {
-			structLogger.Warn("HANA Cloud vector store not available", map[string]interface{}{
-				"error": err.Error(),
-			})
-		} else {
-			embeddingService := vectorstore.NewEmbeddingService(
-				os.Getenv("LOCALAI_URL"),
-				legacyLogger,
-			)
-
-			vectorStoreHandler := vectorstore.NewHANAVectorStoreHandler(
-				hanaStore,
-				embeddingService,
-				legacyLogger,
-			)
-
-			// Register vector store endpoints
-			mux.HandleFunc("/vectorstore/store", vectorStoreHandler.HandleStoreInformation)
-			mux.HandleFunc("/vectorstore/search", vectorStoreHandler.HandleSearchInformation)
-			mux.HandleFunc("/vectorstore", func(w http.ResponseWriter, r *http.Request) {
-				// Handle both list (GET with query params) and get by ID (GET /vectorstore/{id})
-				if r.Method == http.MethodGet {
-					// Check if path has ID (not just /vectorstore)
-					path := r.URL.Path
-					if path == "/vectorstore" || path == "/vectorstore/" {
-						// List public information
-						vectorStoreHandler.HandleListPublicInformation(w, r)
-					} else {
-						// Get by ID
-						vectorStoreHandler.HandleGetInformation(w, r)
-					}
-				} else {
-					http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-				}
-			})
-			mux.HandleFunc("/vectorstore/", vectorStoreHandler.HandleGetInformation)
-
-			structLogger.Info("HANA Cloud vector store endpoints registered", map[string]interface{}{
-				"endpoints": []string{
-					"POST /vectorstore/store",
-					"POST /vectorstore/search",
-					"GET /vectorstore (list)",
-					"GET /vectorstore/{id}",
-				},
-			})
-		}
-	}
-
 	// Advanced features endpoints (Phase 3)
 	if advancedHandlers != nil {
 		mux.HandleFunc("/catalog/multimodal/extract", advancedHandlers.HandleExtractMultimodal)
@@ -662,61 +590,7 @@ func main() {
 		structLogger.Info("WebSocket endpoints registered", nil)
 	}
 
-	// HANA Cloud inbound integration endpoints
-	hanaHost := os.Getenv("HANA_HOST")
-	hanaUser := os.Getenv("HANA_USER")
-	hanaPassword := os.Getenv("HANA_PASSWORD")
-	hanaDatabase := os.Getenv("HANA_DATABASE")
-	hanaSchema := os.Getenv("HANA_SCHEMA")
-	extractServiceURL := os.Getenv("EXTRACT_SERVICE_URL")
-	trainingServiceURL := os.Getenv("TRAINING_SERVICE_URL")
-	localaiURL := os.Getenv("LOCALAI_URL")
-	searchServiceURL := os.Getenv("SEARCH_SERVICE_URL")
-
-	if hanaHost != "" && hanaUser != "" && hanaPassword != "" {
-		hanaConfig := sap.HANAConfig{
-			Host:     hanaHost,
-			Port:     getEnvOrDefault("HANA_PORT", "39015"),
-			User:     hanaUser,
-			Password: hanaPassword,
-			Database: hanaDatabase,
-			Schema:   hanaSchema,
-			Encrypt:  os.Getenv("HANA_ENCRYPT") == "true",
-		}
-
-		hanaClient, err := sap.NewHANAClient(hanaConfig)
-		if err != nil {
-			structLogger.Error("Failed to initialize HANA client", err, nil)
-		} else {
-			hanaIntegration := integration.NewHANAInboundIntegration(
-				hanaClient,
-				extractServiceURL,
-				trainingServiceURL,
-				localaiURL,
-				searchServiceURL,
-				privacyDomainIntegration,
-				legacyLogger,
-			)
-
-			hanaHandler := api.NewHANAInboundHandler(hanaIntegration, legacyLogger)
-
-			// Register HANA inbound endpoints with authentication
-			mux.Handle("/catalog/integration/hana/process",
-				authMiddleware(http.HandlerFunc(hanaHandler.HandleProcessHANATables)))
-			mux.HandleFunc("/catalog/integration/hana/status/", hanaHandler.HandleGetStatus)
-
-			structLogger.Info("HANA Cloud inbound integration endpoints registered", map[string]interface{}{
-				"endpoints": []string{
-					"POST /catalog/integration/hana/process",
-					"GET /catalog/integration/hana/status/:request_id",
-				},
-				"hana_host":   hanaHost,
-				"hana_schema": hanaSchema,
-			})
-		}
-	} else {
-		structLogger.Info("HANA Cloud integration not configured (HANA_HOST, HANA_USER, HANA_PASSWORD required)", nil)
-	}
+	// HANA inbound integration removed – catalog now relies solely on Postgres and Neo4j
 
 	// Apply authentication middleware to protected endpoints (mandatory in production)
 	// In production, authentication is always required

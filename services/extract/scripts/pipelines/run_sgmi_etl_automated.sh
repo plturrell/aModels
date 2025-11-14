@@ -18,7 +18,17 @@ mkdir -p "${LOG_DIR}"
 # Configuration
 EXTRACT_SERVICE_URL="${EXTRACT_SERVICE_URL:-http://localhost:8083}"
 GRAPH_SERVICE_URL="${GRAPH_SERVICE_URL:-http://localhost:19080}"
-TARGET_ENDPOINT="${1:-${EXTRACT_SERVICE_URL}/knowledge-graph}"
+TARGET_ENDPOINT="${1:-${EXTRACT_SERVICE_URL}/graph}"
+# Gitea configuration for Gitea-first extraction process
+# These will be passed to payload builders via environment variables
+export GITEA_URL="${GITEA_URL:-}"
+export GITEA_TOKEN="${GITEA_TOKEN:-}"
+export GITEA_OWNER="${GITEA_OWNER:-extract-service}"
+export GITEA_REPO_NAME="${GITEA_REPO_NAME:-sgmi-extracted-code}"
+export GITEA_BRANCH="${GITEA_BRANCH:-main}"
+export GITEA_BASE_PATH="${GITEA_BASE_PATH:-}"
+export GITEA_AUTO_CREATE="${GITEA_AUTO_CREATE:-true}"
+export GITEA_DESCRIPTION="${GITEA_DESCRIPTION:-SGMI extracted code and documents}"
 MAX_RETRIES=5
 RETRY_DELAY=5
 TIMEOUT=300

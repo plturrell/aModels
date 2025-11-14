@@ -1,42 +1,119 @@
-# Automated Tests
+# Model Testing Framework
 
-This directory contains the automated tests for the VaultGemma LocalAI server. The tests are written using Go's built-in testing framework and are designed to ensure the correctness and stability of the application's core components.
+Comprehensive testing framework to verify all models produce expected outputs.
 
-## Purpose
+## Overview
 
-The primary purpose of the test suite is to:
+This framework tests all configured models to ensure:
+1. ✅ Models are accessible and respond to requests
+2. ✅ Models produce real, expected outputs
+3. ✅ Outputs meet quality thresholds
+4. ✅ Models handle different prompt types correctly
 
-- **Verify Core Logic**: Ensure that critical components like the domain router and API handlers are working as expected.
-- **Prevent Regressions**: Catch any bugs or unintended side effects that may be introduced during development.
-- **Validate Configuration**: Test the loading and parsing of the `domains.json` configuration file.
-
-## How to Run Tests
-
-To run the entire test suite, execute the following command from the root of the project:
+## Quick Start
 
 ```bash
-# Run all tests in verbose mode
-go test -v ./tests/...
+# Run all model tests
+./run_model_tests.sh
+
+# Or run directly with Python
+python3 test_all_models.py
 ```
 
-To run a specific test, you can use the `-run` flag with a regular expression that matches the test name:
+## Environment Variables
+
+- `TRANSFORMERS_SERVICE_URL`: URL of transformers service (default: `http://localhost:9090`)
+- `LOCALAI_SERVICE_URL`: URL of LocalAI service (default: `http://localhost:8081`)
+- `TEST_TIMEOUT`: Timeout for each test in seconds (default: `60`)
+- `RESULTS_DIR`: Directory to save test results (default: `/tmp/model_test_results`)
+
+## Test Types
+
+Each model is tested with:
+
+1. **Health Check**: Verifies model is accessible via health endpoint
+2. **Simple Prompt**: Basic functionality test
+3. **Reasoning Prompt**: Tests reasoning capabilities
+4. **Code Prompt**: Tests code generation (if applicable)
+5. **Domain-Specific Prompt**: Tests domain-specific knowledge
+
+## Output
+
+The framework generates:
+
+1. **JSON Results**: Detailed test results in JSON format
+2. **Text Report**: Human-readable summary report
+3. **Console Output**: Real-time test progress and results
+
+Results are saved to `RESULTS_DIR` with timestamps.
+
+## Quality Metrics
+
+Each response is scored on:
+- **Length**: Appropriate response length (10-2000 chars)
+- **Coherence**: No obvious errors or error messages
+- **Relevance**: Contains relevant words from the prompt
+- **Completeness**: Non-empty, meaningful response
+
+Quality scores range from 0.0 to 1.0, with 0.3+ considered passing.
+
+## Example Output
+
+```
+============================================================
+Testing model: phi-3.5-mini
+============================================================
+  [1/5] Health check...
+    ✅ PASS: OK
+  [2/5] Simple prompt...
+    ✅ PASS: Hello, I am working correctly!
+  [3/5] Reasoning prompt...
+    ✅ PASS: 4
+  [4/5] Code prompt...
+    ✅ PASS: def add_numbers(a, b): return a + b
+  [5/5] Domain-specific prompt...
+    ✅ PASS: AI is artificial intelligence...
+```
+
+## Integration
+
+Add to CI/CD pipeline:
+
+```yaml
+- name: Test All Models
+  run: |
+    cd services/localai/tests
+    ./run_model_tests.sh
+```
+
+## Continuous Monitoring
+
+Run periodically to ensure models remain functional:
 
 ```bash
-# Run only the domain detection tests
-go test -v ./tests/ -run TestDomainDetection
+# Add to cron
+0 */6 * * * cd /path/to/aModels/services/localai/tests && ./run_model_tests.sh
 ```
 
-To check test coverage:
+## Troubleshooting
 
-```bash
-go test -v -cover ./tests/...
-```
+### Service Not Accessible
 
-## Key Test Cases
+If tests fail with connection errors:
+1. Verify services are running: `docker ps` or `systemctl status`
+2. Check service URLs in environment variables
+3. Verify network connectivity
 
-While the exact test cases may vary, the suite should cover at least the following scenarios:
+### Model Not Found
 
-*   **`TestDomainLoading`**: Verifies that the `domains.json` file is correctly parsed and that all domains are loaded into the registry.
-*   **`TestDomainDetection`**: Tests the keyword-based routing logic by sending various prompts and asserting that the correct domain is selected.
-*   **`TestChatCompletionsAPI`**: Makes mock requests to the `/v1/chat/completions` endpoint and validates the response format and status codes.
-*   **`TestHealthEndpoint`**: Checks that the `/health` endpoint returns a `200 OK` status.
+If a model is not in the health check:
+1. Verify model is in `transformers_cpu_server.py` MODEL_REGISTRY
+2. Check model files exist in `/models` directory
+3. Restart transformers service
+
+### Low Quality Scores
+
+If quality scores are low:
+1. Check model is properly loaded
+2. Verify model supports the test prompt type
+3. Check for model-specific configuration issues

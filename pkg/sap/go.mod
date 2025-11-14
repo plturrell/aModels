@@ -1,6 +1,6 @@
 module github.com/plturrell/aModels/pkg/sap
 
-go 1.18
+go 1.24
 
 require (
 	github.com/SAP/go-hdb v1.14.9

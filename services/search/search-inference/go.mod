@@ -1,6 +1,6 @@
 module github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Search/search-inference
 
-go 1.21
+go 1.24
 
 require (
 	github.com/elastic/go-elasticsearch/v7 v7.17.10

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -40,6 +41,12 @@ func main() {
 	murexHandler, err := api.NewMurexHandler(logger)
 	if err != nil {
 		logger.Fatalf("Failed to create Murex handler: %v", err)
+	}
+
+	// Create Gitea handler
+	giteaHandler, err := api.NewGiteaHandler(logger)
+	if err != nil {
+		logger.Fatalf("Failed to create Gitea handler: %v", err)
 	}
 
 	// Setup HTTP routes
@@ -381,6 +388,34 @@ func main() {
 			return
 		}
 		murexHandler.HandleGetHistory(w, r)
+	})
+
+	// Gitea API endpoints
+	mux.HandleFunc("/api/gitea/repositories", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			giteaHandler.HandleCreateRepository(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/api/gitea/repositories/", func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if strings.HasSuffix(path, "/clone") {
+			if r.Method == http.MethodPost {
+				giteaHandler.HandleCloneRepository(w, r)
+			} else {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+		} else if strings.HasSuffix(path, "/process") {
+			if r.Method == http.MethodPost {
+				giteaHandler.HandleProcessRepository(w, r)
+			} else {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+		} else {
+			http.Error(w, "Not found", http.StatusNotFound)
+		}
 	})
 
 	// Health check

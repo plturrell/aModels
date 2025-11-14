@@ -1,6 +1,6 @@
 module github.com/plturrell/aModels/services/extract
 
-go 1.21
+go 1.24
 
 require (
 	ai_benchmarks/services/shared v0.0.0-00010101000000-000000000000
@@ -14,6 +14,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	github.com/plturrell/aModels/pkg/localai v0.0.0-00010101000000-000000000000
+	github.com/plturrell/aModels/pkg/catalog/flightcatalog v0.0.0-00010101000000-000000000000
 	github.com/plturrell/aModels/services/postgres v0.0.0
 	github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration v0.0.0-00010101000000-000000000000
 	github.com/pressly/goose/v3 v3.21.1
@@ -36,6 +37,8 @@ replace github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration => .
 replace github.com/Chahine-tech/sql-parser-go => ../../infrastructure/third_party/sql-parser-go
 
 replace github.com/plturrell/aModels/pkg/localai => ../../pkg/localai
+
+replace github.com/plturrell/aModels/pkg/catalog/flightcatalog => ../../pkg/catalog/flightcatalog
 
 replace github.com/plturrell/aModels => ../..
 

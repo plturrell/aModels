@@ -1,6 +1,6 @@
 module github.com/plturrell/aModels/hana
 
-go 1.22
+go 1.24
 
 require github.com/SAP/go-hdb v1.9.11
 

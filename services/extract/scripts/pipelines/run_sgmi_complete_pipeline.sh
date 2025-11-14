@@ -8,10 +8,13 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SCRIPTS_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 REPO_ROOT=$(cd "${ROOT_DIR}/../.." && pwd)
+
+# Configuration file (can be overridden via CONFIG_FILE env var)
+CONFIG_FILE="${CONFIG_FILE:-${SCRIPT_DIR}/sgmi-config.yaml}"
+
 # Support custom data root for Docker mounts
 # Default to extract service data directory (now part of extract service)
 SGMI_DATA_ROOT="${SGMI_DATA_ROOT:-${REPO_ROOT}/services/extract/data}"
-DATA_ROOT="${SGMI_DATA_ROOT}/training/sgmi"
 LOG_DIR="${REPO_ROOT}/logs/sgmi_pipeline"
 
 mkdir -p "${LOG_DIR}"
@@ -22,11 +25,19 @@ mkdir -p "${LOG_DIR}"
 #   EXTRACT_SERVICE_URL=http://extract-service:8082 \
 #   EXTRACT_SERVICE_URL=http://extract:8083 \
 #   CATALOG_SERVICE_URL=http://catalog:8084 \
+#   GITEA_URL=http://gitea:3000 \
+#   GITEA_TOKEN=your_token \
 #   ./scripts/run_sgmi_complete_pipeline.sh
 # Or use the wrapper: ./scripts/run_sgmi_pipeline_from_docker.sh
 EXTRACT_SERVICE_URL="${EXTRACT_SERVICE_URL:-http://localhost:8083}"
 CATALOG_SERVICE_URL="${CATALOG_SERVICE_URL:-http://localhost:8084}"
 GRAPH_SERVICE_URL="${GRAPH_SERVICE_URL:-http://localhost:19080}"
+# Gitea configuration for Gitea-first extraction process
+GITEA_URL="${GITEA_URL:-}"
+GITEA_TOKEN="${GITEA_TOKEN:-}"
+GITEA_OWNER="${GITEA_OWNER:-extract-service}"
+GITEA_REPO_NAME="${GITEA_REPO_NAME:-sgmi-extracted-code}"
+GITEA_BRANCH="${GITEA_BRANCH:-main}"
 MAX_RETRIES=5
 RETRY_DELAY=5
 TIMEOUT=300
@@ -52,6 +63,89 @@ warn() {
 
 info() {
     echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+# Load configuration from YAML file
+load_config() {
+    local config_file="${1:-${CONFIG_FILE}}"
+    
+    if [[ ! -f "${config_file}" ]]; then
+        warn "Config file not found: ${config_file}, using defaults"
+        # Set defaults for backward compatibility
+        PROJECT_ID="${PROJECT_ID:-sgmi}"
+        SYSTEM_ID="${SYSTEM_ID:-sgmi}"
+        DATA_ROOT="${SGMI_DATA_ROOT}/training/sgmi"
+        return 0
+    fi
+    
+    # Try to use Python to parse YAML (more reliable than bash)
+    if command -v python3 >/dev/null 2>&1; then
+        local config_json
+        config_json=$(python3 <<PYTHON
+import json
+import sys
+import os
+
+try:
+    import yaml
+    with open('${config_file}', 'r') as f:
+        config = yaml.safe_load(f)
+    
+    # Expand environment variables in data_root
+    project = config.get('project', {})
+    data_root = project.get('data_root', '')
+    if data_root:
+        data_root = os.path.expandvars(data_root)
+        config['project']['data_root'] = data_root
+    
+    print(json.dumps(config))
+except ImportError:
+    print('{}', file=sys.stderr)
+    sys.exit(1)
+except Exception as e:
+    print('{}', file=sys.stderr)
+    sys.exit(1)
+PYTHON
+)
+        
+        if [[ -n "${config_json}" ]] && [[ "${config_json}" != "{}" ]]; then
+            # Extract values using Python
+            PROJECT_ID=$(python3 -c "import json, sys; config=json.loads('${config_json}'); print(config.get('project', {}).get('id', 'sgmi'))" 2>/dev/null || echo "sgmi")
+            SYSTEM_ID=$(python3 -c "import json, sys; config=json.loads('${config_json}'); print(config.get('project', {}).get('system_id', 'sgmi'))" 2>/dev/null || echo "sgmi")
+            local config_data_root=$(python3 -c "import json, sys; config=json.loads('${config_json}'); print(config.get('project', {}).get('data_root', ''))" 2>/dev/null || echo "")
+            
+            if [[ -n "${config_data_root}" ]]; then
+                SGMI_DATA_ROOT="${config_data_root}"
+            fi
+            
+            # Extract verification config
+            KG_QUERY_TEMPLATE=$(python3 -c "import json, sys; config=json.loads('${config_json}'); print(config.get('verification', {}).get('knowledge_graph', {}).get('query_template', ''))" 2>/dev/null || echo "")
+            CATALOG_SOURCE_FILTER=$(python3 -c "import json, sys; config=json.loads('${config_json}'); print(config.get('verification', {}).get('catalog', {}).get('source_filter', 'Extract Service'))" 2>/dev/null || echo "Extract Service")
+            
+            # Store full config JSON for later use
+            CONFIG_JSON="${config_json}"
+        else
+            warn "Failed to parse config file, using defaults"
+            PROJECT_ID="${PROJECT_ID:-sgmi}"
+            SYSTEM_ID="${SYSTEM_ID:-sgmi}"
+        fi
+    else
+        warn "Python3 not available, cannot parse YAML config. Using defaults."
+        PROJECT_ID="${PROJECT_ID:-sgmi}"
+        SYSTEM_ID="${SYSTEM_ID:-sgmi}"
+    fi
+    
+    # Set defaults if not set
+    PROJECT_ID="${PROJECT_ID:-sgmi}"
+    SYSTEM_ID="${SYSTEM_ID:-sgmi}"
+    DATA_ROOT="${SGMI_DATA_ROOT}/training/${PROJECT_ID}"
+    
+    # Export for use in other functions
+    export PROJECT_ID
+    export SYSTEM_ID
+    export DATA_ROOT
+    export KG_QUERY_TEMPLATE
+    export CATALOG_SOURCE_FILTER
 }
 
 # Step 1: Check service health
@@ -89,7 +183,13 @@ process_structured_data() {
     # Use the existing automated ETL script (in same directory)
     if [[ -f "${SCRIPT_DIR}/run_sgmi_etl_automated.sh" ]]; then
         log "Running automated SGMI ETL..."
-        if "${SCRIPT_DIR}/run_sgmi_etl_automated.sh" "${EXTRACT_SERVICE_URL}/knowledge-graph"; then
+        # Export Gitea config to ETL script
+        export GITEA_URL="${GITEA_URL}"
+        export GITEA_TOKEN="${GITEA_TOKEN}"
+        export GITEA_OWNER="${GITEA_OWNER}"
+        export GITEA_REPO_NAME="${GITEA_REPO_NAME}"
+        export GITEA_BRANCH="${GITEA_BRANCH}"
+        if "${SCRIPT_DIR}/run_sgmi_etl_automated.sh" "${EXTRACT_SERVICE_URL}/graph"; then
             log "✓ Structured data processed successfully"
             return 0
         else
@@ -133,15 +233,28 @@ upload_document_to_extract() {
     local response_file=$(mktemp)
     local http_code
     
+    # Build form data with Gitea config if available
+    local form_data=(
+        -F "file=@${file_path}"
+        -F "name=${name}"
+        -F "description=${description}"
+        -F "project_id=${PROJECT_ID}"
+        -F "system_id=${SYSTEM_ID}"
+    )
+    
+    # Add Gitea configuration if available
+    if [[ -n "${GITEA_URL}" ]] && [[ -n "${GITEA_TOKEN}" ]]; then
+        form_data+=(
+            -F "gitea_url=${GITEA_URL}"
+            -F "gitea_token=${GITEA_TOKEN}"
+        )
+    fi
+    
     set +e
     http_code=$(curl -sSL -w "%{http_code}" -o "${response_file}" \
         --max-time ${TIMEOUT} \
         -X POST \
-        -F "file=@${file_path}" \
-        -F "name=${name}" \
-        -F "description=${description}" \
-        -F "project_id=${PROJECT_ID:-sgmi}" \
-        -F "system_id=${SYSTEM_ID:-sgmi}" \
+        "${form_data[@]}" \
         "${EXTRACT_SERVICE_URL}/documents/upload" 2>&1)
     local curl_exit=$?
     set -e
@@ -266,15 +379,33 @@ verify_knowledge_graph() {
     log "Step 3: Verifying Knowledge Graph Integration"
     log "=========================================="
     
-    # Query extract service for SGMI nodes
-    log "Querying knowledge graph for SGMI data..."
+    # Query extract service for project nodes
+    log "Querying knowledge graph for ${PROJECT_ID} data..."
     
-    local query_payload=$(cat <<'EOF'
-{
-  "query": "MATCH (n) WHERE n.project_id = 'sgmi' OR n.system_id = 'sgmi' OR n.id CONTAINS 'sgmi' RETURN count(n) as node_count"
-}
-EOF
+    # Build query from template or use default
+    local query
+    if [[ -n "${KG_QUERY_TEMPLATE}" ]]; then
+        query=$(echo "${KG_QUERY_TEMPLATE}" | sed "s/{project_id}/${PROJECT_ID}/g" | sed "s/{system_id}/${SYSTEM_ID}/g")
+    else
+        query="MATCH (n) WHERE n.project_id = '${PROJECT_ID}' OR n.system_id = '${SYSTEM_ID}' OR n.id CONTAINS '${PROJECT_ID}' RETURN count(n) as node_count"
+    fi
+    
+    # Build JSON payload properly escaping the query
+    local query_payload
+    if command -v python3 >/dev/null 2>&1; then
+        query_payload=$(python3 <<PYTHON
+import json
+query = '''${query}'''
+print(json.dumps({'query': query}))
+PYTHON
 )
+    fi
+    
+    if [[ -z "${query_payload}" ]]; then
+        # Fallback: manually escape quotes
+        query=$(echo "${query}" | sed 's/"/\\"/g')
+        query_payload="{\"query\": \"${query}\"}"
+    fi
     
     local response_file=$(mktemp)
     local http_code
@@ -291,7 +422,7 @@ EOF
     if [[ "${http_code}" =~ ^2[0-9]{2}$ ]] && [[ -s "${response_file}" ]]; then
         if command -v python3 >/dev/null 2>&1; then
             local node_count=$(python3 -c "import json, sys; data=json.load(open('${response_file}')); print(data.get('data', [{}])[0].get('node_count', 0))" 2>/dev/null || echo "0")
-            log "  ✓ Found ${node_count} SGMI nodes in knowledge graph"
+            log "  ✓ Found ${node_count} ${PROJECT_ID} nodes in knowledge graph"
         else
             log "  ✓ Knowledge graph query successful"
         fi
@@ -313,16 +444,20 @@ verify_catalog() {
         return 0
     fi
     
-    log "Querying catalog for SGMI data elements..."
+    log "Querying catalog for ${PROJECT_ID} data elements..."
     
     local response_file=$(mktemp)
     local http_code
+    
+    # Build catalog query URL with source filter from config
+    local source_filter="${CATALOG_SOURCE_FILTER:-Extract Service}"
+    local catalog_url="${CATALOG_SERVICE_URL}/catalog/data-elements?source=$(echo "${source_filter}" | sed 's/ /%20/g')"
     
     set +e
     http_code=$(curl -sSL -w "%{http_code}" -o "${response_file}" \
         --max-time 30 \
         -X GET \
-        "${CATALOG_SERVICE_URL}/catalog/data-elements?source=Extract%20Service" 2>&1)
+        "${catalog_url}" 2>&1)
     set -e
     
     if [[ "${http_code}" =~ ^2[0-9]{2}$ ]] && [[ -s "${response_file}" ]]; then
@@ -341,8 +476,16 @@ verify_catalog() {
 
 # Main execution
 main() {
+    # Load configuration first
+    log "Loading configuration from ${CONFIG_FILE}..."
+    load_config "${CONFIG_FILE}"
+    log "  Project ID: ${PROJECT_ID}"
+    log "  System ID: ${SYSTEM_ID}"
+    log "  Data Root: ${DATA_ROOT}"
+    log ""
+    
     log "=========================================="
-    log "SGMI Complete Data Pipeline"
+    log "${PROJECT_ID} Complete Data Pipeline"
     log "=========================================="
     log ""
     log "This pipeline will:"
@@ -400,7 +543,7 @@ main() {
     
     log ""
     log "=========================================="
-    log "SGMI Complete Pipeline Finished!"
+    log "${PROJECT_ID} Complete Pipeline Finished!"
     log "=========================================="
     log ""
     log "Summary:"
@@ -409,7 +552,7 @@ main() {
     log "  ✓ Knowledge graph integration verified"
     log "  ✓ Catalog integration verified"
     log ""
-    log "All SGMI data has been processed and integrated into the knowledge graph!"
+    log "All ${PROJECT_ID} data has been processed and integrated into the knowledge graph!"
 }
 
 # Run main function

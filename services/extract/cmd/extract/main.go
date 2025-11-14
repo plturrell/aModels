@@ -546,8 +546,12 @@ func main() {
 	mux.HandleFunc("/catalog/systems/add", server.handleAddSystem)
 	mux.HandleFunc("/catalog/information-systems", server.handleGetInformationSystems)
 	mux.HandleFunc("/catalog/information-systems/add", server.handleAddInformationSystem)
+	mux.HandleFunc("/webhooks/gitea", server.handleGiteaWebhook) // Gitea webhook endpoint for automatic pipeline triggering
 	mux.HandleFunc("/ui", server.handleWebUI)
 	mux.HandleFunc("/metrics/improvements", server.handleImprovementsMetrics) // Metrics for all 6 improvements
+	// Gitea repository management endpoints
+	mux.HandleFunc("/gitea/repositories", server.handleGiteaRepositories)        // List and create repositories
+	mux.HandleFunc("/gitea/repositories/", server.handleGiteaRepositoryRouter)    // Route to specific repository handlers
 
 	// Apply middleware chain
 	var handler http.Handler = mux
@@ -1104,17 +1108,13 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		edges = append(edges, fileEdges...)
 	}
 
-	// Collect file system files for Gitea storage
-	var allFileSystemFiles []git.ExtractedFile
+	// Collect file system file paths for Gitea-first upload
+	var allFileSystemPaths []string
 	var documentFiles []string // Files that need document processing
-	filesystemExtractor := git.NewFileSystemExtractor()
 
-	// Extract files from file system sources
+	// Collect paths from file system sources
 	if len(req.JSONTables) > 0 {
-		fsFiles, err := filesystemExtractor.ExtractFilesFromFileList(req.JSONTables)
-		if err == nil {
-			allFileSystemFiles = append(allFileSystemFiles, fsFiles...)
-		}
+		allFileSystemPaths = append(allFileSystemPaths, req.JSONTables...)
 		// Check for document files that need processing
 		for _, path := range req.JSONTables {
 			if git.IsDocumentFile(path) {
@@ -1124,11 +1124,11 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	}
 	// Add explicit document files
 	if len(req.DocumentFiles) > 0 {
+		allFileSystemPaths = append(allFileSystemPaths, req.DocumentFiles...)
 		documentFiles = append(documentFiles, req.DocumentFiles...)
 	}
 	if len(req.HiveDDLs) > 0 {
 		// HiveDDLs can be file paths or DDL content strings
-		var ddlFilePaths []string
 		for _, ddl := range req.HiveDDLs {
 			ddl = strings.TrimSpace(ddl)
 			if ddl == "" {
@@ -1136,30 +1136,18 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			}
 			// Check if it's a file path (exists as file)
 			if _, err := os.Stat(ddl); err == nil {
-				ddlFilePaths = append(ddlFilePaths, ddl)
-			}
-		}
-		if len(ddlFilePaths) > 0 {
-			fsFiles, err := filesystemExtractor.ExtractFilesFromFileList(ddlFilePaths)
-			if err == nil {
-				allFileSystemFiles = append(allFileSystemFiles, fsFiles...)
+				allFileSystemPaths = append(allFileSystemPaths, ddl)
 			}
 		}
 	}
 	if len(req.ControlMFiles) > 0 {
-		fsFiles, err := filesystemExtractor.ExtractFilesFromFileList(req.ControlMFiles)
-		if err == nil {
-			allFileSystemFiles = append(allFileSystemFiles, fsFiles...)
-		}
+		allFileSystemPaths = append(allFileSystemPaths, req.ControlMFiles...)
 	}
 	if len(req.SignavioFiles) > 0 {
-		fsFiles, err := filesystemExtractor.ExtractFilesFromFileList(req.SignavioFiles)
-		if err == nil {
-			allFileSystemFiles = append(allFileSystemFiles, fsFiles...)
-		}
+		allFileSystemPaths = append(allFileSystemPaths, req.SignavioFiles...)
 	}
 
-	// Process documents through markitdown/OCR if configured
+	// Process documents with Gitea-first flow if configured
 	if len(documentFiles) > 0 && req.GiteaStorage != nil && req.GiteaStorage.Enabled {
 		giteaURL := req.GiteaStorage.GiteaURL
 		if giteaURL == "" {
@@ -1190,39 +1178,85 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 				storageConfig.Owner = "extract-service"
 			}
 
-			// Get markitdown client from integration
-			var markitdownClient *clients.MarkItDownClient
-			if adapter, ok := s.markitdownIntegration.(*markitdownClientAdapter); ok {
-				markitdownClient = adapter.client
-			}
-
-			// Create document pipeline
-			docPipeline := git.NewDocumentPipeline(
-				markitdownClient,
-				s.multiModalExtractor,
-				giteaStorage,
-				s.logger,
-			)
-
-			// Process documents
-			docNodes, docEdges, err := docPipeline.ProcessDocuments(ctx, documentFiles, storageConfig, req.ProjectID, req.SystemID)
-			if err == nil {
-				nodes = append(nodes, docNodes...)
-				edges = append(edges, docEdges...)
-				s.logger.Printf("Processed %d documents through markitdown/OCR", len(documentFiles))
+			// Step 1: Upload raw documents to Gitea
+			rawBasePath := "raw/documents/"
+			giteaRepo, cloneURL, err := giteaStorage.UploadRawFiles(ctx, storageConfig, documentFiles, rawBasePath)
+			if err != nil {
+				s.logger.Printf("Warning: failed to upload raw documents to Gitea: %v", err)
 			} else {
-				s.logger.Printf("Warning: document processing failed: %v", err)
-			}
+				s.logger.Printf("Uploaded %d raw documents to Gitea: %s", len(documentFiles), giteaRepo.HTMLURL)
 
-			// Create standardized structure
-			if err := docPipeline.StandardizeDocumentStructure(ctx, storageConfig); err != nil {
-				s.logger.Printf("Warning: failed to create standardized structure: %v", err)
+				// Step 2: Clone from Gitea
+				tempDir := filepath.Join(os.TempDir(), "extract-gitea-docs")
+				if err := os.MkdirAll(tempDir, 0755); err != nil {
+					s.logger.Printf("failed to create temp dir for Gitea clone: %v", err)
+				} else {
+					branch := storageConfig.Branch
+					if branch == "" {
+						branch = "main"
+					}
+					clonePath, err := giteaStorage.CloneFromGitea(ctx, cloneURL, branch, tempDir)
+					if err != nil {
+						s.logger.Printf("Warning: failed to clone from Gitea: %v", err)
+					} else {
+						// Cleanup cloned repo at end
+						cleanupClone := func() {
+							if err := os.RemoveAll(clonePath); err != nil {
+								s.logger.Printf("Warning: failed to cleanup Gitea clone: %v", err)
+							}
+						}
+						defer cleanupClone()
+
+						// Step 3: Get document paths from Gitea clone
+						rawPathInClone := filepath.Join(clonePath, rawBasePath)
+						var documentPathsFromClone []string
+						if entries, err := os.ReadDir(rawPathInClone); err == nil {
+							for _, entry := range entries {
+								if !entry.IsDir() {
+									documentPathsFromClone = append(documentPathsFromClone, filepath.Join(rawPathInClone, entry.Name()))
+								}
+							}
+						}
+
+						// Step 4: Process documents from Gitea clone
+						if len(documentPathsFromClone) > 0 {
+							// Get markitdown client from integration
+							var markitdownClient *clients.MarkItDownClient
+							if adapter, ok := s.markitdownIntegration.(*markitdownClientAdapter); ok {
+								markitdownClient = adapter.client
+							}
+
+							// Create document pipeline
+							docPipeline := git.NewDocumentPipeline(
+								markitdownClient,
+								s.multiModalExtractor,
+								giteaStorage,
+								s.logger,
+							)
+
+							// Process documents from clone
+							docNodes, docEdges, err := docPipeline.ProcessDocuments(ctx, documentPathsFromClone, storageConfig, req.ProjectID, req.SystemID)
+							if err == nil {
+								nodes = append(nodes, docNodes...)
+								edges = append(edges, docEdges...)
+								s.logger.Printf("Processed %d documents through markitdown/OCR from Gitea", len(documentPathsFromClone))
+							} else {
+								s.logger.Printf("Warning: document processing failed: %v", err)
+							}
+
+							// Create standardized structure
+							if err := docPipeline.StandardizeDocumentStructure(ctx, storageConfig); err != nil {
+								s.logger.Printf("Warning: failed to create standardized structure: %v", err)
+							}
+						}
+					}
+				}
 			}
 		}
 	}
 
-	// Store file system files in Gitea if configured
-	if len(allFileSystemFiles) > 0 && req.GiteaStorage != nil && req.GiteaStorage.Enabled {
+	// Process file system files with Gitea-first flow if configured
+	if len(allFileSystemPaths) > 0 && req.GiteaStorage != nil && req.GiteaStorage.Enabled {
 		giteaURL := req.GiteaStorage.GiteaURL
 		if giteaURL == "" {
 			giteaURL = os.Getenv("GITEA_URL")
@@ -1252,47 +1286,123 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			if storageConfig.Owner == "" {
 				storageConfig.Owner = "extract-service"
 			}
-			if storageConfig.BasePath == "" {
-				storageConfig.BasePath = "filesystem/"
-			}
 
-			// Create metadata for file system source
-			fsRepoMeta := &git.RepositoryMetadata{
-				URL:    "filesystem",
-				Branch: "main",
-				Commit: "filesystem",
-			}
-
-			giteaRepo, err := giteaStorage.StoreCode(ctx, storageConfig, allFileSystemFiles, fsRepoMeta)
+			// Step 1: Upload raw files to Gitea
+			rawBasePath := "raw/filesystem/"
+			giteaRepo, cloneURL, err := giteaStorage.UploadRawFiles(ctx, storageConfig, allFileSystemPaths, rawBasePath)
 			if err != nil {
-				s.logger.Printf("Warning: failed to store file system files in Gitea: %v", err)
+				s.logger.Printf("Warning: failed to upload raw files to Gitea: %v", err)
 			} else {
-				s.logger.Printf("Successfully stored %d file system files in Gitea: %s", len(allFileSystemFiles), giteaRepo)
-				
-				// Create Gitea repository node for file system files
-				giteaRepoInfo, err := giteaStorage.GiteaClient().GetRepository(ctx, storageConfig.Owner, storageConfig.RepoName)
-				if err == nil {
-					giteaNode := giteaStorage.CreateRepositoryNode(giteaRepoInfo, storageConfig, fsRepoMeta)
-					nodes = append(nodes, giteaNode)
-					
-					// Create file nodes for file system files
-					fileStorage := git.NewFileStorage(s.logger)
-					fsRepoID := fmt.Sprintf("filesystem:%s", req.ProjectID)
-					fileNodes, fileEdges := fileStorage.CreateFileNodes(allFileSystemFiles, fsRepoID, "filesystem", "filesystem", req.ProjectID, req.SystemID)
-					nodes = append(nodes, fileNodes...)
-					edges = append(edges, fileEdges...)
-					
-					// Link file system files to Gitea repository
-					for _, fileNode := range fileNodes {
-						edges = append(edges, graph.Edge{
-							SourceID: fileNode.ID,
-							TargetID: giteaNode.ID,
-							Label:    "STORED_IN",
-							Props: map[string]interface{}{
-								"storage_type": "gitea",
-								"source":       "filesystem",
-							},
-						})
+				s.logger.Printf("Uploaded %d raw files to Gitea: %s", len(allFileSystemPaths), giteaRepo.HTMLURL)
+
+				// Step 2: Clone from Gitea
+				tempDir := filepath.Join(os.TempDir(), "extract-gitea-clone")
+				if err := os.MkdirAll(tempDir, 0755); err != nil {
+					s.logger.Printf("failed to create temp dir for Gitea clone: %v", err)
+				} else {
+					branch := storageConfig.Branch
+					if branch == "" {
+						branch = "main"
+					}
+					clonePath, err := giteaStorage.CloneFromGitea(ctx, cloneURL, branch, tempDir)
+					if err != nil {
+						s.logger.Printf("Warning: failed to clone from Gitea: %v", err)
+					} else {
+						defer func() {
+							// Cleanup cloned repo
+							if err := os.RemoveAll(clonePath); err != nil {
+								s.logger.Printf("Warning: failed to cleanup Gitea clone: %v", err)
+							}
+						}()
+
+						// Step 3: Extract files from Gitea clone
+						filesystemExtractor := git.NewFileSystemExtractor()
+						// Extract from the raw path in the cloned repo
+						rawPathInClone := filepath.Join(clonePath, rawBasePath)
+						var extractedFiles []git.ExtractedFile
+						
+						// Get list of files in the raw path
+						if entries, err := os.ReadDir(rawPathInClone); err == nil {
+							var filePathsInClone []string
+							for _, entry := range entries {
+								if !entry.IsDir() {
+									filePathsInClone = append(filePathsInClone, filepath.Join(rawPathInClone, entry.Name()))
+								}
+							}
+							if len(filePathsInClone) > 0 {
+								extractedFiles, err = filesystemExtractor.ExtractFilesFromFileList(filePathsInClone)
+								if err != nil {
+									s.logger.Printf("Warning: failed to extract files from Gitea clone: %v", err)
+								}
+							}
+						}
+
+						// Step 4: Process files (schema extraction, etc.)
+						// Process JSON tables for schema extraction
+						for _, path := range req.JSONTables {
+							// Find corresponding file in clone
+							fileName := filepath.Base(path)
+							cloneFilePath := filepath.Join(rawPathInClone, fileName)
+							if _, err := os.Stat(cloneFilePath); err == nil {
+								fileNodes, fileEdges, data, err := s.extractSchemaFromJSON(cloneFilePath)
+								if err == nil {
+									nodes = append(nodes, fileNodes...)
+									edges = append(edges, fileEdges...)
+									if s.tablePersistence != nil && data != nil {
+										tableName := strings.TrimSuffix(filepath.Base(cloneFilePath), filepath.Ext(cloneFilePath))
+										if err := s.tablePersistence.SaveTable(tableName, data); err != nil {
+											s.logger.Printf("failed to save table %s: %v", tableName, err)
+										}
+									}
+								}
+							}
+						}
+
+						// Step 5: Update Gitea with processed results
+						if len(extractedFiles) > 0 {
+							processedBasePath := "filesystem/"
+							if storageConfig.BasePath != "" {
+								processedBasePath = storageConfig.BasePath
+							}
+							fsRepoMeta := &git.RepositoryMetadata{
+								URL:    "filesystem",
+								Branch: branch,
+								Commit: "processed",
+							}
+							_, err := giteaStorage.StoreCode(ctx, storageConfig, extractedFiles, fsRepoMeta)
+							if err != nil {
+								s.logger.Printf("Warning: failed to store processed files in Gitea: %v", err)
+							} else {
+								s.logger.Printf("Successfully stored %d processed files in Gitea", len(extractedFiles))
+								
+								// Create Gitea repository node
+								giteaRepoInfo, err := giteaStorage.GiteaClient().GetRepository(ctx, storageConfig.Owner, storageConfig.RepoName)
+								if err == nil {
+									giteaNode := giteaStorage.CreateRepositoryNode(giteaRepoInfo, storageConfig, fsRepoMeta)
+									nodes = append(nodes, giteaNode)
+									
+									// Create file nodes for processed files
+									fileStorage := git.NewFileStorage(s.logger)
+									fsRepoID := fmt.Sprintf("filesystem:%s", req.ProjectID)
+									fileNodes, fileEdges := fileStorage.CreateFileNodes(extractedFiles, fsRepoID, "filesystem", "processed", req.ProjectID, req.SystemID)
+									nodes = append(nodes, fileNodes...)
+									edges = append(edges, fileEdges...)
+									
+									// Link files to Gitea repository
+									for _, fileNode := range fileNodes {
+										edges = append(edges, graph.Edge{
+											SourceID: fileNode.ID,
+											TargetID: giteaNode.ID,
+											Label:    "STORED_IN",
+											Props: map[string]interface{}{
+												"storage_type": "gitea",
+												"source":       "filesystem",
+											},
+										})
+									}
+								}
+							}
+						}
 					}
 				}
 			}
@@ -1329,26 +1439,20 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 					},
 				}
 
-				// Process repository
+				// Step 1: Clone source repository
 				extractedFiles, repoMeta, err := gitPipeline.ProcessRepository(ctx, repo)
 				if err != nil {
 					s.logger.Printf("failed to process Git repository %s: %v", repoReq.URL, err)
 					continue
 				}
 
-				// Create repository nodes
+				// Create repository nodes for source repo
 				repoNodes, repoEdges := gitPipeline.CreateRepositoryNodes(repoMeta, req.ProjectID, req.SystemID)
 				nodes = append(nodes, repoNodes...)
 				edges = append(edges, repoEdges...)
-
-				// Create file nodes with raw code content
-				fileStorage := git.NewFileStorage(s.logger)
 				repoID := repoNodes[0].ID
-				fileNodes, fileEdges := fileStorage.CreateFileNodes(extractedFiles, repoID, repoMeta.URL, repoMeta.Commit, req.ProjectID, req.SystemID)
-				nodes = append(nodes, fileNodes...)
-				edges = append(edges, fileEdges...)
 
-				// Store code in Gitea if configured
+				// Step 2: Upload to Gitea if configured, then process from Gitea
 				if req.GiteaStorage != nil && req.GiteaStorage.Enabled {
 					giteaURL := req.GiteaStorage.GiteaURL
 					if giteaURL == "" {
@@ -1377,31 +1481,135 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 							storageConfig.RepoName = fmt.Sprintf("%s-extracted-code", req.ProjectID)
 						}
 						if storageConfig.Owner == "" {
-							storageConfig.Owner = "extract-service" // Default owner
+							storageConfig.Owner = "extract-service"
 						}
 
-						giteaRepo, err := giteaStorage.StoreCode(ctx, storageConfig, extractedFiles, repoMeta)
+						// Upload raw files from source clone to Gitea
+						// Store extracted files as raw files in Gitea
+						rawBasePath := fmt.Sprintf("raw/git-repos/%s/", filepath.Base(repoMeta.URL))
+						rawRepoMeta := &git.RepositoryMetadata{
+							URL:    repoMeta.URL,
+							Branch: repoMeta.Branch,
+							Commit: repoMeta.Commit,
+						}
+						
+						// Upload raw files to Gitea using StoreCode with raw base path
+						rawStorageConfig := storageConfig
+						rawStorageConfig.BasePath = rawBasePath
+						_, err = giteaStorage.StoreCode(ctx, rawStorageConfig, extractedFiles, rawRepoMeta)
 						if err != nil {
-							s.logger.Printf("Warning: failed to store code in Gitea: %v", err)
+							s.logger.Printf("Warning: failed to upload raw files to Gitea: %v", err)
+							// Fallback: continue with source clone
+							fileStorage := git.NewFileStorage(s.logger)
+							fileNodes, fileEdges := fileStorage.CreateFileNodes(extractedFiles, repoID, repoMeta.URL, repoMeta.Commit, req.ProjectID, req.SystemID)
+							nodes = append(nodes, fileNodes...)
+							edges = append(edges, fileEdges...)
 						} else {
-							s.logger.Printf("Successfully stored code in Gitea: %s", giteaRepo)
-							// Create Gitea repository node
+							// Get repository to get clone URL
 							giteaRepoInfo, err := giteaStorage.GiteaClient().GetRepository(ctx, storageConfig.Owner, storageConfig.RepoName)
-							if err == nil {
-								giteaNode := giteaStorage.CreateRepositoryNode(giteaRepoInfo, storageConfig, repoMeta)
-								nodes = append(nodes, giteaNode)
-								// Link source repo to Gitea repo
-								edges = append(edges, graph.Edge{
-									SourceID: repoID,
-									TargetID: giteaNode.ID,
-									Label:    "STORED_IN",
-									Props: map[string]interface{}{
-										"storage_type": "gitea",
-									},
-								})
+							if err != nil {
+								s.logger.Printf("Warning: failed to get Gitea repository info: %v", err)
+								// Fallback: continue with source clone
+								fileStorage := git.NewFileStorage(s.logger)
+								fileNodes, fileEdges := fileStorage.CreateFileNodes(extractedFiles, repoID, repoMeta.URL, repoMeta.Commit, req.ProjectID, req.SystemID)
+								nodes = append(nodes, fileNodes...)
+								edges = append(edges, fileEdges...)
+							} else {
+								cloneURL := giteaRepoInfo.CloneURL
+								s.logger.Printf("Uploaded raw files to Gitea, cloning for processing...")
+								
+								// Step 3: Clone from Gitea
+								giteaTempDir := filepath.Join(os.TempDir(), "extract-gitea-git-repos")
+								if err := os.MkdirAll(giteaTempDir, 0755); err != nil {
+									s.logger.Printf("failed to create temp dir for Gitea clone: %v", err)
+								} else {
+									branch := storageConfig.Branch
+									if branch == "" {
+										branch = "main"
+									}
+									giteaClonePath, err := giteaStorage.CloneFromGitea(ctx, cloneURL, branch, giteaTempDir)
+									if err != nil {
+										s.logger.Printf("Warning: failed to clone from Gitea: %v", err)
+									} else {
+										// Cleanup Gitea clone at end
+										cleanupGiteaClone := func() {
+											if err := os.RemoveAll(giteaClonePath); err != nil {
+												s.logger.Printf("Warning: failed to cleanup Gitea clone: %v", err)
+											}
+										}
+										defer cleanupGiteaClone()
+
+										// Step 4: Extract from Gitea clone
+										// Use CodeExtractor directly on the cloned path
+										codeExtractor := git.NewCodeExtractor()
+										rawPathInClone := filepath.Join(giteaClonePath, rawBasePath)
+										giteaExtractedFiles, err := codeExtractor.ExtractFiles(rawPathInClone, repo.FilePatterns)
+										if err != nil {
+											s.logger.Printf("Warning: failed to extract from Gitea clone: %v", err)
+											// Fallback to source extracted files
+											giteaExtractedFiles = extractedFiles
+										}
+
+										// Step 5: Update Gitea with processed results
+										processedBasePath := "extracted-code/"
+										if storageConfig.BasePath != "" {
+											processedBasePath = storageConfig.BasePath
+										}
+										processedStorageConfig := storageConfig
+										processedStorageConfig.BasePath = processedBasePath
+										_, err = giteaStorage.StoreCode(ctx, processedStorageConfig, giteaExtractedFiles, repoMeta)
+										if err != nil {
+											s.logger.Printf("Warning: failed to store processed code in Gitea: %v", err)
+										} else {
+											s.logger.Printf("Successfully stored processed code in Gitea")
+										}
+
+										// Create file nodes from Gitea extracted files
+										fileStorage := git.NewFileStorage(s.logger)
+										fileNodes, fileEdges := fileStorage.CreateFileNodes(giteaExtractedFiles, repoID, repoMeta.URL, repoMeta.Commit, req.ProjectID, req.SystemID)
+										nodes = append(nodes, fileNodes...)
+										edges = append(edges, fileEdges...)
+
+										// Create Gitea repository node
+										giteaNode := giteaStorage.CreateRepositoryNode(giteaRepoInfo, storageConfig, repoMeta)
+										nodes = append(nodes, giteaNode)
+										// Link source repo to Gitea repo
+										edges = append(edges, graph.Edge{
+											SourceID: repoID,
+											TargetID: giteaNode.ID,
+											Label:    "STORED_IN",
+											Props: map[string]interface{}{
+												"storage_type": "gitea",
+											},
+										})
+										// Link files to Gitea repo
+										for _, fileNode := range fileNodes {
+											edges = append(edges, graph.Edge{
+												SourceID: fileNode.ID,
+												TargetID: giteaNode.ID,
+												Label:    "STORED_IN",
+												Props: map[string]interface{}{
+													"storage_type": "gitea",
+												},
+											})
+										}
+									}
+								}
 							}
 						}
+					} else {
+						// No Gitea storage - use source clone directly
+						fileStorage := git.NewFileStorage(s.logger)
+						fileNodes, fileEdges := fileStorage.CreateFileNodes(extractedFiles, repoID, repoMeta.URL, repoMeta.Commit, req.ProjectID, req.SystemID)
+						nodes = append(nodes, fileNodes...)
+						edges = append(edges, fileEdges...)
 					}
+				} else {
+					// No Gitea storage - use source clone directly
+					fileStorage := git.NewFileStorage(s.logger)
+					fileNodes, fileEdges := fileStorage.CreateFileNodes(extractedFiles, repoID, repoMeta.URL, repoMeta.Commit, req.ProjectID, req.SystemID)
+					nodes = append(nodes, fileNodes...)
+					edges = append(edges, fileEdges...)
 				}
 
 				// Process extracted files based on their extensions
