@@ -200,24 +200,39 @@ def get_model_from_server(model_name: str, target_path: Optional[str] = None) ->
 
 def get_model_path(model_name: str, registry_path: str) -> str:
     """
-    Get model path from model-server cache.
-    Model-server is the primary mechanism - no fallback to direct paths.
+    Get model path, trying direct volume access first, then model-server cache.
+    Since models are in a shared Docker volume, we can access them directly.
     Returns the path to use for loading the model.
     """
     import os
     
-    # Get model from model-server (primary mechanism)
+    # First, try direct access to models in the shared volume
+    # Models are mounted at /models from the models-data volume
+    MODELS_VOLUME = os.getenv("MODELS_BASE", "/models")
+    direct_path = os.path.join(MODELS_VOLUME, registry_path)
+    
+    if os.path.exists(direct_path):
+        config_file = os.path.join(direct_path, "config.json")
+        if os.path.exists(config_file):
+            print(f"[MODEL_CLIENT] Using direct volume path: {direct_path}")
+            return direct_path
+        # Check if it's a directory with model files
+        if os.path.isdir(direct_path):
+            files = os.listdir(direct_path)
+            if any(f.endswith(('.json', '.safetensors', '.bin', '.pt')) for f in files):
+                print(f"[MODEL_CLIENT] Using direct volume path (no config.json): {direct_path}")
+                return direct_path
+    
+    # Fallback: Get model from model-server cache
     cached_path = get_model_from_server(model_name)
     if cached_path and os.path.exists(cached_path):
         config_file = os.path.join(cached_path, "config.json")
         if os.path.exists(config_file):
             print(f"[MODEL_CLIENT] Using model-server cache: {cached_path}")
             return cached_path
-        else:
-            print(f"[MODEL_CLIENT] Cached path missing config.json: {cached_path}")
     
-    # If model-server fails, raise error (no fallback)
-    raise ValueError(f"Model '{model_name}' not available from model-server. Ensure model-server is running and has access to models.")
+    # If both fail, raise error
+    raise ValueError(f"Model '{model_name}' not available. Tried: {direct_path} and model-server cache.")
 
 
 def sync_model_files(model_name: str, base_url: str, files: list, target_dir: str):
