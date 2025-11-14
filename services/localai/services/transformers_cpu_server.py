@@ -43,13 +43,11 @@ except ImportError:
     def get_model_path(model_name: str, registry_path: str) -> str:
         return registry_path
 
-# Use /models mount point from Docker volume or model-server
-MODELS_BASE = os.getenv("MODELS_BASE", "/models")
-# Model registry - paths are relative to MODELS_BASE
-# These will be resolved using get_model_path which checks model-server cache first
+# Model registry - paths are model directory names on model-server
+# All models are fetched from model-server and cached locally
 MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
     "phi-3.5-mini": {
-        "path": os.path.join(MODELS_BASE, "phi-3.5-mini-instruct-pytorch")
+        "path": "phi-3.5-mini-instruct-pytorch"
     },
     "granite-4.0-h-micro": {
         "path": "granite-4.0-h-micro-transformers"
@@ -61,21 +59,16 @@ MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
         "path": "vaultgemma-1b-transformers"
     },
     "calm-l": {
-        "path": os.path.join(
-            MODELS_BASE,
-            "calm",
-            "hf",
-            "CALM-L",
-        )
+        "path": "calm/hf/CALM-L"
     },
     "deepseek-ocr": {
-        "path": os.path.join(MODELS_BASE, "DeepSeek-OCR")
+        "path": "DeepSeek-OCR"
     },
     "sap-rpt-1": {
-        "path": os.path.join(MODELS_BASE, "sap-rpt-1-oss-main")
+        "path": "sap-rpt-1-oss-main"
     },
     "cwm": {
-        "path": os.path.join(MODELS_BASE, "cwm")
+        "path": "cwm"
     },
 }
 
