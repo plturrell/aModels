@@ -26,11 +26,11 @@ services:
     container_name: model-server
     restart: unless-stopped
     environment:
-      - MODELS_BASE=/home/aModels/models
+      - MODELS_BASE=/models
       - MODEL_SERVER_PORT=8088
       - PYTHONUNBUFFERED=1
     volumes:
-      - /home/aModels/models:/home/aModels/models:ro
+      - models-data:/models:ro
     ports:
       - "8088:8088"
     networks:
@@ -49,8 +49,20 @@ services:
     container_name: models-storage
     restart: unless-stopped
     volumes:
-      - /home/aModels/models:/models:ro
-    command: tail -f /dev/null
+      - /home/aModels/models:/host-models:ro
+      - models-data:/models:rw
+    command: >
+      sh -c "
+      if [ ! -f /models/.initialized ]; then
+        echo 'Initializing models-data volume from host...';
+        cp -r /host-models/* /models/ 2>/dev/null || true;
+        touch /models/.initialized;
+        echo 'Models initialized successfully';
+      else
+        echo 'Models already initialized';
+      fi;
+      tail -f /dev/null
+      "
     networks:
       - models-network
     labels:
@@ -66,12 +78,11 @@ services:
     environment:
       - TRANSFORMERS_CPU_PORT=9090
       - PYTHONUNBUFFERED=1
-      - MODELS_BASE=/models
       - MODEL_SERVER_URL=http://model-server:8088
       - MODEL_CACHE_DIR=/tmp/models-cache
       - MODEL_CACHE_ENABLED=true
     volumes:
-      - /home/aModels/models:/models:ro
+      - models-data:/models:ro
     ports:
       - "9090:9090"
     networks:
@@ -109,7 +120,7 @@ services:
       - CONTEXT_SIZE=512
       - PORT=8080
     volumes:
-      - ../../models:/models:ro
+      - models-data:/models:ro
       - ../../services/localai/config/domains.json:/workspace/config/domains.json:ro
       - ../../services/localai/config/routing_rules.json:/workspace/config/routing_rules.json:ro
     ports:

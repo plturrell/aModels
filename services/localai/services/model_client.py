@@ -183,25 +183,24 @@ def get_model_from_server(model_name: str, target_path: Optional[str] = None) ->
 
 def get_model_path(model_name: str, registry_path: str) -> str:
     """
-    Get model path, trying model-server first, then falling back to registry path.
+    Get model path from model-server cache.
+    Model-server is the primary mechanism - no fallback to direct paths.
     Returns the path to use for loading the model.
     """
     import os
     
-    # First check if registry_path exists locally (direct mount)
-    if os.path.exists(registry_path):
-        print(f"[MODEL_CLIENT] Using direct mount path: {registry_path}")
-        return registry_path
-    
-    # Try model-server cache
+    # Get model from model-server (primary mechanism)
     cached_path = get_model_from_server(model_name)
     if cached_path and os.path.exists(cached_path):
-        print(f"[MODEL_CLIENT] Using model-server cache: {cached_path}")
-        return cached_path
+        config_file = os.path.join(cached_path, "config.json")
+        if os.path.exists(config_file):
+            print(f"[MODEL_CLIENT] Using model-server cache: {cached_path}")
+            return cached_path
+        else:
+            print(f"[MODEL_CLIENT] Cached path missing config.json: {cached_path}")
     
-    # Fallback to registry path even if it doesn't exist (let transformers handle the error)
-    print(f"[MODEL_CLIENT] Using registry path (may not exist): {registry_path}")
-    return registry_path
+    # If model-server fails, raise error (no fallback)
+    raise ValueError(f"Model '{model_name}' not available from model-server. Ensure model-server is running and has access to models.")
 
 
 def sync_model_files(model_name: str, base_url: str, files: list, target_dir: str):

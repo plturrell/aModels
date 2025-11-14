@@ -17,8 +17,12 @@ RUN pip install --no-cache-dir \
 # Copy model server
 COPY services/localai/services/model_server.py /app/model_server.py
 
-# Create mount point directory structure
+# Create models directory and copy models from host
+# This is a workaround for bind mount issues - models are copied into the image
 RUN mkdir -p /home/aModels/models
+# Copy models directory if it exists (will be empty if not available during build)
+# Note: This requires models to be in the build context
+COPY models /home/aModels/models
 
 # Set environment variables
 ENV MODEL_SERVER_PORT=8088
