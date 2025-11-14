@@ -206,47 +206,50 @@ def get_model_path(model_name: str, registry_path: str) -> str:
     """
     import os
     
-    # First, try direct access to models in the shared volume
+    # FIRST: Try direct access to models in the shared volume (fastest, no network)
     # Models are mounted at /models from the models-data volume
     MODELS_VOLUME = os.getenv("MODELS_BASE", "/models")
     direct_path = os.path.join(MODELS_VOLUME, registry_path)
     
-    print(f"[MODEL_CLIENT] Checking direct path: {direct_path}")
-    if os.path.exists(direct_path):
-        print(f"[MODEL_CLIENT] Direct path exists, checking for model files...")
+    print(f"[MODEL_CLIENT] Checking direct path first: {direct_path}")
+    if os.path.exists(direct_path) and os.path.isdir(direct_path):
+        files = os.listdir(direct_path)
         config_file = os.path.join(direct_path, "config.json")
-        if os.path.exists(config_file):
+        has_config = os.path.exists(config_file)
+        has_model_files = any(f.endswith(('.json', '.safetensors', '.bin', '.pt')) for f in files)
+        
+        if has_config or has_model_files:
             print(f"[MODEL_CLIENT] ✅ Using direct volume path: {direct_path}")
             return direct_path
-        # Check if it's a directory with model files
-        if os.path.isdir(direct_path):
-            files = os.listdir(direct_path)
-            has_model_files = any(f.endswith(('.json', '.safetensors', '.bin', '.pt')) for f in files)
-            print(f"[MODEL_CLIENT] Directory has {len(files)} files, model files: {has_model_files}")
-            if has_model_files:
-                print(f"[MODEL_CLIENT] ✅ Using direct volume path (no config.json): {direct_path}")
-                return direct_path
-    else:
-        print(f"[MODEL_CLIENT] Direct path does not exist: {direct_path}")
+        else:
+            print(f"[MODEL_CLIENT] Direct path exists but no model files found")
     
-    # Fallback: Get model from model-server cache
-    cached_path = get_model_from_server(model_name)
-    if cached_path and os.path.exists(cached_path):
-        config_file = os.path.join(cached_path, "config.json")
-        if os.path.exists(config_file):
-            print(f"[MODEL_CLIENT] Using model-server cache: {cached_path}")
-            return cached_path
-    
-    # If both fail, try one more time with just the registry path in /models
+    # Also try /models/registry_path directly (in case MODELS_BASE is different)
     final_path = os.path.join("/models", registry_path)
-    if os.path.exists(final_path):
+    if final_path != direct_path and os.path.exists(final_path) and os.path.isdir(final_path):
+        files = os.listdir(final_path)
         config_file = os.path.join(final_path, "config.json")
-        if os.path.exists(config_file) or any(f.endswith(('.json', '.safetensors', '.bin', '.pt')) for f in os.listdir(final_path) if os.path.isdir(final_path)):
+        has_config = os.path.exists(config_file)
+        has_model_files = any(f.endswith(('.json', '.safetensors', '.bin', '.pt')) for f in files)
+        
+        if has_config or has_model_files:
             print(f"[MODEL_CLIENT] ✅ Using final fallback path: {final_path}")
             return final_path
     
+    # SECOND: Try model-server cache (slower, requires network, may timeout)
+    print(f"[MODEL_CLIENT] Direct paths not found, trying model-server cache...")
+    try:
+        cached_path = get_model_from_server(model_name)
+        if cached_path and os.path.exists(cached_path):
+            config_file = os.path.join(cached_path, "config.json")
+            if os.path.exists(config_file):
+                print(f"[MODEL_CLIENT] Using model-server cache: {cached_path}")
+                return cached_path
+    except Exception as e:
+        print(f"[MODEL_CLIENT] Model-server cache failed: {e}")
+    
     # If all fail, raise error
-    raise ValueError(f"Model '{model_name}' not available. Tried: {direct_path}, model-server cache, and {final_path}.")
+    raise ValueError(f"Model '{model_name}' not available. Tried: {direct_path}, {final_path}, and model-server cache.")
 
 
 def sync_model_files(model_name: str, base_url: str, files: list, target_dir: str):
