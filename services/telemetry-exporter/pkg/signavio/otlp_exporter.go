@@ -15,6 +15,7 @@ import (
 	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 	
 	"github.com/plturrell/aModels/services/telemetry-exporter/pkg/file"
+	"github.com/plturrell/aModels/services/telemetry-exporter/pkg/llm"
 	"github.com/plturrell/aModels/services/testing"
 )
 
@@ -214,6 +215,49 @@ func (se *SignavioExporter) spanToSignavioRecord(span *tracepb.Span, resource *r
 	// Extract prompt metrics if available
 	if promptMetrics := extractPromptMetrics(span.Attributes); promptMetrics != nil {
 		record.PromptMetrics = promptMetrics
+	}
+
+	// Extract LLM-specific information using OpenLLMetry conventions
+	if llmInfo := llm.ExtractLLMInfo(span); llmInfo != nil && llmInfo.HasLLMAttributes {
+		// Enhance LLM calls with OpenLLMetry attributes
+		if len(record.LLMCalls) == 0 {
+			// Create LLM call entry if none exists
+			llmCall := testing.SignavioLLMCall{
+				Model:   llmInfo.Model,
+				Purpose: llmInfo.RequestType,
+			}
+			if llmInfo.PromptTokens > 0 {
+				llmCall.InputTokens = int(llmInfo.PromptTokens)
+			}
+			if llmInfo.CompletionTokens > 0 {
+				llmCall.OutputTokens = int(llmInfo.CompletionTokens)
+			}
+			if llmInfo.TotalTokens > 0 {
+				llmCall.TotalTokens = int(llmInfo.TotalTokens)
+			}
+			record.LLMCalls = []testing.SignavioLLMCall{llmCall}
+		} else {
+			// Enhance existing LLM call entries
+			for i := range record.LLMCalls {
+				if record.LLMCalls[i].Model == "" && llmInfo.Model != "" {
+					record.LLMCalls[i].Model = llmInfo.Model
+				}
+				if record.LLMCalls[i].InputTokens == 0 && llmInfo.PromptTokens > 0 {
+					record.LLMCalls[i].InputTokens = int(llmInfo.PromptTokens)
+				}
+				if record.LLMCalls[i].OutputTokens == 0 && llmInfo.CompletionTokens > 0 {
+					record.LLMCalls[i].OutputTokens = int(llmInfo.CompletionTokens)
+				}
+				if record.LLMCalls[i].TotalTokens == 0 && llmInfo.TotalTokens > 0 {
+					record.LLMCalls[i].TotalTokens = int(llmInfo.TotalTokens)
+				}
+			}
+		}
+		
+		// Store LLM system/provider in agent type if not already set
+		if record.AgentType == "" && llmInfo.System != "" {
+			record.AgentType = "llm:" + llmInfo.System
+		}
 	}
 
 	return record

@@ -9,6 +9,7 @@ The Telemetry Exporter service aggregates and exports OpenTelemetry traces from 
 - **Continuous Export**: Background worker for automatic trace export
 - **On-Demand Export**: REST API for manual trace export requests
 - **Multi-Exporter Support**: Simultaneously export to multiple destinations
+- **LLM Observability**: Integrated support for OpenLLMetry semantic conventions for LLM trace recognition and enrichment
 
 ## Configuration
 
@@ -107,6 +108,12 @@ The service converts OTLP traces to Signavio telemetry records with:
 - Prompt metrics
 
 See [Signavio Integration Guide](./docs/SIGNAVIO_INTEGRATION.md) for detailed configuration.
+
+## LLM Observability
+
+The service integrates with [OpenLLMetry](https://github.com/traceloop/openllmetry) to provide comprehensive observability for LLM operations. LLM spans are automatically detected and enriched with token usage, cost, and performance metrics.
+
+See [LLM Observability Guide](./docs/LLM_OBSERVABILITY.md) for detailed information.
 
 ## Development
 

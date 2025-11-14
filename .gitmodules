@@ -46,3 +46,6 @@
 [submodule "infrastructure/third_party/markitdown"]
 	path = infrastructure/third_party/markitdown
 	url = https://github.com/microsoft/markitdown.git
+[submodule "infrastructure/third_party/openllmetry"]
+	path = infrastructure/third_party/openllmetry
+	url = https://github.com/traceloop/openllmetry.git
