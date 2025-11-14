@@ -43,3 +43,6 @@
 [submodule "infrastructure/third_party/coralnpu"]
 	path = infrastructure/third_party/coralnpu
 	url = https://github.com/google-coral/coralnpu.git
+[submodule "infrastructure/third_party/markitdown"]
+	path = infrastructure/third_party/markitdown
+	url = https://github.com/microsoft/markitdown.git
