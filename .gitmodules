@@ -40,3 +40,6 @@
 [submodule "infrastructure/third_party/gogs"]
 	path = infrastructure/third_party/gogs
 	url = https://github.com/gogs/gogs.git
+[submodule "infrastructure/third_party/coralnpu"]
+	path = infrastructure/third_party/coralnpu
+	url = https://github.com/google-coral/coralnpu.git
