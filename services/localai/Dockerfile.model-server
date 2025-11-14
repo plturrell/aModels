@@ -17,6 +17,9 @@ RUN pip install --no-cache-dir \
 # Copy model server
 COPY services/localai/services/model_server.py /app/model_server.py
 
+# Create mount point directory structure
+RUN mkdir -p /home/aModels/models
+
 # Set environment variables
 ENV MODEL_SERVER_PORT=8088
 ENV PYTHONUNBUFFERED=1
