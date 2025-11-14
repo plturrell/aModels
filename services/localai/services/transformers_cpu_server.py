@@ -201,14 +201,30 @@ def load_tokenizer(model_key: str):
     if not cfg:
         raise ValueError(f"unknown model: {model_key}")
     
-    # Get model path (from model-server cache or registry)
-    model_path = get_model_path(model_key, cfg["path"])
+    # Try to get model path from model-server or direct volume
+    try:
+        model_path = get_model_path(model_key, cfg["path"])
+    except (ValueError, Exception) as e:
+        print(f"[DEBUG] get_model_path failed: {e}, trying direct volume access...")
+        model_path = None
+    
+    # If get_model_path failed or path doesn't exist, try direct volume access
+    if not model_path or not os.path.exists(model_path):
+        # Try direct paths
+        alt_paths = [
+            os.path.join("/models", cfg["path"]),
+            cfg["path"],
+        ]
+        for alt_path in alt_paths:
+            if os.path.exists(alt_path):
+                model_path = alt_path
+                print(f"[DEBUG] Found model at direct path: {model_path}")
+                break
+        
+        if not model_path or not os.path.exists(model_path):
+            raise ValueError(f"model path does not exist. Tried: {[cfg['path']] + alt_paths}")
     
     print(f"[DEBUG] Loading tokenizer for {model_key} from {model_path}")
-    
-    # Verify path exists (should come from model-server cache)
-    if not os.path.exists(model_path):
-        raise ValueError(f"model path does not exist: {model_path}. Model should be fetched from model-server first.")
     
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     return tokenizer
@@ -220,14 +236,30 @@ def load_model(model_key: str):
     if not cfg:
         raise ValueError(f"unknown model: {model_key}")
     
-    # Get model path (from model-server cache or registry)
-    model_path = get_model_path(model_key, cfg["path"])
+    # Try to get model path from model-server or direct volume
+    try:
+        model_path = get_model_path(model_key, cfg["path"])
+    except (ValueError, Exception) as e:
+        print(f"[DEBUG] get_model_path failed: {e}, trying direct volume access...")
+        model_path = None
+    
+    # If get_model_path failed or path doesn't exist, try direct volume access
+    if not model_path or not os.path.exists(model_path):
+        # Try direct paths
+        alt_paths = [
+            os.path.join("/models", cfg["path"]),
+            cfg["path"],
+        ]
+        for alt_path in alt_paths:
+            if os.path.exists(alt_path):
+                model_path = alt_path
+                print(f"[DEBUG] Found model at direct path: {model_path}")
+                break
+        
+        if not model_path or not os.path.exists(model_path):
+            raise ValueError(f"model path does not exist. Tried: {[cfg['path']] + alt_paths}")
     
     print(f"[DEBUG] Loading model {model_key} from {model_path}")
-    
-    # Verify path exists (should come from model-server cache)
-    if not os.path.exists(model_path):
-        raise ValueError(f"model path does not exist: {model_path}. Model should be fetched from model-server first.")
     
     # Use appropriate dtype and device for GPU
     if DEVICE == "cuda":
