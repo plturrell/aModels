@@ -13,8 +13,9 @@ COPY services/localai/requirements-transformers.txt /app/requirements.txt
 # Install Python dependencies
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Copy transformers service
+# Copy transformers service and model client
 COPY services/localai/services/transformers_cpu_server.py /app/transformers_cpu_server.py
+COPY services/localai/services/model_client.py /app/model_client.py
 
 # Create models directory structure if needed
 RUN mkdir -p /models
