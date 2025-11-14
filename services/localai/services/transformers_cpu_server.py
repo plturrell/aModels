@@ -52,13 +52,13 @@ MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
         "path": os.path.join(MODELS_BASE, "phi-3.5-mini-instruct-pytorch")
     },
     "granite-4.0-h-micro": {
-        "path": os.path.join(MODELS_BASE, "granite-4.0-h-micro-transformers")
+        "path": "granite-4.0-h-micro-transformers"
     },
     "granite-4.0": {
-        "path": os.path.join(MODELS_BASE, "granite-4.0-h-micro-transformers")
+        "path": "granite-4.0-h-micro-transformers"
     },
     "vaultgemma-1b": {
-        "path": os.path.join(MODELS_BASE, "vaultgemma-1b-transformers")
+        "path": "vaultgemma-1b-transformers"
     },
     "calm-l": {
         "path": os.path.join(

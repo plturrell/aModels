@@ -55,9 +55,18 @@ services:
       sh -c "
       if [ ! -f /models/.initialized ]; then
         echo 'Initializing models-data volume from host...';
-        cp -r /host-models/* /models/ 2>/dev/null || true;
-        touch /models/.initialized;
-        echo 'Models initialized successfully';
+        if [ -d /host-models ] && [ \"\$(ls -A /host-models 2>/dev/null)\" ]; then
+          echo 'Copying models from /host-models to /models...';
+          cp -r /host-models/* /models/ 2>&1;
+          echo 'Copy completed. Verifying...';
+          MODEL_COUNT=\$(ls -1 /models | grep -v '^\.' | wc -l);
+          echo \"Copied \${MODEL_COUNT} model directories\";
+          touch /models/.initialized;
+          echo 'Models initialized successfully';
+        else
+          echo 'WARNING: /host-models is empty or does not exist';
+          touch /models/.initialized;
+        fi;
       else
         echo 'Models already initialized';
       fi;
