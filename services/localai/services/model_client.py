@@ -56,9 +56,12 @@ def get_model_from_server(model_name: str, target_path: Optional[str] = None) ->
                 print(f"[MODEL_CLIENT] Using cached model: {cached_model_path}")
                 return cached_model_path
         
+        # Determine the actual model name on server
+        server_model_name = model_info.get('name', model_name)
+        
         # Download model
-        print(f"[MODEL_CLIENT] Downloading model {model_name} from model-server...")
-        download_url = f"{MODEL_SERVER_URL}/models/{model_name}/download"
+        print(f"[MODEL_CLIENT] Downloading model {server_model_name} from model-server...")
+        download_url = f"{MODEL_SERVER_URL}/models/{server_model_name}/download"
         response = requests.get(download_url, timeout=300, stream=True)  # 5 min timeout for large models
         
         if response.status_code != 200:
@@ -97,13 +100,21 @@ def get_model_path(model_name: str, registry_path: str) -> str:
     Get model path, trying model-server first, then falling back to registry path.
     Returns the path to use for loading the model.
     """
-    # Try model-server first
+    import os
+    
+    # First check if registry_path exists locally (direct mount)
+    if os.path.exists(registry_path):
+        print(f"[MODEL_CLIENT] Using direct mount path: {registry_path}")
+        return registry_path
+    
+    # Try model-server cache
     cached_path = get_model_from_server(model_name)
-    if cached_path:
+    if cached_path and os.path.exists(cached_path):
+        print(f"[MODEL_CLIENT] Using model-server cache: {cached_path}")
         return cached_path
     
-    # Fallback to registry path (direct mount or local)
-    print(f"[MODEL_CLIENT] Using registry path: {registry_path}")
+    # Fallback to registry path even if it doesn't exist (let transformers handle the error)
+    print(f"[MODEL_CLIENT] Using registry path (may not exist): {registry_path}")
     return registry_path
 
 
