@@ -211,17 +211,23 @@ def get_model_path(model_name: str, registry_path: str) -> str:
     MODELS_VOLUME = os.getenv("MODELS_BASE", "/models")
     direct_path = os.path.join(MODELS_VOLUME, registry_path)
     
+    print(f"[MODEL_CLIENT] Checking direct path: {direct_path}")
     if os.path.exists(direct_path):
+        print(f"[MODEL_CLIENT] Direct path exists, checking for model files...")
         config_file = os.path.join(direct_path, "config.json")
         if os.path.exists(config_file):
-            print(f"[MODEL_CLIENT] Using direct volume path: {direct_path}")
+            print(f"[MODEL_CLIENT] ✅ Using direct volume path: {direct_path}")
             return direct_path
         # Check if it's a directory with model files
         if os.path.isdir(direct_path):
             files = os.listdir(direct_path)
-            if any(f.endswith(('.json', '.safetensors', '.bin', '.pt')) for f in files):
-                print(f"[MODEL_CLIENT] Using direct volume path (no config.json): {direct_path}")
+            has_model_files = any(f.endswith(('.json', '.safetensors', '.bin', '.pt')) for f in files)
+            print(f"[MODEL_CLIENT] Directory has {len(files)} files, model files: {has_model_files}")
+            if has_model_files:
+                print(f"[MODEL_CLIENT] ✅ Using direct volume path (no config.json): {direct_path}")
                 return direct_path
+    else:
+        print(f"[MODEL_CLIENT] Direct path does not exist: {direct_path}")
     
     # Fallback: Get model from model-server cache
     cached_path = get_model_from_server(model_name)
