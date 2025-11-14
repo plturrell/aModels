@@ -4,6 +4,8 @@ import (
 	"log"
 	"os"
 	"testing"
+
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 )
 
 func TestValidateNodes(t *testing.T) {
@@ -18,8 +20,8 @@ func TestValidateNodes(t *testing.T) {
 		{
 			name: "valid nodes",
 			nodes: []Node{
-				{ID: "node1", Type: "table", Label: "Table1", Props: map[string]interface{}{"name": "test"}},
-				{ID: "node2", Type: "column", Label: "Column1", Props: map[string]interface{}{"type": "string"}},
+				{ID: "node1", Type: graph.NodeTypeTable, Label: "Table1", Props: map[string]interface{}{"name": "test"}},
+				{ID: "node2", Type: graph.NodeTypeColumn, Label: "Column1", Props: map[string]interface{}{"type": "string"}},
 			},
 			wantValid: true,
 			wantErrors: 0,
@@ -27,7 +29,7 @@ func TestValidateNodes(t *testing.T) {
 		{
 			name: "missing ID",
 			nodes: []Node{
-				{ID: "", Type: "table", Label: "Table1"},
+				{ID: "", Type: graph.NodeTypeTable, Label: "Table1"},
 			},
 			wantValid: false,
 			wantErrors: 1,
@@ -43,8 +45,8 @@ func TestValidateNodes(t *testing.T) {
 		{
 			name: "mixed valid and invalid",
 			nodes: []Node{
-				{ID: "node1", Type: "table", Label: "Table1"},
-				{ID: "", Type: "column", Label: "Column1"},
+				{ID: "node1", Type: graph.NodeTypeTable, Label: "Table1"},
+				{ID: "", Type: graph.NodeTypeColumn, Label: "Column1"},
 				{ID: "node3", Type: "", Label: "Column2"},
 			},
 			wantValid: false,
@@ -69,8 +71,8 @@ func TestValidateEdges(t *testing.T) {
 	logger := log.New(os.Stdout, "[test] ", log.LstdFlags)
 	
 	nodes := []Node{
-		{ID: "node1", Type: "table", Label: "Table1"},
-		{ID: "node2", Type: "column", Label: "Column1"},
+		{ID: "node1", Type: graph.NodeTypeTable, Label: "Table1"},
+		{ID: "node2", Type: graph.NodeTypeColumn, Label: "Column1"},
 	}
 	
 	tests := []struct {
@@ -130,9 +132,9 @@ func TestFilterValidNodes(t *testing.T) {
 	logger := log.New(os.Stdout, "[test] ", log.LstdFlags)
 	
 	nodes := []Node{
-		{ID: "node1", Type: "table", Label: "Table1"},
-		{ID: "", Type: "column", Label: "Column1"}, // Invalid
-		{ID: "node3", Type: "table", Label: "Table2"},
+		{ID: "node1", Type: graph.NodeTypeTable, Label: "Table1"},
+		{ID: "", Type: graph.NodeTypeColumn, Label: "Column1"}, // Invalid
+		{ID: "node3", Type: graph.NodeTypeTable, Label: "Table2"},
 		{ID: "node4", Type: "", Label: "Column2"}, // Invalid
 	}
 	

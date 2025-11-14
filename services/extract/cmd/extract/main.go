@@ -35,19 +35,25 @@ import (
 
 	"github.com/plturrell/aModels/services/extract/internal/middleware"
 	"github.com/plturrell/aModels/services/extract/internal/observability"
+	"github.com/plturrell/aModels/services/extract/pkg/ai"
 	"github.com/plturrell/aModels/services/extract/pkg/catalog"
 	"github.com/plturrell/aModels/services/extract/pkg/clients"
 	"github.com/plturrell/aModels/services/extract/pkg/embeddings"
 	"github.com/plturrell/aModels/services/extract/pkg/extraction"
+	"github.com/plturrell/aModels/services/extract/pkg/git"
 	"github.com/plturrell/aModels/services/extract/pkg/graph"
 	"github.com/plturrell/aModels/services/extract/pkg/integrations"
 	"github.com/plturrell/aModels/services/extract/pkg/monitoring"
 	"github.com/plturrell/aModels/services/extract/pkg/persistence"
+	"github.com/plturrell/aModels/services/extract/pkg/pipeline"
 	"github.com/plturrell/aModels/services/extract/pkg/schema"
 	"github.com/plturrell/aModels/services/extract/pkg/storage"
 	"github.com/plturrell/aModels/services/extract/pkg/terminology"
 	"github.com/plturrell/aModels/services/extract/pkg/utils"
 	"github.com/plturrell/aModels/services/extract/pkg/workflow"
+
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/llms"
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/prompts"
 )
 
 const (
@@ -167,7 +173,7 @@ func main() {
 		// Verify connectivity
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := neo4jPersistence.driver.VerifyConnectivity(ctx); err != nil {
+		if err := neo4jPersistence.Driver().VerifyConnectivity(ctx); err != nil {
 			logger.Fatalf("failed to connect to neo4j: %v", err)
 		}
 		graphPersistences = append(graphPersistences, neo4jPersistence)
@@ -175,7 +181,7 @@ func main() {
 		logger.Println("connected to neo4j")
 	}
 
-	var gleanPersistence *GleanPersistence
+	var gleanPersistence *persistence.GleanPersistence
 	if exportDir := strings.TrimSpace(os.Getenv("GLEAN_EXPORT_DIR")); exportDir != "" {
 		predicatePrefix := strings.TrimSpace(os.Getenv("GLEAN_PREDICATE_PREFIX"))
 		var err error
@@ -188,7 +194,15 @@ func main() {
 
 		// Initialize real-time Glean exporter if enabled
 		dbName := strings.TrimSpace(os.Getenv("GLEAN_DB_NAME"))
-		schemaPath := gleanPersistence.schemaPath
+		schemaPath := strings.TrimSpace(os.Getenv("GLEAN_SCHEMA_PATH"))
+		if schemaPath == "" {
+			schemaRoot := strings.TrimSpace(os.Getenv("GLEAN_SCHEMA_ROOT"))
+			if schemaRoot != "" {
+				schemaPath = filepath.Join(schemaRoot, "source", "etl.angle")
+			} else {
+				schemaPath = filepath.Join("glean", "schema", "source", "etl.angle")
+			}
+		}
 		realTimeGleanExporter = persistence.NewRealTimeGleanExporter(gleanPersistence, dbName, schemaPath, logger)
 		server.realTimeGleanExporter = realTimeGleanExporter
 	}
@@ -274,7 +288,7 @@ func main() {
 				secondary = append(secondary, store)
 			}
 		}
-		server.vectorPersistence = persistence.NewCompositepersistence.VectorPersistence(primaryStore, secondary, logger)
+		server.vectorPersistence = persistence.NewCompositeVectorPersistence(primaryStore, secondary, logger)
 		logger.Println("composite vector persistence enabled")
 	} else if len(vectorStores) == 1 {
 		// Single store
@@ -341,7 +355,8 @@ func main() {
 		}
 	}
 	markitdownClient := clients.NewMarkItDownClient("", logger, markitdownMetricsCollector)
-	server.markitdownIntegration = integrations.NewMarkItDownIntegration(markitdownClient, logger)
+	markitdownAdapter := &markitdownClientAdapter{client: markitdownClient}
+	server.markitdownIntegration = integrations.NewMarkItDownIntegration(markitdownAdapter, logger)
 	// MarkItDown integration is initialized above
 	if server.markitdownIntegration != nil {
 		logger.Printf("MarkItDown integration initialized")
@@ -391,7 +406,7 @@ func main() {
 	server.telemetryOperation = cfg.Telemetry.Operation
 
 	if cfg.Telemetry.Enabled && cfg.Telemetry.Address != "" {
-		telemetryClient, err := newTelemetryClient(context.Background(), telemetryConfig{
+		telemetryClient, err := monitoring.NewTelemetryClient(context.Background(), monitoring.TelemetryConfig{
 			Address:          cfg.Telemetry.Address,
 			LibraryType:      cfg.Telemetry.LibraryType,
 			DefaultOperation: cfg.Telemetry.Operation,
@@ -433,7 +448,7 @@ func main() {
 		catalogServiceURL = "http://localhost:8084" // Default catalog service URL
 	}
 	// Create metrics collector for catalog integration
-	var metricsCollector MetricsCollector
+	var metricsCollector clients.MetricsCollector
 	// In production, this would integrate with Prometheus or similar
 	metricsCollector = func(service, endpoint string, statusCode int, latency time.Duration, correlationID string) {
 		if logger != nil {
@@ -472,10 +487,10 @@ func main() {
 	// Initialize health checker
 	healthChecker := middleware.NewHealthChecker(logger)
 	// Register health checks
-	if server.neo4jPersistence != nil && server.neo4jPersistence.driver != nil {
+	if server.neo4jPersistence != nil && server.neo4jPersistence.Driver() != nil {
 		// Note: Neo4j driver doesn't expose *sql.DB, so we'll check it differently
 		healthChecker.RegisterCheck("neo4j", func(ctx context.Context) error {
-			return server.neo4jPersistence.driver.VerifyConnectivity(ctx)
+			return server.neo4jPersistence.Driver().VerifyConnectivity(ctx)
 		}, 5*time.Second)
 	}
 
@@ -499,6 +514,8 @@ func main() {
 	mux.HandleFunc("/knowledge-graph", server.handleGraph)                                            // Main knowledge graph processing endpoint
 	mux.HandleFunc("/graph", server.handleGraph)                                                      // Legacy alias for backward compatibility
 	mux.HandleFunc("/knowledge-graph/query", server.handleNeo4jQuery)                                 // Neo4j Cypher query endpoint
+	mux.HandleFunc("/documents/upload", server.handleDocumentUpload)                                 // Document upload endpoint (replaces DMS)
+	mux.HandleFunc("/documents", server.handleDocumentsRouter)                                        // Document router (list and get)
 	mux.HandleFunc("/workflow/petri-to-langgraph", server.handlePetriNetToLangGraph)                  // Convert Petri net to LangGraph
 	mux.HandleFunc("/workflow/petri-to-langgraph-advanced", server.handlePetriNetToAdvancedLangGraph) // Convert Petri net to advanced LangGraph (Phase 7.3)
 	mux.HandleFunc("/workflow/petri-to-agentflow", server.handlePetriNetToAgentFlow)                  // Convert Petri net to AgentFlow
@@ -586,7 +603,7 @@ type extractServer struct {
 	graphPersistence       persistence.GraphPersistence
 	neo4jPersistence       *storage.Neo4jPersistence          // Direct Neo4j access for queries
 	realTimeGleanExporter  *persistence.RealTimeGleanExporter // Real-time Glean synchronization
-	flight                 *servers.ExtractFlightServer
+	flight                 *extractFlightServer
 	semanticSchemaAnalyzer *extraction.SemanticSchemaAnalyzer // Phase 8.1: Semantic schema understanding
 	selfHealingSystem      *monitoring.SelfHealingSystem      // Phase 9.2: Self-healing system
 	sapBDCIntegration      *integrations.SAPBDCIntegration    // SAP Business Data Cloud integration
@@ -594,29 +611,29 @@ type extractServer struct {
 	postgresReplication    *schema.PostgresReplication
 	metricsCollector       *monitoring.MetricsCollector // Metrics for all improvements
 
-	telemetry          *telemetryClient
+	telemetry          interface{}
 	telemetryOperation string
 	catalog            *catalog.Catalog
-	catalogClient      *catalog.CatalogClient // HTTP client for catalog service integration
+	catalogClient      *clients.CatalogClient // HTTP client for catalog service integration
 
 	// Orchestration chain matcher (for Phase 2 integration)
 	chainMatcher *integrations.OrchestrationChainMatcher
 
 	// Embedding cache and batch generator (for Phase 3 optimization)
-	embeddingCache    *EmbeddingCache
-	batchEmbeddingGen *BatchEmbeddingGenerator
+	embeddingCache    *embeddings.EmbeddingCache
+	batchEmbeddingGen *embeddings.BatchEmbeddingGenerator
 
 	// Training data collector (for Phase 4 full model utilization)
-	trainingDataCollector *TrainingDataCollector
+	trainingDataCollector *terminology.TrainingDataCollector
 
 	// Model monitor (for Phase 5 advanced capabilities)
-	modelMonitor *ModelMonitor
+	modelMonitor *terminology.ModelMonitor
 
 	// Multi-modal extractor (for Phase 6 unified integration)
-	multiModalExtractor *MultiModalExtractor
+	multiModalExtractor *extraction.MultiModalExtractor
 
 	// MarkItDown integration for document conversion
-	markitdownIntegration *MarkItDownIntegration
+	markitdownIntegration *integrations.MarkItDownIntegration
 
 	// Agent telemetry client for Signavio exposure
 	agentTelemetry *telemetryclient.Client
@@ -658,10 +675,10 @@ func (s *extractServer) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check DeepAgents health if enabled (10/10 integration)
-	if s.deepAgentsClient != nil && s.deepAgentsClient.enabled {
+	if s.deepAgentsClient != nil && s.deepAgentsClient.IsEnabled() {
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()
-		deepAgentsHealthy := s.deepAgentsClient.checkHealth(ctx)
+		deepAgentsHealthy := s.deepAgentsClient.CheckHealth(ctx)
 		status["deepagents"] = map[string]any{
 			"enabled": true,
 			"healthy": deepAgentsHealthy,
@@ -741,7 +758,7 @@ func (s *extractServer) recordTelemetry(ctx context.Context, sessionID string, i
 
 	completed := started.Add(latency)
 
-	record := telemetryRecord{
+	record := monitoring.TelemetryRecord{
 		Operation:    s.telemetryOperation,
 		Input:        input,
 		Output:       output,
@@ -763,7 +780,10 @@ func (s *extractServer) recordTelemetry(ctx context.Context, sessionID string, i
 		}
 	}
 
-	return s.telemetry.Log(ctx, record)
+	if telemetryClient, ok := s.telemetry.(*monitoring.TelemetryClient); ok {
+		return telemetryClient.Log(ctx, record)
+	}
+	return nil
 }
 
 // --- /generate/training ---
@@ -947,11 +967,44 @@ type graphRequest struct {
 	SqlQueries          []string           `json:"sql_queries"`
 	ControlMFiles       []string           `json:"control_m_files"`
 	SignavioFiles       []string           `json:"signavio_files"`
+	DocumentFiles       []string           `json:"document_files,omitempty"` // Files to process through markitdown/OCR
+	GitRepositories     []gitRepositoryReq `json:"git_repositories,omitempty"`
+	GiteaStorage        *giteaStorageReq   `json:"gitea_storage,omitempty"`
 	ViewLineage         []map[string]any   `json:"view_lineage,omitempty"`
 	IdealDistribution   map[string]float64 `json:"ideal_distribution"`
 	ProjectID           string             `json:"project_id"`
 	SystemID            string             `json:"system_id"`
 	InformationSystemID string             `json:"information_system_id"`
+	AIEnabled           bool               `json:"ai_enabled,omitempty"`
+	AIModel             string             `json:"ai_model,omitempty"`
+}
+
+type gitRepositoryReq struct {
+	URL         string   `json:"url"`
+	Type        string   `json:"type,omitempty"`
+	Branch      string   `json:"branch,omitempty"`
+	Tag         string   `json:"tag,omitempty"`
+	Commit      string   `json:"commit,omitempty"`
+	FilePatterns []string `json:"file_patterns,omitempty"`
+	Auth        struct {
+		Type     string `json:"type,omitempty"`
+		Token    string `json:"token,omitempty"`
+		KeyPath  string `json:"key_path,omitempty"`
+		Username string `json:"username,omitempty"`
+		Password string `json:"password,omitempty"`
+	} `json:"auth,omitempty"`
+}
+
+type giteaStorageReq struct {
+	Enabled     bool   `json:"enabled,omitempty"`
+	GiteaURL    string `json:"gitea_url,omitempty"`
+	GiteaToken  string `json:"gitea_token,omitempty"`
+	Owner       string `json:"owner,omitempty"`
+	RepoName    string `json:"repo_name,omitempty"`
+	Branch      string `json:"branch,omitempty"`
+	BasePath    string `json:"base_path,omitempty"`
+	AutoCreate  bool   `json:"auto_create,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
@@ -973,10 +1026,10 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	var nodes []graph.Node
 	var edges []graph.Edge
 	var rootID string
-	signavioMetadata := SignavioMetadata{}
+	signavioMetadata := integrations.SignavioMetadata{}
 
 	if len(req.SignavioFiles) > 0 {
-		signavioNodes, signavioEdges, metadata := loadSignavioArtifacts(req.SignavioFiles, s.logger)
+		signavioNodes, signavioEdges, metadata := integrations.LoadSignavioArtifacts(req.SignavioFiles, s.logger)
 		if len(signavioNodes) > 0 {
 			nodes = append(nodes, signavioNodes...)
 		}
@@ -990,7 +1043,25 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			if s.catalog != nil {
 				var signavioCatalogDirty bool
 				for _, proc := range metadata.Processes {
-					s.catalog.UpsertSignavioProcess(proc)
+					// Convert integrations.SignavioProcessSummary to catalog.SignavioProcessSummary
+					catalogProc := catalog.SignavioProcessSummary{
+						ID:           proc.ID,
+						Name:         proc.Name,
+						SourceFile:   proc.SourceFile,
+						ElementCount: proc.ElementCount,
+						ElementTypes: proc.ElementTypes,
+						Elements:     make([]catalog.SignavioElementSummary, len(proc.Elements)),
+						Labels:       proc.Labels,
+						Properties:   proc.Properties,
+					}
+					for i, elem := range proc.Elements {
+						catalogProc.Elements[i] = catalog.SignavioElementSummary{
+							ID:   elem.ID,
+							Type: elem.Type,
+							Name: elem.Name,
+						}
+					}
+					s.catalog.UpsertSignavioProcess(catalogProc)
 					signavioCatalogDirty = true
 				}
 				if signavioCatalogDirty {
@@ -1033,33 +1104,406 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		edges = append(edges, fileEdges...)
 	}
 
+	// Collect file system files for Gitea storage
+	var allFileSystemFiles []git.ExtractedFile
+	var documentFiles []string // Files that need document processing
+	filesystemExtractor := git.NewFileSystemExtractor()
+
+	// Extract files from file system sources
+	if len(req.JSONTables) > 0 {
+		fsFiles, err := filesystemExtractor.ExtractFilesFromFileList(req.JSONTables)
+		if err == nil {
+			allFileSystemFiles = append(allFileSystemFiles, fsFiles...)
+		}
+		// Check for document files that need processing
+		for _, path := range req.JSONTables {
+			if git.IsDocumentFile(path) {
+				documentFiles = append(documentFiles, path)
+			}
+		}
+	}
+	// Add explicit document files
+	if len(req.DocumentFiles) > 0 {
+		documentFiles = append(documentFiles, req.DocumentFiles...)
+	}
+	if len(req.HiveDDLs) > 0 {
+		// HiveDDLs can be file paths or DDL content strings
+		var ddlFilePaths []string
+		for _, ddl := range req.HiveDDLs {
+			ddl = strings.TrimSpace(ddl)
+			if ddl == "" {
+				continue
+			}
+			// Check if it's a file path (exists as file)
+			if _, err := os.Stat(ddl); err == nil {
+				ddlFilePaths = append(ddlFilePaths, ddl)
+			}
+		}
+		if len(ddlFilePaths) > 0 {
+			fsFiles, err := filesystemExtractor.ExtractFilesFromFileList(ddlFilePaths)
+			if err == nil {
+				allFileSystemFiles = append(allFileSystemFiles, fsFiles...)
+			}
+		}
+	}
+	if len(req.ControlMFiles) > 0 {
+		fsFiles, err := filesystemExtractor.ExtractFilesFromFileList(req.ControlMFiles)
+		if err == nil {
+			allFileSystemFiles = append(allFileSystemFiles, fsFiles...)
+		}
+	}
+	if len(req.SignavioFiles) > 0 {
+		fsFiles, err := filesystemExtractor.ExtractFilesFromFileList(req.SignavioFiles)
+		if err == nil {
+			allFileSystemFiles = append(allFileSystemFiles, fsFiles...)
+		}
+	}
+
+	// Process documents through markitdown/OCR if configured
+	if len(documentFiles) > 0 && req.GiteaStorage != nil && req.GiteaStorage.Enabled {
+		giteaURL := req.GiteaStorage.GiteaURL
+		if giteaURL == "" {
+			giteaURL = os.Getenv("GITEA_URL")
+		}
+		giteaToken := req.GiteaStorage.GiteaToken
+		if giteaToken == "" {
+			giteaToken = os.Getenv("GITEA_TOKEN")
+		}
+
+		if giteaURL != "" && giteaToken != "" {
+			giteaStorage := git.NewGiteaStorage(giteaURL, giteaToken, s.logger)
+			storageConfig := git.StorageConfig{
+				Owner:       req.GiteaStorage.Owner,
+				RepoName:    req.GiteaStorage.RepoName,
+				Branch:      req.GiteaStorage.Branch,
+				BasePath:    "documents/processed/",
+				ProjectID:   req.ProjectID,
+				SystemID:    req.SystemID,
+				AutoCreate:  req.GiteaStorage.AutoCreate,
+				Description: fmt.Sprintf("Processed documents for project %s", req.ProjectID),
+			}
+
+			if storageConfig.RepoName == "" {
+				storageConfig.RepoName = fmt.Sprintf("%s-documents", req.ProjectID)
+			}
+			if storageConfig.Owner == "" {
+				storageConfig.Owner = "extract-service"
+			}
+
+			// Get markitdown client from integration
+			var markitdownClient *clients.MarkItDownClient
+			if adapter, ok := s.markitdownIntegration.(*markitdownClientAdapter); ok {
+				markitdownClient = adapter.client
+			}
+
+			// Create document pipeline
+			docPipeline := git.NewDocumentPipeline(
+				markitdownClient,
+				s.multiModalExtractor,
+				giteaStorage,
+				s.logger,
+			)
+
+			// Process documents
+			docNodes, docEdges, err := docPipeline.ProcessDocuments(ctx, documentFiles, storageConfig, req.ProjectID, req.SystemID)
+			if err == nil {
+				nodes = append(nodes, docNodes...)
+				edges = append(edges, docEdges...)
+				s.logger.Printf("Processed %d documents through markitdown/OCR", len(documentFiles))
+			} else {
+				s.logger.Printf("Warning: document processing failed: %v", err)
+			}
+
+			// Create standardized structure
+			if err := docPipeline.StandardizeDocumentStructure(ctx, storageConfig); err != nil {
+				s.logger.Printf("Warning: failed to create standardized structure: %v", err)
+			}
+		}
+	}
+
+	// Store file system files in Gitea if configured
+	if len(allFileSystemFiles) > 0 && req.GiteaStorage != nil && req.GiteaStorage.Enabled {
+		giteaURL := req.GiteaStorage.GiteaURL
+		if giteaURL == "" {
+			giteaURL = os.Getenv("GITEA_URL")
+		}
+		giteaToken := req.GiteaStorage.GiteaToken
+		if giteaToken == "" {
+			giteaToken = os.Getenv("GITEA_TOKEN")
+		}
+
+		if giteaURL != "" && giteaToken != "" {
+			giteaStorage := git.NewGiteaStorage(giteaURL, giteaToken, s.logger)
+			storageConfig := git.StorageConfig{
+				Owner:       req.GiteaStorage.Owner,
+				RepoName:    req.GiteaStorage.RepoName,
+				Branch:      req.GiteaStorage.Branch,
+				BasePath:    req.GiteaStorage.BasePath,
+				ProjectID:   req.ProjectID,
+				SystemID:    req.SystemID,
+				AutoCreate:  req.GiteaStorage.AutoCreate,
+				Description: req.GiteaStorage.Description,
+			}
+
+			// Default repo name if not provided
+			if storageConfig.RepoName == "" {
+				storageConfig.RepoName = fmt.Sprintf("%s-extracted-code", req.ProjectID)
+			}
+			if storageConfig.Owner == "" {
+				storageConfig.Owner = "extract-service"
+			}
+			if storageConfig.BasePath == "" {
+				storageConfig.BasePath = "filesystem/"
+			}
+
+			// Create metadata for file system source
+			fsRepoMeta := &git.RepositoryMetadata{
+				URL:    "filesystem",
+				Branch: "main",
+				Commit: "filesystem",
+			}
+
+			giteaRepo, err := giteaStorage.StoreCode(ctx, storageConfig, allFileSystemFiles, fsRepoMeta)
+			if err != nil {
+				s.logger.Printf("Warning: failed to store file system files in Gitea: %v", err)
+			} else {
+				s.logger.Printf("Successfully stored %d file system files in Gitea: %s", len(allFileSystemFiles), giteaRepo)
+				
+				// Create Gitea repository node for file system files
+				giteaRepoInfo, err := giteaStorage.GiteaClient().GetRepository(ctx, storageConfig.Owner, storageConfig.RepoName)
+				if err == nil {
+					giteaNode := giteaStorage.CreateRepositoryNode(giteaRepoInfo, storageConfig, fsRepoMeta)
+					nodes = append(nodes, giteaNode)
+					
+					// Create file nodes for file system files
+					fileStorage := git.NewFileStorage(s.logger)
+					fsRepoID := fmt.Sprintf("filesystem:%s", req.ProjectID)
+					fileNodes, fileEdges := fileStorage.CreateFileNodes(allFileSystemFiles, fsRepoID, "filesystem", "filesystem", req.ProjectID, req.SystemID)
+					nodes = append(nodes, fileNodes...)
+					edges = append(edges, fileEdges...)
+					
+					// Link file system files to Gitea repository
+					for _, fileNode := range fileNodes {
+						edges = append(edges, graph.Edge{
+							SourceID: fileNode.ID,
+							TargetID: giteaNode.ID,
+							Label:    "STORED_IN",
+							Props: map[string]interface{}{
+								"storage_type": "gitea",
+								"source":       "filesystem",
+							},
+						})
+					}
+				}
+			}
+		}
+	}
+
+	// Process Git repositories
+	if len(req.GitRepositories) > 0 {
+		tempDir := filepath.Join(os.TempDir(), "extract-git-repos")
+		if err := os.MkdirAll(tempDir, 0755); err != nil {
+			s.logger.Printf("failed to create temp dir for Git repos: %v", err)
+		} else {
+			gitPipeline := git.NewPipeline(tempDir, s.logger)
+			
+			for _, repoReq := range req.GitRepositories {
+				if strings.TrimSpace(repoReq.URL) == "" {
+					continue
+				}
+
+				// Convert request to pipeline GitRepository
+				repo := pipeline.GitRepository{
+					URL:         repoReq.URL,
+					Type:        repoReq.Type,
+					Branch:      repoReq.Branch,
+					Tag:         repoReq.Tag,
+					Commit:      repoReq.Commit,
+					FilePatterns: repoReq.FilePatterns,
+					Auth: pipeline.GitAuth{
+						Type:     repoReq.Auth.Type,
+						Token:    repoReq.Auth.Token,
+						KeyPath:  repoReq.Auth.KeyPath,
+						Username: repoReq.Auth.Username,
+						Password: repoReq.Auth.Password,
+					},
+				}
+
+				// Process repository
+				extractedFiles, repoMeta, err := gitPipeline.ProcessRepository(ctx, repo)
+				if err != nil {
+					s.logger.Printf("failed to process Git repository %s: %v", repoReq.URL, err)
+					continue
+				}
+
+				// Create repository nodes
+				repoNodes, repoEdges := gitPipeline.CreateRepositoryNodes(repoMeta, req.ProjectID, req.SystemID)
+				nodes = append(nodes, repoNodes...)
+				edges = append(edges, repoEdges...)
+
+				// Create file nodes with raw code content
+				fileStorage := git.NewFileStorage(s.logger)
+				repoID := repoNodes[0].ID
+				fileNodes, fileEdges := fileStorage.CreateFileNodes(extractedFiles, repoID, repoMeta.URL, repoMeta.Commit, req.ProjectID, req.SystemID)
+				nodes = append(nodes, fileNodes...)
+				edges = append(edges, fileEdges...)
+
+				// Store code in Gitea if configured
+				if req.GiteaStorage != nil && req.GiteaStorage.Enabled {
+					giteaURL := req.GiteaStorage.GiteaURL
+					if giteaURL == "" {
+						giteaURL = os.Getenv("GITEA_URL")
+					}
+					giteaToken := req.GiteaStorage.GiteaToken
+					if giteaToken == "" {
+						giteaToken = os.Getenv("GITEA_TOKEN")
+					}
+
+					if giteaURL != "" && giteaToken != "" {
+						giteaStorage := git.NewGiteaStorage(giteaURL, giteaToken, s.logger)
+						storageConfig := git.StorageConfig{
+							Owner:       req.GiteaStorage.Owner,
+							RepoName:    req.GiteaStorage.RepoName,
+							Branch:      req.GiteaStorage.Branch,
+							BasePath:    req.GiteaStorage.BasePath,
+							ProjectID:   req.ProjectID,
+							SystemID:    req.SystemID,
+							AutoCreate:  req.GiteaStorage.AutoCreate,
+							Description: req.GiteaStorage.Description,
+						}
+
+						// Default repo name if not provided
+						if storageConfig.RepoName == "" {
+							storageConfig.RepoName = fmt.Sprintf("%s-extracted-code", req.ProjectID)
+						}
+						if storageConfig.Owner == "" {
+							storageConfig.Owner = "extract-service" // Default owner
+						}
+
+						giteaRepo, err := giteaStorage.StoreCode(ctx, storageConfig, extractedFiles, repoMeta)
+						if err != nil {
+							s.logger.Printf("Warning: failed to store code in Gitea: %v", err)
+						} else {
+							s.logger.Printf("Successfully stored code in Gitea: %s", giteaRepo)
+							// Create Gitea repository node
+							giteaRepoInfo, err := giteaStorage.GiteaClient().GetRepository(ctx, storageConfig.Owner, storageConfig.RepoName)
+							if err == nil {
+								giteaNode := giteaStorage.CreateRepositoryNode(giteaRepoInfo, storageConfig, repoMeta)
+								nodes = append(nodes, giteaNode)
+								// Link source repo to Gitea repo
+								edges = append(edges, graph.Edge{
+									SourceID: repoID,
+									TargetID: giteaNode.ID,
+									Label:    "STORED_IN",
+									Props: map[string]interface{}{
+										"storage_type": "gitea",
+									},
+								})
+							}
+						}
+					}
+				}
+
+				// Process extracted files based on their extensions
+				for _, file := range extractedFiles {
+					ext := strings.ToLower(filepath.Ext(file.Path))
+					
+					// Route to appropriate parser based on file extension
+					switch ext {
+					case ".hql", ".sql":
+						// Process as DDL/SQL
+						parsed, err := storage.ParseHiveDDL(ctx, file.Content)
+						if err != nil {
+							s.logger.Printf("failed to parse SQL from %s: %v", file.Path, err)
+							continue
+						}
+						ddlNodes, ddlEdges := storage.DDLToGraph(parsed)
+						nodes = append(nodes, ddlNodes...)
+						edges = append(edges, ddlEdges...)
+						
+						// Link to repository
+						if len(repoNodes) > 0 {
+							edges = append(edges, graph.Edge{
+								SourceID: repoNodes[0].ID,
+								TargetID: ddlNodes[0].ID,
+								Label:    "CONTAINS",
+								Props: map[string]interface{}{
+									"file_path": file.Path,
+									"source":    "git",
+								},
+							})
+						}
+					case ".json":
+						// Process as JSON table
+						tmpFile, err := os.CreateTemp("", "git-json-*.json")
+						if err != nil {
+							s.logger.Printf("failed to create temp file: %v", err)
+							continue
+						}
+						if _, err := tmpFile.WriteString(file.Content); err != nil {
+							tmpFile.Close()
+							os.Remove(tmpFile.Name())
+							s.logger.Printf("failed to write temp file: %v", err)
+							continue
+						}
+						tmpFile.Close()
+						defer os.Remove(tmpFile.Name())
+
+						fileNodes, fileEdges, _, err := s.extractSchemaFromJSON(tmpFile.Name())
+						if err != nil {
+							s.logger.Printf("failed to extract schema from %s: %v", file.Path, err)
+							continue
+						}
+						nodes = append(nodes, fileNodes...)
+						edges = append(edges, fileEdges...)
+						
+						// Link to repository
+						if len(repoNodes) > 0 && len(fileNodes) > 0 {
+							edges = append(edges, graph.Edge{
+								SourceID: repoNodes[0].ID,
+								TargetID: fileNodes[0].ID,
+								Label:    "CONTAINS",
+								Props: map[string]interface{}{
+									"file_path": file.Path,
+									"source":    "git",
+								},
+							})
+						}
+					}
+				}
+
+				s.logger.Printf("Processed Git repository %s: %d files extracted", repoReq.URL, len(extractedFiles))
+			}
+		}
+	}
+
 	for i, ddl := range req.HiveDDLs {
 		ddl = strings.TrimSpace(ddl)
 		if ddl == "" {
 			continue
 		}
 
-		parsed, err := parseHiveDDL(ctx, ddl)
+		parsed, err := storage.ParseHiveDDL(ctx, ddl)
 		if err != nil {
 			s.logger.Printf("failed to parse hive ddl #%d: %v", i+1, err)
 			continue
 		}
 
-		ddlNodes, ddlEdges := ddlToGraph(parsed)
+		ddlNodes, ddlEdges := storage.DDLToGraph(parsed)
 		nodes = append(nodes, ddlNodes...)
 		edges = append(edges, ddlEdges...)
 	}
 
 	// Collect all Control-M jobs for Petri net conversion
-	allControlMJobs := []ControlMJob{}
-	controlMJobMap := make(map[string][]ControlMJob) // path -> jobs
+	allControlMJobs := []integrations.ControlMJob{}
+	controlMJobMap := make(map[string][]integrations.ControlMJob) // path -> jobs
 
 	for _, path := range req.ControlMFiles {
 		if strings.TrimSpace(path) == "" {
 			continue
 		}
 
-		jobs, err := parseControlMXML(path)
+		jobs, err := integrations.ParseControlMXML(path)
 		if err != nil {
 			s.logger.Printf("failed to parse control-m xml file %q: %v", path, err)
 			continue
@@ -1072,7 +1516,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			jobID := fmt.Sprintf("control-m:%s", job.JobName)
 			nodes = append(nodes, graph.Node{
 				ID:    jobID,
-				Type:  "control-m-job",
+				Type:  graph.NodeTypeControlMJob,
 				Label: job.JobName,
 				Props: job.Properties(),
 			})
@@ -1081,7 +1525,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 				calendarID := fmt.Sprintf("control-m-calendar:%s", calendar)
 				nodes = append(nodes, graph.Node{
 					ID:    calendarID,
-					Type:  "control-m-calendar",
+					Type:  graph.NodeTypeControlMCalendar,
 					Label: calendar,
 				})
 				edges = append(edges, graph.Edge{
@@ -1095,7 +1539,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 				condID := fmt.Sprintf("control-m-cond:%s", inCond.Name)
 				nodes = append(nodes, graph.Node{
 					ID:    condID,
-					Type:  "control-m-condition",
+					Type:  graph.NodeTypeControlMCondition,
 					Label: inCond.Name,
 					Props: inCond.Properties(),
 				})
@@ -1111,7 +1555,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 				condID := fmt.Sprintf("control-m-cond:%s", outCond.Name)
 				nodes = append(nodes, graph.Node{
 					ID:    condID,
-					Type:  "control-m-condition",
+					Type:  graph.NodeTypeControlMCondition,
 					Label: outCond.Name,
 					Props: outCond.Properties(),
 				})
@@ -1250,7 +1694,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		lineage, err := parseSQL(sql)
+		lineage, err := storage.ParseSQL(sql)
 		if err != nil {
 			s.logger.Printf("failed to parse sql query %q: %v", sql, err)
 			continue
@@ -1352,7 +1796,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 				}
 				nodes = append(nodes, graph.Node{
 					ID:    sourceColumnID,
-					Type:  "column",
+					Type:  graph.NodeTypeColumn,
 					Label: sourceCol,
 					Props: sourceNodeProps,
 				})
@@ -1427,7 +1871,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 
 				nodes = append(nodes, graph.Node{
 					ID:    targetColumnID,
-					Type:  "column",
+					Type:  graph.NodeTypeColumn,
 					Label: targetCol,
 					Props: targetNodeProps,
 				})
@@ -1471,7 +1915,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		embedding, err := generateEmbedding(ctx, sql)
+		embedding, err := embeddings.GenerateEmbedding(ctx, sql)
 		if err != nil {
 			s.logger.Printf("failed to generate embedding for sql query %q: %v", sql, err)
 			continue
@@ -1561,7 +2005,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	normResult := normalizeGraph(normalizationInput{
+	normResult := schema.NormalizeGraph(schema.NormalizationInput{
 		Nodes:               nodes,
 		Edges:               edges,
 		ProjectID:           req.ProjectID,
@@ -1588,7 +2032,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		s.domainDetector.AssociateDomainsWithNodes(nodes)
 
 		// Create node map for edge association
-		nodeMap := make(map[string]*Node)
+		nodeMap := make(map[string]*graph.Node)
 		for i := range nodes {
 			nodeMap[nodes[i].ID] = &nodes[i]
 		}
@@ -1684,9 +2128,9 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	)
 
 	// Take action based on interpretation
-	// Allow bypass for specific projects (e.g., SGMI) that have known data patterns
-	allowBypass := req.ProjectID == "sgmi" || req.ProjectID == "sgmi-full" || 
-	               req.SystemID == "sgmi" || req.SystemID == "sgmi-full"
+	// Allow bypass for projects that have known data patterns (configurable via project config)
+	// Removed hard-coded SGMI check - now configurable per project
+	allowBypass := false // Can be set via project config in the future
 	
 	if interpretation.ShouldReject && !allowBypass {
 		s.logger.Printf("ERROR: Rejecting graph processing due to critical data quality issues (quality=%s, score=%.2f)",
@@ -1750,7 +2194,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	// Improvement 3: Add automatic consistency validation
 	if projectID := req.ProjectID; projectID != "" {
 		consistencyStart := time.Now()
-		consistencyResult := ValidateConsistency(ctx, projectID, s.logger)
+		consistencyResult := schema.ValidateConsistency(ctx, projectID, s.logger)
 		consistencyDuration := time.Since(consistencyStart)
 
 		// Record consistency metrics
@@ -1783,12 +2227,10 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 
 		if s.catalog != nil {
 			catalogEntry := petriNetConverter.ExportPetriNetToCatalog(petriNet)
-			s.catalog.mu.Lock()
 			if s.catalog.PetriNets == nil {
 				s.catalog.PetriNets = make(map[string]any)
 			}
 			s.catalog.PetriNets[petriNet.ID] = catalogEntry
-			s.catalog.mu.Unlock()
 
 			// Save catalog to persist Petri net
 			if err := s.catalog.Save(); err != nil {
@@ -1802,18 +2244,18 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	// Register extracted data elements in catalog service
 	if s.catalogClient != nil && len(nodes) > 0 {
 		// Convert nodes to data elements and register in bulk
-		dataElements := make([]DataElementRequest, 0, len(nodes))
+		dataElements := make([]clients.DataElementRequest, 0, len(nodes))
 		for _, node := range nodes {
 			// Only register meaningful nodes (skip root, project, system nodes)
 			if node.Type == "root" || node.Type == "project" || node.Type == "system" || node.Type == "information-system" {
 				continue
 			}
 			// Use AI enrichment if enabled, otherwise use basic conversion
-			var element DataElementRequest
+			var element clients.DataElementRequest
 			if s.catalogClient != nil {
 				element = s.catalogClient.ConvertNodeToDataElementWithAI(ctx, node, req.ProjectID, req.SystemID)
 			} else {
-				element = ConvertNodeToDataElement(node, req.ProjectID, req.SystemID)
+				element = clients.ConvertNodeToDataElement(node, req.ProjectID, req.SystemID)
 			}
 			dataElements = append(dataElements, element)
 		}
@@ -1832,13 +2274,81 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// AI Enhancement (optional, non-blocking)
+	aiEnabled := req.AIEnabled
+	if !aiEnabled {
+		// Check environment variable as fallback
+		aiEnabled = strings.ToLower(os.Getenv("AI_ENABLED")) == "true"
+	}
+	
+	if aiEnabled && len(nodes) > 0 {
+		localAIURL := os.Getenv("LOCALAI_URL")
+		if localAIURL == "" {
+			localAIURL = "http://localai:8080"
+		}
+		
+		aiModel := req.AIModel
+		if aiModel == "" {
+			aiModel = os.Getenv("AI_MODEL")
+			if aiModel == "" {
+				aiModel = "auto"
+			}
+		}
+		
+		cwmClient := ai.NewCWMClient(localAIURL)
+		
+		// Enhance nodes with semantic analysis (non-blocking, log errors)
+		go func() {
+			enhancedCount := 0
+			for i := range nodes {
+				// Only enhance code-related nodes
+				if nodes[i].Type == graph.NodeTypeTable || 
+				   nodes[i].Type == graph.NodeTypeView ||
+				   nodes[i].Type == graph.NodeTypeFunction ||
+				   nodes[i].Type == "Repository" {
+					
+					// Extract code content if available
+					codeContent := ""
+					if content, ok := nodes[i].Props["content"].(string); ok {
+						codeContent = content
+					} else if sql, ok := nodes[i].Props["sql_query"].(string); ok {
+						codeContent = sql
+					}
+					
+					if codeContent != "" {
+						codeType := "SQL"
+						if nodes[i].Type == "Repository" {
+							codeType = "Repository"
+						}
+						
+						analysis, err := cwmClient.AnalyzeCodeSemantics(context.Background(), codeContent, codeType)
+						if err == nil && analysis != nil {
+							// Add semantic metadata to node properties
+							if nodes[i].Props == nil {
+								nodes[i].Props = make(map[string]interface{})
+							}
+							nodes[i].Props["ai_intent"] = analysis.Intent
+							nodes[i].Props["ai_transformations"] = analysis.Transformations
+							nodes[i].Props["ai_dependencies"] = analysis.Dependencies
+							enhancedCount++
+						}
+					}
+				}
+			}
+			
+			if enhancedCount > 0 {
+				s.logger.Printf("AI enhancement: enhanced %d nodes with semantic analysis", enhancedCount)
+			}
+		}()
+	}
+
 	// Save graph to persistence layers (Neo4j, Glean, etc.)
 	// Information theory metrics are included:
 	// 1. In root node properties (accessible in Neo4j queries)
 	// 2. In Glean export manifest (via glean_persistence.go)
 	if s.graphPersistence != nil {
 		// Improvement 2: Add retry logic for Neo4j operations
-		if err := RetryNeo4jOperation(r.Context(), func() error {
+		if err := utils.RetryNeo4jOperation(ctx, func() error {
 			return s.graphPersistence.SaveGraph(nodes, edges)
 		}, s.logger); err != nil {
 			s.logger.Printf("failed to save graph to Neo4j after retries: %v", err)
@@ -1846,13 +2356,13 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 
 		// Populate execution tracking, data quality, and performance metrics in Neo4j
 		if s.neo4jPersistence != nil {
-			s.populateExecutionTracking(ctx, req, allControlMJobs, nodes, edges)
+			s.populateExecutionTracking(ctx, &req, allControlMJobs, nodes, edges)
 			s.populateDataQualityMetrics(ctx, interpretation, nodes)
-			s.populatePerformanceMetrics(ctx, req, nodes)
+			s.populatePerformanceMetrics(ctx, &req, nodes)
 		}
 
 		// Phase 10: Learn terminology from this extraction run (incremental learning)
-		if terminologyLearner := GetGlobalTerminologyLearner(); terminologyLearner != nil {
+		if terminologyLearner := embeddings.GetGlobalTerminologyLearner(); terminologyLearner != nil {
 			if err := terminologyLearner.LearnFromExtraction(r.Context(), nodes, edges); err != nil {
 				s.logger.Printf("Warning: Failed to learn terminology from extraction: %v", err)
 				// Non-fatal: continue even if terminology learning fails
@@ -1933,7 +2443,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	advancedExtractor := extraction.NewAdvancedExtractor(s.logger)
 
 	// Phase 10: Wire terminology learner to advanced extractor
-	if terminologyLearner := GetGlobalTerminologyLearner(); terminologyLearner != nil {
+	if terminologyLearner := embeddings.GetGlobalTerminologyLearner(); terminologyLearner != nil {
 		advancedExtractor.SetTerminologyLearner(terminologyLearner)
 	}
 
@@ -2057,7 +2567,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	// Phase 3: Uses batch processing and caching for optimization
 	if s.vectorPersistence != nil {
 		// Collect all table nodes for batch processing
-		tableNodes := []graph.graph.Node{}
+		tableNodes := []graph.Node{}
 		for _, node := range nodes {
 			if node.Type == "table" {
 				tableNodes = append(tableNodes, node)
@@ -2128,7 +2638,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Generate embeddings for columns (with batch processing and caching)
-		columnNodes := []graph.graph.Node{}
+		columnNodes := []graph.Node{}
 		for _, node := range nodes {
 			if node.Type == "column" {
 				columnNodes = append(columnNodes, node)
@@ -2218,7 +2728,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 
 		// Generate embeddings for Control-M jobs
 		for _, job := range allControlMJobs {
-			embedding, err := generateJobEmbedding(ctx, job)
+			embedding, err := embeddings.GenerateJobEmbedding(ctx, job)
 			if err != nil {
 				s.logger.Printf("failed to generate embedding for Control-M job %q: %v", job.JobName, err)
 				continue
@@ -2247,7 +2757,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		// Generate embeddings for process sequences
 		if advancedResult != nil {
 			for _, seq := range advancedResult.TableProcessSequences {
-				embedding, err := generateSequenceEmbedding(ctx, seq)
+				embedding, err := embeddings.GenerateSequenceEmbedding(ctx, seq)
 				if err != nil {
 					s.logger.Printf("failed to generate embedding for sequence %q: %v", seq.SequenceID, err)
 					continue
@@ -2279,7 +2789,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		// Generate embeddings for Signavio processes
 		if signavioMetadata.ProcessCount > 0 {
 			for _, proc := range signavioMetadata.Processes {
-				embedding, err := generateSignavioProcessEmbedding(ctx, proc)
+				embedding, err := embeddings.GenerateSignavioProcessEmbedding(ctx, proc)
 				if err != nil {
 					s.logger.Printf("failed to generate embedding for Signavio process %q: %v", proc.Name, err)
 					continue
@@ -2319,7 +2829,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 			}
 			petriNet := petriNetConverter.ConvertControlMToPetriNet(allControlMJobs, sqlQueriesByJob)
 
-			embedding, err := generatePetriNetEmbedding(ctx, petriNet)
+			embedding, err := embeddings.GeneratePetriNetEmbedding(ctx, petriNet)
 			if err != nil {
 				s.logger.Printf("failed to generate embedding for Petri net: %v", err)
 			} else {
@@ -2349,9 +2859,9 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 
 	// DeepAgents analysis (enabled by default, 10/10 integration)
 	// Always attempt analysis if client is enabled (non-fatal if service unavailable)
-	var deepAgentsAnalysis *AnalyzeGraphResponse
-	if s.deepAgentsClient != nil && s.deepAgentsClient.enabled {
-		graphSummary := FormatGraphSummary(nodes, edges, map[string]any{
+	var deepAgentsAnalysis *clients.AnalyzeGraphResponse
+	if s.deepAgentsClient != nil && s.deepAgentsClient.IsEnabled() {
+		graphSummary := clients.FormatGraphSummary(nodes, edges, map[string]any{
 			"score":  interpretation.QualityScore,
 			"level":  interpretation.QualityLevel,
 			"issues": interpretation.Issues,
@@ -2448,7 +2958,7 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 	if s.telemetry != nil {
 		telemetryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		telemetryRecord := telemetryRecord{
+		telemetryRecord := monitoring.TelemetryRecord{
 			LibraryType: "layer4_extract",
 			Operation:   "graph_processing",
 			Input: map[string]any{
@@ -2479,8 +2989,10 @@ func (s *extractServer) handleGraph(w http.ResponseWriter, r *http.Request) {
 		if normResult.Stats != nil {
 			telemetryRecord.Output["normalization_stats"] = normResult.Stats
 		}
-		if err := s.telemetry.Log(telemetryCtx, telemetryRecord); err != nil {
-			s.logger.Printf("telemetry warning: %v", err)
+		if telemetryClient, ok := s.telemetry.(*monitoring.TelemetryClient); ok {
+			if err := telemetryClient.Log(telemetryCtx, telemetryRecord); err != nil {
+				s.logger.Printf("telemetry warning: %v", err)
+			}
 		}
 	}
 
@@ -2505,15 +3017,13 @@ func (s *extractServer) handleAddProject(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var p Project
+	var p catalog.Project
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	s.catalog.mu.Lock()
 	s.catalog.Projects = append(s.catalog.Projects, p)
-	s.catalog.mu.Unlock()
 
 	if err := s.catalog.Save(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -2541,15 +3051,13 @@ func (s *extractServer) handleAddSystem(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var sys System
+	var sys catalog.System
 	if err := json.NewDecoder(r.Body).Decode(&sys); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	s.catalog.mu.Lock()
 	s.catalog.Systems = append(s.catalog.Systems, sys)
-	s.catalog.mu.Unlock()
 
 	if err := s.catalog.Save(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -2637,9 +3145,7 @@ func (s *extractServer) handlePetriNetToLangGraph(w http.ResponseWriter, r *http
 		return
 	}
 
-	s.catalog.mu.RLock()
 	petriNetData, exists := s.catalog.PetriNets[req.PetriNetID]
-	s.catalog.mu.RUnlock()
 
 	if !exists {
 		handlers.WriteJSON(w, http.StatusNotFound, map[string]any{
@@ -2648,14 +3154,14 @@ func (s *extractServer) handlePetriNetToLangGraph(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Convert catalog data to PetriNet struct
+	// Convert catalog data to workflow.PetriNet struct
 	petriNetJSON, err := json.Marshal(petriNetData)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to marshal petri net: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	var petriNet PetriNet
+	var petriNet workflow.PetriNet
 	if err := json.Unmarshal(petriNetJSON, &petriNet); err != nil {
 		http.Error(w, fmt.Sprintf("failed to unmarshal petri net: %v", err), http.StatusInternalServerError)
 		return
@@ -2698,9 +3204,7 @@ func (s *extractServer) handlePetriNetToAgentFlow(w http.ResponseWriter, r *http
 		return
 	}
 
-	s.catalog.mu.RLock()
 	petriNetData, exists := s.catalog.PetriNets[req.PetriNetID]
-	s.catalog.mu.RUnlock()
 
 	if !exists {
 		handlers.WriteJSON(w, http.StatusNotFound, map[string]any{
@@ -2709,14 +3213,14 @@ func (s *extractServer) handlePetriNetToAgentFlow(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Convert catalog data to PetriNet struct
+	// Convert catalog data to workflow.PetriNet struct
 	petriNetJSON, err := json.Marshal(petriNetData)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to marshal petri net: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	var petriNet PetriNet
+	var petriNet workflow.PetriNet
 	if err := json.Unmarshal(petriNetJSON, &petriNet); err != nil {
 		http.Error(w, fmt.Sprintf("failed to unmarshal petri net: %v", err), http.StatusInternalServerError)
 		return
@@ -2745,7 +3249,7 @@ func (s *extractServer) handleAgentFlowRun(w http.ResponseWriter, r *http.Reques
 	}
 	defer r.Body.Close()
 
-	var req AgentFlowRunRequest
+	var req clients.AgentFlowRunRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("failed to decode request: %v", err), http.StatusBadRequest)
 		return
@@ -2791,9 +3295,7 @@ func (s *extractServer) handlePetriNetToAdvancedLangGraph(w http.ResponseWriter,
 		return
 	}
 
-	s.catalog.mu.RLock()
 	petriNetData, exists := s.catalog.PetriNets[req.PetriNetID]
-	s.catalog.mu.RUnlock()
 
 	if !exists {
 		handlers.WriteJSON(w, http.StatusNotFound, map[string]any{
@@ -2802,14 +3304,14 @@ func (s *extractServer) handlePetriNetToAdvancedLangGraph(w http.ResponseWriter,
 		return
 	}
 
-	// Convert catalog data to PetriNet struct
+	// Convert catalog data to workflow.PetriNet struct
 	petriNetJSON, err := json.Marshal(petriNetData)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to marshal petri net: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	var petriNet PetriNet
+	var petriNet workflow.PetriNet
 	if err := json.Unmarshal(petriNetJSON, &petriNet); err != nil {
 		http.Error(w, fmt.Sprintf("failed to unmarshal petri net: %v", err), http.StatusInternalServerError)
 		return
@@ -2923,7 +3425,7 @@ func (s *extractServer) handleVectorSearch(w http.ResponseWriter, r *http.Reques
 		// Generate appropriate embedding based on query type
 		if useSemantic && os.Getenv("USE_SAP_RPT_EMBEDDINGS") == "true" {
 			// Generate semantic embedding using sap-rpt-1-oss
-			semanticQueryVector, err = generateSemanticEmbedding(ctx, request.Query)
+			semanticQueryVector, err = embeddings.GenerateSemanticEmbedding(ctx, request.Query)
 			if err != nil {
 				s.logger.Printf("semantic embedding generation failed, falling back to relational: %v", err)
 				// Fallback to relational embedding
@@ -2953,14 +3455,14 @@ func (s *extractServer) handleVectorSearch(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Perform search with hybrid capability
-	var results []VectorSearchResult
+	var results []persistence.VectorSearchResult
 	var err error
 
 	// For hybrid search, we need both embeddings
 	if request.UseHybridSearch && os.Getenv("USE_SAP_RPT_EMBEDDINGS") == "true" {
 		// Generate both embeddings if not already done
 		if len(semanticQueryVector) == 0 && request.Query != "" {
-			semanticQueryVector, _ = generateSemanticEmbedding(ctx, request.Query)
+			semanticQueryVector, _ = embeddings.GenerateSemanticEmbedding(ctx, request.Query)
 		}
 		// Generate relational embedding if needed
 		if len(queryVector) == 0 && request.Query != "" {
@@ -3009,13 +3511,13 @@ func (s *extractServer) handleVectorSearch(w http.ResponseWriter, r *http.Reques
 func (s *extractServer) generateQueryEmbedding(ctx context.Context, query, artifactType string) ([]float32, error) {
 	switch artifactType {
 	case "sql-query":
-		return generateSQLEmbedding(ctx, query)
+		return embeddings.GenerateEmbedding(ctx, query)
 	case "table":
-		node := graph.Node{Label: query, Type: "table"}
-		relational, _, err := generateTableEmbedding(ctx, node)
+		node := graph.Node{Label: query, Type: graph.NodeTypeTable}
+		relational, _, err := embeddings.GenerateTableEmbedding(ctx, node)
 		return relational, err
 	default:
-		return generateSQLEmbedding(ctx, query)
+		return embeddings.GenerateEmbedding(ctx, query)
 	}
 }
 
@@ -3092,19 +3594,19 @@ func (s *extractServer) getEmbeddingType(relationalVector, semanticVector []floa
 }
 
 // performHybridSearch searches both relational and semantic embeddings and fuses results
-func (s *extractServer) performHybridSearch(ctx context.Context, relationalVector, semanticVector []float32, queryText, artifactType string, limit int, threshold float32) ([]VectorSearchResult, error) {
+func (s *extractServer) performHybridSearch(ctx context.Context, relationalVector, semanticVector []float32, queryText, artifactType string, limit int, threshold float32) ([]persistence.VectorSearchResult, error) {
 	// Search relational embeddings
 	relationalResults, err1 := s.searchRelationalEmbeddings(relationalVector, artifactType, limit, threshold)
 	if err1 != nil {
 		s.logger.Printf("relational search failed: %v", err1)
-		relationalResults = []VectorSearchResult{}
+		relationalResults = []persistence.VectorSearchResult{}
 	}
 
 	// Search semantic embeddings
 	semanticResults, err2 := s.searchSemanticEmbeddings(semanticVector, artifactType, limit, threshold)
 	if err2 != nil {
 		s.logger.Printf("semantic search failed: %v", err2)
-		semanticResults = []VectorSearchResult{}
+		semanticResults = []persistence.VectorSearchResult{}
 	}
 
 	// Fuse results intelligently
@@ -3114,7 +3616,7 @@ func (s *extractServer) performHybridSearch(ctx context.Context, relationalVecto
 }
 
 // searchRelationalEmbeddings searches relational embeddings
-func (s *extractServer) searchRelationalEmbeddings(queryVector []float32, artifactType string, limit int, threshold float32) ([]VectorSearchResult, error) {
+func (s *extractServer) searchRelationalEmbeddings(queryVector []float32, artifactType string, limit int, threshold float32) ([]persistence.VectorSearchResult, error) {
 	// Search for embeddings with embedding_type = "relational_transformer"
 	// We need to search all embeddings and filter by type
 	results, err := s.vectorPersistence.SearchSimilar(queryVector, artifactType, limit*2, threshold)
@@ -3123,7 +3625,7 @@ func (s *extractServer) searchRelationalEmbeddings(queryVector []float32, artifa
 	}
 
 	// Filter for relational embeddings
-	relationalResults := []VectorSearchResult{}
+	relationalResults := []persistence.VectorSearchResult{}
 	for _, result := range results {
 		if result.Metadata != nil {
 			if embeddingType, ok := result.Metadata["embedding_type"].(string); ok {
@@ -3146,7 +3648,7 @@ func (s *extractServer) searchRelationalEmbeddings(queryVector []float32, artifa
 }
 
 // searchSemanticEmbeddings searches semantic embeddings
-func (s *extractServer) searchSemanticEmbeddings(queryVector []float32, artifactType string, limit int, threshold float32) ([]VectorSearchResult, error) {
+func (s *extractServer) searchSemanticEmbeddings(queryVector []float32, artifactType string, limit int, threshold float32) ([]persistence.VectorSearchResult, error) {
 	// Search for embeddings with embedding_type = "sap_rpt_semantic"
 	// We need to search all embeddings and filter by type
 	results, err := s.vectorPersistence.SearchSimilar(queryVector, artifactType, limit*2, threshold)
@@ -3155,7 +3657,7 @@ func (s *extractServer) searchSemanticEmbeddings(queryVector []float32, artifact
 	}
 
 	// Filter for semantic embeddings
-	semanticResults := []VectorSearchResult{}
+	semanticResults := []persistence.VectorSearchResult{}
 	for _, result := range results {
 		if result.Metadata != nil {
 			if embeddingType, ok := result.Metadata["embedding_type"].(string); ok {
@@ -3175,9 +3677,9 @@ func (s *extractServer) searchSemanticEmbeddings(queryVector []float32, artifact
 }
 
 // fuseSearchResults intelligently fuses results from both embedding types
-func (s *extractServer) fuseSearchResults(relationalResults, semanticResults []VectorSearchResult, limit int) []VectorSearchResult {
+func (s *extractServer) fuseSearchResults(relationalResults, semanticResults []persistence.VectorSearchResult, limit int) []persistence.VectorSearchResult {
 	// Create a map to deduplicate by artifact_id
-	resultMap := make(map[string]VectorSearchResult)
+	resultMap := make(map[string]persistence.VectorSearchResult)
 	scoreMap := make(map[string]float32)
 
 	// Process relational results
@@ -3234,7 +3736,7 @@ func (s *extractServer) fuseSearchResults(relationalResults, semanticResults []V
 	}
 
 	// Convert map to slice and sort by score
-	fusedResults := make([]VectorSearchResult, 0, len(resultMap))
+	fusedResults := make([]persistence.VectorSearchResult, 0, len(resultMap))
 	for _, result := range resultMap {
 		result.Score = scoreMap[result.ArtifactID]
 		fusedResults = append(fusedResults, result)
@@ -3291,18 +3793,18 @@ func (s *extractServer) handleGenerateEmbedding(w http.ResponseWriter, r *http.R
 
 	switch artifactType {
 	case "sql-query":
-		embedding, err = generateSQLEmbedding(ctx, request.Text)
+		embedding, err = embeddings.GenerateEmbedding(ctx, request.Text)
 	case "table":
-		node := graph.Node{Label: request.Text, Type: "table"}
+		node := graph.Node{Label: request.Text, Type: graph.NodeTypeTable}
 		var relational []float32
-		relational, _, err = generateTableEmbedding(ctx, node)
+		relational, _, err = embeddings.GenerateTableEmbedding(ctx, node)
 		embedding = relational
 	case "column":
-		node := graph.Node{Label: request.Text, Type: "column"}
-		embedding, err = generateColumnEmbedding(ctx, node)
+		node := graph.Node{Label: request.Text, Type: graph.NodeTypeColumn}
+		embedding, err = embeddings.GenerateColumnEmbedding(ctx, node)
 	default:
 		// Default to SQL embedding
-		embedding, err = generateSQLEmbedding(ctx, request.Text)
+		embedding, err = embeddings.GenerateEmbedding(ctx, request.Text)
 	}
 
 	if err != nil {
@@ -3499,7 +4001,7 @@ func (s *extractServer) handleOCR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var ocrResult *OCRResult
+	var ocrResult *extraction.OCRResult
 	var err error
 
 	if request.ImageBase64 != "" {
@@ -3679,15 +4181,13 @@ func (s *extractServer) handleAddInformationSystem(w http.ResponseWriter, r *htt
 		return
 	}
 
-	var is InformationSystem
+	var is catalog.InformationSystem
 	if err := json.NewDecoder(r.Body).Decode(&is); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	s.catalog.mu.Lock()
-	s.catalog.InformationSystems = append(s.catalog.InformationSystems, is)
-	s.catalog.mu.Unlock()
+		s.catalog.InformationSystems = append(s.catalog.InformationSystems, is)
 
 	if err := s.catalog.Save(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -3737,7 +4237,7 @@ func (s *extractServer) extractSchemaFromJSON(path string) ([]graph.Node, []grap
 	tableID := filepath.Base(path)
 	tableNode := graph.Node{
 		ID:    tableID,
-		Type:  "table",
+		Type:  graph.NodeTypeTable,
 		Label: tableID,
 	}
 	nodes = append(nodes, tableNode)
@@ -3747,7 +4247,7 @@ func (s *extractServer) extractSchemaFromJSON(path string) ([]graph.Node, []grap
 		columnID := fmt.Sprintf("%s.%s", tableID, key)
 		columnNode := graph.Node{
 			ID:    columnID,
-			Type:  "column",
+			Type:  graph.NodeTypeColumn,
 			Label: key,
 			Props: profile.toProps(),
 		}
@@ -3837,7 +4337,7 @@ func (p *columnProfile) toProps() map[string]any {
 		props["examples"] = p.examples
 	}
 
-	return mapOrNil(props)
+	return storage.MapOrNil(props)
 }
 
 func inferJSONType(value any) string {
@@ -3998,23 +4498,59 @@ type extractResponse struct {
 	Extractions []extractionResult  `json:"extractions"`
 }
 
-func (s *extractServer) buildLangextractPayload(req extractRequest) (*langextractPayload, error) {
+func (s *extractServer) buildLangextractPayload(ctx context.Context, req extractRequest) (*langextractPayload, []llms.Token, error) {
 	var textOrDocs any
 	if len(req.TextOrDocumentsRaw) > 0 {
 		if err := json.Unmarshal(req.TextOrDocumentsRaw, &textOrDocs); err != nil {
-			return nil, fmt.Errorf("text_or_documents: %w", err)
+			return nil, nil, fmt.Errorf("text_or_documents: %w", err)
 		}
 	} else if len(req.Documents) > 0 {
 		textOrDocs = req.Documents
 	} else if strings.TrimSpace(req.Document) != "" {
 		textOrDocs = req.Document
 	} else {
-		return nil, errors.New("document content is required")
+		return nil, nil, errors.New("document content is required")
 	}
 
-	prompt := strings.TrimSpace(req.PromptDescription)
-	if prompt == "" {
-		prompt = defaultPromptDescription
+	// Build token-aware prompt using TOON
+	promptTemplate := strings.TrimSpace(req.PromptDescription)
+	if promptTemplate == "" {
+		promptTemplate = defaultPromptDescription
+	}
+
+	// Create a prompt template with variables
+	// Extract variables from prompt if it contains template syntax
+	var promptTokens []llms.Token
+	var prompt string
+	
+	// Check if prompt contains template variables (e.g., {{.variable}})
+	if strings.Contains(promptTemplate, "{{") {
+		// Parse template variables
+		pt := prompts.NewPromptTemplate(promptTemplate, []string{})
+		promptValue, err := pt.FormatPrompt(map[string]any{})
+		if err == nil {
+			if tokenAware, ok := promptValue.(llms.TokenAwarePromptValue); ok {
+				promptTokens = tokenAware.Tokens()
+				prompt = promptValue.String()
+			} else {
+				prompt = promptValue.String()
+			}
+		} else {
+			// Fallback to plain string
+			prompt = promptTemplate
+		}
+	} else {
+		// Plain string prompt - create simple token structure
+		prompt = promptTemplate
+		promptTokens = []llms.Token{
+			{
+				Type:  "text",
+				Value: prompt,
+				Metadata: map[string]string{
+					"length": strconv.Itoa(len(prompt)),
+				},
+			},
+		}
 	}
 
 	modelID := strings.TrimSpace(req.ModelID)
@@ -4033,7 +4569,7 @@ func (s *extractServer) buildLangextractPayload(req extractRequest) (*langextrac
 		ModelID:         modelID,
 		Examples:        req.Examples,
 		APIKey:          apiKey,
-	}, nil
+	}, promptTokens, nil
 }
 
 func (s *extractServer) invokeLangextract(ctx context.Context, payload *langextractPayload) (*langextractResponse, error) {
@@ -4067,6 +4603,147 @@ func (s *extractServer) invokeLangextract(ctx context.Context, payload *langextr
 	return &langResp, nil
 }
 
+type extractError struct {
+	err    error
+	status int
+}
+
+func (e *extractError) Error() string {
+	if e.err != nil {
+		return e.err.Error()
+	}
+	return "extract error"
+}
+
+func (s *extractServer) runExtract(ctx context.Context, req extractRequest) (extractResponse, error) {
+	payload, promptTokens, err := s.buildLangextractPayload(ctx, req)
+	if err != nil {
+		return extractResponse{}, &extractError{err: err, status: http.StatusBadRequest}
+	}
+
+	// Log prompt tokens to telemetry if enabled (graceful - doesn't fail if telemetry unavailable)
+	if s.telemetry != nil && len(promptTokens) > 0 {
+		// Use type assertion with recovery to handle telemetry client gracefully
+		if telemetryClient, ok := s.telemetry.(*monitoring.TelemetryClient); ok && telemetryClient != nil {
+			promptID := monitoring.PromptID(req.PromptDescription, map[string]any{
+				"model_id": payload.ModelID,
+			})
+			templateType := "template"
+			if !strings.Contains(req.PromptDescription, "{{") {
+				templateType = "text"
+			}
+			variableCount := 0
+			if strings.Contains(req.PromptDescription, "{{") {
+				// Count variables in template
+				variableCount = strings.Count(req.PromptDescription, "{{")
+			}
+			
+			// Log asynchronously to avoid blocking extraction
+			go func() {
+				defer func() {
+					if r := recover(); r != nil {
+						s.logger.Printf("telemetry token logging recovered from panic: %v", r)
+					}
+				}()
+				telemetryCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+				defer cancel()
+				if err := telemetryClient.LogPromptTokens(telemetryCtx, promptID, templateType, promptTokens, variableCount); err != nil {
+					s.logger.Printf("failed to log prompt tokens (non-fatal): %v", err)
+				}
+			}()
+		}
+	}
+
+	langResp, err := s.invokeLangextract(ctx, payload)
+	if err != nil {
+		return extractResponse{}, &extractError{err: err, status: http.StatusInternalServerError}
+	}
+
+	if langResp.Error != "" {
+		return extractResponse{}, &extractError{err: errors.New(langResp.Error), status: http.StatusInternalServerError}
+	}
+
+	entities := groupExtractions(langResp.Extractions)
+	response := extractResponse{
+		Entities:    entities,
+		Extractions: langResp.Extractions,
+	}
+
+	return response, nil
+}
+
+func telemetryInputFromRequest(req extractRequest) map[string]any {
+	summary := map[string]any{
+		"prompt_description": strings.TrimSpace(req.PromptDescription),
+		"model_id":           strings.TrimSpace(req.ModelID),
+		"documents_count":    len(req.Documents),
+		"examples_count":     len(req.Examples),
+	}
+
+	if doc := strings.TrimSpace(req.Document); doc != "" {
+		if len(doc) > documentPreviewLength {
+			doc = doc[:documentPreviewLength]
+		}
+		summary["document_preview"] = doc
+	}
+
+	return summary
+}
+
+func telemetryOutputFromResponse(resp *extractResponse) map[string]any {
+	if resp == nil {
+		return map[string]any{}
+	}
+
+	entityKeys := make([]string, 0, len(resp.Entities))
+	for key := range resp.Entities {
+		entityKeys = append(entityKeys, key)
+	}
+
+	return map[string]any{
+		"extraction_count": len(resp.Extractions),
+		"entity_keys":      entityKeys,
+	}
+}
+
+type markitdownClientAdapter struct {
+	client *clients.MarkItDownClient
+}
+
+func (a *markitdownClientAdapter) ConvertFile(ctx context.Context, filePath string) (*integrations.MarkItDownResponse, error) {
+	resp, err := a.client.ConvertFile(ctx, filePath)
+	if err != nil {
+		return nil, err
+	}
+	return &integrations.MarkItDownResponse{
+		TextContent: resp.TextContent,
+		Metadata:    resp.Metadata,
+		Format:      resp.Format,
+		Error:       resp.Error,
+	}, nil
+}
+
+func (a *markitdownClientAdapter) ConvertBytes(ctx context.Context, fileData []byte, fileExtension string) (*integrations.MarkItDownResponse, error) {
+	resp, err := a.client.ConvertBytes(ctx, fileData, fileExtension)
+	if err != nil {
+		return nil, err
+	}
+	return &integrations.MarkItDownResponse{
+		TextContent: resp.TextContent,
+		Metadata:    resp.Metadata,
+		Format:      resp.Format,
+		Error:       resp.Error,
+	}, nil
+}
+
+func (a *markitdownClientAdapter) IsFormatSupported(fileExtension string) bool {
+	return a.client.IsFormatSupported(fileExtension)
+}
+
+func (a *markitdownClientAdapter) HealthCheck(ctx context.Context) (bool, error) {
+	return a.client.HealthCheck(ctx)
+}
+
 func groupExtractions(extractions []extractionResult) map[string][]string {
 	grouped := map[string][]string{}
 	for _, ext := range extractions {
@@ -4075,7 +4752,7 @@ func groupExtractions(extractions []extractionResult) map[string][]string {
 		if class == "" || text == "" {
 			continue
 		}
-		if !containsString(grouped[class], text) {
+		if !utils.ContainsString(grouped[class], text) {
 			grouped[class] = append(grouped[class], text)
 		}
 	}
@@ -4388,8 +5065,8 @@ func (s *extractServer) generateDocumentExtract(ctx context.Context, input docum
 				}
 				continue
 			}
-			// MarkItDown failed, fallback to OCR if enabled
-			if s.markitdownIntegration.fallbackToOCR && s.logger != nil {
+			// MarkItDown failed, fallback to OCR if enabled (handled internally by markitdownIntegration)
+			if s.logger != nil {
 				s.logger.Printf("MarkItDown conversion failed for %s, falling back to OCR", absInput)
 			}
 		}
@@ -4586,7 +5263,7 @@ func (s *extractServer) handleSAPBDCExtract(w http.ResponseWriter, r *http.Reque
 		}
 
 		// Phase 10: Learn terminology from this extraction run
-		if terminologyLearner := GetGlobalTerminologyLearner(); terminologyLearner != nil {
+		if terminologyLearner := embeddings.GetGlobalTerminologyLearner(); terminologyLearner != nil {
 			if err := terminologyLearner.LearnFromExtraction(r.Context(), nodes, edges); err != nil {
 				s.logger.Printf("Warning: Failed to learn terminology from SAP BDC extraction: %v", err)
 			}
@@ -4598,7 +5275,7 @@ func (s *extractServer) handleSAPBDCExtract(w http.ResponseWriter, r *http.Reque
 		ctx := r.Context()
 		for _, node := range nodes {
 			if node.Type == "table" {
-				relationalEmbedding, semanticEmbedding, err := generateTableEmbedding(ctx, node)
+				relationalEmbedding, semanticEmbedding, err := embeddings.GenerateTableEmbedding(ctx, node)
 				if err == nil {
 					metadata := map[string]any{
 						"artifact_type":  "table",
@@ -4654,7 +5331,7 @@ func (s *extractServer) handleTerminologyDomains(w http.ResponseWriter, r *http.
 		return
 	}
 
-	learner := GetGlobalTerminologyLearner()
+	learner := embeddings.GetGlobalTerminologyLearner()
 	if learner == nil {
 		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "terminology learner unavailable"})
 		return
@@ -4675,7 +5352,7 @@ func (s *extractServer) handleTerminologyRoles(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	learner := GetGlobalTerminologyLearner()
+	learner := embeddings.GetGlobalTerminologyLearner()
 	if learner == nil {
 		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "terminology learner unavailable"})
 		return
@@ -4696,7 +5373,7 @@ func (s *extractServer) handleTerminologyPatterns(w http.ResponseWriter, r *http
 		return
 	}
 
-	learner := GetGlobalTerminologyLearner()
+	learner := embeddings.GetGlobalTerminologyLearner()
 	if learner == nil {
 		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "terminology learner unavailable"})
 		return
@@ -4717,7 +5394,7 @@ func (s *extractServer) handleTerminologyLearn(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	learner := GetGlobalTerminologyLearner()
+	learner := embeddings.GetGlobalTerminologyLearner()
 	if learner == nil {
 		handlers.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "terminology learner unavailable"})
 		return
@@ -4831,7 +5508,7 @@ func (s *extractServer) handleAnalyzeDataLineage(w http.ResponseWriter, r *http.
 }
 
 // populateExecutionTracking creates Execution nodes for Control-M jobs and SQL queries
-func (s *extractServer) populateExecutionTracking(ctx context.Context, req *ExtractRequest, allControlMJobs []ControlMJob, nodes []graph.Node, edges []graph.Edge) {
+func (s *extractServer) populateExecutionTracking(ctx context.Context, req *graphRequest, allControlMJobs []integrations.ControlMJob, nodes []graph.Node, edges []graph.Edge) {
 	if s.neo4jPersistence == nil {
 		return
 	}
@@ -5008,7 +5685,7 @@ func (s *extractServer) populateDataQualityMetrics(ctx context.Context, interpre
 }
 
 // populatePerformanceMetrics creates PerformanceMetric nodes for query and batch processing performance
-func (s *extractServer) populatePerformanceMetrics(ctx context.Context, req *ExtractRequest, nodes []graph.Node) {
+func (s *extractServer) populatePerformanceMetrics(ctx context.Context, req *graphRequest, nodes []graph.Node) {
 	if s.neo4jPersistence == nil || s.metricsCollector == nil {
 		return
 	}
@@ -5153,20 +5830,14 @@ func (s *extractServer) handleExplorerCommand(command string) {
 		fmt.Println("  isystems - list all information systems")
 		fmt.Println("  exit - exit the explorer")
 	case "projects":
-		s.catalog.mu.RLock()
-		defer s.catalog.mu.RUnlock()
 		for _, p := range s.catalog.Projects {
 			fmt.Printf("- %s (%s)\n", p.Name, p.ID)
 		}
 	case "systems":
-		s.catalog.mu.RLock()
-		defer s.catalog.mu.RUnlock()
 		for _, sys := range s.catalog.Systems {
 			fmt.Printf("- %s (%s)\n", sys.Name, sys.ID)
 		}
 	case "isystems":
-		s.catalog.mu.RLock()
-		defer s.catalog.mu.RUnlock()
 		for _, is := range s.catalog.InformationSystems {
 			fmt.Printf("- %s (%s)\n", is.Name, is.ID)
 		}

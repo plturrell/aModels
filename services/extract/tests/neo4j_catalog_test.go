@@ -2,6 +2,8 @@ package main
 
 import (
 	"testing"
+
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 )
 
 func TestGenerateResourceURI(t *testing.T) {
@@ -58,37 +60,37 @@ func TestShouldCreateResourceNode(t *testing.T) {
 	}{
 		{
 			name:     "column node should create resource",
-			nodeType: "column",
+			nodeType: graph.NodeTypeColumn,
 			expected: true,
 		},
 		{
 			name:     "table node should create resource",
-			nodeType: "table",
+			nodeType: graph.NodeTypeTable,
 			expected: true,
 		},
 		{
 			name:     "root node should not create resource",
-			nodeType: "root",
+			nodeType: graph.NodeTypeRoot,
 			expected: false,
 		},
 		{
 			name:     "project node should not create resource",
-			nodeType: "project",
+			nodeType: graph.NodeTypeProject,
 			expected: false,
 		},
 		{
 			name:     "system node should not create resource",
-			nodeType: "system",
+			nodeType: graph.NodeTypeSystem,
 			expected: false,
 		},
 		{
 			name:     "information-system node should not create resource",
-			nodeType: "information-system",
+			nodeType: graph.NodeTypeInformationSystem,
 			expected: false,
 		},
 		{
 			name:     "unknown node type should create resource",
-			nodeType: "unknown",
+			nodeType: graph.NodeTypeUnknown,
 			expected: true,
 		},
 	}

@@ -17,7 +17,7 @@ import CloudIcon from '@mui/icons-material/Cloud';
 import StorageIcon from '@mui/icons-material/Storage';
 import SchemaIcon from '@mui/icons-material/Schema';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
-import { Panel } from '../../components/Panel';
+import { Panel } from '../../components/common/Panel';
 import { ConnectionConfigView } from './views/ConnectionConfigView';
 import { DataProductsView } from './views/DataProductsView';
 import { SchemaExtractionView } from './views/SchemaExtractionView';

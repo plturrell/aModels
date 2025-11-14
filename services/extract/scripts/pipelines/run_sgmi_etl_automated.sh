@@ -139,6 +139,22 @@ build_payload() {
     local view_tmp_dir=$(mktemp -d)
     mkdir -p "${default_view_store}"
     
+    # Try using generalized pipeline if config exists, otherwise fall back to SGMI-specific
+    local config_file="${SCRIPT_DIR}/sgmi-config.yaml"
+    if [[ -f "${config_file}" ]] && [[ -f "${SCRIPT_DIR}/code_view_builder.py" ]]; then
+        log "Using generalized pipeline with config: ${config_file}"
+        # Expand environment variables in config paths
+        export SGMI_DATA_ROOT="${SGMI_DATA_ROOT:-${REPO_ROOT}/services/extract/data}"
+        if python3 "${SCRIPT_DIR}/code_view_builder.py" "${tmp_payload}" "${config_file}" 2>&1 | tee /tmp/python_output.log; then
+            log "Payload built successfully using generalized pipeline"
+            echo "${tmp_payload}"
+            return 0
+        else
+            warn "Generalized pipeline failed, falling back to SGMI-specific builder"
+        fi
+    fi
+    
+    # Fallback to SGMI-specific builder
     # Set environment variables for sgmi_view_builder.py
     export SGMI_JSON_FILES="${DATA_ROOT}/json_with_changes.json"
     export SGMI_DDL_FILES="${DATA_ROOT}/hive-ddl/sgmisit_all_tables_statement.hql:${DATA_ROOT}/hive-ddl/sgmisitetl_all_tables_statement.hql:${DATA_ROOT}/hive-ddl/sgmisitstg_all_tables_statement.hql:${DATA_ROOT}/hive-ddl/sgmisit_view.hql"

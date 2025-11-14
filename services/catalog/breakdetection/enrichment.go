@@ -2,7 +2,6 @@ package breakdetection
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -79,9 +78,9 @@ func (es *EnrichmentService) EnrichBreakContext(ctx context.Context, breakRecord
 func (es *EnrichmentService) buildEnrichmentQuery(breakRecord *Break) string {
 	var queryBuilder strings.Builder
 
-	queryBuilder.WriteString(fmt.Sprintf("Provide semantic context and enrichment for a %s break in %s system.\n\n", 
+	queryBuilder.WriteString(fmt.Sprintf("Provide semantic context and enrichment for a %s break in %s system.\n\n",
 		breakRecord.BreakType, breakRecord.SystemName))
-	
+
 	queryBuilder.WriteString("Break Details:\n")
 	queryBuilder.WriteString(fmt.Sprintf("- Break Type: %s\n", breakRecord.BreakType))
 	queryBuilder.WriteString(fmt.Sprintf("- System: %s\n", breakRecord.SystemName))
@@ -119,7 +118,7 @@ func (es *EnrichmentService) extractEnrichmentFromReport(report *research.Resear
 
 	// Organize sections by topic
 	categories := make(map[string][]map[string]interface{})
-	
+
 	for _, section := range report.Report.Sections {
 		sectionMap := map[string]interface{}{
 			"title":   section.Title,
@@ -145,7 +144,7 @@ func (es *EnrichmentService) extractEnrichmentFromReport(report *research.Resear
 	enrichment["regulatory_implications"] = es.extractFieldFromSections(report.Report.Sections, "regulatory", "compliance")
 	enrichment["impact_assessment"] = es.extractFieldFromSections(report.Report.Sections, "impact", "effect")
 	enrichment["historical_context"] = es.extractFieldFromSections(report.Report.Sections, "historical", "pattern")
-	
+
 	// Add metadata
 	if report.Metadata != nil {
 		enrichment["metadata"] = report.Metadata
@@ -162,7 +161,7 @@ func (es *EnrichmentService) extractEnrichmentFromReport(report *research.Resear
 // categorizeSection categorizes a section based on its title
 func (es *EnrichmentService) categorizeSection(title string) string {
 	titleLower := strings.ToLower(title)
-	
+
 	switch {
 	case strings.Contains(titleLower, "business"):
 		return "business_context"
@@ -188,22 +187,22 @@ func (es *EnrichmentService) extractFieldFromSections(sections []research.Report
 	for _, section := range sections {
 		titleLower := strings.ToLower(section.Title)
 		contentLower := strings.ToLower(section.Content)
-		
+
 		// Check if section matches keywords
 		matches := true
 		for _, keyword := range keywords {
-			if !strings.Contains(titleLower, strings.ToLower(keyword)) && 
-			   !strings.Contains(contentLower, strings.ToLower(keyword)) {
+			if !strings.Contains(titleLower, strings.ToLower(keyword)) &&
+				!strings.Contains(contentLower, strings.ToLower(keyword)) {
 				matches = false
 				break
 			}
 		}
-		
+
 		if matches {
 			return section.Content
 		}
 	}
-	
+
 	return ""
 }
 
@@ -300,7 +299,7 @@ Provide:
 
 	// Extract lineage enrichment
 	lineageEnrichment := map[string]interface{}{
-		"summary": report.Report.Summary,
+		"summary":  report.Report.Summary,
 		"sections": make([]map[string]interface{}, 0, len(report.Report.Sections)),
 	}
 
@@ -317,4 +316,3 @@ Provide:
 
 	return lineageEnrichment, nil
 }
-

@@ -761,6 +761,85 @@
       ],
       "backend_type": "gguf"
     },
+    "0xC0DE-CodeWorldModelAgent": {
+      "name": "Code World Model Agent",
+      "layer": "layer4",
+      "team": "FoundationTeam",
+      "backend_type": "hf-transformers",
+      "model_name": "cwm",
+      "model_path": "/models/cwm",
+      "transformers_config": {
+        "endpoint": "http://localhost:5678/v1/chat/completions",
+        "model_name": "cwm",
+        "timeout_seconds": 300
+      },
+      "fallback_model": "phi-3.5-mini",
+      "enabled_env_var": "ENABLE_CWM_DOMAIN",
+      "agent_id": "0xC0DE",
+      "attention_weights": {
+        "code_generation": 0.97,
+        "bug_fixing": 0.95,
+        "analysis": 0.9
+      },
+      "max_tokens": 4096,
+      "temperature": 0.2,
+      "tags": [
+        "code",
+        "analysis",
+        "cwm",
+        "fastgen"
+      ],
+      "keywords": [
+        "code",
+        "bug",
+        "patch",
+        "refactor",
+        "compile",
+        "stack trace",
+        "function",
+        "class",
+        "diff"
+      ]
+    },
+    "0xCALM-ContinuousReasoningAgent": {
+      "name": "CALM Continuous Reasoning Agent",
+      "layer": "layer4",
+      "team": "FoundationTeam",
+      "backend_type": "hf-transformers",
+      "model_name": "calm-l",
+      "model_path": "/models/calm/CALM-L",
+      "transformers_config": {
+        "endpoint": "http://localhost:9090/v1/chat/completions",
+        "model_name": "calm-l",
+        "timeout_seconds": 300
+      },
+      "fallback_model": "phi-3.5-mini",
+      "enabled_env_var": "ENABLE_CALM_DOMAIN",
+      "agent_id": "0xCALM",
+      "attention_weights": {
+        "continuous_reasoning": 0.96,
+        "code_generation": 0.9,
+        "analysis": 0.88
+      },
+      "max_tokens": 4096,
+      "temperature": 0.3,
+      "tags": [
+        "calm",
+        "continuous",
+        "vector",
+        "energy"
+      ],
+      "keywords": [
+        "calm",
+        "continuous",
+        "latent",
+        "chunk",
+        "autoencoder",
+        "energy",
+        "semantic bandwidth",
+        "brier"
+      ]
+    },
     "general": {
       "name": "General Assistant",
       "layer": "general",
@@ -868,7 +947,9 @@
       "VisionTeam": [],
       "FoundationTeam": [
         "0xG2B-GemmaAssistant",
-        "0xG7B-Gemma7BAssistant"
+        "0xG7B-Gemma7BAssistant",
+        "0xC0DE-CodeWorldModelAgent",
+        "0xCALM-ContinuousReasoningAgent"
       ]
     }
   }

@@ -307,7 +307,7 @@ func (beg *BatchEmbeddingGenerator) GenerateBatchColumnEmbeddings(
 					return
 				}
 				
-				embedding, err := generateColumnEmbedding(ctx, node)
+				embedding, err := GenerateColumnEmbedding(ctx, node)
 				if err != nil {
 					resultChan <- BatchEmbeddingResult{
 						ID:    it.ID,

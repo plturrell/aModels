@@ -58,8 +58,8 @@ type OutCond struct {
 	Type  string `xml:"TYPE,attr"`
 }
 
-// parseControlMXML parses a Control-M XML file and returns a slice of ControlMJob structs.
-func parseControlMXML(filePath string) ([]ControlMJob, error) {
+// ParseControlMXML parses a Control-M XML file and returns a slice of ControlMJob structs.
+func ParseControlMXML(filePath string) ([]ControlMJob, error) {
 	xmlFile, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open control-m xml file: %w", err)

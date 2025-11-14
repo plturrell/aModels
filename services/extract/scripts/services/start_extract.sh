@@ -11,8 +11,8 @@ set -euo pipefail
 # Example:
 #   WAIT_FOR_POSTGRES=postgres:5432 WAIT_FOR_REDIS=redis:6379 ./scripts/start_extract.sh
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WAIT_SCRIPT="${ROOT_DIR}/scripts/wait_for_service.sh"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+WAIT_SCRIPT="${ROOT_DIR}/scripts/services/wait_for_service.sh"
 SERVER_BIN="${ROOT_DIR}/server"
 
 if [[ ! -x "${WAIT_SCRIPT}" ]]; then

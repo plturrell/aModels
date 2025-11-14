@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 )
 
 func TestReplicateSchemaToPostgres(t *testing.T) {
@@ -17,11 +19,11 @@ func TestReplicateSchemaToPostgres(t *testing.T) {
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS glean_nodes").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS glean_edges").WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectBegin()
-	mock.ExpectPrepare("INSERT INTO glean_nodes").ExpectExec().WithArgs("node1", "table", "Table", sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectPrepare("INSERT INTO glean_nodes").ExpectExec().WithArgs("node1", graph.NodeTypeTable, "Table", sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectPrepare("INSERT INTO glean_edges").ExpectExec().WithArgs("node1", "node2", "HAS_COLUMN", sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	nodes := []Node{{ID: "node1", Type: "table", Label: "Table"}}
+	nodes := []Node{{ID: "node1", Type: graph.NodeTypeTable, Label: "Table"}}
 	edges := []Edge{{SourceID: "node1", TargetID: "node2", Label: "HAS_COLUMN"}}
 
 	if err := replicateSchemaToPostgres(context.Background(), db, nodes, edges); err != nil {
@@ -47,7 +49,7 @@ func TestReplicateSchemaToHANA(t *testing.T) {
 	mock.ExpectPrepare("UPSERT GLEAN_EDGES").ExpectExec().WithArgs("node1", "node2", "HAS_COLUMN", sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectCommit()
 
-	nodes := []Node{{ID: "node1", Type: "table", Label: "Table"}}
+	nodes := []Node{{ID: "node1", Type: graph.NodeTypeTable, Label: "Table"}}
 	edges := []Edge{{SourceID: "node1", TargetID: "node2", Label: "HAS_COLUMN"}}
 
 	if err := replicateSchemaToHANA(context.Background(), db, nodes, edges); err != nil {

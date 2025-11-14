@@ -229,7 +229,7 @@ export async function processDMSDocuments(payload: {
 }
 
 /**
- * List DMS documents
+ * List documents from Extract service (replaces DMS)
  */
 export async function listDMSDocuments(options: {
   limit?: number;
@@ -239,23 +239,27 @@ export async function listDMSDocuments(options: {
   if (options.limit) params.set("limit", options.limit.toString());
   if (options.offset) params.set("offset", options.offset.toString());
 
-  const dmsUrl = import.meta.env.VITE_DMS_URL || "http://localhost:8096";
-  const url = `${dmsUrl}/documents?${params.toString()}`;
+  // Use Extract service URL (via gateway/orchestration or direct)
+  const extractUrl = import.meta.env.VITE_EXTRACT_URL || import.meta.env.VITE_DMS_URL || "http://localhost:8083";
+  const url = `${extractUrl}/documents?${params.toString()}`;
   const response = await fetch(url, {
     headers: { Accept: "application/json" }
   });
   if (!response.ok) {
     throw new Error(`Failed to fetch documents: ${response.statusText}`);
   }
-  return response.json();
+  const data = await response.json();
+  // Extract service returns { documents: [...], total, limit, offset }
+  return data.documents || data;
 }
 
 /**
- * Get a specific DMS document
+ * Get a specific document from Extract service (replaces DMS)
  */
 export async function getDMSDocument(documentId: string): Promise<DMSDocument> {
-  const dmsUrl = import.meta.env.VITE_DMS_URL || "http://localhost:8096";
-  const url = `${dmsUrl}/documents/${documentId}`;
+  // Use Extract service URL (via gateway/orchestration or direct)
+  const extractUrl = import.meta.env.VITE_EXTRACT_URL || import.meta.env.VITE_DMS_URL || "http://localhost:8083";
+  const url = `${extractUrl}/documents/${documentId}`;
   const response = await fetch(url, {
     headers: { Accept: "application/json" }
   });

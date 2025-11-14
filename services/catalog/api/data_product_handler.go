@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -25,7 +24,7 @@ func NewDataProductHandler(unifiedWorkflow *workflows.UnifiedWorkflowIntegration
 	return &DataProductHandler{
 		unifiedWorkflow: unifiedWorkflow,
 		registry:        registry,
-		versionManager: versionManager,
+		versionManager:  versionManager,
 		logger:          logger,
 	}
 }
@@ -63,17 +62,17 @@ func (h *DataProductHandler) HandleBuildDataProduct(w http.ResponseWriter, r *ht
 	// Return complete product
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data_product": map[string]any{
-			"identifier":      product.DataElement.Identifier,
-			"name":            product.DataElement.Name,
-			"definition":      product.DataElement.Definition,
-			"quality_score":   product.QualityMetrics.QualityScore,
-			"quality_level":   product.QualityMetrics.ValidationStatus,
-			"lifecycle_state": product.EnhancedElement.LifecycleState,
-			"lineage":         product.Lineage,
-			"usage_examples":  product.UsageExamples,
+			"identifier":        product.DataElement.Identifier,
+			"name":              product.DataElement.Name,
+			"definition":        product.DataElement.Definition,
+			"quality_score":     product.QualityMetrics.QualityScore,
+			"quality_level":     product.QualityMetrics.ValidationStatus,
+			"lifecycle_state":   product.EnhancedElement.LifecycleState,
+			"lineage":           product.Lineage,
+			"usage_examples":    product.UsageExamples,
 			"documentation_url": product.DocumentationURL,
 			"sample_data_url":   product.SampleDataURL,
-			"research_report":  product.ResearchReport,
+			"research_report":   product.ResearchReport,
 		},
 		"message": "Complete data product built successfully",
 	})
@@ -88,12 +87,12 @@ func (h *DataProductHandler) HandleGetDataProduct(w http.ResponseWriter, r *http
 
 	// Extract ID from path
 	path := r.URL.Path[len("/catalog/data-products/"):]
-	
+
 	// Handle versioned requests: /catalog/data-products/{id}?version=v1.0.0
 	// or /catalog/data-products/{id}/versions/{version}
 	var productID string
 	var version string
-	
+
 	if strings.Contains(path, "/versions/") {
 		parts := strings.Split(path, "/versions/")
 		productID = parts[0]
@@ -111,30 +110,30 @@ func (h *DataProductHandler) HandleGetDataProduct(w http.ResponseWriter, r *http
 	if h.versionManager != nil {
 		var versionData *workflows.DataProductVersion
 		var err error
-		
+
 		if version != "" {
 			versionData, err = h.versionManager.GetVersion(ctx, productID, version)
 		} else {
 			versionData, err = h.versionManager.GetLatestVersion(ctx, productID)
 		}
-		
+
 		if err == nil && versionData != nil {
 			// Unmarshal product snapshot
 			var product workflows.CompleteDataProduct
 			if err := json.Unmarshal(versionData.ProductSnapshot, &product); err == nil {
 				writeJSON(w, http.StatusOK, map[string]any{
 					"data_product": map[string]any{
-						"identifier":      product.DataElement.Identifier,
-						"name":            product.DataElement.Name,
-						"definition":      product.DataElement.Definition,
-						"quality_score":   product.QualityMetrics.QualityScore,
-						"quality_level":   product.QualityMetrics.ValidationStatus,
-						"lifecycle_state": product.EnhancedElement.LifecycleState,
-						"lineage":         product.Lineage,
-						"usage_examples":  product.UsageExamples,
+						"identifier":        product.DataElement.Identifier,
+						"name":              product.DataElement.Name,
+						"definition":        product.DataElement.Definition,
+						"quality_score":     product.QualityMetrics.QualityScore,
+						"quality_level":     product.QualityMetrics.ValidationStatus,
+						"lifecycle_state":   product.EnhancedElement.LifecycleState,
+						"lineage":           product.Lineage,
+						"usage_examples":    product.UsageExamples,
 						"documentation_url": product.DocumentationURL,
 						"sample_data_url":   product.SampleDataURL,
-						"research_report":  product.ResearchReport,
+						"research_report":   product.ResearchReport,
 						"version":           versionData.Version,
 						"created_at":        versionData.CreatedAt,
 						"created_by":        versionData.CreatedBy,
@@ -152,14 +151,14 @@ func (h *DataProductHandler) HandleGetDataProduct(w http.ResponseWriter, r *http
 		if ok {
 			// Get enhanced element if available
 			enhanced := iso11179.NewEnhancedDataElement(element)
-			
+
 			// Build response from registry data
 			writeJSON(w, http.StatusOK, map[string]any{
 				"data_product": map[string]any{
-					"identifier":      element.Identifier,
-					"name":            element.Name,
-					"definition":      element.Definition,
-					"lifecycle_state": enhanced.LifecycleState,
+					"identifier":        element.Identifier,
+					"name":              element.Name,
+					"definition":        element.Definition,
+					"lifecycle_state":   enhanced.LifecycleState,
 					"documentation_url": fmt.Sprintf("/catalog/data-elements/%s/docs", element.Identifier),
 					"sample_data_url":   fmt.Sprintf("/catalog/data-elements/%s/sample", element.Identifier),
 				},
@@ -184,7 +183,7 @@ func (h *DataProductHandler) HandleGetSampleData(w http.ResponseWriter, r *http.
 	// Extract ID from path
 	path := r.URL.Path
 	var elementID string
-	
+
 	if strings.Contains(path, "/data-elements/") {
 		parts := strings.Split(path, "/data-elements/")
 		if len(parts) > 1 {
@@ -212,7 +211,7 @@ func (h *DataProductHandler) HandleGetSampleData(w http.ResponseWriter, r *http.
 			if err := json.Unmarshal(versionData.ProductSnapshot, &product); err == nil {
 				sampleData := h.generateSampleData(&product)
 				writeJSON(w, http.StatusOK, map[string]any{
-					"element_id": elementID,
+					"element_id":  elementID,
 					"sample_data": sampleData,
 					"message":     "Sample data generated from data product",
 				})
@@ -227,7 +226,7 @@ func (h *DataProductHandler) HandleGetSampleData(w http.ResponseWriter, r *http.
 		if ok {
 			sampleData := h.generateSampleDataFromElement(element)
 			writeJSON(w, http.StatusOK, map[string]any{
-				"element_id": elementID,
+				"element_id":  elementID,
 				"sample_data": sampleData,
 				"message":     "Sample data generated from registry",
 			})
@@ -241,7 +240,7 @@ func (h *DataProductHandler) HandleGetSampleData(w http.ResponseWriter, r *http.
 // generateSampleData generates sample data from a complete data product.
 func (h *DataProductHandler) generateSampleData(product *workflows.CompleteDataProduct) []map[string]any {
 	samples := make([]map[string]any, 0, 5)
-	
+
 	if product.DataElement == nil {
 		return samples
 	}
@@ -252,31 +251,31 @@ func (h *DataProductHandler) generateSampleData(product *workflows.CompleteDataP
 		sample["id"] = fmt.Sprintf("sample_%d", i+1)
 		sample["name"] = fmt.Sprintf("%s Sample %d", product.DataElement.Name, i+1)
 		sample["description"] = product.DataElement.Definition
-		
+
 		// Add quality metrics if available
 		if product.QualityMetrics != nil {
 			sample["quality_score"] = product.QualityMetrics.QualityScore
 			sample["freshness"] = product.QualityMetrics.FreshnessScore
 			sample["completeness"] = product.QualityMetrics.CompletenessScore
 		}
-		
+
 		// Add metadata fields
 		if product.DataElement.Metadata != nil {
 			for k, v := range product.DataElement.Metadata {
 				sample[k] = v
 			}
 		}
-		
+
 		samples = append(samples, sample)
 	}
-	
+
 	return samples
 }
 
 // generateSampleDataFromElement generates sample data from a data element.
 func (h *DataProductHandler) generateSampleDataFromElement(element *iso11179.DataElement) []map[string]any {
 	samples := make([]map[string]any, 0, 5)
-	
+
 	// Generate 5 sample records
 	for i := 0; i < 5; i++ {
 		sample := make(map[string]any)
@@ -285,17 +284,16 @@ func (h *DataProductHandler) generateSampleDataFromElement(element *iso11179.Dat
 		sample["description"] = element.Definition
 		sample["identifier"] = element.Identifier
 		sample["version"] = element.Version
-		
+
 		// Add metadata fields
 		if element.Metadata != nil {
 			for k, v := range element.Metadata {
 				sample[k] = v
 			}
 		}
-		
+
 		samples = append(samples, sample)
 	}
-	
+
 	return samples
 }
-

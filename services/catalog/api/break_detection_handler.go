@@ -1,17 +1,13 @@
 package api
 
 import (
-	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/plturrell/aModels/services/catalog/breakdetection"
-	"github.com/plturrell/aModels/services/catalog/research"
 )
 
 // BreakDetectionHandler handles break detection API requests
@@ -41,8 +37,6 @@ func (h *BreakDetectionHandler) HandleDetectBreaks(w http.ResponseWriter, r *htt
 		return
 	}
 
-	ctx := r.Context()
-
 	var req breakdetection.DetectionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to decode request: %v", err), http.StatusBadRequest)
@@ -64,7 +58,7 @@ func (h *BreakDetectionHandler) HandleDetectBreaks(w http.ResponseWriter, r *htt
 	}
 
 	// Perform break detection
-	result, err := h.breakDetectionService.DetectBreaks(ctx, &req)
+	result, err := h.breakDetectionService.DetectBreaks(r.Context(), &req)
 	if err != nil {
 		h.logger.Printf("Break detection failed: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
@@ -74,7 +68,7 @@ func (h *BreakDetectionHandler) HandleDetectBreaks(w http.ResponseWriter, r *htt
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"result": result,
+		"result":  result,
 		"message": fmt.Sprintf("Break detection completed: %d breaks detected", result.TotalBreaksDetected),
 	})
 }
@@ -123,7 +117,7 @@ func (h *BreakDetectionHandler) HandleCreateBaseline(w http.ResponseWriter, r *h
 
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"baseline": baseline,
-		"message": "Baseline created successfully",
+		"message":  "Baseline created successfully",
 	})
 }
 
@@ -220,7 +214,9 @@ func (h *BreakDetectionHandler) HandleListBreaks(w http.ResponseWriter, r *http.
 	breaks, err := h.breakDetectionService.ListBreaks(ctx, breakdetection.SystemName(systemName), limit, status)
 	if err != nil {
 		h.logger.Printf("Failed to list breaks: %v", err)
-		http.Error(w, fmt.Sprintf("Failed to list breaks: %v", err), http.StatusInternalServerError)
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error": err.Error(),
+		})
 		return
 	}
 
@@ -243,7 +239,7 @@ func (h *BreakDetectionHandler) HandleGetBreak(w http.ResponseWriter, r *http.Re
 	// Path format: /catalog/break-detection/breaks/{break_id}
 	path := r.URL.Path
 	pathParts := strings.Split(strings.Trim(path, "/"), "/")
-	
+
 	var breakID string
 	for i, part := range pathParts {
 		if part == "breaks" && i+1 < len(pathParts) {
@@ -265,7 +261,9 @@ func (h *BreakDetectionHandler) HandleGetBreak(w http.ResponseWriter, r *http.Re
 			return
 		}
 		h.logger.Printf("Failed to get break %s: %v", breakID, err)
-		http.Error(w, fmt.Sprintf("Failed to get break: %v", err), http.StatusInternalServerError)
+		writeJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error": err.Error(),
+		})
 		return
 	}
 
@@ -273,13 +271,3 @@ func (h *BreakDetectionHandler) HandleGetBreak(w http.ResponseWriter, r *http.Re
 		"break": breakRecord,
 	})
 }
-
-// writeJSON writes a JSON response
-func writeJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		// Log error but can't change response
-	}
-}
-

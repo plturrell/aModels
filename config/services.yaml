@@ -174,21 +174,8 @@ application_services:
       EXTRACT_SERVICE_URL: "http://localhost:8083"
       LOCALAI_URL: "http://localhost:8081"
       
-  dms:
-    name: "Document Management Service"
-    port: 8096
-    health_endpoint: "http://localhost:8096/docs"
-    docker_service: "dms"
-    python_service: true
-    startup_timeout: 90
-    depends_on: [postgres, redis, neo4j, extract, catalog]
-    required: false
-    env:
-      DMS_POSTGRES_DSN: "postgresql+psycopg://postgres:postgres@localhost:5432/dms"
-      DMS_REDIS_URL: "redis://localhost:6379/0"
-      DMS_NEO4J_URI: "neo4j://localhost:7687"
-      DMS_NEO4J_USER: "neo4j"
-      DMS_NEO4J_PASSWORD: "amodels123"
+  # DMS service removed - functionality migrated to Extract service
+  # Document management is now handled by Extract service with Gitea storage
       
   postgres_lang:
     name: "PostgreSQL Lang Service"

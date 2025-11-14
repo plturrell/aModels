@@ -3,10 +3,8 @@ package workflows
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"time"
@@ -218,7 +216,7 @@ func (uwi *UnifiedWorkflowIntegration) BuildCompleteDataProduct(
 		if createdBy == "" {
 			createdBy = "system"
 		}
-		
+
 		_, err := uwi.versionManager.CreateVersion(ctx, dataElement.Identifier, version, product, createdBy)
 		if err != nil {
 			if uwi.logger != nil {

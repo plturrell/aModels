@@ -20,7 +20,7 @@ import {
 } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
-import { PremiumCard } from "../../components/PremiumCard";
+import { PremiumCard } from "../../components/dashboard/PremiumCard";
 import { useLocalAIChatStore } from "../../state/useLocalAIChatStore";
 import { useServiceContext } from "../../hooks/useServiceContext";
 

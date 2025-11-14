@@ -1,25 +1,25 @@
 FROM golang:1.24-alpine AS builder
 
-WORKDIR /app
+WORKDIR /workspace
 
 # Install goose for migrations
 RUN go install github.com/pressly/goose/v3/cmd/goose@latest
 
-# Copy go.mod and go.sum first
-COPY services/catalog/go.mod services/catalog/go.sum ./
+# Root module files (for replace directives)
+COPY go.mod go.sum go.work ./
 
-# Remove replace directives that point to missing local paths
-RUN sed -i '/replace.*infrastructure\/third_party/d' go.mod || true && \
-    sed -i '/replace.*third_party\/goose/d' go.mod || true && \
-    sed -i '/replace github\.com\/plturrell\/aModels\/services\/catalog/d' go.mod || true
+# Local module dependencies referenced via replace directives
+COPY pkg ./pkg
+COPY services/extract ./services/extract
+COPY services/orchestration ./services/orchestration
+COPY infrastructure/third_party/go-hdb ./infrastructure/third_party/go-hdb
 
-# Update go.mod and download dependencies
-RUN go mod tidy && go mod download
+# Catalog module files
+COPY services/catalog/go.mod services/catalog/go.sum ./services/catalog/
+COPY services/catalog ./services/catalog
 
-# Copy source code
-COPY services/catalog/ .
+WORKDIR /workspace/services/catalog
 
-# Run go mod tidy to update go.mod after copying source
 RUN go mod tidy
 
 # Build

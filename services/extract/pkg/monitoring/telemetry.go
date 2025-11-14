@@ -1,9 +1,11 @@
+// +build !notelemetry
+
 package monitoring
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -15,7 +17,8 @@ import (
 	postgresv1 "github.com/plturrell/aModels/services/postgres/pkg/gen/v1"
 )
 
-type telemetryConfig struct {
+// TelemetryConfig configures a telemetry client.
+type TelemetryConfig struct {
 	Address          string
 	LibraryType      string
 	DefaultOperation string
@@ -25,7 +28,8 @@ type telemetryConfig struct {
 	CallTimeout      time.Duration
 }
 
-type telemetryClient struct {
+// TelemetryClient provides telemetry logging capabilities.
+type TelemetryClient struct {
 	conn             *grpc.ClientConn
 	svc              postgresv1.PostgresLangServiceClient
 	libraryType      string
@@ -35,7 +39,8 @@ type telemetryClient struct {
 	callTimeout      time.Duration
 }
 
-type telemetryRecord struct {
+// TelemetryRecord represents a telemetry log entry.
+type TelemetryRecord struct {
 	LibraryType  string
 	Operation    string
 	Input        map[string]any
@@ -50,7 +55,8 @@ type telemetryRecord struct {
 	UserIDHash   string
 }
 
-func newTelemetryClient(ctx context.Context, cfg telemetryConfig) (*telemetryClient, error) {
+// NewTelemetryClient creates a new telemetry client.
+func NewTelemetryClient(ctx context.Context, cfg TelemetryConfig) (*TelemetryClient, error) {
 	addr := strings.TrimSpace(cfg.Address)
 	if addr == "" {
 		return nil, fmt.Errorf("telemetry address is required")
@@ -88,7 +94,7 @@ func newTelemetryClient(ctx context.Context, cfg telemetryConfig) (*telemetryCli
 		operation = "run_extract" // defaultTelemetryOperation
 	}
 
-	client := &telemetryClient{
+	client := &TelemetryClient{
 		conn:             conn,
 		svc:              postgresv1.NewPostgresLangServiceClient(conn),
 		libraryType:      library,
@@ -100,14 +106,16 @@ func newTelemetryClient(ctx context.Context, cfg telemetryConfig) (*telemetryCli
 	return client, nil
 }
 
-func (c *telemetryClient) Close() error {
+// Close closes the telemetry client connection.
+func (c *TelemetryClient) Close() error {
 	if c == nil || c.conn == nil {
 		return nil
 	}
 	return c.conn.Close()
 }
 
-func (c *telemetryClient) Log(ctx context.Context, record telemetryRecord) error {
+// Log records a telemetry event.
+func (c *TelemetryClient) Log(ctx context.Context, record TelemetryRecord) error {
 	if c == nil || c.svc == nil {
 		return nil
 	}
@@ -315,6 +323,7 @@ func summariseExtractions(extractions []extractionResult) []map[string]any {
 	}
 	return summaries
 }
+*/
 
 func previewString(value string, maxLen int) string {
 	trimmed := strings.TrimSpace(value)

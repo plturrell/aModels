@@ -100,54 +100,9 @@ func (p *FewShotPrompt) getExamples(input map[string]string) ([]map[string]strin
 }
 
 // Format assembles and formats the pieces of the prompt with the given input values and partial values.
-func (p *FewShotPrompt) Format(values map[string]interface{}) (string, error) {
-	resolvedValues, err := resolvePartialValues(p.PartialVariables, values)
-	if err != nil {
-		return "", fmt.Errorf("resolving partial values: %w", err)
-	}
-	stringResolvedValues := map[string]string{}
-	for k, v := range resolvedValues {
-		strVal, ok := v.(string)
-		if !ok {
-			strVal2, ok := v.(StringPromptValue)
-			if !ok {
-				return "", fmt.Errorf("%w: variable %q has type %T, expected string or StringPromptValue", ErrInvalidPartialVariableType, k, v)
-			}
-			strVal = strVal2.String()
-		}
-		stringResolvedValues[k] = strVal
-	}
-	examples, err := p.getExamples(stringResolvedValues)
-	if err != nil {
-		return "", fmt.Errorf("getting examples: %w", err)
-	}
-	exampleStrings := make([]string, len(examples))
-
-	var errs []error
-	for i, example := range examples {
-		exampleMap := make(map[string]interface{})
-		for k, v := range example {
-			exampleMap[k] = v
-		}
-
-		res, err := p.ExamplePrompt.Format(exampleMap)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("formatting example %d: %w", i, err))
-			continue
-		}
-		exampleStrings[i] = res
-	}
-
-	if len(errs) > 0 {
-		return "", fmt.Errorf("formatting examples: %w", errors.Join(errs...))
-	}
-
-	template := p.AssemblePieces(exampleStrings)
-	result, err := defaultFormatterMapping[p.TemplateFormat](template, resolvedValues)
-	if err != nil {
-		return "", fmt.Errorf("rendering template: %w", err)
-	}
-	return result, nil
+func (p *FewShotPrompt) Format(values map[string]any) (string, error) {
+	rendered, _, _, _, _, err := p.render(values)
+	return rendered, err
 }
 
 // AssemblePieces assembles the pieces of the few-shot prompt.
@@ -181,12 +136,75 @@ func getMapKeys(inputMap map[string]any) []string {
 }
 
 func (p *FewShotPrompt) FormatPrompt(values map[string]any) (llms.PromptValue, error) {
-	f, err := p.Format(values)
+	rendered, resolved, exampleStrings, examples, assembledTemplate, err := p.render(values)
 	if err != nil {
 		return nil, err
 	}
 
-	return StringPromptValue(f), nil
+	tokens := buildFewShotPromptTokens(
+		p.TemplateFormat,
+		p.Prefix,
+		p.Suffix,
+		examples,
+		exampleStrings,
+		assembledTemplate,
+		resolved,
+		rendered,
+	)
+
+	return NewTokenPromptValue(rendered, nil, tokens), nil
+}
+
+func (p *FewShotPrompt) render(values map[string]any) (string, map[string]any, []string, []map[string]string, string, error) {
+	resolvedValues, err := resolvePartialValues(p.PartialVariables, values)
+	if err != nil {
+		return "", nil, nil, nil, "", fmt.Errorf("resolving partial values: %w", err)
+	}
+
+	stringResolved := make(map[string]string, len(resolvedValues))
+	for k, v := range resolvedValues {
+		switch value := v.(type) {
+		case string:
+			stringResolved[k] = value
+		case StringPromptValue:
+			stringResolved[k] = value.String()
+		default:
+			return "", nil, nil, nil, "", fmt.Errorf("%w: variable %q has type %T, expected string or StringPromptValue", ErrInvalidPartialVariableType, k, v)
+		}
+	}
+
+	examples, err := p.getExamples(stringResolved)
+	if err != nil {
+		return "", nil, nil, nil, "", fmt.Errorf("getting examples: %w", err)
+	}
+
+	exampleStrings := make([]string, len(examples))
+	var errs []error
+	for i, example := range examples {
+		exampleMap := make(map[string]any, len(example))
+		for k, v := range example {
+			exampleMap[k] = v
+		}
+
+		res, err := p.ExamplePrompt.Format(exampleMap)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("formatting example %d: %w", i, err))
+			continue
+		}
+		exampleStrings[i] = res
+	}
+
+	if len(errs) > 0 {
+		return "", nil, nil, nil, "", fmt.Errorf("formatting examples: %w", errors.Join(errs...))
+	}
+
+	assembled := p.AssemblePieces(exampleStrings)
+	result, err := defaultFormatterMapping[p.TemplateFormat](assembled, resolvedValues)
+	if err != nil {
+		return "", nil, nil, nil, "", fmt.Errorf("rendering template: %w", err)
+	}
+
+	return result, resolvedValues, exampleStrings, examples, assembled, nil
 }
 
 func (p *FewShotPrompt) GetInputVariables() []string {

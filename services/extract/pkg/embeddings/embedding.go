@@ -16,15 +16,15 @@ import (
 	"github.com/plturrell/aModels/services/extract/pkg/workflow"
 )
 
-// generateEmbedding generates embedding for SQL query (legacy function, kept for backward compatibility)
-func generateEmbedding(ctx context.Context, sql string) ([]float32, error) {
-	return generateSQLEmbedding(ctx, sql)
+// GenerateEmbedding generates embedding for SQL query (legacy function, kept for backward compatibility)
+func GenerateEmbedding(ctx context.Context, sql string) ([]float32, error) {
+	return GenerateSQLEmbedding(ctx, sql)
 }
 
-// generateSemanticEmbedding generates semantic embedding using sap-rpt-1-oss for text queries
+// GenerateSemanticEmbedding generates semantic embedding using sap-rpt-1-oss for text queries.
 // Phase 3: Uses connection pooling (handled by Python script)
 // Phase 10: Enhanced with LNN terminology layer
-func generateSemanticEmbedding(ctx context.Context, text string) ([]float32, error) {
+func GenerateSemanticEmbedding(ctx context.Context, text string) ([]float32, error) {
 	cmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed_sap_rpt.py",
 		"--artifact-type", "text",
 		"--text", text,
@@ -68,9 +68,9 @@ func GetGlobalTerminologyLearner() *terminology.TerminologyLearner {
 	return globalTerminologyLearner
 }
 
-// generateSQLEmbedding generates embedding for SQL query
+// GenerateSQLEmbedding generates embedding for SQL query.
 // Phase 10: Enhanced with LNN terminology layer
-func generateSQLEmbedding(ctx context.Context, sql string) ([]float32, error) {
+func GenerateSQLEmbedding(ctx context.Context, sql string) ([]float32, error) {
 	cmd := exec.CommandContext(ctx, "python3", "./scripts/embeddings/embed.py", "--artifact-type", "sql", "--sql", sql)
 
 	output, err := cmd.Output()
@@ -98,9 +98,9 @@ func generateSQLEmbedding(ctx context.Context, sql string) ([]float32, error) {
 	return embedding, nil
 }
 
-// generateTableEmbedding generates embedding for table schema
+// GenerateTableEmbedding generates embedding for table schema.
 // Returns both RelationalTransformer and sap-rpt-1-oss embeddings if available
-func generateTableEmbedding(ctx context.Context, node graph.Node) ([]float32, []float32, error) {
+func GenerateTableEmbedding(ctx context.Context, node graph.Node) ([]float32, []float32, error) {
 	// Extract columns from node properties or edges
 	columns := []map[string]any{}
 	if node.Props != nil {
@@ -191,12 +191,12 @@ func generateTableEmbedding(ctx context.Context, node graph.Node) ([]float32, []
 
 // generateTableEmbeddingLegacy generates single embedding (for backward compatibility)
 func generateTableEmbeddingLegacy(ctx context.Context, node graph.Node) ([]float32, error) {
-	relational, _, err := generateTableEmbedding(ctx, node)
+		relational, _, err := GenerateTableEmbedding(ctx, node)
 	return relational, err
 }
 
-// generateColumnEmbedding generates embedding for column definition
-func generateColumnEmbedding(ctx context.Context, node graph.Node) ([]float32, error) {
+// GenerateColumnEmbedding generates embedding for column definition.
+func GenerateColumnEmbedding(ctx context.Context, node graph.Node) ([]float32, error) {
 	columnType := "string"
 	if node.Props != nil {
 		if t, ok := node.Props["type"].(string); ok && t != "" {
@@ -235,7 +235,8 @@ func generateColumnEmbedding(ctx context.Context, node graph.Node) ([]float32, e
 	return embedding, nil
 }
 
-func generateSignavioProcessEmbedding(ctx context.Context, summary integrations.SignavioProcessSummary) ([]float32, error) {
+// GenerateSignavioProcessEmbedding generates embedding for Signavio process.
+func GenerateSignavioProcessEmbedding(ctx context.Context, summary integrations.SignavioProcessSummary) ([]float32, error) {
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("Signavio process %s (%s)", summary.Name, summary.ID))
 	if summary.SourceFile != "" {
@@ -266,11 +267,11 @@ func generateSignavioProcessEmbedding(ctx context.Context, summary integrations.
 		builder.WriteString(fmt.Sprintf(" ... %d additional steps omitted.", len(summary.Elements)-maxElements))
 	}
 
-	return generateSemanticEmbedding(ctx, builder.String())
+	return GenerateSemanticEmbedding(ctx, builder.String())
 }
 
-// generateJobEmbedding generates embedding for Control-M job
-func generateJobEmbedding(ctx context.Context, job integrations.ControlMJob) ([]float32, error) {
+// GenerateJobEmbedding generates embedding for Control-M job.
+func GenerateJobEmbedding(ctx context.Context, job integrations.ControlMJob) ([]float32, error) {
 	conditions := []string{}
 	for _, inCond := range job.InConds {
 		conditions = append(conditions, inCond.Name)
@@ -317,8 +318,8 @@ func generateJobEmbedding(ctx context.Context, job integrations.ControlMJob) ([]
 	return embedding, nil
 }
 
-// generateSequenceEmbedding generates embedding for table process sequence
-func generateSequenceEmbedding(ctx context.Context, sequence extraction.TableProcessSequence) ([]float32, error) {
+// GenerateSequenceEmbedding generates embedding for table process sequence.
+func GenerateSequenceEmbedding(ctx context.Context, sequence extraction.TableProcessSequence) ([]float32, error) {
 	tablesJSON, err := json.Marshal(sequence.Tables)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal tables: %w", err)
@@ -360,8 +361,8 @@ func generateSequenceEmbedding(ctx context.Context, sequence extraction.TablePro
 	return embedding, nil
 }
 
-// generatePetriNetEmbedding generates embedding for Petri net workflow
-func generatePetriNetEmbedding(ctx context.Context, petriNet *workflow.PetriNet) ([]float32, error) {
+// GeneratePetriNetEmbedding generates embedding for Petri net workflow.
+func GeneratePetriNetEmbedding(ctx context.Context, petriNet *workflow.PetriNet) ([]float32, error) {
 	// Convert PetriNet struct to JSON for Python script
 	petriNetJSON, err := json.Marshal(petriNet)
 	if err != nil {

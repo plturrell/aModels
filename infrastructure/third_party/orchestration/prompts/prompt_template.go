@@ -65,22 +65,38 @@ var (
 
 // Format formats the prompt template and returns a string value.
 func (p PromptTemplate) Format(values map[string]any) (string, error) {
-	resolvedValues, err := resolvePartialValues(p.PartialVariables, values)
-	if err != nil {
-		return "", fmt.Errorf("resolving partial values: %w", err)
-	}
-
-	return RenderTemplate(p.Template, p.TemplateFormat, resolvedValues)
+	rendered, _, err := p.render(values)
+	return rendered, err
 }
 
-// FormatPrompt formats the prompt template and returns a string prompt value.
+// FormatPrompt formats the prompt template and returns a token-aware prompt
+// value.
 func (p PromptTemplate) FormatPrompt(values map[string]any) (llms.PromptValue, error) { //nolint:ireturn
-	f, err := p.Format(values)
+	rendered, resolved, err := p.render(values)
 	if err != nil {
 		return nil, err
 	}
 
-	return StringPromptValue(f), nil //nolint:ireturn
+	tokens := buildTemplateTokens(p.TemplateFormat, p.Template, resolved, rendered)
+	if len(tokens) == 0 {
+		return NewStringTokenPromptValue(rendered), nil //nolint:ireturn
+	}
+
+	return NewTokenPromptValue(rendered, nil, tokens), nil //nolint:ireturn
+}
+
+func (p PromptTemplate) render(values map[string]any) (string, map[string]any, error) {
+	resolvedValues, err := resolvePartialValues(p.PartialVariables, values)
+	if err != nil {
+		return "", nil, fmt.Errorf("resolving partial values: %w", err)
+	}
+
+	rendered, err := RenderTemplate(p.Template, p.TemplateFormat, resolvedValues)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return rendered, resolvedValues, nil
 }
 
 // GetInputVariables returns the input variables the prompt expect.

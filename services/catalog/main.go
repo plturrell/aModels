@@ -7,28 +7,28 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/plturrell/aModels/pkg/sap"
 	"github.com/plturrell/aModels/services/catalog/ai"
 	"github.com/plturrell/aModels/services/catalog/analytics"
 	"github.com/plturrell/aModels/services/catalog/api"
 	"github.com/plturrell/aModels/services/catalog/autonomous"
 	"github.com/plturrell/aModels/services/catalog/breakdetection"
 	"github.com/plturrell/aModels/services/catalog/cache"
+	"github.com/plturrell/aModels/services/catalog/integration"
 	"github.com/plturrell/aModels/services/catalog/iso11179"
-	"github.com/plturrell/aModels/services/catalog/vectorstore"
 	"github.com/plturrell/aModels/services/catalog/migrations"
 	"github.com/plturrell/aModels/services/catalog/multimodal"
 	"github.com/plturrell/aModels/services/catalog/observability"
 	"github.com/plturrell/aModels/services/catalog/quality"
 	"github.com/plturrell/aModels/services/catalog/research"
-	"github.com/plturrell/aModels/services/catalog/security"
 	"github.com/plturrell/aModels/services/catalog/streaming"
 	"github.com/plturrell/aModels/services/catalog/triplestore"
+	"github.com/plturrell/aModels/services/catalog/vectorstore"
 	"github.com/plturrell/aModels/services/catalog/workflows"
-	"github.com/plturrell/aModels/services/catalog/integration"
-	"github.com/plturrell/aModels/pkg/sap"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -263,59 +263,59 @@ func main() {
 			if err := db.Ping(); err == nil {
 				// Initialize baseline manager
 				baselineManager = breakdetection.NewBaselineManager(db, legacyLogger)
-				
+
 				// Initialize SAP Fioneer URL
 				sapFioneerURL := os.Getenv("SAP_FIONEER_URL")
 				if sapFioneerURL == "" {
 					sapFioneerURL = "http://localhost:8080"
 				}
-				
+
 				// Initialize finance detector
 				financeDetector := breakdetection.NewFinanceDetector(sapFioneerURL, legacyLogger)
-				
+
 				// Initialize capital detector
 				bcrsURL := os.Getenv("BCRS_URL")
 				if bcrsURL == "" {
 					bcrsURL = "http://localhost:8080"
 				}
 				capitalDetector := breakdetection.NewCapitalDetector(bcrsURL, legacyLogger)
-				
+
 				// Initialize liquidity detector
 				rcoURL := os.Getenv("RCO_URL")
 				if rcoURL == "" {
 					rcoURL = "http://localhost:8080"
 				}
 				liquidityDetector := breakdetection.NewLiquidityDetector(rcoURL, legacyLogger)
-				
+
 				// Initialize regulatory detector
 				axiomSLURL := os.Getenv("AXIOMSL_URL")
 				if axiomSLURL == "" {
 					axiomSLURL = "http://localhost:8080"
 				}
 				regulatoryDetector := breakdetection.NewRegulatoryDetector(axiomSLURL, legacyLogger)
-				
+
 				// Initialize Deep Research integration services
 				var analysisService *breakdetection.BreakAnalysisService
 				var enrichmentService *breakdetection.EnrichmentService
 				var ruleGenerator *breakdetection.RuleGeneratorService
-				
+
 				if deepResearchClient != nil {
 					analysisService = breakdetection.NewBreakAnalysisService(deepResearchClient, legacyLogger)
 					enrichmentService = breakdetection.NewEnrichmentService(deepResearchClient, legacyLogger)
 					ruleGenerator = breakdetection.NewRuleGeneratorService(deepResearchClient, db, legacyLogger)
 					structLogger.Info("Deep Research integration for break detection initialized", nil)
 				}
-				
+
 				// Initialize Search service
 				searchService := breakdetection.NewBreakSearchService(extractServiceURL, legacyLogger)
-				
+
 				// Initialize LocalAI service
 				var aiAnalysisService *breakdetection.AIAnalysisService
 				if localaiURL != "" {
 					aiAnalysisService = breakdetection.NewAIAnalysisService(localaiURL, legacyLogger)
 					structLogger.Info("LocalAI integration for break detection initialized", nil)
 				}
-				
+
 				// Initialize break detection service
 				breakDetectionService = breakdetection.NewBreakDetectionService(
 					db,
@@ -331,14 +331,14 @@ func main() {
 					aiAnalysisService,
 					legacyLogger,
 				)
-				
+
 				// Initialize break detection handler
 				breakDetectionHandler = api.NewBreakDetectionHandler(
 					breakDetectionService,
 					baselineManager,
 					legacyLogger,
 				)
-				
+
 				structLogger.Info("Break detection service initialized", nil)
 			} else {
 				db.Close()
@@ -353,25 +353,25 @@ func main() {
 		}
 	}
 
-	// Initialize discoverability system if database is available
-	var discoverSystem *discoverability.DiscoverabilitySystem
-	if catalogDB != nil {
-		discoverSystem = discoverability.NewDiscoverabilitySystem(catalogDB, legacyLogger)
-		structLogger.Info("Discoverability system initialized", nil)
-	}
+	// Initialize discoverability system (disabled pending refactor)
+	// var discoverSystem *discoverability.DiscoverabilitySystem
+	// if catalogDB != nil {
+	//     discoverSystem = discoverability.NewDiscoverabilitySystem(catalogDB, legacyLogger)
+	//     structLogger.Info("Discoverability system initialized", nil)
+	// }
 
 	// Initialize API handlers
 	catalogHandlers := api.NewCatalogHandlers(registry, legacyLogger)
 	sparqlHandler := api.NewSPARQLHandler(sparqlEndpoint, legacyLogger)
 	dataProductHandler := api.NewDataProductHandler(unifiedWorkflow, registry, versionManager, legacyLogger)
 	aiHandlers := api.NewAIHandlers(metadataDiscoverer, qualityPredictor, recommender, legacyLogger)
-	
-	// Initialize discoverability handler if system is available
-	var discoverabilityHandler *api.DiscoverabilityHandler
-	if discoverSystem != nil {
-		discoverabilityHandler = api.NewDiscoverabilityHandler(discoverSystem, legacyLogger)
-		structLogger.Info("Discoverability handler initialized", nil)
-	}
+
+	// Initialize discoverability handler (disabled pending discoverability system refactor)
+	// var discoverabilityHandler *api.DiscoverabilityHandler
+	// if discoverSystem != nil {
+	//     discoverabilityHandler = api.NewDiscoverabilityHandler(discoverSystem, legacyLogger)
+	//     structLogger.Info("Discoverability handler initialized", nil)
+	// }
 
 	// Initialize advanced handlers (Phase 3)
 	var advancedHandlers *api.AdvancedHandlers
@@ -388,7 +388,7 @@ func main() {
 	var xsuaaMiddleware *security.XSUAAMiddleware
 	var privacyDomainIntegration *security.PrivacyDomainIntegration
 	useXSUAA := os.Getenv("VCAP_SERVICES") != "" || os.Getenv("XSUAA_CLIENT_ID") != ""
-	
+
 	if useXSUAA {
 		// Use XSUAA authentication for SAP BTP deployment
 		var err error
@@ -398,10 +398,10 @@ func main() {
 			os.Exit(1)
 		}
 		authMiddleware = xsuaaMiddleware.Middleware
-		
+
 		// Initialize privacy-domain integration for XSUAA
 		privacyDomainIntegration = security.NewPrivacyDomainIntegration(xsuaaMiddleware, legacyLogger)
-		
+
 		structLogger.Info("XSUAA authentication middleware initialized", map[string]interface{}{
 			"xsappname": os.Getenv("XS_APP_NAME"),
 			"client_id": os.Getenv("XSUAA_CLIENT_ID"),
@@ -514,7 +514,7 @@ func main() {
 
 	// Complete data product endpoints (thin slice approach)
 	mux.HandleFunc("/catalog/data-products/build", dataProductHandler.HandleBuildDataProduct)
-	
+
 	// Data products endpoint (handles both get and sample)
 	mux.HandleFunc("/catalog/data-products/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/sample") {
@@ -523,7 +523,7 @@ func main() {
 			dataProductHandler.HandleGetDataProduct(w, r)
 		}
 	})
-	
+
 	// Data elements endpoint (handles both get and sample)
 	mux.HandleFunc("/catalog/data-elements/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/sample") {
@@ -539,34 +539,34 @@ func main() {
 	mux.HandleFunc("/catalog/ai/recommendations", aiHandlers.HandleGetRecommendations)
 	mux.HandleFunc("/catalog/ai/usage", aiHandlers.HandleRecordUsage)
 
-		// Discoverability endpoints
-		if discoverabilityHandler != nil {
-			mux.HandleFunc("/api/discover/search", discoverabilityHandler.HandleSearch)
-			mux.HandleFunc("/api/discover/marketplace", discoverabilityHandler.HandleMarketplace)
-			mux.HandleFunc("/api/discover/tags", discoverabilityHandler.HandleCreateTag)
-			mux.HandleFunc("/api/discover/access-request", discoverabilityHandler.HandleRequestAccess)
-		}
+	// Discoverability endpoints
+	if discoverabilityHandler != nil {
+		mux.HandleFunc("/api/discover/search", discoverabilityHandler.HandleSearch)
+		mux.HandleFunc("/api/discover/marketplace", discoverabilityHandler.HandleMarketplace)
+		mux.HandleFunc("/api/discover/tags", discoverabilityHandler.HandleCreateTag)
+		mux.HandleFunc("/api/discover/access-request", discoverabilityHandler.HandleRequestAccess)
+	}
 
-		// Autonomous Intelligence Layer endpoints
-		deepAgentsURL := os.Getenv("DEEPAGENTS_URL")
-		if deepAgentsURL == "" {
-			deepAgentsURL = "http://deepagents-service:9004"
-		}
-		unifiedWorkflowURL := os.Getenv("GRAPH_SERVICE_URL")
-		if unifiedWorkflowURL == "" {
-			unifiedWorkflowURL = "http://graph-service:8081"
-		}
-		autonomousHandler := autonomous.NewAutonomousHandler(
-			deepResearchClient,
-			deepAgentsURL,
-			unifiedWorkflowURL,
-			legacyLogger,
-		)
-		mux.HandleFunc("/api/autonomous/execute", autonomousHandler.HandleExecuteTask)
-		mux.HandleFunc("/api/autonomous/metrics", autonomousHandler.HandleGetMetrics)
-		mux.HandleFunc("/api/autonomous/agents", autonomousHandler.HandleGetAgents)
-		mux.HandleFunc("/api/autonomous/knowledge", autonomousHandler.HandleGetKnowledgeBase)
-		structLogger.Info("Autonomous Intelligence Layer endpoints registered", nil)
+	// Autonomous Intelligence Layer endpoints
+	deepAgentsURL := os.Getenv("DEEPAGENTS_URL")
+	if deepAgentsURL == "" {
+		deepAgentsURL = "http://deepagents-service:9004"
+	}
+	unifiedWorkflowURL := os.Getenv("GRAPH_SERVICE_URL")
+	if unifiedWorkflowURL == "" {
+		unifiedWorkflowURL = "http://graph-service:8081"
+	}
+	autonomousHandler := autonomous.NewAutonomousHandler(
+		deepResearchClient,
+		deepAgentsURL,
+		unifiedWorkflowURL,
+		legacyLogger,
+	)
+	mux.HandleFunc("/api/autonomous/execute", autonomousHandler.HandleExecuteTask)
+	mux.HandleFunc("/api/autonomous/metrics", autonomousHandler.HandleGetMetrics)
+	mux.HandleFunc("/api/autonomous/agents", autonomousHandler.HandleGetAgents)
+	mux.HandleFunc("/api/autonomous/knowledge", autonomousHandler.HandleGetKnowledgeBase)
+	structLogger.Info("Autonomous Intelligence Layer endpoints registered", nil)
 
 	// Break detection endpoints
 	if breakDetectionHandler != nil {
@@ -593,7 +593,7 @@ func main() {
 			ConnectionString: hanaConnectionString,
 			Schema:           getEnvOrDefault("HANA_CLOUD_SCHEMA", "PUBLIC"),
 			TableName:        getEnvOrDefault("HANA_CLOUD_TABLE_NAME", "PUBLIC_VECTORS"),
-			VectorDimension: getEnvIntOrDefault("HANA_CLOUD_VECTOR_DIMENSION", 1536),
+			VectorDimension:  getEnvIntOrDefault("HANA_CLOUD_VECTOR_DIMENSION", 1536),
 			EnableIndexing:   os.Getenv("HANA_CLOUD_ENABLE_INDEXING") != "false",
 		}
 
@@ -701,7 +701,7 @@ func main() {
 			hanaHandler := api.NewHANAInboundHandler(hanaIntegration, legacyLogger)
 
 			// Register HANA inbound endpoints with authentication
-			mux.Handle("/catalog/integration/hana/process", 
+			mux.Handle("/catalog/integration/hana/process",
 				authMiddleware(http.HandlerFunc(hanaHandler.HandleProcessHANATables)))
 			mux.HandleFunc("/catalog/integration/hana/status/", hanaHandler.HandleGetStatus)
 
@@ -710,7 +710,7 @@ func main() {
 					"POST /catalog/integration/hana/process",
 					"GET /catalog/integration/hana/status/:request_id",
 				},
-				"hana_host": hanaHost,
+				"hana_host":   hanaHost,
 				"hana_schema": hanaSchema,
 			})
 		}
@@ -721,11 +721,11 @@ func main() {
 	// Apply authentication middleware to protected endpoints (mandatory in production)
 	// In production, authentication is always required
 	// Uses XSUAA when deployed on SAP BTP, JWT otherwise
-	
+
 	// Apply authentication to all protected endpoints
 	mux.Handle("/catalog/data-elements", authMiddleware(http.HandlerFunc(catalogHandlers.HandleCreateDataElement)))
 	mux.Handle("/catalog/data-products/build", authMiddleware(http.HandlerFunc(dataProductHandler.HandleBuildDataProduct)))
-	
+
 	authType := "XSUAA"
 	if !useXSUAA {
 		authType = "JWT"

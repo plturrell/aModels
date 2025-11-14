@@ -332,7 +332,7 @@ func (pnc *PetriNetConverter) PetriNetToGraphNodes(net *PetriNet) ([]graph.Node,
 	// Root node for the Petri net
 	nodes = append(nodes, graph.Node{
 		ID:    rootID,
-		Type:  "petri_net",
+		Type:  graph.NodeTypePetriNet,
 		Label: net.Name,
 		Props: map[string]any{
 			"petri_net_id": net.ID,
@@ -349,7 +349,7 @@ func (pnc *PetriNetConverter) PetriNetToGraphNodes(net *PetriNet) ([]graph.Node,
 		placeNodeID := fmt.Sprintf("petri_place:%s", place.ID)
 		nodes = append(nodes, graph.Node{
 			ID:    placeNodeID,
-			Type:  "petri_place",
+			Type:  graph.NodeTypePetriPlace,
 			Label: place.Label,
 			Props: map[string]any{
 				"place_id":        place.ID,
@@ -372,7 +372,7 @@ func (pnc *PetriNetConverter) PetriNetToGraphNodes(net *PetriNet) ([]graph.Node,
 		transitionNodeID := fmt.Sprintf("petri_transition:%s", transition.ID)
 		nodes = append(nodes, graph.Node{
 			ID:    transitionNodeID,
-			Type:  "petri_transition",
+			Type:  graph.NodeTypePetriTransition,
 			Label: transition.Label,
 			Props: map[string]any{
 				"transition_id":   transition.ID,
@@ -394,7 +394,7 @@ func (pnc *PetriNetConverter) PetriNetToGraphNodes(net *PetriNet) ([]graph.Node,
 			subProcessNodeID := fmt.Sprintf("petri_subprocess:%s", subProcess.ID)
 			nodes = append(nodes, graph.Node{
 				ID:    subProcessNodeID,
-				Type:  "petri_subprocess",
+				Type:  graph.NodeTypePetriSubprocess,
 				Label: subProcess.Label,
 				Props: map[string]any{
 					"subprocess_id":   subProcess.ID,
@@ -487,5 +487,40 @@ func (pn *PetriNet) ToJSON() (string, error) {
 		return "", fmt.Errorf("marshal petri net: %w", err)
 	}
 	return string(data), nil
+}
+
+// ConvertYAMLWorkflowToPetriNet converts a YAML workflow definition to a Petri net.
+// This is a basic implementation that can be extended for specific YAML formats.
+func (pnc *PetriNetConverter) ConvertYAMLWorkflowToPetriNet(yamlContent string) (*PetriNet, error) {
+	// Basic YAML workflow structure:
+	// workflows:
+	//   - name: "workflow1"
+	//     steps:
+	//       - name: "step1"
+	//         type: "job"
+	//         depends_on: []
+	//       - name: "step2"
+	//         type: "job"
+	//         depends_on: ["step1"]
+	
+	// For now, return a placeholder - full implementation would parse YAML
+	// and convert to Petri net structure similar to Control-M conversion
+	net := &PetriNet{
+		ID:          "yaml_workflow_petri_net",
+		Name:        "YAML Workflow Petri Net",
+		Places:      []Place{},
+		Transitions: []Transition{},
+		Arcs:        []Arc{},
+		Metadata: map[string]any{
+			"source": "yaml",
+			"format":  "workflow",
+		},
+	}
+	
+	if pnc.logger != nil {
+		pnc.logger.Printf("YAML workflow conversion: basic structure created (full parsing not yet implemented)")
+	}
+	
+	return net, nil
 }
 

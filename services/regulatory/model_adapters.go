@@ -9,6 +9,10 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/plturrell/aModels/services/regulatory/internal/observability"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ModelAdapter defines the interface for different AI model integrations.
@@ -66,6 +70,15 @@ func NewGNNAdapter(trainingServiceURL string, logger *log.Logger) *GNNAdapter {
 
 // Query executes a GNN-based structural analysis query.
 func (a *GNNAdapter) Query(ctx context.Context, request ModelQueryRequest) (*ModelQueryResponse, error) {
+	// Start OpenTelemetry span for GNN query
+	ctx, span := observability.StartSpan(ctx, "model.adapter.gnn.query",
+		trace.WithAttributes(
+			attribute.String("model.type", "gnn"),
+			attribute.String("query.type", request.QueryType),
+			attribute.String("principle.id", request.PrincipleID),
+		))
+	defer span.End()
+
 	startTime := time.Now()
 
 	// Prepare GNN query based on request type
@@ -245,6 +258,16 @@ func NewGooseAdapter(gooseServerURL string, logger *log.Logger) *GooseAdapter {
 
 // Query executes a Goose agent task for compliance.
 func (a *GooseAdapter) Query(ctx context.Context, request ModelQueryRequest) (*ModelQueryResponse, error) {
+	// Start OpenTelemetry span for Goose query
+	ctx, span := observability.StartSpan(ctx, "model.adapter.goose.query",
+		trace.WithAttributes(
+			attribute.String("model.type", "goose"),
+			attribute.String("agent.framework.type", "goose"),
+			attribute.String("query.type", request.QueryType),
+			attribute.String("principle.id", request.PrincipleID),
+		))
+	defer span.End()
+
 	startTime := time.Now()
 
 	// Create Goose task request
@@ -373,6 +396,16 @@ func NewDeepResearchAdapter(deepAgentsURL string, logger *log.Logger) *DeepResea
 
 // Query executes a deep research query for compliance.
 func (a *DeepResearchAdapter) Query(ctx context.Context, request ModelQueryRequest) (*ModelQueryResponse, error) {
+	// Start OpenTelemetry span for Deep Research query
+	ctx, span := observability.StartSpan(ctx, "model.adapter.deepresearch.query",
+		trace.WithAttributes(
+			attribute.String("model.type", "deepresearch"),
+			attribute.String("agent.framework.type", "deep-research"),
+			attribute.String("query.type", request.QueryType),
+			attribute.String("principle.id", request.PrincipleID),
+		))
+	defer span.End()
+
 	startTime := time.Now()
 
 	// Create deep research request

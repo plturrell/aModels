@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/llms"
 )
 
 func TestPromptTemplateFormatPrompt(t *testing.T) {
@@ -70,6 +71,23 @@ func TestPromptTemplateFormatPrompt(t *testing.T) {
 			got := fmt.Sprint(fp)
 			if cmp.Diff(tc.expected, got) != "" {
 				t.Errorf("unexpected prompt output (-want +got):\n%s", cmp.Diff(tc.expected, got))
+			}
+
+			ta, ok := fp.(llms.TokenAwarePromptValue)
+			if !ok {
+				t.Fatalf("expected token-aware prompt value")
+			}
+
+			tokens := ta.Tokens()
+			if tc.expected != "" && len(tokens) == 0 {
+				t.Errorf("expected tokens for non-empty output")
+			}
+
+			if len(tokens) > 0 {
+				top := tokens[0]
+				if top.Type != "template" {
+					t.Errorf("expected top-level template token, got %q", top.Type)
+				}
 			}
 		})
 	}

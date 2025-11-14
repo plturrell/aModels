@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -207,11 +206,3 @@ func (h *DiscoverabilityHandler) HandleRequestAccess(w http.ResponseWriter, r *h
 		"message":    "Access request submitted successfully",
 	})
 }
-
-// writeJSON writes a JSON response.
-func writeJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
-}
-

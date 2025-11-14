@@ -1,7 +1,6 @@
 package breakdetection
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -35,24 +34,24 @@ func NewCapitalDetector(bcrsURL string, logger *log.Logger) *CapitalDetector {
 // BCRSCreditExposure represents a credit exposure from BCRS
 type BCRSCreditExposure struct {
 	ExposureID          string    `json:"exposure_id"`
-	CounterpartyID     string    `json:"counterparty_id"`
-	CounterpartyName   string    `json:"counterparty_name,omitempty"`
-	ExposureAmount     float64   `json:"exposure_amount"`
-	ExposureDate       time.Time `json:"exposure_date"`
-	RiskWeight         float64   `json:"risk_weight"`
-	EffectiveRiskWeight *float64 `json:"effective_risk_weight,omitempty"`
-	RiskWeightedAmount float64   `json:"risk_weighted_amount"`
-	Rating             string    `json:"rating,omitempty"`
-	RatingAgency       string    `json:"rating_agency,omitempty"`
+	CounterpartyID      string    `json:"counterparty_id"`
+	CounterpartyName    string    `json:"counterparty_name,omitempty"`
+	ExposureAmount      float64   `json:"exposure_amount"`
+	ExposureDate        time.Time `json:"exposure_date"`
+	RiskWeight          float64   `json:"risk_weight"`
+	EffectiveRiskWeight *float64  `json:"effective_risk_weight,omitempty"`
+	RiskWeightedAmount  float64   `json:"risk_weighted_amount"`
+	Rating              string    `json:"rating,omitempty"`
+	RatingAgency        string    `json:"rating_agency,omitempty"`
 }
 
 // BCRSCapitalRatio represents a capital ratio from BCRS
 type BCRSCapitalRatio struct {
-	RatioType      string    `json:"ratio_type"` // "CET1", "Tier1", "Total"
-	RatioValue     float64   `json:"ratio_value"`
-	MinimumRequired float64  `json:"minimum_required"`
-	AsOfDate       time.Time `json:"as_of_date"`
-	Status         string    `json:"status"` // "compliant", "below_minimum"
+	RatioType       string    `json:"ratio_type"` // "CET1", "Tier1", "Total"
+	RatioValue      float64   `json:"ratio_value"`
+	MinimumRequired float64   `json:"minimum_required"`
+	AsOfDate        time.Time `json:"as_of_date"`
+	Status          string    `json:"status"` // "compliant", "below_minimum"
 }
 
 // DetectBreaks detects breaks in BCRS for capital calculations
@@ -404,19 +403,19 @@ func (cd *CapitalDetector) detectCapitalRatioViolations(baseline, current map[st
 		if !exists {
 			// Missing ratio
 			br := &Break{
-				BreakID:        fmt.Sprintf("break-missing-ratio-%s", ratioType),
-				SystemName:      SystemBCRS,
-				DetectionType:   DetectionTypeCapital,
-				BreakType:       BreakTypeCapitalRatioViolation,
-				Severity:        SeverityCritical,
-				Status:          BreakStatusOpen,
-				CurrentValue:    nil,
-				BaselineValue:   cd.capitalRatioToMap(baselineRatio),
-				Difference:      map[string]interface{}{"missing": true},
+				BreakID:          fmt.Sprintf("break-missing-ratio-%s", ratioType),
+				SystemName:       SystemBCRS,
+				DetectionType:    DetectionTypeCapital,
+				BreakType:        BreakTypeCapitalRatioViolation,
+				Severity:         SeverityCritical,
+				Status:           BreakStatusOpen,
+				CurrentValue:     nil,
+				BaselineValue:    cd.capitalRatioToMap(baselineRatio),
+				Difference:       map[string]interface{}{"missing": true},
 				AffectedEntities: []string{ratioType},
-				DetectedAt:      time.Now(),
-				CreatedAt:       time.Now(),
-				UpdatedAt:       time.Now(),
+				DetectedAt:       time.Now(),
+				CreatedAt:        time.Now(),
+				UpdatedAt:        time.Now(),
 			}
 			breaks = append(breaks, br)
 			continue
@@ -425,18 +424,18 @@ func (cd *CapitalDetector) detectCapitalRatioViolations(baseline, current map[st
 		// Check if ratio is below minimum
 		if currentRatio.RatioValue < currentRatio.MinimumRequired {
 			br := &Break{
-				BreakID:        fmt.Sprintf("break-ratio-violation-%s", ratioType),
-				SystemName:      SystemBCRS,
-				DetectionType:   DetectionTypeCapital,
-				BreakType:       BreakTypeCapitalRatioViolation,
-				Severity:        SeverityCritical,
-				Status:          BreakStatusOpen,
-				CurrentValue:    cd.capitalRatioToMap(currentRatio),
-				BaselineValue:   cd.capitalRatioToMap(baselineRatio),
+				BreakID:       fmt.Sprintf("break-ratio-violation-%s", ratioType),
+				SystemName:    SystemBCRS,
+				DetectionType: DetectionTypeCapital,
+				BreakType:     BreakTypeCapitalRatioViolation,
+				Severity:      SeverityCritical,
+				Status:        BreakStatusOpen,
+				CurrentValue:  cd.capitalRatioToMap(currentRatio),
+				BaselineValue: cd.capitalRatioToMap(baselineRatio),
 				Difference: map[string]interface{}{
-					"ratio_value":     currentRatio.RatioValue,
+					"ratio_value":      currentRatio.RatioValue,
 					"minimum_required": currentRatio.MinimumRequired,
-					"deficit":         currentRatio.MinimumRequired - currentRatio.RatioValue,
+					"deficit":          currentRatio.MinimumRequired - currentRatio.RatioValue,
 				},
 				AffectedEntities: []string{ratioType},
 				DetectedAt:       time.Now(),
@@ -454,14 +453,14 @@ func (cd *CapitalDetector) detectCapitalRatioViolations(baseline, current map[st
 		// Significant change threshold: 0.5% (0.005)
 		if ratioChange > 0.005 {
 			br := &Break{
-				BreakID:        fmt.Sprintf("break-ratio-change-%s", ratioType),
-				SystemName:      SystemBCRS,
-				DetectionType:   DetectionTypeCapital,
-				BreakType:       BreakTypeCapitalRatioViolation,
-				Severity:        SeverityHigh,
-				Status:          BreakStatusOpen,
-				CurrentValue:    cd.capitalRatioToMap(currentRatio),
-				BaselineValue:   cd.capitalRatioToMap(baselineRatio),
+				BreakID:       fmt.Sprintf("break-ratio-change-%s", ratioType),
+				SystemName:    SystemBCRS,
+				DetectionType: DetectionTypeCapital,
+				BreakType:     BreakTypeCapitalRatioViolation,
+				Severity:      SeverityHigh,
+				Status:        BreakStatusOpen,
+				CurrentValue:  cd.capitalRatioToMap(currentRatio),
+				BaselineValue: cd.capitalRatioToMap(baselineRatio),
 				Difference: map[string]interface{}{
 					"baseline_ratio": baselineRatio.RatioValue,
 					"current_ratio":  currentRatio.RatioValue,
@@ -501,14 +500,14 @@ func (cd *CapitalDetector) detectRWAErrors(baseline, current map[string]*BCRSCre
 
 		if diff > tolerance {
 			br := &Break{
-				BreakID:        fmt.Sprintf("break-rwa-error-%s", exposureID),
-				SystemName:      SystemBCRS,
-				DetectionType:   DetectionTypeCapital,
-				BreakType:       BreakTypeRWAError,
-				Severity:        SeverityCritical,
-				Status:          BreakStatusOpen,
-				CurrentValue:    cd.creditExposureToMap(currentExposure),
-				BaselineValue:   cd.creditExposureToMap(baselineExposure),
+				BreakID:       fmt.Sprintf("break-rwa-error-%s", exposureID),
+				SystemName:    SystemBCRS,
+				DetectionType: DetectionTypeCapital,
+				BreakType:     BreakTypeRWAError,
+				Severity:      SeverityCritical,
+				Status:        BreakStatusOpen,
+				CurrentValue:  cd.creditExposureToMap(currentExposure),
+				BaselineValue: cd.creditExposureToMap(baselineExposure),
 				Difference: map[string]interface{}{
 					"expected_rwa": expectedRWA,
 					"actual_rwa":   actualRWA,
@@ -536,19 +535,19 @@ func (cd *CapitalDetector) detectExposureMismatches(baseline, current map[string
 		if !exists {
 			// Missing exposure
 			br := &Break{
-				BreakID:        fmt.Sprintf("break-missing-exposure-%s", exposureID),
-				SystemName:      SystemBCRS,
-				DetectionType:   DetectionTypeCapital,
-				BreakType:       BreakTypeExposureMismatch,
-				Severity:        SeverityHigh,
-				Status:          BreakStatusOpen,
-				CurrentValue:    nil,
-				BaselineValue:   cd.creditExposureToMap(baselineExposure),
-				Difference:      map[string]interface{}{"missing": true},
+				BreakID:          fmt.Sprintf("break-missing-exposure-%s", exposureID),
+				SystemName:       SystemBCRS,
+				DetectionType:    DetectionTypeCapital,
+				BreakType:        BreakTypeExposureMismatch,
+				Severity:         SeverityHigh,
+				Status:           BreakStatusOpen,
+				CurrentValue:     nil,
+				BaselineValue:    cd.creditExposureToMap(baselineExposure),
+				Difference:       map[string]interface{}{"missing": true},
 				AffectedEntities: []string{exposureID, baselineExposure.CounterpartyID},
-				DetectedAt:      time.Now(),
-				CreatedAt:       time.Now(),
-				UpdatedAt:       time.Now(),
+				DetectedAt:       time.Now(),
+				CreatedAt:        time.Now(),
+				UpdatedAt:        time.Now(),
 			}
 			breaks = append(breaks, br)
 			continue
@@ -561,18 +560,18 @@ func (cd *CapitalDetector) detectExposureMismatches(baseline, current map[string
 		}
 		if amountDiff > tolerance {
 			br := &Break{
-				BreakID:        fmt.Sprintf("break-exposure-amount-mismatch-%s", exposureID),
-				SystemName:      SystemBCRS,
-				DetectionType:   DetectionTypeCapital,
-				BreakType:       BreakTypeExposureMismatch,
-				Severity:        SeverityCritical,
-				Status:          BreakStatusOpen,
-				CurrentValue:    cd.creditExposureToMap(currentExposure),
-				BaselineValue:   cd.creditExposureToMap(baselineExposure),
+				BreakID:       fmt.Sprintf("break-exposure-amount-mismatch-%s", exposureID),
+				SystemName:    SystemBCRS,
+				DetectionType: DetectionTypeCapital,
+				BreakType:     BreakTypeExposureMismatch,
+				Severity:      SeverityCritical,
+				Status:        BreakStatusOpen,
+				CurrentValue:  cd.creditExposureToMap(currentExposure),
+				BaselineValue: cd.creditExposureToMap(baselineExposure),
 				Difference: map[string]interface{}{
 					"field":      "exposure_amount",
 					"baseline":   baselineExposure.ExposureAmount,
-					"current":   currentExposure.ExposureAmount,
+					"current":    currentExposure.ExposureAmount,
 					"difference": amountDiff,
 				},
 				AffectedEntities: []string{exposureID, currentExposure.CounterpartyID},
@@ -590,18 +589,18 @@ func (cd *CapitalDetector) detectExposureMismatches(baseline, current map[string
 		}
 		if weightDiff > 0.001 { // 0.1% tolerance for risk weights
 			br := &Break{
-				BreakID:        fmt.Sprintf("break-risk-weight-mismatch-%s", exposureID),
-				SystemName:      SystemBCRS,
-				DetectionType:   DetectionTypeCapital,
-				BreakType:       BreakTypeExposureMismatch,
-				Severity:        SeverityHigh,
-				Status:          BreakStatusOpen,
-				CurrentValue:    cd.creditExposureToMap(currentExposure),
-				BaselineValue:   cd.creditExposureToMap(baselineExposure),
+				BreakID:       fmt.Sprintf("break-risk-weight-mismatch-%s", exposureID),
+				SystemName:    SystemBCRS,
+				DetectionType: DetectionTypeCapital,
+				BreakType:     BreakTypeExposureMismatch,
+				Severity:      SeverityHigh,
+				Status:        BreakStatusOpen,
+				CurrentValue:  cd.creditExposureToMap(currentExposure),
+				BaselineValue: cd.creditExposureToMap(baselineExposure),
 				Difference: map[string]interface{}{
 					"field":      "risk_weight",
 					"baseline":   baselineExposure.RiskWeight,
-					"current":   currentExposure.RiskWeight,
+					"current":    currentExposure.RiskWeight,
 					"difference": weightDiff,
 				},
 				AffectedEntities: []string{exposureID, currentExposure.CounterpartyID},
@@ -619,20 +618,19 @@ func (cd *CapitalDetector) detectExposureMismatches(baseline, current map[string
 // Helper functions
 func (cd *CapitalDetector) creditExposureToMap(exposure *BCRSCreditExposure) map[string]interface{} {
 	return map[string]interface{}{
-		"exposure_id":        exposure.ExposureID,
-		"counterparty_id":    exposure.CounterpartyID,
-		"exposure_amount":    exposure.ExposureAmount,
-		"risk_weight":        exposure.RiskWeight,
+		"exposure_id":          exposure.ExposureID,
+		"counterparty_id":      exposure.CounterpartyID,
+		"exposure_amount":      exposure.ExposureAmount,
+		"risk_weight":          exposure.RiskWeight,
 		"risk_weighted_amount": exposure.RiskWeightedAmount,
 	}
 }
 
 func (cd *CapitalDetector) capitalRatioToMap(ratio *BCRSCapitalRatio) map[string]interface{} {
 	return map[string]interface{}{
-		"ratio_type":      ratio.RatioType,
-		"ratio_value":     ratio.RatioValue,
+		"ratio_type":       ratio.RatioType,
+		"ratio_value":      ratio.RatioValue,
 		"minimum_required": ratio.MinimumRequired,
-		"status":          ratio.Status,
+		"status":           ratio.Status,
 	}
 }
-

@@ -1,7 +1,6 @@
 package vectorstore
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -17,15 +16,15 @@ type HANAVectorStoreHandler struct {
 	logger           *log.Logger
 }
 
-// NewHANAVectorStoreHandler creates a new API handler
-func NewHANAVectorStoreHandler(
-	store *HANACloudVectorStore,
-	embeddingService *EmbeddingService,
-	logger *log.Logger,
-) *HANAVectorStoreHandler {
+// NewHANAVectorStoreHandler creates a new HANA vector store handler
+func NewHANAVectorStoreHandler(store *HANACloudVectorStore, embedding *EmbeddingService, logger *log.Logger) *HANAVectorStoreHandler {
+	if logger == nil {
+		logger = log.New(log.Writer(), "HANAVectorStoreHandler: ", log.LstdFlags)
+	}
+
 	return &HANAVectorStoreHandler{
 		store:            store,
-		embeddingService: embeddingService,
+		embeddingService: embedding,
 		logger:           logger,
 	}
 }
@@ -46,15 +45,15 @@ func (h *HANAVectorStoreHandler) HandleSearchInformation(w http.ResponseWriter, 
 	ctx := r.Context()
 
 	var req struct {
-		Query      string                 `json:"query"`       // Text query (will generate embedding)
-		Vector     []float32              `json:"vector"`      // Direct vector (optional)
-		Type       string                 `json:"type"`
-		System     string                 `json:"system"`
-		Category   string                 `json:"category"`
-		Tags       []string               `json:"tags"`
-		IsPublic   *bool                  `json:"is_public"`
-		Limit      int                    `json:"limit"`
-		Threshold  float64                `json:"threshold"`
+		Query     string    `json:"query"`  // Text query (will generate embedding)
+		Vector    []float32 `json:"vector"` // Direct vector (optional)
+		Type      string    `json:"type"`
+		System    string    `json:"system"`
+		Category  string    `json:"category"`
+		Tags      []string  `json:"tags"`
+		IsPublic  *bool     `json:"is_public"`
+		Limit     int       `json:"limit"`
+		Threshold float64   `json:"threshold"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -148,28 +147,28 @@ func (h *HANAVectorStoreHandler) HandleListPublicInformation(w http.ResponseWrit
 
 	// Parse query parameters
 	options := &ListOptions{}
-	
+
 	if typeParam := r.URL.Query().Get("type"); typeParam != "" {
 		options.Type = typeParam
 	}
-	
+
 	if systemParam := r.URL.Query().Get("system"); systemParam != "" {
 		options.System = systemParam
 	}
-	
+
 	if categoryParam := r.URL.Query().Get("category"); categoryParam != "" {
 		options.Category = categoryParam
 	}
-	
+
 	if tagsParam := r.URL.Query().Get("tags"); tagsParam != "" {
 		options.Tags = strings.Split(tagsParam, ",")
 	}
-	
+
 	if publicParam := r.URL.Query().Get("is_public"); publicParam != "" {
 		isPublic := publicParam == "true" || publicParam == "1"
 		options.IsPublic = &isPublic
 	}
-	
+
 	if limitParam := r.URL.Query().Get("limit"); limitParam != "" {
 		if limit, err := strconv.Atoi(limitParam); err == nil && limit > 0 {
 			options.Limit = limit
@@ -178,17 +177,17 @@ func (h *HANAVectorStoreHandler) HandleListPublicInformation(w http.ResponseWrit
 	if options.Limit <= 0 {
 		options.Limit = 100 // Default limit
 	}
-	
+
 	if offsetParam := r.URL.Query().Get("offset"); offsetParam != "" {
 		if offset, err := strconv.Atoi(offsetParam); err == nil && offset >= 0 {
 			options.Offset = offset
 		}
 	}
-	
+
 	if orderByParam := r.URL.Query().Get("order_by"); orderByParam != "" {
 		options.OrderBy = orderByParam
 	}
-	
+
 	if orderDescParam := r.URL.Query().Get("order_desc"); orderDescParam != "" {
 		options.OrderDesc = orderDescParam == "true" || orderDescParam == "1"
 	}
@@ -210,4 +209,3 @@ func (h *HANAVectorStoreHandler) HandleListPublicInformation(w http.ResponseWrit
 		"offset":  options.Offset,
 	})
 }
-

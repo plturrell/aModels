@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, TextField, Typography, List, ListItem, ListItemButton, ListItemText, Paper, Modal } from '@mui/material';
-import { unifiedSearch } from '../api/search';
+import { unifiedSearch } from '../../api/search';
 
 interface CommandPaletteProps {
   onCommand: (command: string, data: any) => void;

@@ -21,7 +21,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
-import { Panel } from '../../../components/Panel';
+import { Panel } from '../../../components/common/Panel';
 import type { SAPBDCConnectionConfig } from '../../../api/sap';
 
 interface ConnectionConfigViewProps {

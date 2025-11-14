@@ -295,7 +295,7 @@ func (mme *MultiModalExtractor) ConvertExtractedTableToNodes(
 	// Create table node
 	tableNode := graph.Node{
 		ID:    fmt.Sprintf("table:%s", tableName),
-		Type:  "table",
+		Type:  graph.NodeTypeTable,
 		Label: tableName,
 		Props: map[string]any{
 			"source":            "ocr",
@@ -311,7 +311,7 @@ func (mme *MultiModalExtractor) ConvertExtractedTableToNodes(
 	for i, header := range table.Headers {
 		colNode := graph.Node{
 			ID:    fmt.Sprintf("column:%s:%s", tableName, header),
-			Type:  "column",
+			Type:  graph.NodeTypeColumn,
 			Label: header,
 			Props: map[string]any{
 				"table_name":        tableName,

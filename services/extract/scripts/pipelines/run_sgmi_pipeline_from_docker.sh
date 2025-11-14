@@ -8,14 +8,12 @@ REPO_ROOT=$(cd "${SCRIPT_DIR}/../../../.." && pwd)
 
 # Use container names (accessible from Docker network)
 export EXTRACT_SERVICE_URL="http://extract-service:8082"
-export DMS_SERVICE_URL="http://dms-service:8080"
 export CATALOG_SERVICE_URL="http://catalog:8084"
 
 echo "=== Running SGMI Pipeline from Docker Network ==="
 echo ""
 echo "Service URLs (Docker network):"
 echo "  Extract: ${EXTRACT_SERVICE_URL}"
-echo "  DMS: ${DMS_SERVICE_URL}"
 echo "  Catalog: ${CATALOG_SERVICE_URL}"
 echo ""
 
@@ -63,7 +61,6 @@ docker run --rm \
     -v "${REPO_ABS}:/workspace:ro" \
     -w /workspace/services/extract \
     -e EXTRACT_SERVICE_URL="${EXTRACT_SERVICE_URL}" \
-    -e DMS_SERVICE_URL="${DMS_SERVICE_URL}" \
     -e CATALOG_SERVICE_URL="${CATALOG_SERVICE_URL}" \
     -e SGMI_DATA_ROOT="/workspace/services/extract/data" \
     -e PYTHON_SCRIPT_B64="${PYTHON_SCRIPT_B64}" \

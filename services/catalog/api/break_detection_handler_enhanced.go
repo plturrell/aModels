@@ -1,10 +1,7 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,12 +13,12 @@ import (
 // EnhancedBreakDetectionHandler provides enhanced API features
 type EnhancedBreakDetectionHandler struct {
 	*BreakDetectionHandler
-	apiVersion        string
-	enableRateLimit   bool
-	enablePagination  bool
-	enableValidation  bool
-	enableMetrics     bool
-	rateLimiter       *RateLimiter
+	apiVersion       string
+	enableRateLimit  bool
+	enablePagination bool
+	enableValidation bool
+	enableMetrics    bool
+	rateLimiter      *RateLimiter
 }
 
 // NewEnhancedBreakDetectionHandler creates an enhanced handler
@@ -47,18 +44,18 @@ func NewEnhancedBreakDetectionHandler(
 
 // APIResponse represents a standardized API response
 type APIResponse struct {
-	Success   bool                   `json:"success"`
-	Data      interface{}            `json:"data,omitempty"`
-	Error     *APIError              `json:"error,omitempty"`
-	Meta      *ResponseMeta          `json:"meta,omitempty"`
-	Version   string                 `json:"version"`
-	Timestamp time.Time              `json:"timestamp"`
+	Success   bool          `json:"success"`
+	Data      interface{}   `json:"data,omitempty"`
+	Error     *APIError     `json:"error,omitempty"`
+	Meta      *ResponseMeta `json:"meta,omitempty"`
+	Version   string        `json:"version"`
+	Timestamp time.Time     `json:"timestamp"`
 }
 
 // APIError represents an API error
 type APIError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code    string      `json:"code"`
+	Message string      `json:"message"`
 	Details interface{} `json:"details,omitempty"`
 }
 
@@ -82,10 +79,10 @@ type PaginationParams struct {
 // HandleDetectBreaksEnhanced handles break detection with enhanced features
 func (h *EnhancedBreakDetectionHandler) HandleDetectBreaksEnhanced(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
-	
+
 	// API versioning
 	if h.apiVersion != "" && !h.validateAPIVersion(r) {
-		h.writeErrorResponse(w, http.StatusBadRequest, "INVALID_API_VERSION", 
+		h.writeErrorResponse(w, http.StatusBadRequest, "INVALID_API_VERSION",
 			"API version not supported", nil)
 		return
 	}
@@ -125,7 +122,7 @@ func (h *EnhancedBreakDetectionHandler) HandleDetectBreaksEnhanced(w http.Respon
 		h.logger.Printf("Break detection failed: %v", err)
 		h.writeErrorResponse(w, http.StatusInternalServerError, "DETECTION_FAILED",
 			"Break detection failed", map[string]interface{}{
-				"error": err.Error(),
+				"error":       err.Error(),
 				"duration_ms": duration.Milliseconds(),
 			})
 		return
@@ -175,7 +172,7 @@ func (h *EnhancedBreakDetectionHandler) HandleListBreaksEnhanced(w http.Response
 
 	// Get breaks with pagination
 	ctx := r.Context()
-	breaks, err := h.breakDetectionService.ListBreaks(ctx, 
+	breaks, err := h.breakDetectionService.ListBreaks(ctx,
 		breakdetection.SystemName(systemName), pagination.Limit, status)
 	duration := time.Since(startTime)
 
@@ -231,7 +228,7 @@ func (h *EnhancedBreakDetectionHandler) checkRateLimit(r *http.Request) bool {
 
 	// Default rate limits: 100 requests per minute per IP, burst of 10
 	// Different endpoints can have different limits
-	rps := 100.0 / 60.0  // 100 requests per minute = ~1.67 requests per second
+	rps := 100.0 / 60.0 // 100 requests per minute = ~1.67 requests per second
 	burst := 10
 
 	// Get or create limiter for this IP
@@ -300,7 +297,7 @@ func (h *EnhancedBreakDetectionHandler) parsePagination(r *http.Request) Paginat
 	}
 }
 
-func (h *EnhancedBreakDetectionHandler) writeSuccessResponse(w http.ResponseWriter, 
+func (h *EnhancedBreakDetectionHandler) writeSuccessResponse(w http.ResponseWriter,
 	status int, data interface{}, meta *ResponseMeta) {
 	response := APIResponse{
 		Success:   true,
@@ -315,7 +312,7 @@ func (h *EnhancedBreakDetectionHandler) writeSuccessResponse(w http.ResponseWrit
 func (h *EnhancedBreakDetectionHandler) writeErrorResponse(w http.ResponseWriter,
 	status int, code string, message string, details interface{}) {
 	response := APIResponse{
-		Success:   false,
+		Success: false,
 		Error: &APIError{
 			Code:    code,
 			Message: message,
@@ -335,4 +332,3 @@ func (h *EnhancedBreakDetectionHandler) writeJSONResponse(w http.ResponseWriter,
 		h.logger.Printf("Failed to encode response: %v", err)
 	}
 }
-

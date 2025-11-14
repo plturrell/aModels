@@ -511,11 +511,3 @@ func (h *CatalogHandlers) dataElementToMap(element *iso11179.DataElement) map[st
 		"metadata":                 element.Metadata,
 	}
 }
-
-// writeJSON writes a JSON response.
-func writeJSON(w http.ResponseWriter, statusCode int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(data)
-}
-

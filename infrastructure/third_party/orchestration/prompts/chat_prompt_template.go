@@ -36,7 +36,7 @@ func (p ChatPromptTemplate) FormatPrompt(values map[string]any) (llms.PromptValu
 		formattedMessages = append(formattedMessages, curFormattedMessages...)
 	}
 
-	return ChatPromptValue(formattedMessages), nil
+	return NewChatTokenPromptValue(formattedMessages), nil
 }
 
 // Format formats the messages with values given and returns the messages as a string.

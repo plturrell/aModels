@@ -131,6 +131,34 @@ With the sidecar running, LocalAI will automatically forward chat completion req
 
 > **Tip:** The sidecar depends on `torch`, `transformers`, and `accelerate`, so the first install can take a moment. Subsequent launches reuse the virtual environment.
 
+### Optional: Code World Model (CWM) Fastgen backend
+
+The repository vendors Meta's [Code World Model](https://github.com/facebookresearch/cwm) under `../../models/cwm`. To expose it as a LocalAI domain:
+
+1. **Launch the Fastgen server** from the vendored checkout (requires GPUs that meet CWM's requirements):
+   ```bash
+   cd ../../models/cwm
+   # Follow upstream instructions to download checkpoints.
+   torchrun --nproc-per-node 2 -m serve.fgserve config=serve/configs/cwm.yaml \
+     checkpoint_dir=/abs/path/to/cwm/checkpoint
+   ```
+2. **Enable the domain** when starting LocalAI:
+   ```bash
+   ENABLE_CWM_DOMAIN=1 ./bin/vaultgemma-server --config config/domains.json
+   ```
+
+When enabled, prompts routed to `0xC0DE-CodeWorldModelAgent` (or specifying `"model": "0xC0DE-CodeWorldModelAgent"`) will proxy through the Fastgen endpoint at `http://localhost:5678/v1/chat/completions`. The domain falls back to `phi-3.5-mini` if CWM is unavailable.
+
+### Optional: CALM Continuous Reasoning domain
+
+We also vendor **CALM** under `../../models/calm`. To expose the CALM-L checkpoint through the standard transformers sidecar:
+
+1. Download the Hugging Face weights (accept the license first) and place them under `../../models/calm/hf/CALM-L` so the directory contains the usual `config.json`, `pytorch_model.bin`, tokenizer files, etc.
+2. Ensure the transformers sidecar is running (`scripts/start_transformers_sidecar.sh`); it will now advertise the `calm-l` model.
+3. Start LocalAI with `ENABLE_CALM_DOMAIN=1` so the domain loads from `config/domains.json`.
+
+Requests routed to `0xCALM-ContinuousReasoningAgent` will call the transformers sidecar at `http://localhost:9090/v1/chat/completions`. If CALM is disabled or unavailable the server will automatically fall back to `phi-3.5-mini`.
+
 ## 5. Configuration
 
 The server is configured through command-line flags and the `config/domains.json` file.

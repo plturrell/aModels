@@ -2,6 +2,7 @@ package chains
 
 import (
 	"context"
+	"errors"
 
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/callbacks"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/llms"
@@ -9,6 +10,7 @@ import (
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/outputparser"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/prompts"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/schema"
+	monitoring "github.com/plturrell/aModels/services/extract/pkg/monitoring"
 )
 
 const _llmChainDefaultOutputKey = "text"
@@ -64,9 +66,42 @@ func (c LLMChain) Call(ctx context.Context, values map[string]any, options ...Ch
 		return nil, err
 	}
 
-	result, err := llms.GenerateFromSinglePrompt(ctx, c.LLM, promptValue.String(), getLLMCallOptions(options...)...)
+	// Telemetry: log the tokenized prompt structure if telemetry is enabled.
+	if telemetry, ok := ctx.Value("telemetry").(*monitoring.TelemetryClient); ok {
+		if tokenValue, ok := promptValue.(llms.TokenAwarePromptValue); ok {
+			promptID := monitoring.PromptID(c.Prompt.GetInputVariables()[0], values)
+			_ = telemetry.LogPromptTokens(
+				ctx,
+				promptID,
+				"template", // TODO: detect chat/few-shot
+				tokenValue.Tokens(),
+				len(values),
+			)
+		}
+	}
+
+	callOptions := getLLMCallOptions(options...)
+
+	messageContents, err := llms.ChatMessagesToMessageContents(promptValue.Messages())
 	if err != nil {
 		return nil, err
+	}
+
+	var result string
+	if len(messageContents) > 0 {
+		resp, err := c.LLM.GenerateContent(ctx, messageContents, callOptions...)
+		if err != nil {
+			return nil, err
+		}
+		if len(resp.Choices) == 0 {
+			return nil, errors.New("llm chain: empty response from model")
+		}
+		result = resp.Choices[0].Content
+	} else {
+		result, err = llms.GenerateFromSinglePrompt(ctx, c.LLM, promptValue.String(), callOptions...)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	finalOutput, err := c.OutputParser.ParseWithPrompt(result, promptValue)

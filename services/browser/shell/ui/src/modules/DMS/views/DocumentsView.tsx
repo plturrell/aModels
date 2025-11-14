@@ -18,7 +18,7 @@ import {
   ListItemText,
   Divider
 } from "@mui/material";
-import { Panel } from "../../../components/Panel";
+import { Panel } from "../../../components/common/Panel";
 import type { DMSDocument } from "../../../api/dms";
 
 interface DocumentsViewProps {

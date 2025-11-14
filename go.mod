@@ -9,7 +9,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.10.9
 	golang.org/x/image v0.25.0
-	gonum.org/v1/gonum v0.16.0
+	gonum.org/v1/gonum v0.13.0
 	gorgonia.org/gorgonia v0.9.18
 	gorgonia.org/tensor v0.9.24
 )
@@ -21,6 +21,14 @@ require (
 replace github.com/apache/arrow/go/v16 => ./infrastructure/third_party/go-arrow
 
 replace github.com/SAP/go-hdb => ./infrastructure/third_party/go-hdb
+
+replace github.com/plturrell/aModels/pkg/sap => ./pkg/sap
+
+replace github.com/plturrell/aModels/services/extract => ./services/extract
+
+replace github.com/plturrell/aModels/services/graph => ./services/graph
+
+replace github.com/plturrell/aModels/services/orchestration => ./services/orchestration
 
 replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20250825161204-c5933d9347a5
 
@@ -41,7 +49,6 @@ require (
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pressly/goose/v3 v3.20.0 // indirect
 	github.com/sethvargo/go-retry v0.2.4 // indirect
 	github.com/xtgo/set v1.0.0 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect

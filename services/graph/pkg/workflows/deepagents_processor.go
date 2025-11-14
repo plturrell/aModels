@@ -14,6 +14,9 @@ import (
 
 	"github.com/langchain-ai/langgraph-go/pkg/stategraph"
 	"github.com/langchain-ai/langgraph-go/pkg/integration"
+	"github.com/plturrell/aModels/services/graph/pkg/observability"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // DeepAgentsProcessorOptions configures the deep agents processing workflow.
@@ -114,6 +117,16 @@ func RunDeepAgentNode(deepagentsServiceURL string) stategraph.NodeFunc {
 				deepagentsServiceURL = "http://deepagents-service:9004"
 			}
 		}
+
+		// Start OpenTelemetry span for DeepAgents execution
+		ctx, span := observability.StartSpan(ctx, "deepagents.execute",
+			trace.WithAttributes(
+				attribute.String("agent.framework.type", "deepagents"),
+				attribute.String("workflow.type", "deepagents"),
+				attribute.Int("message.count", len(agentRequest.Messages)),
+				attribute.Bool("stream", agentRequest.Stream),
+			))
+		defer span.End()
 
 		// Start logged operation with correlation ID
 		op := integration.StartOperation(ctx, log.Default(), "deepagents.invoke")
@@ -220,9 +233,16 @@ func RunDeepAgentNode(deepagentsServiceURL string) stategraph.NodeFunc {
 			},
 		)
 		if err != nil {
+			observability.RecordError(ctx, err)
 			op.End(err)
 			return nil, fmt.Errorf("execute deep agent: %w", err)
 		}
+
+		// Record successful execution event
+		observability.RecordEvent(ctx, "deepagents.completed",
+			attribute.Int("response.message.count", len(agentResponse.Messages)),
+			attribute.Bool("success", true),
+		)
 
 		// Store results in state
 		newState := make(map[string]any, len(state)+4)

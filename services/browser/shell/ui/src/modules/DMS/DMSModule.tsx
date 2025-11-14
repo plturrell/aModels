@@ -23,7 +23,7 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import BarChartIcon from "@mui/icons-material/BarChart";
 import DescriptionIcon from "@mui/icons-material/Description";
 import SendIcon from "@mui/icons-material/Send";
-import { Panel } from "../../components/Panel";
+import { Panel } from "../../components/common/Panel";
 import { ProcessingView } from "./views/ProcessingView";
 import { ResultsView } from "./views/ResultsView";
 import { AnalyticsView } from "./views/AnalyticsView";

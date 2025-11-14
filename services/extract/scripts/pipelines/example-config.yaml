@@ -1,0 +1,62 @@
+# Example project configuration for code-to-knowledge graph pipeline
+# This file demonstrates how to configure the generalized pipeline
+
+project:
+  id: "my-codebase"
+  name: "My Application"
+  system_id: "backend"
+
+sources:
+  # File-based sources
+  files:
+    - "/path/to/code/*.sql"
+    - "/path/to/code/*.hql"
+    - "/path/to/code/*.json"
+  
+  # Git repository sources
+  git_repositories:
+    - url: "https://gitea.example.com/user/repo.git"
+      type: "gitea"
+      branch: "main"
+      auth:
+        type: "token"
+        token: "${GITEA_TOKEN}"
+      file_patterns:
+        - "**/*.sql"
+        - "**/*.hql"
+        - "**/*.go"
+    - url: "https://github.com/user/repo.git"
+      type: "github"
+      branch: "develop"
+      auth:
+        type: "ssh"
+        key_path: "/path/to/ssh/key"
+      file_patterns:
+        - "**/*.py"
+        - "**/*.yaml"
+
+parsers:
+  - type: "ddl"
+    enabled: true
+  - type: "sql"
+    enabled: true
+  - type: "python"
+    enabled: true
+    options:
+      extract_functions: true
+      extract_classes: true
+  - type: "go"
+    enabled: true
+    options:
+      extract_functions: true
+      extract_interfaces: true
+
+ai:
+  enabled: true
+  model: "cwm"  # or "phi-3.5-mini", "auto"
+  localai_url: "http://localai:8080"
+  tasks:
+    - "semantic_analysis"
+    - "relationship_discovery"
+    - "documentation_generation"
+

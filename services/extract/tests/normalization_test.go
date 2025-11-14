@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 )
 
 func TestNormalizeGraphDeduplicatesAndSetsRoot(t *testing.T) {
@@ -15,10 +17,10 @@ func TestNormalizeGraphDeduplicatesAndSetsRoot(t *testing.T) {
 
 	input := normalizationInput{
 		Nodes: []Node{
-			{ID: "doc-1", Type: "document", Label: "Document"},
-			{ID: "doc-1", Type: "document", Label: "Duplicate"},
-			{ID: "doc-1.col", Type: "column", Label: "Name", Props: map[string]any{"type": "string"}},
-			{ID: "doc-1.col", Type: "column", Label: "Name", Props: map[string]any{"type": "string"}},
+			{ID: "doc-1", Type: graph.NodeTypeDocument, Label: "Document"},
+			{ID: "doc-1", Type: graph.NodeTypeDocument, Label: "Duplicate"},
+			{ID: "doc-1.col", Type: graph.NodeTypeColumn, Label: "Name", Props: map[string]any{"type": "string"}},
+			{ID: "doc-1.col", Type: graph.NodeTypeColumn, Label: "Name", Props: map[string]any{"type": "string"}},
 		},
 		Edges: []Edge{
 			{SourceID: "doc-1", TargetID: "doc-1.col", Label: "HAS_COLUMN"},

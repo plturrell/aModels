@@ -36,7 +36,8 @@ type ddlColumn struct {
 	References any    `json:"references"`
 }
 
-func parseHiveDDL(ctx context.Context, ddl string) (ddlParseResult, error) {
+// ParseHiveDDL parses a Hive DDL statement.
+func ParseHiveDDL(ctx context.Context, ddl string) (ddlParseResult, error) {
 	// Check if ddl is a file path (contains "/" or starts with "/")
 	// If it's a file path, read the file content
 	ddlContent := ddl
@@ -106,7 +107,8 @@ func parseHiveDDL(ctx context.Context, ddl string) (ddlParseResult, error) {
 	return parsed, nil
 }
 
-func ddlToGraph(parsed ddlParseResult) ([]graph.Node, []graph.Edge) {
+// DDLToGraph converts a parsed DDL result to graph nodes and edges.
+func DDLToGraph(parsed ddlParseResult) ([]graph.Node, []graph.Edge) {
 	var nodes []graph.Node
 	var edges []graph.Edge
 	schemaNodes := make(map[string]bool) // Track created schema nodes
@@ -129,7 +131,7 @@ func ddlToGraph(parsed ddlParseResult) ([]graph.Node, []graph.Edge) {
 			if !schemaNodes[schemaID] {
 				nodes = append(nodes, graph.Node{
 					ID:    schemaID,
-					Type:  "database",
+					Type:  graph.NodeTypeDatabase,
 					Label: schemaName,
 					Props: map[string]any{
 						"schema": schemaName,
@@ -164,7 +166,7 @@ func ddlToGraph(parsed ddlParseResult) ([]graph.Node, []graph.Edge) {
 
 		nodes = append(nodes, graph.Node{
 			ID:    tableID,
-			Type:  "table",
+			Type:  graph.NodeTypeTable,
 			Label: table.TableName,
 			Props: mapOrNil(tableProps),
 		})
@@ -231,7 +233,7 @@ func ddlToGraph(parsed ddlParseResult) ([]graph.Node, []graph.Edge) {
 
 			nodes = append(nodes, graph.Node{
 				ID:    columnID,
-				Type:  "column",
+				Type:  graph.NodeTypeColumn,
 				Label: column.Name,
 				Props: mapOrNil(columnProps),
 			})

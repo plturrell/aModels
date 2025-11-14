@@ -23,7 +23,7 @@ func NewDigitalTwinIntegration(twinSystem *digitaltwin.DigitalTwinSystem, logger
 }
 
 // CreateTwinForDataProduct creates a digital twin for a data product.
-func (dti *DigitalTwinIntegration) CreateTwinForDataProduct(ctx context.Context, productID string, productName string) (*digitaltwin.DigitalTwin, error) {
+func (dti *DigitalTwinIntegration) CreateTwinForDataProduct(ctx context.Context, productID string, productName string) (*digitaltwin.Twin, error) {
 	if dti.twinSystem == nil {
 		return nil, fmt.Errorf("digital twin system not initialized")
 	}
@@ -41,16 +41,21 @@ func (dti *DigitalTwinIntegration) CreateTwinForDataProduct(ctx context.Context,
 }
 
 // SimulateDataProductChange simulates a change to a data product using its twin.
-func (dti *DigitalTwinIntegration) SimulateDataProductChange(ctx context.Context, productID string, change digitaltwin.Change) (*digitaltwin.RehearsalResult, error) {
+func (dti *DigitalTwinIntegration) SimulateDataProductChange(ctx context.Context, productID string, change digitaltwin.Change) (*digitaltwin.Rehearsal, error) {
 	if dti.twinSystem == nil {
 		return nil, fmt.Errorf("digital twin system not initialized")
 	}
 
 	// Find twin for product
-	twin, err := dti.twinSystem.GetTwinManager().GetTwinBySourceID(ctx, productID)
+	filters := digitaltwin.TwinFilters{SourceID: productID, Limit: 1}
+	twins, err := dti.twinSystem.GetTwinManager().ListTwins(ctx, filters)
 	if err != nil {
-		return nil, fmt.Errorf("twin not found for product %s: %w", productID, err)
+		return nil, fmt.Errorf("failed to locate twin for product %s: %w", productID, err)
 	}
+	if len(twins) == 0 {
+		return nil, fmt.Errorf("twin not found for product %s", productID)
+	}
+	twin := twins[0]
 
 	// Rehearse change
 	result, err := dti.twinSystem.RehearseChange(ctx, twin.ID, change, true, false)
@@ -60,4 +65,3 @@ func (dti *DigitalTwinIntegration) SimulateDataProductChange(ctx context.Context
 
 	return result, nil
 }
-

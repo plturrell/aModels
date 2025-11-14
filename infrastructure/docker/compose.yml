@@ -12,7 +12,8 @@ services:
 
   gateway:
     build:
-      context: ../gateway
+      context: ../..
+      dockerfile: services/gateway/Dockerfile
     environment:
       - HANA_URL=http://hana:8083
       - GATEWAY_PORT=8000
@@ -57,8 +58,8 @@ services:
 
   deepagents:
     build:
-      context: ../../services/deepagents
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: services/deepagents/Dockerfile
     environment:
       - EXTRACT_SERVICE_URL=http://extract-service:19080
       - AGENTFLOW_SERVICE_URL=http://agentflow-service:9001
@@ -149,8 +150,8 @@ services:
 
   catalog:
     build:
-      context: ../../services/catalog
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: services/catalog/Dockerfile
     environment:
       - PORT=8084
       - RUN_MIGRATIONS=${RUN_MIGRATIONS:-true}

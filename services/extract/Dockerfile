@@ -39,13 +39,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the compiled binary
-COPY --from=builder /build/server ./server
+COPY --from=builder /workspace/services/extract/server ./server
 
 # Copy scripts
 COPY services/extract/scripts ./scripts
 
 # Make scripts executable
-RUN chmod +x ./scripts/*.sh 2>/dev/null || true
+RUN find ./scripts -name "*.sh" -exec chmod +x {} \; 2>/dev/null || true
 
 # Set working directory
 WORKDIR /app
@@ -54,4 +54,4 @@ WORKDIR /app
 EXPOSE 8082 9090 8815
 
 # Entrypoint
-ENTRYPOINT ["./scripts/start_extract.sh"]
+ENTRYPOINT ["./scripts/services/start_extract.sh"]

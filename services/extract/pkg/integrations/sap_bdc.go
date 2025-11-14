@@ -172,7 +172,7 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 	// Create database/schema node
 	dbNode := graph.Node{
 		ID:    fmt.Sprintf("sap_bdc:%s:%s", schema.Database, schema.Schema),
-		Type:  "database",
+		Type:  graph.NodeTypeDatabase,
 		Label: fmt.Sprintf("%s.%s", schema.Database, schema.Schema),
 		Props: map[string]any{
 			"database":   schema.Database,
@@ -188,7 +188,7 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 	for _, table := range schema.Tables {
 		tableNode := graph.Node{
 			ID:    fmt.Sprintf("sap_bdc:table:%s:%s:%s", schema.Database, schema.Schema, table.Name),
-			Type:  "table",
+			Type:  graph.NodeTypeTable,
 			Label: table.Name,
 			Props: map[string]any{
 				"database":   schema.Database,
@@ -220,7 +220,7 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 		for _, column := range table.Columns {
 			columnNode := graph.Node{
 				ID:    fmt.Sprintf("sap_bdc:column:%s:%s:%s:%s", schema.Database, schema.Schema, table.Name, column.Name),
-				Type:  "column",
+				Type:  graph.NodeTypeColumn,
 				Label: column.Name,
 				Props: map[string]any{
 					"database":    schema.Database,
@@ -279,7 +279,7 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 	for _, view := range schema.Views {
 		viewNode := graph.Node{
 			ID:    fmt.Sprintf("sap_bdc:view:%s:%s:%s", schema.Database, schema.Schema, view.Name),
-			Type:  "view",
+			Type:  graph.NodeTypeView,
 			Label: view.Name,
 			Props: map[string]any{
 				"database":   schema.Database,
@@ -312,7 +312,7 @@ func (s *SAPBDCIntegration) convertSAPBDCSchemaToGraph(
 		for _, column := range view.Columns {
 			columnNode := graph.Node{
 				ID:    fmt.Sprintf("sap_bdc:column:%s:%s:%s:%s", schema.Database, schema.Schema, view.Name, column.Name),
-				Type:  "column",
+				Type:  graph.NodeTypeColumn,
 				Label: column.Name,
 				Props: map[string]any{
 					"database":    schema.Database,

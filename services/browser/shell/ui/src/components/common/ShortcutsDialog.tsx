@@ -19,7 +19,7 @@ import {
   Divider,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import { GLOBAL_SHORTCUTS, formatShortcut } from '../hooks/useGlobalShortcuts';
+import { GLOBAL_SHORTCUTS, formatShortcut } from '../../hooks/useGlobalShortcuts';
 
 interface ShortcutsDialogProps {
   open: boolean;

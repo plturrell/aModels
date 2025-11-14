@@ -40,7 +40,8 @@ type SignavioMetadata struct {
 	Errors       []string                 `json:"errors,omitempty"`
 }
 
-func loadSignavioArtifacts(paths []string, logger *log.Logger) ([]graph.Node, []graph.Edge, SignavioMetadata) {
+// LoadSignavioArtifacts loads Signavio artifacts from file paths.
+func LoadSignavioArtifacts(paths []string, logger *log.Logger) ([]graph.Node, []graph.Edge, SignavioMetadata) {
 	metadata := SignavioMetadata{}
 	if len(paths) == 0 {
 		return nil, nil, metadata

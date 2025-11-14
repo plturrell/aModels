@@ -54,6 +54,11 @@ func ValidateNodes(nodes []graph.Node, logger *log.Logger) ValidationResult {
 			continue
 		}
 
+		// Validate node type is recognized
+		if !graph.IsValidNodeType(node.Type) {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("node[%d] (id=%s): unknown node type '%s'", i, node.ID, node.Type))
+		}
+
 		// Validate ID format (should not contain special characters that could break queries)
 		if strings.ContainsAny(node.ID, " \t\n\r") {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("node[%d] (id=%s): ID contains whitespace", i, node.ID))

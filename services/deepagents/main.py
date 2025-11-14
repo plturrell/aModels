@@ -18,6 +18,8 @@ from observability import (
     record_structured_output,
     get_metrics,
 )
+from otel_instrumentation import init_otel_instrumentation, get_tracer, shutdown_otel
+from opentelemetry import trace
 
 # Global agent instance (created on startup)
 _agent = None
@@ -122,6 +124,9 @@ def validate_config():
 @app.on_event("startup")
 async def startup():
     """Initialize the deep agent on startup."""
+    # Initialize OpenTelemetry instrumentation
+    init_otel_instrumentation(app)
+    
     # Validate configuration
     try:
         validate_config()
@@ -137,6 +142,12 @@ async def startup():
     except Exception as e:
         logger.warning(f"Failed to initialize DeepAgent: {e}")
         logger.warning("Agent will be created on first request")
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    """Shutdown the service."""
+    shutdown_otel()
 
 
 @app.get("/healthz")
@@ -213,67 +224,98 @@ async def invoke_agent(request: AgentRequest) -> AgentResponse:
         Agent response with messages and result
     """
     import time
+    from opentelemetry.trace import Status, StatusCode
+    
+    tracer = get_tracer()
     start_time = time.time()
     
-    global _agent
-    if _agent is None:
-        # Lazy initialization if startup failed
-        _agent = create_amodels_deep_agent()
-    
-    try:
-        # Convert messages to format expected by LangGraph
-        messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+    # Start OpenTelemetry span
+    with tracer.start_as_current_span("deepagents.invoke") as span:
+        span.set_attribute("agent.framework.type", "deepagents")
+        span.set_attribute("workflow.type", "agent_invocation")
+        span.set_attribute("request.message_count", len(request.messages))
+        span.set_attribute("request.stream", request.stream)
         
-        # Prepare input
-        agent_input = {"messages": messages}
         if request.config:
-            agent_input["config"] = request.config
+            for key, value in request.config.items():
+                span.set_attribute(f"request.config.{key}", str(value))
         
-        # If response_format is "json", add instruction to response in JSON
-        if request.response_format == "json":
-            # Add instruction to last user message
-            if messages and messages[-1].get("role") == "user":
-                messages[-1]["content"] += "\n\nPlease respond with valid JSON only."
+        global _agent
+        if _agent is None:
+            # Lazy initialization if startup failed
+            _agent = create_amodels_deep_agent()
         
-        # Invoke agent
-        result = _agent.invoke(agent_input)
+        try:
+            # Convert messages to format expected by LangGraph
+            messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+            
+            # Prepare input
+            agent_input = {"messages": messages}
+            if request.config:
+                agent_input["config"] = request.config
+            
+            # If response_format is "json", add instruction to response in JSON
+            if request.response_format == "json":
+                # Add instruction to last user message
+                if messages and messages[-1].get("role") == "user":
+                    messages[-1]["content"] += "\n\nPlease respond with valid JSON only."
+            
+            # Invoke agent
+            result = _agent.invoke(agent_input)
+            
+            # Extract messages from result
+            response_messages = []
+            if "messages" in result:
+                response_messages = [
+                    {
+                        "role": msg.get("role", "assistant"),
+                        "content": msg.get("content", ""),
+                    }
+                    for msg in result["messages"]
+                ]
+            
+            # Record metrics
+            latency = time.time() - start_time
+            record_request("/invoke", "POST", 200)
+            record_latency("/invoke", latency)
+            
+            # Estimate token usage (rough estimate: 1 token ≈ 4 characters)
+            total_chars = sum(len(msg.get("content", "")) for msg in messages + response_messages)
+            estimated_tokens = total_chars // 4
+            record_token_usage(input_tokens=estimated_tokens // 2, output_tokens=estimated_tokens // 2)
+            
+            # Add span attributes
+            span.set_attribute("response.message_count", len(response_messages))
+            span.set_attribute("latency_ms", latency * 1000)
+            span.set_attribute("estimated_tokens", estimated_tokens)
+            span.set_status(Status(StatusCode.OK))
+            
+            # Record event
+            span.add_event("agent.invoke.completed", {
+                "message_count": len(response_messages),
+                "latency_ms": latency * 1000,
+            })
+            
+            return AgentResponse(
+                messages=response_messages,
+                result=result.get("result") if "result" in result else result,
+            )
         
-        # Extract messages from result
-        response_messages = []
-        if "messages" in result:
-            response_messages = [
-                {
-                    "role": msg.get("role", "assistant"),
-                    "content": msg.get("content", ""),
-                }
-                for msg in result["messages"]
-            ]
-        
-        # Record metrics
-        latency = time.time() - start_time
-        record_request("/invoke", "POST", 200)
-        record_latency("/invoke", latency)
-        
-        # Estimate token usage (rough estimate: 1 token ≈ 4 characters)
-        total_chars = sum(len(msg.get("content", "")) for msg in messages + response_messages)
-        estimated_tokens = total_chars // 4
-        record_token_usage(input_tokens=estimated_tokens // 2, output_tokens=estimated_tokens // 2)
-        
-        return AgentResponse(
-            messages=response_messages,
-            result=result.get("result") if "result" in result else result,
-        )
-    
-    except Exception as e:
-        latency = time.time() - start_time
-        record_request("/invoke", "POST", 500)
-        record_latency("/invoke", latency)
-        record_error("/invoke", "exception")
-        logger.exception("Agent invocation failed")
-        raise HTTPException(
-            status_code=500,
-            detail="Agent invocation failed; see service logs for details.",
-        )
+        except Exception as e:
+            latency = time.time() - start_time
+            record_request("/invoke", "POST", 500)
+            record_latency("/invoke", latency)
+            record_error("/invoke", "exception")
+            
+            # Record error in span
+            span.record_exception(e)
+            span.set_status(Status(StatusCode.ERROR, str(e)))
+            
+            logger.exception("Agent invocation failed")
+            raise HTTPException(
+                status_code=500,
+                detail="Agent invocation failed; see service logs for details.",
+            )
 
 
 @app.post("/invoke/structured", response_model=StructuredAgentResponse)
@@ -287,92 +329,124 @@ async def invoke_agent_structured(request: StructuredAgentRequest) -> Structured
         Structured agent response with validated output
     """
     import time
+    from opentelemetry.trace import Status, StatusCode
+    
+    tracer = get_tracer()
     start_time = time.time()
     
-    global _agent
-    if _agent is None:
-        _agent = create_amodels_deep_agent()
-    
-    try:
-        # Convert messages
-        messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+    # Start OpenTelemetry span
+    with tracer.start_as_current_span("deepagents.invoke.structured") as span:
+        span.set_attribute("agent.framework.type", "deepagents")
+        span.set_attribute("workflow.type", "structured_agent_invocation")
+        span.set_attribute("request.message_count", len(request.messages))
+        span.set_attribute("request.stream", request.stream)
         
-        # Prepare input
-        agent_input = {"messages": messages}
-        if request.config:
-            agent_input["config"] = request.config
+        if isinstance(request.response_format, dict):
+            span.set_attribute("response_format.type", request.response_format.get("type", "unknown"))
         
-        # Handle response format
-        response_format = request.response_format
-        if isinstance(response_format, str):
-            response_format = {"type": "json"} if response_format == "json" else None
-        elif isinstance(response_format, StructuredOutputSchema):
-            response_format = response_format.dict()
+        global _agent
+        if _agent is None:
+            _agent = create_amodels_deep_agent()
         
-        # Add instruction for structured output
-        if response_format:
-            schema_instruction = "\n\nPlease respond with valid JSON that matches the requested structure."
-            if isinstance(response_format, dict) and "json_schema" in response_format:
-                schema = response_format.get("json_schema", {})
-                if "properties" in schema:
-                    schema_instruction += f"\n\nRequired structure: {json.dumps(schema, indent=2)}"
+        try:
+            # Convert messages
+            messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
             
-            if messages and messages[-1].get("role") == "user":
-                messages[-1]["content"] += schema_instruction
+            # Prepare input
+            agent_input = {"messages": messages}
+            if request.config:
+                agent_input["config"] = request.config
+            
+            # Handle response format
+            response_format = request.response_format
+            if isinstance(response_format, str):
+                response_format = {"type": "json"} if response_format == "json" else None
+            elif isinstance(response_format, StructuredOutputSchema):
+                response_format = response_format.dict()
+            
+            # Add instruction for structured output
+            if response_format:
+                schema_instruction = "\n\nPlease respond with valid JSON that matches the requested structure."
+                if isinstance(response_format, dict) and "json_schema" in response_format:
+                    schema = response_format.get("json_schema", {})
+                    if "properties" in schema:
+                        schema_instruction += f"\n\nRequired structure: {json.dumps(schema, indent=2)}"
+                
+                if messages and messages[-1].get("role") == "user":
+                    messages[-1]["content"] += schema_instruction
+            
+            # Invoke agent
+            result = _agent.invoke(agent_input)
+            
+            # Extract messages
+            response_messages = []
+            if "messages" in result:
+                response_messages = [
+                    {
+                        "role": msg.get("role", "assistant"),
+                        "content": msg.get("content", ""),
+                    }
+                    for msg in result["messages"]
+                ]
+            
+            # Extract and validate structured output
+            structured_output = _extract_structured_output(response_messages, response_format)
+            validation_errors = None
+            
+            if response_format and not structured_output:
+                validation_errors = ["Failed to extract structured output from response"]
+            
+            # Record metrics
+            latency = time.time() - start_time
+            record_request("/invoke/structured", "POST", 200)
+            record_latency("/invoke/structured", latency)
+            record_structured_output(
+                success=structured_output is not None,
+                validation_errors=len(validation_errors) if validation_errors else 0
+            )
+            
+            # Estimate token usage
+            total_chars = sum(len(msg.get("content", "")) for msg in messages + response_messages)
+            estimated_tokens = total_chars // 4
+            record_token_usage(input_tokens=estimated_tokens // 2, output_tokens=estimated_tokens // 2)
+            
+            # Add span attributes
+            span.set_attribute("response.message_count", len(response_messages))
+            span.set_attribute("structured_output.success", structured_output is not None)
+            span.set_attribute("validation_errors.count", len(validation_errors) if validation_errors else 0)
+            span.set_attribute("latency_ms", latency * 1000)
+            span.set_attribute("estimated_tokens", estimated_tokens)
+            span.set_status(Status(StatusCode.OK))
+            
+            # Record event
+            span.add_event("agent.invoke.structured.completed", {
+                "structured_output_success": structured_output is not None,
+                "validation_errors": len(validation_errors) if validation_errors else 0,
+            })
+            
+            return StructuredAgentResponse(
+                messages=response_messages,
+                structured_output=structured_output,
+                result=result.get("result") if "result" in result else result,
+                validation_errors=validation_errors,
+            )
         
-        # Invoke agent
-        result = _agent.invoke(agent_input)
-        
-        # Extract messages
-        response_messages = []
-        if "messages" in result:
-            response_messages = [
-                {
-                    "role": msg.get("role", "assistant"),
-                    "content": msg.get("content", ""),
-                }
-                for msg in result["messages"]
-            ]
-        
-        # Extract and validate structured output
-        structured_output = _extract_structured_output(response_messages, response_format)
-        validation_errors = None
-        
-        if response_format and not structured_output:
-            validation_errors = ["Failed to extract structured output from response"]
-        
-        # Record metrics
-        latency = time.time() - start_time
-        record_request("/invoke/structured", "POST", 200)
-        record_latency("/invoke/structured", latency)
-        record_structured_output(
-            success=structured_output is not None,
-            validation_errors=len(validation_errors) if validation_errors else 0
-        )
-        
-        # Estimate token usage
-        total_chars = sum(len(msg.get("content", "")) for msg in messages + response_messages)
-        estimated_tokens = total_chars // 4
-        record_token_usage(input_tokens=estimated_tokens // 2, output_tokens=estimated_tokens // 2)
-        
-        return StructuredAgentResponse(
-            messages=response_messages,
-            structured_output=structured_output,
-            result=result.get("result") if "result" in result else result,
-            validation_errors=validation_errors,
-        )
-    
-    except Exception as e:
-        latency = time.time() - start_time
-        record_request("/invoke/structured", "POST", 500)
-        record_latency("/invoke/structured", latency)
-        record_error("/invoke/structured", "exception")
-        record_structured_output(success=False)
-        logger.exception("Structured agent invocation failed")
-        raise HTTPException(
-            status_code=500,
-            detail="Structured agent invocation failed; see service logs for details.",
-        )
+        except Exception as e:
+            latency = time.time() - start_time
+            record_request("/invoke/structured", "POST", 500)
+            record_latency("/invoke/structured", latency)
+            record_error("/invoke/structured", "exception")
+            record_structured_output(success=False)
+            
+            # Record error in span
+            span.record_exception(e)
+            span.set_status(Status(StatusCode.ERROR, str(e)))
+            
+            logger.exception("Structured agent invocation failed")
+            raise HTTPException(
+                status_code=500,
+                detail="Structured agent invocation failed; see service logs for details.",
+            )
 
 
 @app.post("/stream")

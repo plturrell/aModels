@@ -51,6 +51,14 @@ MODEL_REGISTRY: Dict[str, Dict[str, str]] = {
             "granite-4.0-transformers-granite",
         )
     },
+    "calm-l": {
+        "path": os.path.join(
+            MODELS_BASE,
+            "calm",
+            "hf",
+            "CALM-L",
+        )
+    },
 }
 
 app = FastAPI(title="Transformers GPU Service", version="0.1.0")

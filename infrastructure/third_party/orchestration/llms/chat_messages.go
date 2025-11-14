@@ -202,3 +202,52 @@ func ConvertChatMessageToModel(m ChatMessage) ChatMessageModel {
 		},
 	}
 }
+
+// ChatMessagesToMessageContents converts chat messages into the MessageContent
+// form required by multi-part GenerateContent calls.
+func ChatMessagesToMessageContents(messages []ChatMessage) ([]MessageContent, error) {
+	if len(messages) == 0 {
+		return nil, nil
+	}
+
+	contents := make([]MessageContent, 0, len(messages))
+	for _, msg := range messages {
+		if msg == nil {
+			return nil, fmt.Errorf("llms: nil chat message encountered")
+		}
+
+		role := msg.GetType()
+		content := strings.TrimSpace(msg.GetContent())
+		parts := []ContentPart{TextPart(content)}
+
+		switch m := msg.(type) {
+		case AIChatMessage:
+			if m.FunctionCall != nil {
+				// Preserve function call metadata where supported.
+				parts = append(parts, ToolCall{
+					ID: "function_call",
+					Type: "function",
+					FunctionCall: m.FunctionCall,
+				})
+			}
+			if len(m.ToolCalls) > 0 {
+				for _, call := range m.ToolCalls {
+					parts = append(parts, call)
+				}
+			}
+		case ToolChatMessage:
+			parts = append(parts, ToolCallResponse{
+				ToolCallID: m.ID,
+				Name:       "tool",
+				Content:    m.Content,
+			})
+		}
+
+		contents = append(contents, MessageContent{
+			Role:  role,
+			Parts: parts,
+		})
+	}
+
+	return contents, nil
+}

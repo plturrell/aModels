@@ -5,11 +5,9 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -25,13 +23,9 @@ type BaselineManagerEnhanced struct {
 }
 
 // NewBaselineManagerEnhanced creates an enhanced baseline manager
-func NewBaselineManagerEnhanced(
-	baseManager *BaselineManager,
-	enableCompression bool,
-	enableValidation bool,
-) *BaselineManagerEnhanced {
+func NewBaselineManagerEnhanced(baseManager *BaselineManager, enableCompression bool, enableValidation bool) *BaselineManagerEnhanced {
 	return &BaselineManagerEnhanced{
-		BaselineManager:  baseManager,
+		BaselineManager:   baseManager,
 		enableCompression: enableCompression,
 		enableValidation:  enableValidation,
 		maxSnapshotSize:   100 * 1024 * 1024, // 100MB
@@ -46,8 +40,8 @@ func (bme *BaselineManagerEnhanced) CreateBaselineEnhanced(ctx context.Context, 
 		// Create temporary baseline for validation
 		tempBaseline := &Baseline{
 			BaselineID:   fmt.Sprintf("temp-%s", uuid.New().String()),
-			SystemName:  req.SystemName,
-			Version:     req.Version,
+			SystemName:   req.SystemName,
+			Version:      req.Version,
 			SnapshotData: req.SnapshotData,
 		}
 		if err := ValidateBaseline(tempBaseline); err != nil {
@@ -126,7 +120,7 @@ func (bme *BaselineManagerEnhanced) GetBaselineEnhanced(ctx context.Context, bas
 }
 
 // CompareBaselinesEnhanced compares baselines with enhanced features
-func (bme *BaselineManagerEnhanced) CompareBaselinesEnhanced(ctx context.Context, 
+func (bme *BaselineManagerEnhanced) CompareBaselinesEnhanced(ctx context.Context,
 	baseline1ID, baseline2ID string) (*BreakComparison, error) {
 	// Verify baselines exist
 	if _, err := bme.GetBaselineEnhanced(ctx, baseline1ID); err != nil {
@@ -167,9 +161,8 @@ func (bme *BaselineManagerEnhanced) VerifySnapshotIntegrity(ctx context.Context,
 // Helper methods
 func (bme *BaselineManagerEnhanced) compressData(data []byte) ([]byte, error) {
 	var buf bytes.Buffer
-	writer := io.Writer(&buf)
-	
-	gzipWriter, err := gzip.NewWriterLevel(writer, bme.compressionLevel)
+
+	gzipWriter, err := gzip.NewWriterLevel(&buf, bme.compressionLevel)
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +176,7 @@ func (bme *BaselineManagerEnhanced) compressData(data []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	return buf, nil
+	return buf.Bytes(), nil
 }
 
 func (bme *BaselineManagerEnhanced) decompressData(data []byte) ([]byte, error) {
@@ -273,4 +266,3 @@ func (bme *BaselineManagerEnhanced) getRequiredFields(systemName SystemName) []s
 		return []string{}
 	}
 }
-

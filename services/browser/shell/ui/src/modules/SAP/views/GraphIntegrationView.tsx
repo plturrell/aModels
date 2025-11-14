@@ -19,7 +19,7 @@ import {
   InputLabel,
 } from '@mui/material';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
-import { Panel } from '../../../components/Panel';
+import { Panel } from '../../../components/common/Panel';
 import { GraphVisualization, LayoutType } from '../../../components/GraphVisualization';
 import type { SAPBDCConnectionConfig } from '../../../api/sap';
 import type { GraphData } from '../../../api/graph';

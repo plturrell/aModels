@@ -12,7 +12,8 @@ import (
 	"github.com/plturrell/aModels/services/orchestration/agents"
 )
 
-// DMSConnector connects to DMS FastAPI service to fetch documents.
+// DMSConnector connects to Extract service to fetch documents (migrated from DMS).
+// This connector now uses Extract service endpoints instead of DMS.
 type DMSConnector struct {
 	config     map[string]interface{}
 	logger     *log.Logger
@@ -33,14 +34,18 @@ type DMSDocument struct {
 	Content           string    `json:"content,omitempty"` // Will be populated from storage_path if needed
 }
 
-// NewDMSConnector creates a new DMS connector.
+// NewDMSConnector creates a new connector for Extract service (replaces DMS).
 func NewDMSConnector(config map[string]interface{}, logger *log.Logger) *DMSConnector {
 	baseURL, _ := config["base_url"].(string)
 	if baseURL == "" {
-		baseURL = config["DMS_URL"].(string)
+		// Try EXTRACT_URL first (new), then DMS_URL (backward compatibility)
+		baseURL, _ = config["EXTRACT_URL"].(string)
+		if baseURL == "" {
+			baseURL, _ = config["DMS_URL"].(string)
+		}
 	}
 	if baseURL == "" {
-		baseURL = "http://localhost:8096" // Default DMS port
+		baseURL = "http://localhost:8083" // Default Extract service port
 	}
 
 	// Use connection pooling for better performance (Priority 1)
@@ -62,10 +67,10 @@ func NewDMSConnector(config map[string]interface{}, logger *log.Logger) *DMSConn
 	}
 }
 
-// Connect establishes connection to DMS API.
+// Connect establishes connection to Extract service (replaces DMS).
 func (dc *DMSConnector) Connect(ctx context.Context, config map[string]interface{}) error {
 	if dc.logger != nil {
-		dc.logger.Printf("Connecting to DMS API at %s", dc.baseURL)
+		dc.logger.Printf("Connecting to Extract service at %s", dc.baseURL)
 	}
 
 	// Merge provided config
@@ -77,8 +82,12 @@ func (dc *DMSConnector) Connect(ctx context.Context, config map[string]interface
 	if baseURL, ok := config["base_url"].(string); ok && baseURL != "" {
 		dc.baseURL = baseURL
 	}
+	// Also check for EXTRACT_URL in config
+	if extractURL, ok := config["EXTRACT_URL"].(string); ok && extractURL != "" {
+		dc.baseURL = extractURL
+	}
 
-	// Test connection with a simple request
+	// Test connection with a simple request to Extract service
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, dc.baseURL+"/documents", nil)
 	if err != nil {
 		return fmt.Errorf("failed to create test request: %w", err)
@@ -87,22 +96,22 @@ func (dc *DMSConnector) Connect(ctx context.Context, config map[string]interface
 
 	resp, err := dc.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to connect to DMS API: %w", err)
+		return fmt.Errorf("failed to connect to Extract service: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("DMS API connection test failed with status %d", resp.StatusCode)
+		return fmt.Errorf("Extract service connection test failed with status %d", resp.StatusCode)
 	}
 
 	return nil
 }
 
-// DiscoverSchema discovers schema from DMS API.
-// For DMS, we treat each document as a "table" with content fields.
+// DiscoverSchema discovers schema from Extract service (replaces DMS).
+// For documents, we treat each document as a "table" with content fields.
 func (dc *DMSConnector) DiscoverSchema(ctx context.Context) (*agents.SourceSchema, error) {
 	schema := &agents.SourceSchema{
-		SourceType: "dms",
+		SourceType: "extract", // Updated from "dms"
 		Tables: []agents.TableDefinition{
 			{
 				Name: "documents",
@@ -129,13 +138,13 @@ func (dc *DMSConnector) DiscoverSchema(ctx context.Context) (*agents.SourceSchem
 	}
 
 	if dc.logger != nil {
-		dc.logger.Printf("Discovered DMS schema: %d tables", len(schema.Tables))
+		dc.logger.Printf("Discovered Extract service schema: %d tables", len(schema.Tables))
 	}
 
 	return schema, nil
 }
 
-// ExtractData extracts documents from DMS API.
+// ExtractData extracts documents from Extract service (replaces DMS).
 // Query parameters:
 //   - document_id: Specific document ID to fetch
 //   - limit: Maximum number of documents to fetch (default: 10)
@@ -164,7 +173,7 @@ func (dc *DMSConnector) ExtractData(ctx context.Context, query map[string]interf
 
 	documents, err := dc.listDocuments(ctx, limit, offset, query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list DMS documents: %w", err)
+		return nil, fmt.Errorf("failed to list documents from Extract service: %w", err)
 	}
 
 	// Convert to map format
@@ -184,13 +193,13 @@ func (dc *DMSConnector) ExtractData(ctx context.Context, query map[string]interf
 	}
 
 	if dc.logger != nil {
-		dc.logger.Printf("Extracted %d documents from DMS", len(result))
+		dc.logger.Printf("Extracted %d documents from Extract service", len(result))
 	}
 
 	return result, nil
 }
 
-// fetchDocumentByID fetches a specific document by ID.
+// fetchDocumentByID fetches a specific document by ID from Extract service.
 func (dc *DMSConnector) fetchDocumentByID(ctx context.Context, documentID string, query map[string]interface{}) (map[string]interface{}, error) {
 	url := fmt.Sprintf("%s/documents/%s", dc.baseURL, documentID)
 	
@@ -211,7 +220,7 @@ func (dc *DMSConnector) fetchDocumentByID(ctx context.Context, documentID string
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("DMS API returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("Extract service returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var doc DMSDocument
@@ -241,7 +250,7 @@ func (dc *DMSConnector) fetchDocumentByID(ctx context.Context, documentID string
 	}, nil
 }
 
-// listDocuments lists documents from DMS API.
+// listDocuments lists documents from Extract service.
 func (dc *DMSConnector) listDocuments(ctx context.Context, limit, offset int, query map[string]interface{}) ([]DMSDocument, error) {
 	url := fmt.Sprintf("%s/documents", dc.baseURL)
 	
@@ -251,7 +260,7 @@ func (dc *DMSConnector) listDocuments(ctx context.Context, limit, offset int, qu
 	}
 	req.Header.Set("Accept", "application/json")
 
-	// Add query parameters if needed (DMS API may support pagination)
+	// Add query parameters for pagination
 	q := req.URL.Query()
 	if limit > 0 {
 		q.Set("limit", fmt.Sprintf("%d", limit))
@@ -269,7 +278,7 @@ func (dc *DMSConnector) listDocuments(ctx context.Context, limit, offset int, qu
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("DMS API returned status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("Extract service returned status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var documents []DMSDocument
@@ -294,18 +303,17 @@ func (dc *DMSConnector) listDocuments(ctx context.Context, limit, offset int, qu
 }
 
 // readDocumentContent reads content from a document's storage path.
-// This is a placeholder - in production, you might need to fetch from DMS service
-// or read directly from storage if accessible.
+// Content is now stored in Gitea and accessible via Extract service.
 func (dc *DMSConnector) readDocumentContent(ctx context.Context, storagePath string) (string, error) {
-	// For now, return empty - content should be fetched via DMS API if needed
-	// In production, this might call a DMS endpoint to get document content
+	// Content is stored in Gitea and accessible via knowledge graph
+	// For now, return empty - content should be fetched via Extract service if needed
 	return "", nil
 }
 
 // Close closes the connection.
 func (dc *DMSConnector) Close() error {
 	if dc.logger != nil {
-		dc.logger.Printf("Closing DMS connection")
+		dc.logger.Printf("Closing Extract service connection")
 	}
 	return nil
 }

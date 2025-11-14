@@ -34,8 +34,6 @@ import { GNNInsights } from './views/GNNInsights';
 import { Analytics } from './views/Analytics';
 import { PatternVisualization } from './views/PatternVisualization';
 import { AIGraphAssistant } from '../../components/AIGraphAssistant';
-import { GraphRecommendations } from '../../components/GraphRecommendations';
-import { VisualQueryBuilder } from '../../components/VisualQueryBuilder';
 import { NarrativeInsights } from './views/NarrativeInsights';
 import {
   visualizeGraph,
@@ -47,7 +45,7 @@ import {
   GraphEdge,
 } from '../../api/graph';
 import { GraphData } from '../../types/graph';
-import { GraphSkeleton } from '../../components/loading-states';
+// Simple loading indicator instead of GraphSkeleton
 
 interface GraphModuleProps {
   projectId?: string;
@@ -359,7 +357,9 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
           </Grid>
           <Grid item xs={12} md={7}>
             {loading && graphData.nodes.length === 0 ? (
-              <GraphSkeleton />
+              <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '600px' }}>
+                <CircularProgress />
+              </Box>
             ) : (
               <Paper sx={{ p: 2, height: '600px' }}>
                 <GraphVisualization
@@ -538,18 +538,14 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
       {activeTab === 9 && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
-            <GraphRecommendations
-              nodes={graphData.nodes}
-              edges={graphData.edges}
-              selectedNodeId={selectedNodes[0]}
-              onNodeClick={(nodeId) => {
-                setSelectedNodes([nodeId]);
-                handleNodeClick(nodeId, graphData.nodes.find(n => n.id === nodeId)!);
-              }}
-              onPathClick={(path) => {
-                setSelectedNodes(path);
-              }}
-            />
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Graph Recommendations
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                AI-powered recommendations will appear here
+              </Typography>
+            </Paper>
           </Grid>
         </Grid>
       )}
@@ -557,17 +553,14 @@ export function GraphModule({ projectId, systemId }: GraphModuleProps) {
       {activeTab === 10 && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
-            <VisualQueryBuilder
-              nodes={graphData.nodes}
-              edges={graphData.edges}
-              onQueryGenerated={(query) => {
-                setCypherQuery(query);
-                setActiveTab(11); // Switch to Query tab
-              }}
-              onQueryExecute={async (query) => {
-                return await queryGraph({ query });
-              }}
-            />
+            <Paper sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Visual Query Builder
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Drag-and-drop query builder coming soon
+              </Typography>
+            </Paper>
           </Grid>
         </Grid>
       )}

@@ -433,10 +433,11 @@ async def perplexity_catalog_search(payload: Dict[str, Any]) -> Any:
     except httpx.RequestError as e:
         raise HTTPException(status_code=502, detail=f"Orchestration service error: {e}")
 
-# DMS API endpoints - proxy to orchestration service
+# DMS API endpoints - proxy to orchestration service (which now uses Extract service)
+# These endpoints are kept for backward compatibility
 @app.post("/api/dms/process")
 async def dms_process(payload: Dict[str, Any]) -> Any:
-    """Process documents from DMS."""
+    """Process documents via orchestration service (which uses Extract service)."""
     global _orchestration_available, _last_health_check
     import time as time_module
     if time_module.time() - _last_health_check > 30:
@@ -613,7 +614,7 @@ async def dms_catalog_search(payload: Dict[str, Any]) -> Any:
 
 @app.get("/api/dms/documents/{document_id}")
 async def dms_get_document(document_id: str) -> Any:
-    """Get a specific DMS document."""
+    """Get a specific document from Extract service (via orchestration)."""
     try:
         r = await client.get(f"{ORCHESTRATION_URL}/api/dms/documents/{document_id}", timeout=30.0)
         r.raise_for_status()

@@ -7,7 +7,8 @@ import (
 	"strings"
 )
 
-type normalizationInput struct {
+// NormalizationInput represents input for graph normalization.
+type NormalizationInput struct {
 	Nodes               []graph.Node
 	Edges               []graph.Edge
 	ProjectID           string
@@ -24,7 +25,8 @@ type normalizationResult struct {
 	Warnings   []string
 }
 
-func normalizeGraph(input normalizationInput) normalizationResult {
+// NormalizeGraph normalizes a knowledge graph.
+func NormalizeGraph(input NormalizationInput) normalizationResult {
 	result := normalizationResult{
 		Stats:    map[string]any{},
 		Warnings: []string{},

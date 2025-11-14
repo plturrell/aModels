@@ -253,6 +253,19 @@ services:
       - NEO4J_USERNAME=neo4j
       - NEO4J_PASSWORD=amodels123
       - POSTGRES_CATALOG_DSN=postgresql://postgres:postgres@postgres:5432/amodels?sslmode=disable
+      - TELEMETRY_ENABLED=${TELEMETRY_ENABLED:-false}
+      - LANGEXTRACT_API_KEY=${LANGEXTRACT_API_KEY:-}
+      - SQLITE_PATH=/app/data/tables.db
+      - DOCUMENT_STORE_PATH=/app/data/documents
+      - POSTGRES_LANG_SERVICE_ADDR=${POSTGRES_LANG_SERVICE_ADDR:-}
+      # OpenTelemetry Configuration
+      - OTEL_TRACES_ENABLED=${OTEL_TRACES_ENABLED:-true}
+      - OTEL_EXPORTER_TYPE=${OTEL_EXPORTER_TYPE:-otlp}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://telemetry-exporter:4318}
+      - OTEL_EXPORT_FILE_ENABLED=${OTEL_EXPORT_FILE_ENABLED:-true}
+      - OTEL_EXPORT_FILE_PATH=/app/data/traces
+      - OTEL_EXPORT_SIGNAVIO_ENABLED=${OTEL_EXPORT_SIGNAVIO_ENABLED:-false}
+      - AGENT_FRAMEWORK_TYPE=extract
       # DeepAgents is enabled by default (10/10 integration)
       # Set DEEPAGENTS_ENABLED=false to disable
       - DEEPAGENTS_ENABLED=${DEEPAGENTS_ENABLED:-true}
@@ -268,9 +281,7 @@ services:
       # Multimodal Extraction and DeepSeek OCR (Phase 6)
       - USE_MULTIMODAL_EXTRACTION=${USE_MULTIMODAL_EXTRACTION:-true}
       - USE_DEEPSEEK_OCR=${USE_DEEPSEEK_OCR:-true}
-      # DMS Integration - Document Management System URLs
-      - DMS_EXTRACT_URL=${DMS_EXTRACT_URL:-http://extract-service:8082}
-      - DMS_CATALOG_URL=${DMS_CATALOG_URL:-http://catalog:8084}
+      # DMS Integration removed - now handled by Extract service
     volumes:
       - ../../data:/workspace/data:rw
       - ../../logs:/workspace/logs:rw
@@ -298,6 +309,14 @@ services:
       - NEO4J_PASSWORD=amodels123
       # Model Configuration - LocalAI only (no external LLM dependencies)
       - LOCALAI_URL=http://localai:8081
+      # OpenTelemetry Configuration
+      - OTEL_TRACES_ENABLED=${OTEL_TRACES_ENABLED:-true}
+      - OTEL_EXPORTER_TYPE=${OTEL_EXPORTER_TYPE:-otlp}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://telemetry-exporter:4318}
+      - OTEL_EXPORT_FILE_ENABLED=${OTEL_EXPORT_FILE_ENABLED:-true}
+      - OTEL_EXPORT_FILE_PATH=/app/data/traces
+      - OTEL_EXPORT_SIGNAVIO_ENABLED=${OTEL_EXPORT_SIGNAVIO_ENABLED:-false}
+      - AGENT_FRAMEWORK_TYPE=langgraph
     volumes:
       - ../../config:/workspace/config:ro
       - ../../artifacts/model-release:/workspace/assets:ro
@@ -326,6 +345,10 @@ services:
       - DEEPAGENTS_PORT=9004
       # Service URLs for DeepAgents tools
       - EXTRACT_SERVICE_URL=http://extract-service:8082
+      # OpenTelemetry Configuration
+      - OTEL_TRACES_ENABLED=${OTEL_TRACES_ENABLED:-true}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://telemetry-exporter:4318}
+      - AGENT_FRAMEWORK_TYPE=deepagents
       - AGENTFLOW_SERVICE_URL=http://agentflow-service:8001
       - GRAPH_SERVICE_URL=http://graph-server:8080
       # Model Configuration - LocalAI only (no external LLM dependencies)
@@ -431,43 +454,44 @@ services:
       retries: 3
       start_period: 40s
 
-  dms:
+  # DMS service removed - functionality migrated to Extract service with Gitea storage
+  # Document management is now handled by Extract service endpoints:
+  # - POST /documents/upload
+  # - GET /documents
+  # - GET /documents/{id}
+
+  telemetry-exporter:
     build:
       context: ../../..
-      dockerfile: ./services/dms/Dockerfile
-    image: amodels/dms:latest
-    container_name: dms-service
+      dockerfile: ./services/telemetry-exporter/Dockerfile
+    image: amodels/telemetry-exporter:latest
+    container_name: telemetry-exporter
     restart: unless-stopped
     environment:
-      - DMS_POSTGRES_DSN=postgresql+psycopg://postgres:postgres@postgres:5432/dms
-      - DMS_REDIS_URL=redis://redis:6379/0
-      - DMS_NEO4J_URI=neo4j://neo4j:7687
-      - DMS_NEO4J_USER=neo4j
-      - DMS_NEO4J_PASSWORD=amodels123
-      - DMS_STORAGE_ROOT=/workspace/data/dms/documents
-      - DMS_EXTRACT_URL=${DMS_EXTRACT_URL:-http://extract-service:8082}
-      - DMS_CATALOG_URL=${DMS_CATALOG_URL:-http://catalog:8084}
+      - OTEL_EXPORT_MODE=${OTEL_EXPORT_MODE:-both}
+      - OTEL_EXPORT_FLUSH_INTERVAL=${OTEL_EXPORT_FLUSH_INTERVAL:-30s}
+      - OTEL_EXPORT_FILE_ENABLED=${OTEL_EXPORT_FILE_ENABLED:-true}
+      - OTEL_EXPORT_FILE_PATH=/app/data/traces
+      - OTEL_EXPORT_FILE_MAX_SIZE=${OTEL_EXPORT_FILE_MAX_SIZE:-104857600}
+      - OTEL_EXPORT_FILE_MAX_FILES=${OTEL_EXPORT_FILE_MAX_FILES:-10}
+      - OTEL_EXPORT_SIGNAVIO_ENABLED=${OTEL_EXPORT_SIGNAVIO_ENABLED:-false}
+      - SIGNAVIO_API_URL=${SIGNAVIO_API_URL:-}
+      - SIGNAVIO_API_KEY=${SIGNAVIO_API_KEY:-}
+      - SIGNAVIO_TENANT_ID=${SIGNAVIO_TENANT_ID:-}
+      - SIGNAVIO_DATASET=${SIGNAVIO_DATASET:-}
+      - SIGNAVIO_BATCH_SIZE=${SIGNAVIO_BATCH_SIZE:-100}
+      - SIGNAVIO_TIMEOUT=${SIGNAVIO_TIMEOUT:-30s}
+      - SIGNAVIO_MAX_RETRIES=${SIGNAVIO_MAX_RETRIES:-3}
     volumes:
-      - ../../data/dms:/workspace/data/dms:rw
+      - ../../data/traces:/app/data/traces
     ports:
-      - "${DMS_PORT:-8096}:8080"  # Default to 8096 on host to avoid conflicts; set DMS_PORT=8080 for production
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      neo4j:
-        condition: service_healthy
-      extract:
-        condition: service_started
-      catalog:
-        condition: service_healthy
+      - "8083:8080"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/docs').read()"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 10s
 
 networks:
   default:

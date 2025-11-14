@@ -35,7 +35,7 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import { Panel } from '../../../components/Panel';
+import { Panel } from '../../../components/common/Panel';
 import { extractFromSAPBDC, convertSAPSchemaToGraph } from '../../../api/sap';
 import type { SAPBDCConnectionConfig, SAPBDCExtractRequest, SAPSchema } from '../../../api/sap';
 

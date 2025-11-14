@@ -32,7 +32,7 @@ import CloudIcon from '@mui/icons-material/Cloud';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import { useShellStore, ShellModuleId } from '../state/useShellStore';
+import { useShellStore, ShellModuleId } from '../../state/useShellStore';
 
 interface QuickAction {
   id: ShellModuleId;

@@ -20,12 +20,11 @@ mkdir -p "${LOG_DIR}"
 # Default to localhost, but allow override for Docker network access
 # If running from host and ports don't work, use:
 #   EXTRACT_SERVICE_URL=http://extract-service:8082 \
-#   DMS_SERVICE_URL=http://dms-service:8080 \
+#   EXTRACT_SERVICE_URL=http://extract:8083 \
 #   CATALOG_SERVICE_URL=http://catalog:8084 \
 #   ./scripts/run_sgmi_complete_pipeline.sh
 # Or use the wrapper: ./scripts/run_sgmi_pipeline_from_docker.sh
 EXTRACT_SERVICE_URL="${EXTRACT_SERVICE_URL:-http://localhost:8083}"
-DMS_SERVICE_URL="${DMS_SERVICE_URL:-http://localhost:8096}"
 CATALOG_SERVICE_URL="${CATALOG_SERVICE_URL:-http://localhost:8084}"
 GRAPH_SERVICE_URL="${GRAPH_SERVICE_URL:-http://localhost:19080}"
 MAX_RETRIES=5
@@ -103,8 +102,8 @@ process_structured_data() {
     fi
 }
 
-# Step 3: Upload documents to DMS
-upload_document_to_dms() {
+# Step 3: Upload documents to Extract service (replaces DMS)
+upload_document_to_extract() {
     local file_path=$1
     local name=$2
     local description=$3
@@ -129,7 +128,7 @@ upload_document_to_dms() {
         hql) content_type="text/plain" ;;
     esac
     
-    info "Uploading ${filename} to DMS..."
+    info "Uploading ${filename} to Extract service..."
     
     local response_file=$(mktemp)
     local http_code
@@ -138,11 +137,12 @@ upload_document_to_dms() {
     http_code=$(curl -sSL -w "%{http_code}" -o "${response_file}" \
         --max-time ${TIMEOUT} \
         -X POST \
+        -F "file=@${file_path}" \
         -F "name=${name}" \
         -F "description=${description}" \
-        -F "tags=${tags}" \
-        -F "file=@${file_path};type=${content_type}" \
-        "${DMS_SERVICE_URL}/documents/" 2>&1)
+        -F "project_id=${PROJECT_ID:-sgmi}" \
+        -F "system_id=${SYSTEM_ID:-sgmi}" \
+        "${EXTRACT_SERVICE_URL}/documents/upload" 2>&1)
     local curl_exit=$?
     set -e
     
@@ -172,14 +172,14 @@ upload_document_to_dms() {
     return 0
 }
 
-# Step 4: Process all SGMI documents through DMS
+# Step 4: Process all SGMI documents through Extract service
 process_documents() {
     log "=========================================="
-    log "Step 2: Processing Documents (DMS Service)"
+    log "Step 2: Processing Documents (Extract Service)"
     log "=========================================="
     
-    if ! check_service_health "${DMS_SERVICE_URL}" "DMS Service"; then
-        warn "DMS service not available, skipping document upload"
+    if ! check_service_health "${EXTRACT_SERVICE_URL}" "Extract Service"; then
+        warn "Extract service not available, skipping document upload"
         return 0
     fi
     
@@ -192,7 +192,7 @@ process_documents() {
     for xml_file in "${DATA_ROOT}/SGMI-controlm"/*.xml; do
         if [[ -f "${xml_file}" ]]; then
             local name=$(basename "${xml_file}")
-            if upload_document_to_dms "${xml_file}" "${name}" "SGMI Control-M job definition" "sgmi,control-m,xml"; then
+            if upload_document_to_extract "${xml_file}" "${name}" "SGMI Control-M job definition" "sgmi,control-m,xml"; then
                 ((uploaded++))
             else
                 ((failed++))
@@ -205,7 +205,7 @@ process_documents() {
     for xlsx_file in "${DATA_ROOT}/SGMI-controlm"/*.xlsx; do
         if [[ -f "${xlsx_file}" ]]; then
             local name=$(basename "${xlsx_file}")
-            if upload_document_to_dms "${xlsx_file}" "${name}" "SGMI Excel document" "sgmi,excel"; then
+            if upload_document_to_extract "${xlsx_file}" "${name}" "SGMI Excel document" "sgmi,excel"; then
                 ((uploaded++))
             else
                 ((failed++))
@@ -218,7 +218,7 @@ process_documents() {
     for docx_file in "${DATA_ROOT}/SGMI-controlm"/*.docx; do
         if [[ -f "${docx_file}" ]]; then
             local name=$(basename "${docx_file}")
-            if upload_document_to_dms "${docx_file}" "${name}" "SGMI Word document" "sgmi,word"; then
+            if upload_document_to_extract "${docx_file}" "${name}" "SGMI Word document" "sgmi,word"; then
                 ((uploaded++))
             else
                 ((failed++))
@@ -231,7 +231,7 @@ process_documents() {
     for hql_file in "${DATA_ROOT}/hive-ddl"/*.hql; do
         if [[ -f "${hql_file}" ]]; then
             local name=$(basename "${hql_file}")
-            if upload_document_to_dms "${hql_file}" "${name}" "SGMI Hive DDL file" "sgmi,hive,ddl"; then
+            if upload_document_to_extract "${hql_file}" "${name}" "SGMI Hive DDL file" "sgmi,hive,ddl"; then
                 ((uploaded++))
             else
                 ((failed++))
@@ -242,7 +242,7 @@ process_documents() {
     # Process JSON file (as document for reference)
     if [[ -f "${DATA_ROOT}/json_with_changes.json" ]]; then
         log "Uploading JSON metadata file..."
-        if upload_document_to_dms "${DATA_ROOT}/json_with_changes.json" \
+        if upload_document_to_extract "${DATA_ROOT}/json_with_changes.json" \
             "SGMI JSON Metadata" "SGMI table metadata and change history" "sgmi,json,metadata"; then
             ((uploaded++))
         else
@@ -347,7 +347,7 @@ main() {
     log ""
     log "This pipeline will:"
     log "  1. Process structured data (JSON, DDL, Control-M) through Extract service"
-    log "  2. Upload all documents to DMS service"
+    log "  2. Upload all documents to Extract service"
     log "  3. Verify knowledge graph integration"
     log "  4. Verify catalog integration"
     log ""
@@ -360,8 +360,8 @@ main() {
         services_ok=false
     fi
     
-    if ! check_service_health "${DMS_SERVICE_URL}" "DMS Service"; then
-        warn "DMS service not available, document upload will be skipped"
+    if ! check_service_health "${EXTRACT_SERVICE_URL}" "Extract Service"; then
+        warn "Extract service not available, document upload will be skipped"
     fi
     
     if ! check_service_health "${CATALOG_SERVICE_URL}" "Catalog Service"; then
@@ -405,7 +405,7 @@ main() {
     log ""
     log "Summary:"
     log "  ✓ Structured data processed through Extract service"
-    log "  ✓ Documents uploaded to DMS service"
+    log "  ✓ Documents uploaded to Extract service"
     log "  ✓ Knowledge graph integration verified"
     log "  ✓ Catalog integration verified"
     log ""

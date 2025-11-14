@@ -19,7 +19,7 @@ import {
   Divider,
   Paper
 } from "@mui/material";
-import { Panel } from "../../../components/Panel";
+import { Panel } from "../../../components/common/Panel";
 import type { DMSProcessedDocument, DMSRequestIntelligence } from "../../../api/dms";
 
 interface ResultsViewProps {

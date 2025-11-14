@@ -1,0 +1,30 @@
+# SGMI project configuration (example)
+# This demonstrates backward compatibility with SGMI pipeline
+
+project:
+  id: "sgmi"
+  name: "SAP Global Master Index"
+  system_id: "sgmi"
+
+sources:
+  files:
+    - "${SGMI_DATA_ROOT}/training/sgmi/json_with_changes.json"
+    - "${SGMI_DATA_ROOT}/training/sgmi/hive-ddl/sgmisit_all_tables_statement.hql"
+    - "${SGMI_DATA_ROOT}/training/sgmi/hive-ddl/sgmisitetl_all_tables_statement.hql"
+    - "${SGMI_DATA_ROOT}/training/sgmi/hive-ddl/sgmisitstg_all_tables_statement.hql"
+    - "${SGMI_DATA_ROOT}/training/sgmi/hive-ddl/sgmisit_view.hql"
+    - "${SGMI_DATA_ROOT}/training/sgmi/SGMI-controlm/catalyst migration prod 640.xml"
+
+parsers:
+  - type: "ddl"
+    enabled: true
+  - type: "sql"
+    enabled: true
+  - type: "json"
+    enabled: true
+
+ai:
+  enabled: true
+  model: "cwm"
+  localai_url: "http://localai:8080"
+

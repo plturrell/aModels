@@ -86,13 +86,3 @@ func (h *HANAInboundHandler) HandleGetStatus(w http.ResponseWriter, r *http.Requ
 		"message":    "Status retrieval not yet implemented",
 	})
 }
-
-// Helper function to write JSON response
-func writeJSON(w http.ResponseWriter, statusCode int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		// Log error but can't change status code at this point
-	}
-}
-

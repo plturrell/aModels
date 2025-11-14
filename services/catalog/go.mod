@@ -11,7 +11,6 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4
 	github.com/plturrell/aModels/pkg/sap v0.0.0-00010101000000-000000000000
-	github.com/plturrell/aModels/services/catalog/third_party/goose v0.0.0-00010101000000-000000000000
 	github.com/plturrell/aModels/services/extract v0.0.0-00010101000000-000000000000
 	github.com/plturrell/aModels/services/orchestration v0.0.0-00010101000000-000000000000
 	github.com/pressly/goose/v3 v3.21.1
@@ -39,17 +38,12 @@ require (
 	google.golang.org/protobuf v1.36.10 // indirect
 )
 
-replace github.com/pressly/goose/v3 => ./third_party/goose
-
-replace github.com/plturrell/aModels/pkg/sap => ../../pkg/sap
-
-replace github.com/plturrell/aModels/services/extract => ../extract
-
 replace github.com/plturrell/aModels/services/orchestration => ../orchestration
 
 replace github.com/SAP/go-hdb => ../../infrastructure/third_party/go-hdb
 
-replace github.com/plturrell/aModels => ../../
+replace github.com/plturrell/aModels/pkg/sap => ../../pkg/sap
 
-replace github.com/plturrell/aModels/services/catalog/third_party/goose => ./third_party/goose
+replace github.com/pressly/goose/v3 => ./third_party/goose
 
+replace github.com/plturrell/aModels/services/extract => ../extract

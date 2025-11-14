@@ -18,6 +18,9 @@ import (
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration/prompts"
 	
 	"github.com/langchain-ai/langgraph-go/pkg/integration"
+	"github.com/plturrell/aModels/services/graph/pkg/observability"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // OrchestrationProcessorOptions configures the orchestration chain processing workflow.
@@ -83,6 +86,24 @@ func RunOrchestrationChainNode(localAIURL string) stategraph.NodeFunc {
 			if localAIURL == "" {
 				localAIURL = "http://localai:8080"
 			}
+		}
+
+		// Start OpenTelemetry span for orchestration chain execution
+		ctx, span := observability.StartSpan(ctx, fmt.Sprintf("orchestration.chain.%s", chainName),
+			trace.WithAttributes(
+				attribute.String("chain.name", chainName),
+				attribute.String("agent.framework.type", "langgraph"),
+				attribute.String("workflow.type", "orchestration"),
+			))
+		defer span.End()
+
+		// Add chain inputs as attributes
+		if len(chainInputs) > 0 {
+			attrs := make([]attribute.KeyValue, 0, len(chainInputs))
+			for k, v := range chainInputs {
+				attrs = append(attrs, attribute.String(fmt.Sprintf("chain.input.%s", k), fmt.Sprintf("%v", v)))
+			}
+			observability.AddSpanAttributes(ctx, attrs...)
 		}
 
 		// Start logged operation with correlation ID
@@ -190,9 +211,16 @@ func RunOrchestrationChainNode(localAIURL string) stategraph.NodeFunc {
 			},
 		)
 		if err != nil {
+			observability.RecordError(ctx, err)
 			op.End(err)
 			return nil, fmt.Errorf("execute orchestration chain %s: %w", chainName, err)
 		}
+
+		// Record successful execution event
+		observability.RecordEvent(ctx, "orchestration.chain.completed",
+			attribute.String("chain.name", chainName),
+			attribute.Bool("success", true),
+		)
 
 		// Store results in state
 		newState := make(map[string]any, len(state)+5)

@@ -180,7 +180,7 @@ func signavioModelsToGraph(models []SignavioModel, sourceLabel string) ([]graph.
 
 		nodes = append(nodes, graph.Node{
 			ID:    processNodeID,
-			Type:  "signavio-process",
+			Type:  graph.NodeTypeSignavioProcess,
 			Label: fallbackSignavioLabel(model.Name, model.ID),
 			Props: processProps,
 		})
@@ -209,7 +209,7 @@ func signavioModelsToGraph(models []SignavioModel, sourceLabel string) ([]graph.
 			laneID := fmt.Sprintf("signavio:lane:%s", stableSignavioID(lane.ID, lane.Name))
 			nodes = append(nodes, graph.Node{
 				ID:    laneID,
-				Type:  "signavio-lane",
+				Type:  graph.NodeTypeSignavioLane,
 				Label: fallbackSignavioLabel(lane.Name, lane.ID),
 				Props: map[string]any{
 					"lane_id": lane.ID,

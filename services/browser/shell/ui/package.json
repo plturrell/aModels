@@ -30,6 +30,7 @@
     "@sentry/react": "^10.25.0",
     "@sentry/vite-plugin": "^4.6.0",
     "@types/react-window": "^2.0.0",
+    "axios": "^1.13.2",
     "cytoscape": "^3.28.1",
     "cytoscape-cola": "^2.5.0",
     "cytoscape-cose-bilkent": "^4.1.0",

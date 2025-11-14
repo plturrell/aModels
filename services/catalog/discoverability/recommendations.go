@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"math"
 )
 
 // RecommendationEngine provides advanced recommendation algorithms.
@@ -34,11 +33,11 @@ const (
 
 // Recommendation represents a product recommendation.
 type Recommendation struct {
-	ProductID     string  `json:"product_id"`
-	ProductName   string  `json:"product_name"`
-	Score         float64 `json:"score"`
-	Reason        string  `json:"reason"`
-	Type          RecommendationType `json:"type"`
+	ProductID   string             `json:"product_id"`
+	ProductName string             `json:"product_name"`
+	Score       float64            `json:"score"`
+	Reason      string             `json:"reason"`
+	Type        RecommendationType `json:"type"`
 }
 
 // GetSimilarProducts recommends products similar to a given product.
@@ -111,7 +110,7 @@ func (re *RecommendationEngine) GetPersonalizedRecommendations(ctx context.Conte
 
 	// Find products matching preferences
 	recommendations := make([]*Recommendation, 0)
-	
+
 	// Similar to accessed products
 	for _, accessedProduct := range userHistory.AccessedProducts {
 		similar, err := re.GetSimilarProducts(ctx, accessedProduct, limit/len(userHistory.AccessedProducts)+1)
@@ -125,6 +124,26 @@ func (re *RecommendationEngine) GetPersonalizedRecommendations(ctx context.Conte
 	trending, err := re.GetTrendingProducts(ctx, limit/2)
 	if err == nil {
 		recommendations = append(recommendations, trending...)
+	}
+
+	// Add preference-based recommendations when available
+	if len(preferences) > 0 {
+		prefTags := make([]string, 0, len(preferences))
+		for tag := range preferences {
+			prefTags = append(prefTags, tag)
+		}
+
+		if prefResults, err := re.findProductsByTags(ctx, prefTags, "", limit); err == nil {
+			for _, product := range prefResults {
+				recommendations = append(recommendations, &Recommendation{
+					ProductID:   product.ID,
+					ProductName: product.Name,
+					Score:       preferencesBoost(product.Tags, preferences),
+					Reason:      fmt.Sprintf("Matches preferred tags: %d overlaps", len(intersect(prefTags, product.Tags))),
+					Type:        RecommendationTypePersonalized,
+				})
+			}
+		}
 	}
 
 	// Sort and deduplicate
@@ -142,9 +161,9 @@ func (re *RecommendationEngine) GetPersonalizedRecommendations(ctx context.Conte
 // Helper types and functions
 
 type ProductWithTags struct {
-	ID    string
-	Name  string
-	Tags  []string
+	ID   string
+	Name string
+	Tags []string
 }
 
 type TrendingProduct struct {
@@ -155,10 +174,10 @@ type TrendingProduct struct {
 }
 
 type UserHistory struct {
-	UserID          string
+	UserID           string
 	AccessedProducts []string
-	PreferredTags   []string
-	PreferredTeams  []string
+	PreferredTags    []string
+	PreferredTeams   []string
 }
 
 func (re *RecommendationEngine) getProductTags(ctx context.Context, productID string) ([]string, error) {
@@ -179,16 +198,16 @@ func (re *RecommendationEngine) findTrendingProducts(ctx context.Context, limit 
 func (re *RecommendationEngine) getUserHistory(ctx context.Context, userID string) (*UserHistory, error) {
 	// In production, would query database
 	return &UserHistory{
-		UserID:          userID,
+		UserID:           userID,
 		AccessedProducts: []string{},
-		PreferredTags:   []string{},
-		PreferredTeams:  []string{},
+		PreferredTags:    []string{},
+		PreferredTeams:   []string{},
 	}, nil
 }
 
 func (re *RecommendationEngine) calculateUserPreferences(history *UserHistory) map[string]float64 {
 	preferences := make(map[string]float64)
-	
+
 	// Weight tags from accessed products
 	for _, tag := range history.PreferredTags {
 		preferences[tag] = 1.0
@@ -229,6 +248,16 @@ func intersect(a, b []string) []string {
 		}
 	}
 	return result
+}
+
+func preferencesBoost(tags []string, preferences map[string]float64) float64 {
+	var score float64
+	for _, tag := range tags {
+		if weight, ok := preferences[tag]; ok {
+			score += weight
+		}
+	}
+	return score
 }
 
 func union(a, b []string) []string {
@@ -276,4 +305,3 @@ func deduplicateRecommendations(recommendations []*Recommendation, excludeIDs []
 
 	return result
 }
-

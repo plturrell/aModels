@@ -16,27 +16,27 @@ type SimulationEngine struct {
 
 // Simulation represents a running simulation.
 type Simulation struct {
-	ID            string
-	TwinID        string
-	Type          string // "pipeline", "data_flow", "event", "time_based"
-	Status        string // "running", "completed", "failed", "paused"
-	StartTime     time.Time
-	EndTime       time.Time
-	Config        SimulationConfig
-	Results       SimulationResults
-	Events        []SimulationEvent
-	Metrics       map[string]interface{}
+	ID        string
+	TwinID    string
+	Type      string // "pipeline", "data_flow", "event", "time_based"
+	Status    string // "running", "completed", "failed", "paused"
+	StartTime time.Time
+	EndTime   time.Time
+	Config    SimulationConfig
+	Results   SimulationResults
+	Events    []SimulationEvent
+	Metrics   map[string]interface{}
 }
 
 // SimulationConfig configures a simulation.
 type SimulationConfig struct {
-	Duration      time.Duration
-	TimeStep      time.Duration
-	DataVolume    int64
-	EventRate     float64 // Events per second
-	FailureRate   float64 // Probability of failure (0.0 to 1.0)
-	Scenarios     []Scenario
-	Metrics       []string
+	Duration    time.Duration
+	TimeStep    time.Duration
+	DataVolume  int64
+	EventRate   float64 // Events per second
+	FailureRate float64 // Probability of failure (0.0 to 1.0)
+	Scenarios   []Scenario
+	Metrics     []string
 }
 
 // Scenario defines a scenario to simulate.
@@ -49,50 +49,50 @@ type Scenario struct {
 
 // ScenarioStep represents a step in a scenario.
 type ScenarioStep struct {
-	Order       int
-	Action      string
-	Parameters  map[string]interface{}
-	Duration    time.Duration
+	Order          int
+	Action         string
+	Parameters     map[string]interface{}
+	Duration       time.Duration
 	ExpectedResult interface{}
 }
 
 // SimulationResults contains the results of a simulation.
 type SimulationResults struct {
-	TotalDuration    time.Duration
-	EventsProcessed  int64
-	DataProcessed    int64
-	Failures         int
-	SuccessRate      float64
-	Metrics          map[string]interface{}
-	Bottlenecks      []Bottleneck
-	Recommendations  []string
+	TotalDuration   time.Duration
+	EventsProcessed int64
+	DataProcessed   int64
+	Failures        int
+	SuccessRate     float64
+	Metrics         map[string]interface{}
+	Bottlenecks     []Bottleneck
+	Recommendations []string
 }
 
 // Bottleneck identifies a bottleneck in the simulation.
 type Bottleneck struct {
-	Component   string
-	Type        string // "performance", "resource", "data"
-	Severity    string // "low", "medium", "high", "critical"
-	Description string
-	Impact      float64
+	Component      string
+	Type           string // "performance", "resource", "data"
+	Severity       string // "low", "medium", "high", "critical"
+	Description    string
+	Impact         float64
 	Recommendation string
 }
 
 // SimulationEvent represents an event in a simulation.
 type SimulationEvent struct {
-	ID          string
-	Timestamp   time.Time
-	Type        string
-	Component   string
-	Data        map[string]interface{}
-	Severity    string
+	ID        string
+	Timestamp time.Time
+	Type      string
+	Component string
+	Data      map[string]interface{}
+	Severity  string
 }
 
 // NewSimulationEngine creates a new simulation engine.
 func NewSimulationEngine(twinManager *TwinManager, logger *log.Logger) *SimulationEngine {
 	return &SimulationEngine{
-		twinManager:  twinManager,
-		logger:       logger,
+		twinManager: twinManager,
+		logger:      logger,
 		simulations: make(map[string]*Simulation),
 	}
 }
@@ -178,7 +178,7 @@ func (se *SimulationEngine) simulatePipeline(ctx context.Context, sim *Simulatio
 	}, "low")
 
 	// Simulate pipeline steps
-	for i, scenario := range sim.Config.Scenarios {
+	for _, scenario := range sim.Config.Scenarios {
 		for _, step := range scenario.Steps {
 			startStep := time.Now()
 
@@ -198,9 +198,9 @@ func (se *SimulationEngine) simulatePipeline(ctx context.Context, sim *Simulatio
 			// Log success
 			stepDuration := time.Since(startStep)
 			se.logEvent(sim, "success", step.Action, map[string]interface{}{
-				"scenario":     scenario.Name,
-				"step":         step.Order,
-				"duration":     stepDuration,
+				"scenario": scenario.Name,
+				"step":     step.Order,
+				"duration": stepDuration,
 			}, "low")
 
 			sim.Results.EventsProcessed++
@@ -225,7 +225,7 @@ func (se *SimulationEngine) simulateDataFlow(ctx context.Context, sim *Simulatio
 	defer ticker.Stop()
 
 	endTime := time.Now().Add(sim.Config.Duration)
-	
+
 	for time.Now().Before(endTime) {
 		select {
 		case <-ctx.Done():
@@ -320,11 +320,11 @@ func (se *SimulationEngine) identifyBottlenecks(sim *Simulation) {
 	// In production, would use more sophisticated analysis
 	if sim.Results.SuccessRate < 95.0 {
 		sim.Results.Bottlenecks = append(sim.Results.Bottlenecks, Bottleneck{
-			Component:    "overall",
-			Type:         "performance",
-			Severity:     "medium",
-			Description:  fmt.Sprintf("Success rate below threshold: %.2f%%", sim.Results.SuccessRate),
-			Impact:       100.0 - sim.Results.SuccessRate,
+			Component:      "overall",
+			Type:           "performance",
+			Severity:       "medium",
+			Description:    fmt.Sprintf("Success rate below threshold: %.2f%%", sim.Results.SuccessRate),
+			Impact:         100.0 - sim.Results.SuccessRate,
 			Recommendation: "Review failure causes and optimize critical paths",
 		})
 	}
@@ -378,4 +378,3 @@ type StartSimulationRequest struct {
 	Type   string
 	Config SimulationConfig
 }
-

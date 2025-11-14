@@ -89,7 +89,7 @@ func LoadConfig() (*Config, error) {
 			FlightAddr: getEnv("FLIGHT_ADDR", defaultFlightAddr),
 		},
 		Langextract: LangextractConfig{
-			URL:    strings.TrimRight(getEnv("LANGEXTRACT_API_URL", defaultLangextractURL), "/"),
+			URL:    strings.TrimRight(strings.TrimSpace(os.Getenv("LANGEXTRACT_API_URL")), "/"),
 			APIKey: os.Getenv("LANGEXTRACT_API_KEY"),
 		},
 		Training: TrainingConfig{
@@ -112,7 +112,7 @@ func LoadConfig() (*Config, error) {
 			CatalogResourceBaseURI:      getEnv("EXTRACT_CATALOG_BASE_URI", "http://amodels.org/catalog"),
 		},
 		Telemetry: TelemetryConfig{
-			Enabled:      parseBoolEnv("POSTGRES_LANG_SERVICE_ENABLED", true),
+			Enabled:      parseBoolEnv("TELEMETRY_ENABLED", parseBoolEnv("POSTGRES_LANG_SERVICE_ENABLED", false)),
 			Address:      strings.TrimSpace(os.Getenv("POSTGRES_LANG_SERVICE_ADDR")),
 			LibraryType:  getEnv("POSTGRES_LANG_SERVICE_LIBRARY_TYPE", defaultTelemetryLibrary),
 			Operation:    getEnv("POSTGRES_LANG_SERVICE_OPERATION", defaultTelemetryOperation),
@@ -148,12 +148,9 @@ func (c *Config) Validate() error {
 		errors = append(errors, "PORT is required")
 	}
 	
-	// Required: LangExtract configuration
-	if c.Langextract.URL == "" {
-		errors = append(errors, "LANGEXTRACT_API_URL is required")
-	}
-	if c.Langextract.APIKey == "" {
-		errors = append(errors, "LANGEXTRACT_API_KEY is required")
+	// Required: LangExtract configuration (only if URL is set)
+	if c.Langextract.URL != "" && c.Langextract.APIKey == "" {
+		errors = append(errors, "LANGEXTRACT_API_KEY is required when LANGEXTRACT_API_URL is set")
 	}
 
 	// Required: Core persistence

@@ -41,8 +41,10 @@ type DMSPipeline struct {
 }
 
 // DMSPipelineConfig configures the pipeline.
+// DMSURL is kept for backward compatibility but now points to Extract service.
 type DMSPipelineConfig struct {
-	DMSURL              string
+	DMSURL              string // Deprecated: Use ExtractURL instead
+	ExtractURL          string // Extract service URL (replaces DMS)
 	DeepSeekOCREndpoint string
 	DeepSeekOCRAPIKey   string
 	DeepResearchURL     string
@@ -51,16 +53,25 @@ type DMSPipelineConfig struct {
 	TrainingURL         string
 	LocalAIURL          string
 	SearchURL           string
-	ExtractURL          string
 	Logger              *log.Logger
 }
 
-// NewDMSPipeline creates a new DMS processing pipeline.
+// NewDMSPipeline creates a new document processing pipeline (migrated from DMS to Extract service).
 func NewDMSPipeline(config DMSPipelineConfig) (*DMSPipeline, error) {
-	// Create DMS connector
+	// Determine Extract service URL (prefer ExtractURL, fallback to DMSURL for backward compatibility)
+	extractURL := config.ExtractURL
+	if extractURL == "" {
+		extractURL = config.DMSURL
+	}
+	if extractURL == "" {
+		extractURL = "http://localhost:8083" // Default Extract service port
+	}
+	
+	// Create connector for Extract service (replaces DMS connector)
 	dmsConfig := map[string]interface{}{
-		"base_url": config.DMSURL,
-		"DMS_URL":  config.DMSURL,
+		"base_url":   extractURL,
+		"EXTRACT_URL": extractURL,
+		"DMS_URL":    extractURL, // Backward compatibility
 	}
 	dmsConnector := connectors.NewDMSConnector(dmsConfig, config.Logger)
 
@@ -98,8 +109,8 @@ func NewDMSPipeline(config DMSPipelineConfig) (*DMSPipeline, error) {
 		trainingURL:        config.TrainingURL,
 		localAIURL:         config.LocalAIURL,
 		searchURL:          config.SearchURL,
-		extractURL:         config.ExtractURL,
-		dmsURL:             config.DMSURL,
+		extractURL:         extractURL,
+		dmsURL:             extractURL, // Now points to Extract service
 		graphServiceURL:    graphServiceURL,
 		logger:             config.Logger,
 		// Use connection pooling for better performance (Priority 1)
@@ -380,16 +391,15 @@ func (dp *DMSPipeline) processDocumentWithIntelligence(ctx context.Context, doc 
 	return intelligence, nil
 }
 
-// fetchDocumentContent fetches document content from DMS API.
+// fetchDocumentContent fetches document content from Extract service (replaces DMS).
 func (dp *DMSPipeline) fetchDocumentContent(ctx context.Context, documentID string) string {
 	if dp.dmsURL == "" {
 		return ""
 	}
 
-	// Try to fetch content from DMS API
-	// Note: This assumes DMS has an endpoint to get document content
-	// If not available, return empty string
-	url := fmt.Sprintf("%s/documents/%s/content", strings.TrimRight(dp.dmsURL, "/"), documentID)
+	// Fetch document from Extract service and extract content from response
+	// Extract service stores content in knowledge graph nodes
+	url := fmt.Sprintf("%s/documents/%s", strings.TrimRight(dp.dmsURL, "/"), documentID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return ""
@@ -405,12 +415,20 @@ func (dp *DMSPipeline) fetchDocumentContent(ctx context.Context, documentID stri
 		return ""
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return ""
 	}
 
-	return string(body)
+	// Extract content from Extract service response
+	if content, ok := result["content"].(string); ok && content != "" {
+		return content
+	}
+	if content, ok := result["extraction_summary"].(string); ok && content != "" {
+		return content
+	}
+	// Content may be stored in Gitea, accessible via gitea_url
+	return ""
 }
 
 // processDocument processes a single document through OCR, catalog, training, local AI, and search.

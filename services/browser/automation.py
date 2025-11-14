@@ -8,7 +8,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 import asyncio
+import time
 from playwright.async_api import async_playwright, Browser, Page
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
+
+from otel_instrumentation import init_otel_instrumentation, get_tracer, shutdown_otel
 
 app = FastAPI(title="Browser Automation Service", version="0.1.0")
 
@@ -36,6 +41,9 @@ class ExtractRequest(BaseModel):
 
 @app.on_event("startup")
 async def startup():
+    # Initialize OpenTelemetry instrumentation
+    init_otel_instrumentation(app)
+    
     global browser
     playwright = await async_playwright().start()
     browser = await playwright.chromium.launch(headless=True)
@@ -43,6 +51,7 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
+    shutdown_otel()
     global browser
     if browser:
         await browser.close()
@@ -62,18 +71,41 @@ async def healthz():
 @app.post("/navigate")
 async def navigate(req: NavigateRequest):
     """Navigate to a URL and return page info."""
-    if not browser:
-        raise HTTPException(status_code=503, detail="Browser not initialized")
+    tracer = get_tracer()
+    start_time = time.time()
     
-    try:
-        page = await browser.new_page()
-        await page.goto(req.url, wait_until=req.wait_until, timeout=req.timeout)
-        title = await page.title()
-        url = page.url
-        await page.close()
-        return {"url": url, "title": title, "status": "success"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    with tracer.start_as_current_span("browser.navigate") as span:
+        span.set_attribute("agent.framework.type", "browser-automation")
+        span.set_attribute("browser.url", req.url)
+        span.set_attribute("browser.wait_until", req.wait_until)
+        span.set_attribute("browser.timeout", req.timeout)
+        
+        if not browser:
+            span.set_status(Status(StatusCode.ERROR, "Browser not initialized"))
+            raise HTTPException(status_code=503, detail="Browser not initialized")
+        
+        try:
+            page = await browser.new_page()
+            await page.goto(req.url, wait_until=req.wait_until, timeout=req.timeout)
+            title = await page.title()
+            final_url = page.url
+            await page.close()
+            
+            latency = time.time() - start_time
+            span.set_attribute("browser.page.title", title)
+            span.set_attribute("browser.final_url", final_url)
+            span.set_attribute("latency_ms", latency * 1000)
+            span.set_status(Status(StatusCode.OK))
+            span.add_event("browser.navigate.completed", {
+                "title": title,
+                "latency_ms": latency * 1000,
+            })
+            
+            return {"url": final_url, "title": title, "status": "success"}
+        except Exception as e:
+            span.record_exception(e)
+            span.set_status(Status(StatusCode.ERROR, str(e)))
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/screenshot")
@@ -97,32 +129,56 @@ async def screenshot(req: ScreenshotRequest):
 @app.post("/extract")
 async def extract(req: ExtractRequest):
     """Extract content from a page."""
-    if not browser:
-        raise HTTPException(status_code=503, detail="Browser not initialized")
+    tracer = get_tracer()
+    start_time = time.time()
     
-    try:
-        page = await browser.new_page()
-        await page.goto(req.url)
-        result: Dict[str, Any] = {}
+    with tracer.start_as_current_span("browser.extract") as span:
+        span.set_attribute("agent.framework.type", "browser-automation")
+        span.set_attribute("browser.url", req.url)
+        span.set_attribute("browser.selector", req.selector or "none")
+        span.set_attribute("browser.extract_text", req.extract_text)
+        span.set_attribute("browser.extract_html", req.extract_html)
         
-        if req.extract_text:
-            if req.selector:
-                element = await page.query_selector(req.selector)
-                result["text"] = await element.text_content() if element else None
-            else:
-                result["text"] = await page.inner_text("body")
+        if not browser:
+            span.set_status(Status(StatusCode.ERROR, "Browser not initialized"))
+            raise HTTPException(status_code=503, detail="Browser not initialized")
         
-        if req.extract_html:
-            if req.selector:
-                element = await page.query_selector(req.selector)
-                result["html"] = await element.inner_html() if element else None
-            else:
-                result["html"] = await page.content()
-        
-        await page.close()
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        try:
+            page = await browser.new_page()
+            await page.goto(req.url)
+            result: Dict[str, Any] = {}
+            
+            if req.extract_text:
+                if req.selector:
+                    element = await page.query_selector(req.selector)
+                    result["text"] = await element.text_content() if element else None
+                else:
+                    result["text"] = await page.inner_text("body")
+            
+            if req.extract_html:
+                if req.selector:
+                    element = await page.query_selector(req.selector)
+                    result["html"] = await element.inner_html() if element else None
+                else:
+                    result["html"] = await page.content()
+            
+            await page.close()
+            
+            latency = time.time() - start_time
+            span.set_attribute("latency_ms", latency * 1000)
+            span.set_attribute("extracted.text_length", len(result.get("text", "")) if result.get("text") else 0)
+            span.set_attribute("extracted.html_length", len(result.get("html", "")) if result.get("html") else 0)
+            span.set_status(Status(StatusCode.OK))
+            span.add_event("browser.extract.completed", {
+                "has_text": "text" in result,
+                "has_html": "html" in result,
+            })
+            
+            return result
+        except Exception as e:
+            span.record_exception(e)
+            span.set_status(Status(StatusCode.ERROR, str(e)))
+            raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

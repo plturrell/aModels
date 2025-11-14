@@ -1,6 +1,6 @@
-module github.com/langchain-ai/langgraph-go
+module github.com/plturrell/aModels/services/graph
 
-go 1.23
+go 1.18
 
 // Core dependencies
 require (
@@ -21,7 +21,6 @@ require (
 require (
 	github.com/plturrell/aModels/services/catalog v0.0.0
 	github.com/plturrell/aModels/services/extract v0.0.0
-	github.com/plturrell/aModels/services/graph v0.0.0
 	github.com/plturrell/aModels/services/orchestration v0.0.0
 	github.com/plturrell/aModels/services/postgres v0.0.0
 	github.com/plturrell/aModels/services/shared v0.0.0

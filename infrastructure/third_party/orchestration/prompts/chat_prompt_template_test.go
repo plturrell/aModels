@@ -40,6 +40,20 @@ func TestChatPromptTemplate(t *testing.T) {
 		t.Errorf("expected %v, got %v", expectedMessages, value.Messages())
 	}
 
+	ta, ok := value.(llms.TokenAwarePromptValue)
+	if !ok {
+		t.Fatalf("expected token-aware prompt value")
+	}
+
+	tokens := ta.Tokens()
+	if len(tokens) == 0 {
+		t.Fatalf("expected chat prompt tokens")
+	}
+
+	if tokens[0].Type != "chat_prompt" {
+		t.Errorf("expected top-level chat_prompt token, got %q", tokens[0].Type)
+	}
+
 	_, err = template.FormatPrompt(map[string]interface{}{
 		"inputLang":  "English",
 		"outputLang": "Chinese",

@@ -2,7 +2,6 @@ package vectorstore
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -56,9 +55,9 @@ func (hbps *HANABreakPatternStore) StoreBreakPattern(ctx context.Context,
 // BreakPattern represents a break pattern
 type BreakPattern struct {
 	Description string   `json:"description"`
-	Frequency   int      `json:"frequency"`   // How often this pattern occurs
-	Resolution  string   `json:"resolution"`  // How to resolve
-	Prevention  string   `json:"prevention"`  // How to prevent
+	Frequency   int      `json:"frequency"`  // How often this pattern occurs
+	Resolution  string   `json:"resolution"` // How to resolve
+	Prevention  string   `json:"prevention"` // How to prevent
 	Tags        []string `json:"tags"`
 }
 
@@ -86,9 +85,9 @@ func (hrrs *HANARegulatoryRuleStore) StoreRegulatoryRule(ctx context.Context,
 		Content:  rule.Description,
 		Vector:   vector,
 		Metadata: map[string]interface{}{
-			"regulation":    rule.Regulation,
-			"requirement":   rule.Requirement,
-			"compliance":    rule.Compliance,
+			"regulation":     rule.Regulation,
+			"requirement":    rule.Requirement,
+			"compliance":     rule.Compliance,
 			"effective_date": rule.EffectiveDate.Format(time.RFC3339),
 		},
 		Tags:      rule.Tags,
@@ -102,13 +101,13 @@ func (hrrs *HANARegulatoryRuleStore) StoreRegulatoryRule(ctx context.Context,
 
 // RegulatoryRule represents a regulatory rule
 type RegulatoryRule struct {
-	Regulation   string    `json:"regulation"`    // e.g., "Basel III", "IFRS 9"
-	Title        string    `json:"title"`
-	Description  string    `json:"description"`
-	Requirement  string    `json:"requirement"`
-	Compliance   string    `json:"compliance"`
+	Regulation    string    `json:"regulation"` // e.g., "Basel III", "IFRS 9"
+	Title         string    `json:"title"`
+	Description   string    `json:"description"`
+	Requirement   string    `json:"requirement"`
+	Compliance    string    `json:"compliance"`
 	EffectiveDate time.Time `json:"effective_date"`
-	Tags         []string  `json:"tags"`
+	Tags          []string  `json:"tags"`
 }
 
 // HANABestPracticeStore stores best practices in HANA Cloud
@@ -150,8 +149,8 @@ func (hbps *HANABestPracticeStore) StoreBestPractice(ctx context.Context,
 
 // BestPractice represents a best practice
 type BestPractice struct {
-	System      string   `json:"system"`      // "general" or specific system
-	Category    string   `json:"category"`    // e.g., "data_quality", "break_detection"
+	System      string   `json:"system"`   // "general" or specific system
+	Category    string   `json:"category"` // e.g., "data_quality", "break_detection"
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
 	Application string   `json:"application"` // How to apply
@@ -175,16 +174,16 @@ func (hkbs *HANAKnowledgeBaseStore) StoreKnowledgeEntry(ctx context.Context,
 	vector []float32) error {
 
 	info := &PublicInformation{
-		ID:       entry.ID,
-		Type:     "knowledge_base",
-		System:   entry.System,
-		Category: entry.Category,
-		Title:    entry.Title,
-		Content:  entry.Content,
-		Vector:   vector,
-		Metadata: entry.Metadata,
-		Tags:     entry.Tags,
-		IsPublic: entry.IsPublic,
+		ID:        entry.ID,
+		Type:      "knowledge_base",
+		System:    entry.System,
+		Category:  entry.Category,
+		Title:     entry.Title,
+		Content:   entry.Content,
+		Vector:    vector,
+		Metadata:  entry.Metadata,
+		Tags:      entry.Tags,
+		IsPublic:  entry.IsPublic,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 		CreatedBy: entry.CreatedBy,
@@ -196,7 +195,7 @@ func (hkbs *HANAKnowledgeBaseStore) StoreKnowledgeEntry(ctx context.Context,
 // KnowledgeEntry represents a knowledge base entry
 type KnowledgeEntry struct {
 	ID        string                 `json:"id"`
-	System   string                 `json:"system"`
+	System    string                 `json:"system"`
 	Category  string                 `json:"category"`
 	Title     string                 `json:"title"`
 	Content   string                 `json:"content"`
@@ -251,26 +250,25 @@ func BuildBreakContent(breakRecord *breakdetection.Break) string {
 	content += fmt.Sprintf("Break Type: %s\n", breakRecord.BreakType)
 	content += fmt.Sprintf("Detection Type: %s\n", breakRecord.DetectionType)
 	content += fmt.Sprintf("Severity: %s\n", breakRecord.Severity)
-	
+
 	if breakRecord.AIDescription != "" {
 		content += fmt.Sprintf("Description: %s\n", breakRecord.AIDescription)
 	}
-	
+
 	if breakRecord.RootCauseAnalysis != "" {
 		content += fmt.Sprintf("Root Cause: %s\n", breakRecord.RootCauseAnalysis)
 	}
-	
+
 	if len(breakRecord.Recommendations) > 0 {
 		content += "Recommendations:\n"
 		for _, rec := range breakRecord.Recommendations {
 			content += fmt.Sprintf("- %s\n", rec)
 		}
 	}
-	
+
 	if breakRecord.ResolutionNotes != "" {
 		content += fmt.Sprintf("Resolution: %s\n", breakRecord.ResolutionNotes)
 	}
 
 	return content
 }
-

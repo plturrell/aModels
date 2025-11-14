@@ -28,7 +28,8 @@ type Lineage struct {
 	ColumnLineage []ColumnLineage `json:"column_lineage"`
 }
 
-func parseSQL(sql string) (*Lineage, error) {
+// ParseSQL parses a SQL query and extracts lineage information.
+func ParseSQL(sql string) (*Lineage, error) {
 	p := parser.New(sql)
 	ast, err := p.ParseStatement()
 	if err != nil {

@@ -27,11 +27,19 @@ func (h *DMSHandler) GetJobProcessor() *agents.DMSJobProcessor {
 	return h.jobProcessor
 }
 
-// NewDMSHandler creates a new DMS handler.
+// NewDMSHandler creates a new document handler (migrated from DMS to Extract service).
 func NewDMSHandler(logger *log.Logger) (*DMSHandler, error) {
 	// Load configuration from environment
+	// ExtractURL is now the primary service (replaces DMS)
+	extractURL := getEnvOrDefault("EXTRACT_URL", "")
+	if extractURL == "" {
+		// Fallback to DMS_URL for backward compatibility
+		extractURL = getEnvOrDefault("DMS_URL", "http://localhost:8083")
+	}
+	
 	config := agents.DMSPipelineConfig{
-		DMSURL:              getEnvOrDefault("DMS_URL", "http://localhost:8096"),
+		ExtractURL:          extractURL, // Primary service
+		DMSURL:              extractURL, // Backward compatibility
 		DeepSeekOCREndpoint: os.Getenv("DEEPSEEK_OCR_ENDPOINT"),
 		DeepSeekOCRAPIKey:   os.Getenv("DEEPSEEK_OCR_API_KEY"),
 		DeepResearchURL:     getEnvOrDefault("DEEP_RESEARCH_URL", "http://localhost:8085"),
@@ -40,7 +48,6 @@ func NewDMSHandler(logger *log.Logger) (*DMSHandler, error) {
 		TrainingURL:         getEnvOrDefault("TRAINING_URL", "http://training:8080"),
 		LocalAIURL:          getEnvOrDefault("LOCALAI_URL", "http://localai:8080"),
 		SearchURL:           getEnvOrDefault("SEARCH_URL", "http://search:8080"),
-		ExtractURL:          getEnvOrDefault("EXTRACT_URL", "http://extract:8081"),
 		Logger:              logger,
 	}
 

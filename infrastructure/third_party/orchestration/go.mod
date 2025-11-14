@@ -1,6 +1,8 @@
 module github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Orchestration
 
-go 1.24.1
+go 1.24
+
+toolchain go1.24.1
 
 require (
 	cloud.google.com/go/alloydbconn v1.16.0

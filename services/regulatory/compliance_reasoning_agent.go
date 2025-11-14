@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"github.com/plturrell/aModels/services/orchestration/agents"
+	"github.com/plturrell/aModels/services/regulatory/internal/observability"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // ComplianceReasoningAgent provides LangGraph-style stateful reasoning for BCBS 239 compliance.
@@ -120,6 +123,16 @@ func (a *ComplianceReasoningAgent) RunComplianceWorkflow(
 	question string,
 	principleID string,
 ) (*ComplianceWorkflowState, error) {
+	// Start OpenTelemetry span for compliance workflow
+	ctx, span := observability.StartSpan(ctx, "compliance.workflow.execute",
+		trace.WithAttributes(
+			attribute.String("agent.framework.type", "regulatory"),
+			attribute.String("workflow.type", "compliance_reasoning"),
+			attribute.String("principle.id", principleID),
+			attribute.String("question", question),
+		))
+	defer span.End()
+
 	if a.logger != nil {
 		a.logger.Printf("Starting compliance workflow for question: %s (principle: %s)", question, principleID)
 	}
@@ -149,14 +162,30 @@ func (a *ComplianceReasoningAgent) RunComplianceWorkflow(
 		state.CurrentNode = node.Name()
 		state.LastUpdateTime = time.Now()
 		
+		// Start span for each workflow node
+		nodeCtx, nodeSpan := observability.StartSpan(ctx, fmt.Sprintf("compliance.workflow.node.%s", node.Name()),
+			trace.WithAttributes(
+				attribute.String("node.name", node.Name()),
+				attribute.String("workflow.state", state.CurrentNode),
+			))
+		
 		if a.logger != nil {
 			a.logger.Printf("Executing workflow node: %s", node.Name())
 		}
 		
-		if err := node.Execute(ctx, state); err != nil {
+		if err := node.Execute(nodeCtx, state); err != nil {
+			observability.RecordError(nodeCtx, err)
+			nodeSpan.End()
 			state.Errors = append(state.Errors, fmt.Sprintf("Node %s failed: %v", node.Name(), err))
 			return state, fmt.Errorf("workflow failed at node %s: %w", node.Name(), err)
 		}
+		
+		// Record successful node execution
+		observability.RecordEvent(nodeCtx, "workflow.node.completed",
+			attribute.String("node.name", node.Name()),
+			attribute.Bool("success", true),
+		)
+		nodeSpan.End()
 		
 		// Check for human-in-the-loop checkpoint
 		if state.RequiresApproval && state.ApprovalStatus == "pending" {
@@ -170,6 +199,13 @@ func (a *ComplianceReasoningAgent) RunComplianceWorkflow(
 	if a.logger != nil {
 		a.logger.Printf("Compliance workflow completed successfully")
 	}
+
+	// Record successful workflow completion
+	observability.RecordEvent(ctx, "compliance.workflow.completed",
+		attribute.Float64("confidence", state.Confidence),
+		attribute.Int("sources.count", len(state.Sources)),
+		attribute.Bool("success", true),
+	)
 
 	return state, nil
 }

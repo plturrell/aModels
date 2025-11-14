@@ -24,7 +24,7 @@ readonly BOLD='\033[1m'
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CONFIG_FILE="${PROJECT_ROOT}/config/services.yaml"
 LOG_DIR="${PROJECT_ROOT}/logs/startup"
 PID_DIR="${PROJECT_ROOT}/.pids"
@@ -443,7 +443,14 @@ start_all_services() {
     if [ "$MODE" = "docker" ] || [ "$services" = "docker-compose" ]; then
         log_step "Starting all services via Docker Compose"
         cd "$PROJECT_ROOT"
-        docker-compose -f infrastructure/docker/brev/docker-compose.yml up -d
+
+        local compose_file="${PROJECT_ROOT}/infrastructure/docker/compose.yml"
+        if [ ! -f "$compose_file" ]; then
+            log_warn "${compose_file} not found, falling back to ${PROJECT_ROOT}/infrastructure/docker/brev/docker-compose.yml"
+            compose_file="${PROJECT_ROOT}/infrastructure/docker/brev/docker-compose.yml"
+        fi
+
+        docker-compose -f "$compose_file" up -d
         
         log_info "Waiting for services to be healthy..."
         sleep 30

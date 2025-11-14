@@ -21,8 +21,8 @@ func NewErrorHandler(logger *log.Logger) *ErrorHandler {
 	}
 }
 
-// APIError represents an API error response.
-type APIError struct {
+// HTTPErrorPayload represents an API error response for http responses.
+type HTTPErrorPayload struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Details string `json:"details,omitempty"`
@@ -74,7 +74,7 @@ func (eh *ErrorHandler) HandleError(w http.ResponseWriter, r *http.Request, err 
 	// Sanitize error details before sending to client
 	sanitizedDetails := sanitizeError(err, statusCode)
 	
-	apiErr := APIError{
+	apiErr := HTTPErrorPayload{
 		Code:      statusCode,
 		Message:   http.StatusText(statusCode),
 		Details:   sanitizedDetails,
@@ -101,20 +101,20 @@ func (eh *ErrorHandler) HandleError(w http.ResponseWriter, r *http.Request, err 
 }
 
 // HandlePanic recovers from panics and returns a 500 error.
-func (eh *ErrorHandler) HandlePanic(w http.ResponseWriter, r *http.Request) {
-	if r := recover(); r != nil {
-		var err error
-		switch e := r.(type) {
-		case error:
-			err = e
-		case string:
-			err = fmt.Errorf("%s", e)
-		default:
-			err = fmt.Errorf("panic: %v", r)
-		}
+func (eh *ErrorHandler) HandlePanic(w http.ResponseWriter, req *http.Request) {
+    if recovered := recover(); recovered != nil {
+        var err error
+        switch e := recovered.(type) {
+        case error:
+            err = e
+        case string:
+            err = fmt.Errorf("%s", e)
+        default:
+            err = fmt.Errorf("panic: %v", recovered)
+        }
 
-		eh.HandleError(w, r, err, http.StatusInternalServerError)
-	}
+        eh.HandleError(w, req, err, http.StatusInternalServerError)
+    }
 }
 
 // RecoveryMiddleware provides panic recovery middleware.
@@ -123,6 +123,13 @@ func (eh *ErrorHandler) RecoveryMiddleware(next http.Handler) http.Handler {
 		defer eh.HandlePanic(w, r)
 		next.ServeHTTP(w, r)
 	})
+}
+
+// writeJSON writes a JSON response payload with the provided status.
+func writeJSON(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(data)
 }
 
 // RetryConfig holds retry configuration.

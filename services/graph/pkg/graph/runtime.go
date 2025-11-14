@@ -218,12 +218,16 @@ func (g *Graph) Run(ctx context.Context, input any, opts ...RunOption) (any, err
 // full Pregel runtime.
 
 func (g *Graph) RunResult(ctx context.Context, input any, opts ...RunOption) (Result, error) {
+	// OpenTelemetry instrumentation will be added via observability package
+	// For now, proceed with execution
+
 	cfg := runConfig{}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
 
 	if err := ctx.Err(); err != nil {
+		span.RecordError(err)
 		return Result{}, err
 	}
 

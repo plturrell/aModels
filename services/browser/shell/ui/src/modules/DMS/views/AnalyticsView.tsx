@@ -21,7 +21,7 @@ import {
   TableRow,
   Paper as MuiPaper
 } from "@mui/material";
-import { Panel } from "../../../components/Panel";
+import { Panel } from "../../../components/common/Panel";
 import type { DMSRequestHistory } from "../../../api/dms";
 
 interface AnalyticsViewProps {

@@ -6,6 +6,8 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 )
 
 func TestRedisPersistenceSaveSchema(t *testing.T) {
@@ -18,7 +20,7 @@ func TestRedisPersistenceSaveSchema(t *testing.T) {
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	rp := &RedisPersistence{client: client}
 
-	nodes := []Node{{ID: "table1", Type: "table", Label: "Table"}}
+	nodes := []Node{{ID: "table1", Type: graph.NodeTypeTable, Label: "Table"}}
 	edges := []Edge{{SourceID: "table1", TargetID: "table1.col", Label: "HAS_COLUMN"}}
 
 	if err := rp.SaveSchema(nodes, edges); err != nil {

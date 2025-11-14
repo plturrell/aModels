@@ -9,6 +9,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/plturrell/aModels/services/extract/pkg/graph"
 )
 
 func TestCatalogClient_RegisterDataElement_Success(t *testing.T) {
@@ -195,7 +197,7 @@ func TestCatalogClient_Disabled(t *testing.T) {
 func TestConvertNodeToDataElement(t *testing.T) {
 	node := Node{
 		ID:    "test-node-123",
-		Type:  "column",
+		Type:  graph.NodeTypeColumn,
 		Label: "Customer Name",
 		Props: map[string]interface{}{
 			"description": "Name of the customer",

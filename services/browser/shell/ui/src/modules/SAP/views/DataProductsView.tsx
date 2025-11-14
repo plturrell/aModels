@@ -23,7 +23,7 @@ import { GridLegacy as Grid } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import InfoIcon from '@mui/icons-material/Info';
-import { Panel } from '../../../components/Panel';
+import { Panel } from '../../../components/common/Panel';
 import { useApiData } from '../../../api/client';
 import { listSAPDataProducts, listSAPIntelligentApplications } from '../../../api/sap';
 import type { SAPBDCConnectionConfig, SAPDataProduct, SAPIntelligentApplication } from '../../../api/sap';

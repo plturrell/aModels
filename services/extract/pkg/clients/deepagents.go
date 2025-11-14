@@ -22,6 +22,16 @@ type DeepAgentsClient struct {
 	enabled bool
 }
 
+// IsEnabled returns whether the DeepAgents client is enabled.
+func (c *DeepAgentsClient) IsEnabled() bool {
+	return c.enabled
+}
+
+// CheckHealth performs a health check on the DeepAgents service.
+func (c *DeepAgentsClient) CheckHealth(ctx context.Context) bool {
+	return c.checkHealth(ctx)
+}
+
 // NewDeepAgentsClient creates a new DeepAgents client.
 // DeepAgents is enabled by default. Set DEEPAGENTS_ENABLED=false to disable.
 func NewDeepAgentsClient(logger *log.Logger) *DeepAgentsClient {

@@ -23,8 +23,8 @@ import {
 } from '@mui/material';
 import { GridLegacy as Grid } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import { GNNPredictionCard } from '../../../components/GNNPredictionCard';
-import { GNNExplanation } from '../../../components/GNNExplanation';
+import { GNNPredictionCard } from '../../../components/ai/GNNPredictionCard';
+import { GNNExplanation } from '../../../components/ai/GNNExplanation';
 import { useGNNAnalysis } from '../../../hooks/useAI';
 import { GraphNode, GraphEdge } from '../../../types/graph';
 

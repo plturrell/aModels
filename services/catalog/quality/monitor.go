@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/plturrell/aModels/services/catalog/httpclient"
@@ -34,7 +35,7 @@ func NewQualityMonitor(extractServiceURL string, logger *log.Logger) *QualityMon
 			Logger:          logger,
 		})
 	}
-	
+
 	return &QualityMonitor{
 		extractServiceURL: extractServiceURL,
 		httpClient:        client,
@@ -44,14 +45,14 @@ func NewQualityMonitor(extractServiceURL string, logger *log.Logger) *QualityMon
 
 // ExtractMetrics represents quality metrics from the Extract service.
 type ExtractMetrics struct {
-	MetadataEntropy   float64            `json:"metadata_entropy"`
-	KLDivergence      float64            `json:"kl_divergence"`
-	ColumnCount       int                `json:"column_count"`
-	QualityScore      float64            `json:"quality_score"`
-	QualityLevel      string             `json:"quality_level"`
+	MetadataEntropy    float64            `json:"metadata_entropy"`
+	KLDivergence       float64            `json:"kl_divergence"`
+	ColumnCount        int                `json:"column_count"`
+	QualityScore       float64            `json:"quality_score"`
+	QualityLevel       string             `json:"quality_level"`
 	ActualDistribution map[string]float64 `json:"actual_distribution"`
 	IdealDistribution  map[string]float64 `json:"ideal_distribution"`
-	LastUpdated       time.Time          `json:"last_updated"`
+	LastUpdated        time.Time          `json:"last_updated"`
 }
 
 // FetchQualityMetrics fetches quality metrics from the Extract service for a data element.
@@ -59,7 +60,7 @@ func (qm *QualityMonitor) FetchQualityMetrics(ctx context.Context, dataElementID
 	if qm.extractServiceURL == "" {
 		return nil, fmt.Errorf("extract service URL not configured")
 	}
-	
+
 	query := map[string]any{
 		"query": `
 			MATCH (n:Node {id: $element_id})
@@ -73,11 +74,11 @@ func (qm *QualityMonitor) FetchQualityMetrics(ctx context.Context, dataElementID
 			"element_id": dataElementID,
 		},
 	}
-	
+
 	var result struct {
 		Data []map[string]any `json:"data"`
 	}
-	
+
 	if qm.httpClient != nil {
 		// Use enhanced HTTP client
 		validator := func(data map[string]interface{}) error {
@@ -86,13 +87,13 @@ func (qm *QualityMonitor) FetchQualityMetrics(ctx context.Context, dataElementID
 			}
 			return nil
 		}
-		
+
 		var responseData map[string]interface{}
 		err := qm.httpClient.PostJSON(ctx, "/knowledge-graph/query", query, &responseData, validator)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch metrics: %w", err)
 		}
-		
+
 		// Convert response to result struct
 		if data, ok := responseData["data"].([]interface{}); ok {
 			for _, item := range data {
@@ -107,41 +108,44 @@ func (qm *QualityMonitor) FetchQualityMetrics(ctx context.Context, dataElementID
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal query: %w", err)
 		}
-		
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonData))
+
+		baseURL := strings.TrimSuffix(qm.extractServiceURL, "/")
+		endpoint := fmt.Sprintf("%s/knowledge-graph/query", baseURL)
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(jsonData))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
-		
+
 		client := &http.Client{Timeout: 30 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch metrics: %w", err)
 		}
 		defer resp.Body.Close()
-		
+
 		if resp.StatusCode != http.StatusOK {
 			// Read response body for better error messages
 			body, _ := io.ReadAll(resp.Body)
 			return nil, fmt.Errorf("extract service returned status %d: %s", resp.StatusCode, string(body))
 		}
-		
+
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 			return nil, fmt.Errorf("failed to decode response: %w", err)
 		}
 	}
-	
+
 	if len(result.Data) == 0 {
 		return nil, fmt.Errorf("no metrics found for data element %s", dataElementID)
 	}
-	
+
 	// Parse metrics from result
 	record := result.Data[0]
 	metrics := &ExtractMetrics{
 		LastUpdated: time.Now(),
 	}
-	
+
 	if val, ok := record["metadata_entropy"].(float64); ok {
 		metrics.MetadataEntropy = val
 	}
@@ -151,7 +155,7 @@ func (qm *QualityMonitor) FetchQualityMetrics(ctx context.Context, dataElementID
 	if val, ok := record["column_count"].(float64); ok {
 		metrics.ColumnCount = int(val)
 	}
-	
+
 	// Calculate quality score from metrics
 	// Use similar logic to metrics_interpreter.go
 	entropyScore := 0.5
@@ -160,21 +164,21 @@ func (qm *QualityMonitor) FetchQualityMetrics(ctx context.Context, dataElementID
 	} else if metrics.MetadataEntropy < 1.0 {
 		entropyScore = metrics.MetadataEntropy / 1.0 * 0.5
 	}
-	
+
 	klScore := 1.0
 	if metrics.KLDivergence > 1.0 {
 		klScore = 0.0
 	} else if metrics.KLDivergence > 0.5 {
 		klScore = 1.0 - (metrics.KLDivergence-0.5)/(1.0-0.5)*0.5
 	}
-	
+
 	columnScore := 1.0
 	if metrics.ColumnCount < 5 {
 		columnScore = float64(metrics.ColumnCount) / 5.0
 	}
-	
+
 	metrics.QualityScore = entropyScore*0.4 + klScore*0.4 + columnScore*0.2
-	
+
 	// Determine quality level
 	if metrics.QualityScore >= 0.9 {
 		metrics.QualityLevel = "excellent"
@@ -187,7 +191,7 @@ func (qm *QualityMonitor) FetchQualityMetrics(ctx context.Context, dataElementID
 	} else {
 		metrics.QualityLevel = "critical"
 	}
-	
+
 	return metrics, nil
 }
 
@@ -202,14 +206,14 @@ func (qm *QualityMonitor) UpdateQualityMetrics(ctx context.Context, elementID st
 		}
 		return nil // Non-fatal
 	}
-	
+
 	// Update quality metrics
 	metrics.UpdateMetric("freshness", extractMetrics.QualityScore)
 	metrics.UpdateMetric("completeness", extractMetrics.QualityScore)
 	metrics.UpdateMetric("accuracy", extractMetrics.QualityScore)
 	metrics.UpdateMetric("consistency", extractMetrics.QualityScore)
 	metrics.UpdateMetric("validity", extractMetrics.QualityScore)
-	
+
 	// Update SLOs
 	for i := range metrics.SLOs {
 		switch metrics.SLOs[i].Name {
@@ -221,15 +225,15 @@ func (qm *QualityMonitor) UpdateQualityMetrics(ctx context.Context, elementID st
 			metrics.SLOs[i].Current = extractMetrics.QualityScore
 		}
 	}
-	
+
 	metrics.LastValidated = extractMetrics.LastUpdated
 	metrics.CheckSLOs()
-	
+
 	if qm.logger != nil {
-		qm.logger.Printf("Updated quality metrics for %s: score=%.2f, level=%s", 
+		qm.logger.Printf("Updated quality metrics for %s: score=%.2f, level=%s",
 			elementID, extractMetrics.QualityScore, extractMetrics.QualityLevel)
 	}
-	
+
 	return nil
 }
 
@@ -237,7 +241,7 @@ func (qm *QualityMonitor) UpdateQualityMetrics(ctx context.Context, elementID st
 func (qm *QualityMonitor) MonitorQuality(ctx context.Context, interval time.Duration, callback func(elementID string, metrics *ExtractMetrics)) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -251,4 +255,3 @@ func (qm *QualityMonitor) MonitorQuality(ctx context.Context, interval time.Dura
 		}
 	}
 }
-

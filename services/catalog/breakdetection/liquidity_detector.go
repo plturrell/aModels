@@ -1,7 +1,6 @@
 package breakdetection
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -34,25 +33,25 @@ func NewLiquidityDetector(rcoURL string, logger *log.Logger) *LiquidityDetector 
 
 // RCOLiquidityPosition represents a liquidity position from RCO
 type RCOLiquidityPosition struct {
-	PositionID          string    `json:"position_id"`
-	TradeID             string    `json:"trade_id,omitempty"`
-	PositionDate        time.Time `json:"position_date"`
-	PositionType        string    `json:"position_type"` // "Long", "Short", "Net"
-	PositionAmount      float64   `json:"position_amount"`
-	Currency            string    `json:"currency"`
-	MarketValue         *float64  `json:"market_value,omitempty"`
-	LiquidityRequirement float64  `json:"liquidity_requirement"`
-	MaturityDate        *time.Time `json:"maturity_date,omitempty"`
+	PositionID           string     `json:"position_id"`
+	TradeID              string     `json:"trade_id,omitempty"`
+	PositionDate         time.Time  `json:"position_date"`
+	PositionType         string     `json:"position_type"` // "Long", "Short", "Net"
+	PositionAmount       float64    `json:"position_amount"`
+	Currency             string     `json:"currency"`
+	MarketValue          *float64   `json:"market_value,omitempty"`
+	LiquidityRequirement float64    `json:"liquidity_requirement"`
+	MaturityDate         *time.Time `json:"maturity_date,omitempty"`
 }
 
 // RCOLCR represents a Liquidity Coverage Ratio from RCO
 type RCOLCR struct {
-	AsOfDate       time.Time `json:"as_of_date"`
-	LCRValue       float64   `json:"lcr_value"`
-	MinimumRequired float64  `json:"minimum_required"` // Typically 1.0 (100%)
-	Status         string    `json:"status"`             // "compliant", "below_minimum"
-	HQLA          float64   `json:"hqla"`              // High Quality Liquid Assets
-	NetCashOutflow float64   `json:"net_cash_outflow"`
+	AsOfDate        time.Time `json:"as_of_date"`
+	LCRValue        float64   `json:"lcr_value"`
+	MinimumRequired float64   `json:"minimum_required"` // Typically 1.0 (100%)
+	Status          string    `json:"status"`           // "compliant", "below_minimum"
+	HQLA            float64   `json:"hqla"`             // High Quality Liquid Assets
+	NetCashOutflow  float64   `json:"net_cash_outflow"`
 }
 
 // DetectBreaks detects breaks in RCO for liquidity positions
@@ -373,19 +372,19 @@ func (ld *LiquidityDetector) detectLCRViolations(baseline, current *RCOLCR) []*B
 		// Missing LCR
 		if baseline != nil {
 			br := &Break{
-				BreakID:        fmt.Sprintf("break-missing-lcr-%d", time.Now().Unix()),
-				SystemName:      SystemRCO,
-				DetectionType:   DetectionTypeLiquidity,
-				BreakType:       BreakTypeLCRViolation,
-				Severity:        SeverityCritical,
-				Status:          BreakStatusOpen,
-				CurrentValue:    nil,
-				BaselineValue:   ld.lcrToMap(baseline),
-				Difference:      map[string]interface{}{"missing": true},
+				BreakID:          fmt.Sprintf("break-missing-lcr-%d", time.Now().Unix()),
+				SystemName:       SystemRCO,
+				DetectionType:    DetectionTypeLiquidity,
+				BreakType:        BreakTypeLCRViolation,
+				Severity:         SeverityCritical,
+				Status:           BreakStatusOpen,
+				CurrentValue:     nil,
+				BaselineValue:    ld.lcrToMap(baseline),
+				Difference:       map[string]interface{}{"missing": true},
 				AffectedEntities: []string{"lcr"},
-				DetectedAt:      time.Now(),
-				CreatedAt:       time.Now(),
-				UpdatedAt:       time.Now(),
+				DetectedAt:       time.Now(),
+				CreatedAt:        time.Now(),
+				UpdatedAt:        time.Now(),
 			}
 			breaks = append(breaks, br)
 		}
@@ -395,18 +394,18 @@ func (ld *LiquidityDetector) detectLCRViolations(baseline, current *RCOLCR) []*B
 	// Check if LCR is below minimum
 	if current.LCRValue < current.MinimumRequired {
 		br := &Break{
-			BreakID:        fmt.Sprintf("break-lcr-violation-%d", time.Now().Unix()),
-			SystemName:      SystemRCO,
-			DetectionType:   DetectionTypeLiquidity,
-			BreakType:       BreakTypeLCRViolation,
-			Severity:        SeverityCritical,
-			Status:          BreakStatusOpen,
-			CurrentValue:    ld.lcrToMap(current),
-			BaselineValue:   ld.lcrToMap(baseline),
+			BreakID:       fmt.Sprintf("break-lcr-violation-%d", time.Now().Unix()),
+			SystemName:    SystemRCO,
+			DetectionType: DetectionTypeLiquidity,
+			BreakType:     BreakTypeLCRViolation,
+			Severity:      SeverityCritical,
+			Status:        BreakStatusOpen,
+			CurrentValue:  ld.lcrToMap(current),
+			BaselineValue: ld.lcrToMap(baseline),
 			Difference: map[string]interface{}{
-				"lcr_value":       current.LCRValue,
+				"lcr_value":        current.LCRValue,
 				"minimum_required": current.MinimumRequired,
-				"deficit":         current.MinimumRequired - current.LCRValue,
+				"deficit":          current.MinimumRequired - current.LCRValue,
 			},
 			AffectedEntities: []string{"lcr"},
 			DetectedAt:       time.Now(),
@@ -425,14 +424,14 @@ func (ld *LiquidityDetector) detectLCRViolations(baseline, current *RCOLCR) []*B
 		// Significant change threshold: 5% (0.05)
 		if lcrChange > 0.05 {
 			br := &Break{
-				BreakID:        fmt.Sprintf("break-lcr-change-%d", time.Now().Unix()),
-				SystemName:      SystemRCO,
-				DetectionType:   DetectionTypeLiquidity,
-				BreakType:       BreakTypeLCRViolation,
-				Severity:        SeverityHigh,
-				Status:          BreakStatusOpen,
-				CurrentValue:    ld.lcrToMap(current),
-				BaselineValue:   ld.lcrToMap(baseline),
+				BreakID:       fmt.Sprintf("break-lcr-change-%d", time.Now().Unix()),
+				SystemName:    SystemRCO,
+				DetectionType: DetectionTypeLiquidity,
+				BreakType:     BreakTypeLCRViolation,
+				Severity:      SeverityHigh,
+				Status:        BreakStatusOpen,
+				CurrentValue:  ld.lcrToMap(current),
+				BaselineValue: ld.lcrToMap(baseline),
 				Difference: map[string]interface{}{
 					"baseline_lcr": baseline.LCRValue,
 					"current_lcr":  current.LCRValue,
@@ -468,18 +467,18 @@ func (ld *LiquidityDetector) detectLiquidityMismatches(baseline, current map[str
 		}
 		if requirementDiff > tolerance {
 			br := &Break{
-				BreakID:        fmt.Sprintf("break-liquidity-requirement-mismatch-%s", positionID),
-				SystemName:      SystemRCO,
-				DetectionType:   DetectionTypeLiquidity,
-				BreakType:       BreakTypeLiquidityMismatch,
-				Severity:        SeverityHigh,
-				Status:          BreakStatusOpen,
-				CurrentValue:    ld.liquidityPositionToMap(currentPosition),
-				BaselineValue:   ld.liquidityPositionToMap(baselinePosition),
+				BreakID:       fmt.Sprintf("break-liquidity-requirement-mismatch-%s", positionID),
+				SystemName:    SystemRCO,
+				DetectionType: DetectionTypeLiquidity,
+				BreakType:     BreakTypeLiquidityMismatch,
+				Severity:      SeverityHigh,
+				Status:        BreakStatusOpen,
+				CurrentValue:  ld.liquidityPositionToMap(currentPosition),
+				BaselineValue: ld.liquidityPositionToMap(baselinePosition),
 				Difference: map[string]interface{}{
 					"field":      "liquidity_requirement",
 					"baseline":   baselinePosition.LiquidityRequirement,
-					"current":   currentPosition.LiquidityRequirement,
+					"current":    currentPosition.LiquidityRequirement,
 					"difference": requirementDiff,
 				},
 				AffectedEntities: []string{positionID},
@@ -504,19 +503,19 @@ func (ld *LiquidityDetector) detectPositionMismatches(baseline, current map[stri
 		if !exists {
 			// Missing position
 			br := &Break{
-				BreakID:        fmt.Sprintf("break-missing-position-%s", positionID),
-				SystemName:      SystemRCO,
-				DetectionType:   DetectionTypeLiquidity,
-				BreakType:       BreakTypePositionMismatch,
-				Severity:        SeverityHigh,
-				Status:          BreakStatusOpen,
-				CurrentValue:    nil,
-				BaselineValue:   ld.liquidityPositionToMap(baselinePosition),
-				Difference:      map[string]interface{}{"missing": true},
+				BreakID:          fmt.Sprintf("break-missing-position-%s", positionID),
+				SystemName:       SystemRCO,
+				DetectionType:    DetectionTypeLiquidity,
+				BreakType:        BreakTypePositionMismatch,
+				Severity:         SeverityHigh,
+				Status:           BreakStatusOpen,
+				CurrentValue:     nil,
+				BaselineValue:    ld.liquidityPositionToMap(baselinePosition),
+				Difference:       map[string]interface{}{"missing": true},
 				AffectedEntities: []string{positionID},
-				DetectedAt:      time.Now(),
-				CreatedAt:       time.Now(),
-				UpdatedAt:       time.Now(),
+				DetectedAt:       time.Now(),
+				CreatedAt:        time.Now(),
+				UpdatedAt:        time.Now(),
 			}
 			breaks = append(breaks, br)
 			continue
@@ -529,18 +528,18 @@ func (ld *LiquidityDetector) detectPositionMismatches(baseline, current map[stri
 		}
 		if amountDiff > tolerance {
 			br := &Break{
-				BreakID:        fmt.Sprintf("break-position-amount-mismatch-%s", positionID),
-				SystemName:      SystemRCO,
-				DetectionType:   DetectionTypeLiquidity,
-				BreakType:       BreakTypePositionMismatch,
-				Severity:        SeverityCritical,
-				Status:          BreakStatusOpen,
-				CurrentValue:    ld.liquidityPositionToMap(currentPosition),
-				BaselineValue:   ld.liquidityPositionToMap(baselinePosition),
+				BreakID:       fmt.Sprintf("break-position-amount-mismatch-%s", positionID),
+				SystemName:    SystemRCO,
+				DetectionType: DetectionTypeLiquidity,
+				BreakType:     BreakTypePositionMismatch,
+				Severity:      SeverityCritical,
+				Status:        BreakStatusOpen,
+				CurrentValue:  ld.liquidityPositionToMap(currentPosition),
+				BaselineValue: ld.liquidityPositionToMap(baselinePosition),
 				Difference: map[string]interface{}{
 					"field":      "position_amount",
 					"baseline":   baselinePosition.PositionAmount,
-					"current":   currentPosition.PositionAmount,
+					"current":    currentPosition.PositionAmount,
 					"difference": amountDiff,
 				},
 				AffectedEntities: []string{positionID},
@@ -558,10 +557,10 @@ func (ld *LiquidityDetector) detectPositionMismatches(baseline, current map[stri
 // Helper functions
 func (ld *LiquidityDetector) liquidityPositionToMap(position *RCOLiquidityPosition) map[string]interface{} {
 	return map[string]interface{}{
-		"position_id":          position.PositionID,
-		"position_amount":      position.PositionAmount,
-		"currency":             position.Currency,
-		"position_type":        position.PositionType,
+		"position_id":           position.PositionID,
+		"position_amount":       position.PositionAmount,
+		"currency":              position.Currency,
+		"position_type":         position.PositionType,
 		"liquidity_requirement": position.LiquidityRequirement,
 	}
 }
@@ -571,11 +570,10 @@ func (ld *LiquidityDetector) lcrToMap(lcr *RCOLCR) map[string]interface{} {
 		return nil
 	}
 	return map[string]interface{}{
-		"lcr_value":       lcr.LCRValue,
+		"lcr_value":        lcr.LCRValue,
 		"minimum_required": lcr.MinimumRequired,
-		"status":          lcr.Status,
-		"hqla":           lcr.HQLA,
+		"status":           lcr.Status,
+		"hqla":             lcr.HQLA,
 		"net_cash_outflow": lcr.NetCashOutflow,
 	}
 }
-
