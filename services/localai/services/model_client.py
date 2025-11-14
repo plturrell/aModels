@@ -47,6 +47,23 @@ def get_model_from_server(model_name: str, target_path: Optional[str] = None) ->
         
         all_models = response.json()
         
+        # Handle different response formats - could be list of dicts or list of strings
+        if not all_models:
+            print(f"[MODEL_CLIENT] No models found on server")
+            return None
+        
+        # Normalize to list of dicts
+        normalized_models = []
+        for model in all_models:
+            if isinstance(model, dict):
+                normalized_models.append(model)
+            elif isinstance(model, str):
+                # If it's a string, treat it as the model name
+                normalized_models.append({'name': model})
+            else:
+                print(f"[MODEL_CLIENT] Unexpected model format: {type(model)}")
+                continue
+        
         # Try to find matching model by name patterns
         model_name_variants = [
             model_name,  # Try as-is (e.g., "phi-3.5-mini")
@@ -59,7 +76,7 @@ def get_model_from_server(model_name: str, target_path: Optional[str] = None) ->
         server_model_name = None
         
         # First try exact matches
-        for model in all_models:
+        for model in normalized_models:
             model_dir_name = model.get('name', '')
             if model_dir_name in model_name_variants:
                 model_info = model
@@ -69,7 +86,7 @@ def get_model_from_server(model_name: str, target_path: Optional[str] = None) ->
         
         # If no exact match, try partial matches
         if not model_info:
-            for model in all_models:
+            for model in normalized_models:
                 model_dir_name = model.get('name', '').lower()
                 for variant in model_name_variants:
                     if variant.lower() in model_dir_name or model_dir_name in variant.lower():
@@ -82,7 +99,8 @@ def get_model_from_server(model_name: str, target_path: Optional[str] = None) ->
         
         if not model_info:
             print(f"[MODEL_CLIENT] Model {model_name} not found on server")
-            print(f"[MODEL_CLIENT] Available models: {[m.get('name') for m in all_models[:5]]}")
+            available_names = [m.get('name', str(m)) for m in normalized_models[:5]]
+            print(f"[MODEL_CLIENT] Available models: {available_names}")
             return None
         
         # Determine cache path
