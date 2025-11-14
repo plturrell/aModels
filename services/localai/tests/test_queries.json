@@ -1,0 +1,63 @@
+[
+  {
+    "query": "Write a SQL query to select all users from the users table",
+    "expected_domain": "SQL",
+    "domain": "auto"
+  },
+  {
+    "query": "How do I join two tables in SQL?",
+    "expected_domain": "SQL",
+    "domain": "auto"
+  },
+  {
+    "query": "What is a SQL subquery?",
+    "expected_domain": "SQL",
+    "domain": "auto"
+  },
+  {
+    "query": "What is a ledger entry?",
+    "expected_domain": "Finance",
+    "domain": "auto"
+  },
+  {
+    "query": "Explain double-entry bookkeeping",
+    "expected_domain": "Finance",
+    "domain": "auto"
+  },
+  {
+    "query": "How do I calculate ROI?",
+    "expected_domain": "Finance",
+    "domain": "auto"
+  },
+  {
+    "query": "Write a Python function to sort a list",
+    "expected_domain": "Code",
+    "domain": "auto"
+  },
+  {
+    "query": "What is a closure in JavaScript?",
+    "expected_domain": "Code",
+    "domain": "auto"
+  },
+  {
+    "query": "How do I handle errors in Go?",
+    "expected_domain": "Code",
+    "domain": "auto"
+  },
+  {
+    "query": "What is artificial intelligence?",
+    "expected_domain": "General",
+    "domain": "auto"
+  },
+  {
+    "query": "Explain machine learning",
+    "expected_domain": "General",
+    "domain": "auto"
+  },
+  {
+    "query": "How does neural network training work?",
+    "expected_domain": "General",
+    "domain": "auto"
+  }
+]
+
