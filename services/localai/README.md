@@ -1,8 +1,22 @@
 # VaultGemma LocalAI: Multi-Domain Agentic Inference Server
 
-**Version**: 2.0.0  
+**Version**: 2.2.0  
 **Status**: ✅ Production Ready  
-**Last Updated**: October 28, 2025
+**Last Updated**: November 14, 2025
+
+## Recent Updates (v2.2.0)
+
+- ✅ **Structured Logging**: High-performance zerolog integration with contextual logging
+- ✅ **Optimized Caching**: LRU cache with TTL support and automatic cleanup
+- ✅ **Connection Pooling**: Database and HTTP client pools for optimal resource usage
+
+## Previous Updates (v2.1.0)
+
+- ✅ **HANA Dependencies Removed**: Simplified architecture by removing SAP HANA integration
+- ✅ **OpenTelemetry Tracing**: Built-in distributed tracing support with Jaeger exporter
+- ✅ **API v2**: Enhanced API with workflow tracking, structured errors, and better metadata
+- ✅ **Performance Optimizations**: Improved sorting algorithm using stdlib `sort.Slice()`
+- ✅ **Codebase Cleanup**: Removed unused LocalAI directory (31MB savings)
 
 ---
 
@@ -37,6 +51,12 @@ This server is a key component of the AgenticAI ETH project, providing the core 
 - **Production-Grade**: Includes essential production features such as rate limiting, CORS, health checks, Prometheus metrics, and request timeouts.
 - **Vision/OCR Routing**: Integrates DeepSeek-OCR as a dedicated vision backend for image-to-text workflows.
 - **Integrated Web UI**: Comes with a built-in web interface for easy testing, exploration, and real-time monitoring.
+- **Distributed Tracing**: OpenTelemetry integration for request tracking across distributed systems.
+- **API Versioning**: Both v1 (legacy) and v2 (enhanced) APIs available with backward compatibility.
+- **Workflow Tracking**: Associate requests with workflows for better observability and debugging.
+- **Structured Logging**: High-performance zerolog with contextual fields and specialized log methods.
+- **Connection Pooling**: Optimized database and HTTP client pools with automatic management.
+- **LRU Caching**: Intelligent cache with TTL support, automatic eviction, and performance tracking.
 
 ## 3. System Architecture
 
@@ -184,23 +204,6 @@ To run the main test suite, which covers domain routing, API handlers, and other
 go test -v ./tests/...
 ```
 
-### HANA Integration Tests
-
-To run the HANA integration tests, you first need to set up your HANA environment:
-
-1.  Copy `.env.hana.example` to `.env.hana` and update the credentials if necessary.
-2.  Export the environment variables:
-
-    ```bash
-    export $(grep -v '^#' .env.hana | xargs)
-    ```
-
-3.  Run the tests with the `hana` build tag:
-
-    ```bash
-    go test -tags hana ./pkg/storage
-    ```
-
 ### Loader Benchmarks
 
 The model loader exposes a micro-benchmark that exercises the chunked tensor reader. Run it with:
@@ -231,19 +234,104 @@ scripts/run_llama_cpp_server.sh ../agenticAiETH_layer4_Models/phi/phi-3-pytorch-
   --port 8081 --ctx-size 4096
 ```
 
-## 8. HANA Integration
+## 8. Distributed Tracing with OpenTelemetry
 
-LocalAI can persist inference logs and caches to SAP HANA when built with the `hana` build tag.
+LocalAI includes built-in OpenTelemetry support for distributed tracing.
 
-1.  Ensure your HANA environment is configured as described in the "HANA Integration Tests" section.
-2.  Start `vaultgemma-server` with the `hana` build tag to enable HANA-backed logging and caching:
+### Enable Tracing
 
-    ```bash
-    go build -tags hana -o bin/vaultgemma-server-hana ./cmd/vaultgemma-server
-    ./bin/vaultgemma-server-hana
-    ```
+Set the following environment variables:
 
-Without the tag, the package falls back to in-memory helpers so the service can run without a database connection.
+```bash
+export OTEL_TRACING_ENABLED=1
+export OTEL_EXPORTER_JAEGER_ENDPOINT=http://localhost:14268/api/traces
+```
+
+### Start Jaeger (Optional)
+
+For local development, you can run Jaeger using Docker:
+
+```bash
+docker run -d --name jaeger \
+  -e COLLECTOR_ZIPKIN_HOST_PORT=:9411 \
+  -p 5775:5775/udp \
+  -p 6831:6831/udp \
+  -p 6832:6832/udp \
+  -p 5778:5778 \
+  -p 16686:16686 \
+  -p 14268:14268 \
+  -p 14250:14250 \
+  -p 9411:9411 \
+  jaegertracing/all-in-one:latest
+```
+
+Then access the Jaeger UI at `http://localhost:16686`
+
+### Trace Context Propagation
+
+The v2 API supports W3C Trace Context propagation:
+
+```bash
+curl -X POST http://localhost:8080/v2/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "auto",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "trace_parent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+  }'
+```
+
+## 9. API v2 - Enhanced Features
+
+The v2 API provides enhanced features over the v1 API:
+
+### Key Features
+
+- **Structured Responses**: Consistent response format with comprehensive metadata
+- **Workflow Tracking**: Associate requests with workflows using `workflow_id`
+- **Enhanced Errors**: Detailed error codes with retry guidance
+- **Built-in Tracing**: OpenTelemetry trace IDs in every response
+
+### Example v2 Request
+
+```bash
+curl -X POST http://localhost:8080/v2/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "model": "auto",
+    "messages": [{"role": "user", "content": "Analyze SQL performance"}],
+    "max_tokens": 512,
+    "workflow_id": "sql-analysis-2024",
+    "metadata": {
+      "user_id": "user_123",
+      "session_id": "session_456"
+    }
+  }'
+```
+
+### Example v2 Response
+
+```json
+{
+  "id": "v2_req_1730000000000",
+  "object": "chat.completion",
+  "created": 1730000000,
+  "model": "0x5678-SQLAgent",
+  "domain": "0x5678-SQLAgent",
+  "status": "completed",
+  "trace_id": "0af7651916cd43dd8448eb211c80319c",
+  "workflow_id": "sql-analysis-2024",
+  "choices": [...],
+  "usage": {...},
+  "metadata": {
+    "latency_ms": 234,
+    "backend_type": "gguf",
+    "cache_hit": false
+  }
+}
+```
+
+For complete v2 API documentation, see [docs/API_V2.md](docs/API_V2.md)
 
 ## 9. Contributing
 

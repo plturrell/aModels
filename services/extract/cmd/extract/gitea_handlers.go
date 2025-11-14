@@ -2,33 +2,37 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	handlers "github.com/plturrell/aModels/services/extract/internal/handlers"
 	"github.com/plturrell/aModels/services/extract/pkg/git"
 )
 
+// Global cache for Gitea responses (5 minute TTL)
+var giteaResponseCache = git.NewResponseCache(5 * time.Minute)
+
+// generateCacheKey creates a cache key from request parameters
+func generateCacheKey(parts ...string) string {
+	combined := strings.Join(parts, "|")
+	hash := sha256.Sum256([]byte(combined))
+	return fmt.Sprintf("%x", hash)
+}
+
 // getGiteaConfig retrieves Gitea configuration from HTTP request.
-// It checks headers first (X-Gitea-URL, X-Gitea-Token), then query parameters (for backward compatibility),
-// and finally environment variables (GITEA_URL, GITEA_TOKEN).
+// It checks headers first (X-Gitea-URL, X-Gitea-Token), then environment variables (GITEA_URL, GITEA_TOKEN).
 // Returns the Gitea URL and token, or empty strings if not found.
+// Note: Query parameter authentication has been removed for security reasons.
 func getGiteaConfig(r *http.Request) (giteaURL, giteaToken string) {
 	// Try headers first (more secure)
 	giteaURL = r.Header.Get("X-Gitea-URL")
 	giteaToken = r.Header.Get("X-Gitea-Token")
-	
-	// Fallback to query params for backward compatibility (deprecated)
-	if giteaURL == "" {
-		giteaURL = r.URL.Query().Get("gitea_url")
-	}
-	if giteaToken == "" {
-		giteaToken = r.URL.Query().Get("gitea_token")
-	}
 	
 	// Fallback to environment variables
 	if giteaURL == "" {
@@ -295,6 +299,13 @@ func (s *extractServer) handleGiteaRepository(w http.ResponseWriter, r *http.Req
 
 	switch r.Method {
 	case http.MethodGet:
+		// Check cache first
+		cacheKey := generateCacheKey("repo", giteaURL, owner, repo)
+		if cached, found := giteaResponseCache.Get(cacheKey); found {
+			handlers.WriteJSON(w, http.StatusOK, cached)
+			return
+		}
+		
 		// Get repository details
 		repoInfo, err := client.GetRepository(ctx, owner, repo)
 		if err != nil {
@@ -305,6 +316,9 @@ func (s *extractServer) handleGiteaRepository(w http.ResponseWriter, r *http.Req
 			})
 			return
 		}
+		
+		// Cache the response
+		giteaResponseCache.Set(cacheKey, repoInfo)
 		handlers.WriteJSON(w, http.StatusOK, repoInfo)
 
 	case http.MethodDelete:
@@ -435,6 +449,13 @@ func (s *extractServer) handleGiteaRepositoryFiles(w http.ResponseWriter, r *htt
 			}
 		}
 
+		// Check cache for file listings
+		cacheKey := generateCacheKey("files", giteaURL, owner, repo, path, ref, fmt.Sprintf("%v", pagination))
+		if cached, found := giteaResponseCache.Get(cacheKey); found {
+			handlers.WriteJSON(w, http.StatusOK, cached)
+			return
+		}
+		
 		files, resultPagination, err := client.ListFiles(ctx, owner, repo, path, ref, pagination)
 		if err != nil {
 			handlers.WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{
@@ -445,18 +466,23 @@ func (s *extractServer) handleGiteaRepositoryFiles(w http.ResponseWriter, r *htt
 			return
 		}
 		
+		var response interface{}
 		// Return paginated response if pagination was requested
 		if pagination != nil {
 			hasMore := resultPagination != nil && resultPagination.Limit > 0 && len(files) == resultPagination.Limit
-			handlers.WriteJSON(w, http.StatusOK, map[string]interface{}{
+			response = map[string]interface{}{
 				"data":     files,
 				"page":     pagination.Page,
 				"limit":    pagination.Limit,
 				"has_more": hasMore,
-			})
+			}
 		} else {
-			handlers.WriteJSON(w, http.StatusOK, files)
+			response = files
 		}
+		
+		// Cache the response
+		giteaResponseCache.Set(cacheKey, response)
+		handlers.WriteJSON(w, http.StatusOK, response)
 
 	case http.MethodPost:
 		// Create or update file

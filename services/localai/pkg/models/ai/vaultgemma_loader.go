@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 
-    "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/maths/util"
+    "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths/util"
     "golang.org/x/sys/unix"
 )
 

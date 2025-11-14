@@ -3,7 +3,10 @@
 // and other configuration constants used throughout the server implementation.
 package server
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 // Request timeouts
 const (

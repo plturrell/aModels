@@ -151,40 +151,213 @@ func TestGiteaClient_ListBranches(t *testing.T) {
 	}
 }
 
-func TestResponseCache(t *testing.T) {
-	cache := NewResponseCache(1 * time.Second)
-	
-	// Test Set and Get
-	cache.Set("key1", "value1")
-	value, found := cache.Get("key1")
-	if !found {
-		t.Error("Expected to find key1 in cache")
+func TestGiteaClient_CreateRepository(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("Expected POST, got %s", r.Method)
+		}
+		if !strings.Contains(r.URL.Path, "/api/v1/") {
+			t.Errorf("Unexpected path: %s", r.URL.Path)
+		}
+		
+		repo := Repository{
+			ID:          1,
+			Name:        "test-repo",
+			FullName:    "owner/test-repo",
+			Description: "Test repository",
+			Private:     false,
+			CloneURL:    "https://gitea.example.com/owner/test-repo.git",
+		}
+		w.WriteHeader(http.StatusCreated)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(repo)
+	}))
+	defer server.Close()
+
+	client := NewGiteaClient(server.URL, "test-token")
+	ctx := context.Background()
+
+	req := CreateRepositoryRequest{
+		Name:        "test-repo",
+		Description: "Test repository",
+		Private:     false,
+		AutoInit:    true,
 	}
-	if value != "value1" {
-		t.Errorf("Expected 'value1', got '%v'", value)
+
+	repo, err := client.CreateRepository(ctx, "owner", req)
+	if err != nil {
+		t.Fatalf("CreateRepository failed: %v", err)
 	}
-	
-	// Test expiration
-	time.Sleep(2 * time.Second)
-	_, found = cache.Get("key1")
-	if found {
-		t.Error("Expected key1 to be expired")
+	if repo.Name != "test-repo" {
+		t.Errorf("Expected name 'test-repo', got '%s'", repo.Name)
 	}
-	
-	// Test Delete
-	cache.Set("key2", "value2")
-	cache.Delete("key2")
-	_, found = cache.Get("key2")
-	if found {
-		t.Error("Expected key2 to be deleted")
+}
+
+func TestGiteaClient_CreateOrUpdateFile(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			// File doesn't exist
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusCreated)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]string{"message": "created"})
+			return
+		}
+	}))
+	defer server.Close()
+
+	client := NewGiteaClient(server.URL, "test-token")
+	ctx := context.Background()
+
+	err := client.CreateOrUpdateFile(ctx, "owner", "repo", "test.txt", "content", "Add test file", "main")
+	if err != nil {
+		t.Fatalf("CreateOrUpdateFile failed: %v", err)
 	}
-	
-	// Test Clear
-	cache.Set("key3", "value3")
-	cache.Clear()
-	_, found = cache.Get("key3")
-	if found {
-		t.Error("Expected cache to be cleared")
+}
+
+func TestGiteaClient_RetryLogic(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(Repository{ID: 1, Name: "test"})
+	}))
+	defer server.Close()
+
+	client := NewGiteaClient(server.URL, "test-token")
+	ctx := context.Background()
+
+	_, err := client.GetRepository(ctx, "owner", "repo")
+	if err != nil {
+		t.Fatalf("Expected retry to succeed, got error: %v", err)
+	}
+	if attempts != 3 {
+		t.Errorf("Expected 3 attempts, got %d", attempts)
+	}
+}
+
+func TestGiteaClient_ListCommits_Pagination(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		limit := r.URL.Query().Get("limit")
+		
+		if page != "2" || limit != "5" {
+			t.Errorf("Expected page=2 and limit=5, got page=%s limit=%s", page, limit)
+		}
+		
+		commits := make([]Commit, 5)
+		for i := 0; i < 5; i++ {
+			commits[i] = Commit{ID: fmt.Sprintf("commit%d", i+6)}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(commits)
+	}))
+	defer server.Close()
+
+	client := NewGiteaClient(server.URL, "test-token")
+	ctx := context.Background()
+
+	pagination := &PaginationOptions{Page: 2, Limit: 5}
+	commits, _, err := client.ListCommits(ctx, "owner", "repo", "main", 0, pagination)
+	if err != nil {
+		t.Fatalf("ListCommits failed: %v", err)
+	}
+	if len(commits) != 5 {
+		t.Errorf("Expected 5 commits, got %d", len(commits))
+	}
+}
+
+func TestGiteaClient_ErrorHandling(t *testing.T) {
+	tests := []struct {
+		name           string
+		statusCode     int
+		expectError    bool
+	}{
+		{"unauthorized", http.StatusUnauthorized, true},
+		{"not found", http.StatusNotFound, true},
+		{"rate limited", http.StatusTooManyRequests, true},
+		{"server error", http.StatusInternalServerError, true},
+		{"success", http.StatusOK, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tt.statusCode)
+				if tt.statusCode == http.StatusOK {
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(Repository{ID: 1, Name: "test"})
+				}
+			}))
+			defer server.Close()
+
+			client := NewGiteaClient(server.URL, "test-token")
+			ctx := context.Background()
+
+			_, err := client.GetRepository(ctx, "owner", "repo")
+			if tt.expectError && err == nil {
+				t.Error("Expected error but got none")
+			}
+			if !tt.expectError && err != nil {
+				t.Errorf("Expected no error but got: %v", err)
+			}
+		})
+	}
+}
+
+func TestGiteaClient_DeleteRepository(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			t.Errorf("Expected DELETE, got %s", r.Method)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client := NewGiteaClient(server.URL, "test-token")
+	ctx := context.Background()
+
+	err := client.DeleteRepository(ctx, "owner", "repo")
+	if err != nil {
+		t.Fatalf("DeleteRepository failed: %v", err)
+	}
+}
+
+func TestGiteaClient_GetFileContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		type ContentResponse struct {
+			Type     string `json:"type"`
+			Encoding string `json:"encoding"`
+			Content  string `json:"content"`
+		}
+		
+		response := ContentResponse{
+			Type:     "file",
+			Encoding: "base64",
+			Content:  "SGVsbG8gV29ybGQh", // "Hello World!" in base64
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	client := NewGiteaClient(server.URL, "test-token")
+	ctx := context.Background()
+
+	content, err := client.GetFileContent(ctx, "owner", "repo", "test.txt", "main")
+	if err != nil {
+		t.Fatalf("GetFileContent failed: %v", err)
+	}
+	if content != "Hello World!" {
+		t.Errorf("Expected 'Hello World!', got '%s'", content)
 	}
 }
 

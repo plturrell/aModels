@@ -61,6 +61,16 @@ docker-build: ## Build Docker images
 	@chmod +x $(SCRIPTS_SYSTEM)/docker-manager.sh
 	@$(SCRIPTS_SYSTEM)/docker-manager.sh build
 
+build-localai: ## Build LocalAI Docker image
+	@echo "$(GREEN)Building LocalAI (vaultgemma-server)...$(NC)"
+	@chmod +x scripts/build-localai.sh
+	@scripts/build-localai.sh
+
+start-all: ## Build LocalAI and start all services with comprehensive checks
+	@echo "$(GREEN)Building LocalAI and starting all services...$(NC)"
+	@chmod +x scripts/start-all-services.sh
+	@scripts/start-all-services.sh
+
 docker-infrastructure: ## Start only infrastructure services
 	@echo "$(GREEN)Starting infrastructure services...$(NC)"
 	@chmod +x $(SCRIPTS_SYSTEM)/docker-manager.sh
@@ -99,7 +109,7 @@ native-stop: ## Stop native services
 
 ##@ Management
 
-start: docker-start ## Alias for docker-start
+start: start-all ## Alias for start-all (builds LocalAI and starts all services)
 
 stop: docker-stop ## Alias for docker-stop
 

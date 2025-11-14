@@ -149,7 +149,7 @@ func (s *VaultGemmaServer) resolveModelForDomain(
 	}
 
 	// Phase 4: Try lazy loading from cache first
-	if s.modelCache != nil {
+	if s.ModelCache != nil {
 		// Check if this is a GGUF model
 		if domainConfig != nil {
 			modelPath := strings.ToLower(strings.TrimSpace(domainConfig.ModelPath))
@@ -160,14 +160,14 @@ func (s *VaultGemmaServer) resolveModelForDomain(
 		}
 
 		// Try to get safetensors model from cache (lazy loading)
-		cachedModel, err := s.modelCache.GetSafetensorModel(ctx, domain)
+		cachedModel, err := s.ModelCache.GetSafetensorModel(ctx, domain)
 		if err == nil && cachedModel != nil {
 			return cachedModel, domain, false, "", nil
 		}
 
 		// Try fallback model from cache
 		if domainConfig != nil && domainConfig.FallbackModel != "" {
-			fallbackModel, err := s.modelCache.GetSafetensorModel(ctx, domainConfig.FallbackModel)
+			fallbackModel, err := s.ModelCache.GetSafetensorModel(ctx, domainConfig.FallbackModel)
 			if err == nil && fallbackModel != nil {
 				log.Printf("Using fallback model '%s' for domain '%s' (lazy loaded)", domainConfig.FallbackModel, domain)
 				return fallbackModel, domainConfig.FallbackModel, true, domainConfig.FallbackModel, nil
@@ -177,7 +177,7 @@ func (s *VaultGemmaServer) resolveModelForDomain(
 		// Try default domain from cache
 		defaultDomain := s.domainManager.GetDefaultDomain()
 		if defaultDomain != "" {
-			defaultModel, err := s.modelCache.GetSafetensorModel(ctx, defaultDomain)
+			defaultModel, err := s.ModelCache.GetSafetensorModel(ctx, defaultDomain)
 			if err == nil && defaultModel != nil {
 				log.Printf("Using default domain '%s' model for request originally targeting '%s' (lazy loaded)", defaultDomain, domain)
 				return defaultModel, defaultDomain, false, "", nil
@@ -263,8 +263,8 @@ func (s *VaultGemmaServer) processChatRequest(
 		return s.processTransformersBackend(ctx, req, domain, domainConfig, maxTokens, topP, prompt, requestID, userID, sessionID, result)
 	}
 
-	// Check cache first if HANA is available
-	if s.hanaCache != nil {
+	// Check cache first if Postgres cache is available
+	if s.postgresCache != nil {
 		cacheResult, err := s.checkCache(ctx, prompt, modelKey, domain, req.Temperature, maxTokens, topP, topK, requestID, userID, sessionID)
 		if err == nil && cacheResult != nil {
 			result.Content = cacheResult.Content
@@ -279,9 +279,9 @@ func (s *VaultGemmaServer) processChatRequest(
 	var ggufModel *gguf.Model
 	if s.ggufModels[modelKey] != nil {
 		ggufModel = s.ggufModels[modelKey]
-	} else if s.modelCache != nil {
+	} else if s.ModelCache != nil {
 		// Phase 4: Try lazy loading GGUF model from cache
-		loadedGGUF, err := s.modelCache.GetGGUFModel(ctx, modelKey)
+		loadedGGUF, err := s.ModelCache.GetGGUFModel(ctx, modelKey)
 		if err == nil && loadedGGUF != nil {
 			ggufModel = loadedGGUF
 			// Cache it for future use
@@ -431,9 +431,9 @@ func (s *VaultGemmaServer) checkCache(
 	sessionID string,
 ) (*cacheResult, error) {
 	// Try exact cache first
-	if s.hanaCache != nil {
-		cacheKey := s.hanaCache.GenerateCacheKey(prompt, modelKey, domain, temperature, maxTokens, topP, topK)
-		cacheEntry, err := s.hanaCache.Get(ctx, cacheKey)
+	if s.postgresCache != nil {
+		cacheKey := s.postgresCache.GenerateCacheKey(prompt, modelKey, domain, temperature, maxTokens, topP, topK)
+		cacheEntry, err := s.postgresCache.Get(ctx, cacheKey)
 		if err == nil && cacheEntry != nil {
 			log.Printf("🎯 Cache hit for domain: %s", domain)
 			if s.enhancedLogging != nil {
@@ -620,9 +620,9 @@ func (s *VaultGemmaServer) saveToCache(
 	topP float64,
 	topK int,
 ) {
-	// Save to HANA cache
-	if s.hanaCache != nil {
-		cacheKey := s.hanaCache.GenerateCacheKey(prompt, modelKey, domain, temperature, maxTokens, topP, topK)
+	// Save to Postgres cache
+	if s.postgresCache != nil {
+		cacheKey := s.postgresCache.GenerateCacheKey(prompt, modelKey, domain, temperature, maxTokens, topP, topK)
 		cacheEntry := &storage.CacheEntry{
 			CacheKey:    cacheKey,
 			PromptHash:  fmt.Sprintf("%x", []byte(prompt)),
@@ -635,7 +635,7 @@ func (s *VaultGemmaServer) saveToCache(
 		}
 
 		go func() {
-			if err := s.hanaCache.Set(context.Background(), cacheEntry); err != nil {
+			if err := s.postgresCache.Set(context.Background(), cacheEntry); err != nil {
 				log.Printf("⚠️ Failed to cache response: %v", err)
 			}
 		}()

@@ -68,12 +68,7 @@ type ChatRequest struct {
 	VisionPrompt string
 }
 
-// ChatMessage represents a message in a chat request
-type ChatMessage struct {
-	Role    string
-	Content string
-}
-
+// ChatMessage and TokenUsage are defined in function_calling.go and streaming.go respectively
 // ChatResponse represents a chat completion response
 type ChatResponse struct {
 	ID       string
@@ -81,21 +76,14 @@ type ChatResponse struct {
 	Created  int64
 	Model    string
 	Choices  []ChatChoice
-	Usage    TokenUsage
+	Usage    TokenUsage // TokenUsage defined in streaming.go
 	Metadata map[string]interface{}
 }
 
 // ChatChoice represents a choice in a chat response
 type ChatChoice struct {
 	Index        int
-	Message      ChatMessage
+	Message      ChatMessage // ChatMessage defined in function_calling.go
 	FinishReason string
-}
-
-// TokenUsage represents token usage information
-type TokenUsage struct {
-	PromptTokens     int
-	CompletionTokens int
-	TotalTokens      int
 }
 

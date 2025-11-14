@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -15,8 +14,8 @@ type PostgresInferenceLogger struct {
 	db *sql.DB
 }
 
-// InferenceLog represents a single inference request log entry
-type InferenceLog struct {
+// PostgresInferenceLog represents a single inference request log entry for PostgreSQL
+type PostgresInferenceLog struct {
 	Domain          string
 	ModelName       string
 	PromptLength    int
@@ -77,8 +76,13 @@ func (p *PostgresInferenceLogger) createTable(ctx context.Context) error {
 	return err
 }
 
+// GetDB returns the underlying database connection (for function calling queries)
+func (p *PostgresInferenceLogger) GetDB() *sql.DB {
+	return p.db
+}
+
 // LogInference logs an inference request (non-blocking, batched)
-func (p *PostgresInferenceLogger) LogInference(ctx context.Context, logEntry *InferenceLog) error {
+func (p *PostgresInferenceLogger) LogInference(ctx context.Context, logEntry *PostgresInferenceLog) error {
 	if logEntry == nil {
 		return fmt.Errorf("log entry is nil")
 	}
@@ -108,7 +112,7 @@ func (p *PostgresInferenceLogger) LogInference(ctx context.Context, logEntry *In
 }
 
 // BatchLogInference logs multiple inference requests in a single transaction
-func (p *PostgresInferenceLogger) BatchLogInference(ctx context.Context, logs []*InferenceLog) error {
+func (p *PostgresInferenceLogger) BatchLogInference(ctx context.Context, logs []*PostgresInferenceLog) error {
 	if len(logs) == 0 {
 		return nil
 	}

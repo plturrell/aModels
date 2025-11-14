@@ -2,10 +2,13 @@ package storage
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -49,7 +52,7 @@ func NewPostgresCacheStore(dsn string) (*PostgresCacheStore, error) {
 	return store, nil
 }
 
-// createTable creates the model_cache_state table if it doesn't exist
+// createTable creates the model_cache_state and response_cache tables if they don't exist
 func (p *PostgresCacheStore) createTable(ctx context.Context) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS model_cache_state (
@@ -66,6 +69,25 @@ func (p *PostgresCacheStore) createTable(ctx context.Context) error {
 
 	CREATE INDEX IF NOT EXISTS idx_model_cache_state_last_access ON model_cache_state(last_access);
 	CREATE INDEX IF NOT EXISTS idx_model_cache_state_model_type ON model_cache_state(model_type);
+
+	CREATE TABLE IF NOT EXISTS response_cache (
+		cache_key VARCHAR(255) PRIMARY KEY,
+		prompt_hash VARCHAR(255),
+		model VARCHAR(255),
+		domain VARCHAR(255),
+		response TEXT,
+		tokens_used INTEGER,
+		temperature FLOAT,
+		max_tokens INTEGER,
+		created_at TIMESTAMP DEFAULT NOW(),
+		expires_at TIMESTAMP,
+		access_count INTEGER DEFAULT 0,
+		last_accessed TIMESTAMP DEFAULT NOW()
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_response_cache_model_domain ON response_cache(model, domain);
+	CREATE INDEX IF NOT EXISTS idx_response_cache_expires_at ON response_cache(expires_at);
+	CREATE INDEX IF NOT EXISTS idx_response_cache_last_accessed ON response_cache(last_accessed);
 	`
 
 	_, err := p.db.ExecContext(ctx, query)
@@ -231,5 +253,127 @@ func (p *PostgresCacheStore) Close() error {
 		return p.db.Close()
 	}
 	return nil
+}
+
+// GenerateCacheKey generates a cache key for a response
+func (p *PostgresCacheStore) GenerateCacheKey(prompt, model, domain string, temperature float64, maxTokens int, topP float64, topK int) string {
+	// Use the same algorithm as HANACache stub
+	normalized := strings.ToLower(strings.TrimSpace(prompt))
+	base := sha256.Sum256([]byte(normalized))
+	keyData := fmt.Sprintf("%s:%s:%s:%.2f:%d:%.3f:%d", hex.EncodeToString(base[:]), model, domain, temperature, maxTokens, topP, topK)
+	key := sha256.Sum256([]byte(keyData))
+	return hex.EncodeToString(key[:])
+}
+
+// Get retrieves a cached response entry
+func (p *PostgresCacheStore) Get(ctx context.Context, key string) (*CacheEntry, error) {
+	query := `
+		SELECT cache_key, prompt_hash, model, domain, response, tokens_used,
+		       temperature, max_tokens, created_at, expires_at, access_count, last_accessed
+		FROM response_cache
+		WHERE cache_key = $1 AND (expires_at IS NULL OR expires_at > NOW())
+	`
+
+	var entry CacheEntry
+	var expiresAt sql.NullTime
+	var createdAt, lastAccessed sql.NullTime
+
+	err := p.db.QueryRowContext(ctx, query, key).Scan(
+		&entry.CacheKey,
+		&entry.PromptHash,
+		&entry.Model,
+		&entry.Domain,
+		&entry.Response,
+		&entry.TokensUsed,
+		&entry.Temperature,
+		&entry.MaxTokens,
+		&createdAt,
+		&expiresAt,
+		&entry.AccessCount,
+		&lastAccessed,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil // Not found, not an error
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query cache entry: %w", err)
+	}
+
+	if createdAt.Valid {
+		entry.CreatedAt = createdAt.Time
+	}
+	if expiresAt.Valid {
+		entry.ExpiresAt = expiresAt.Time
+	}
+	if lastAccessed.Valid {
+		entry.LastAccessed = lastAccessed.Time
+	}
+
+	// Update access count and last accessed time
+	go p.updateAccessStats(context.Background(), key)
+
+	return &entry, nil
+}
+
+// Set stores a response entry in cache
+func (p *PostgresCacheStore) Set(ctx context.Context, entry *CacheEntry) error {
+	if entry == nil {
+		return fmt.Errorf("cache entry is nil")
+	}
+
+	// Set default expiration if not provided
+	expiresAt := entry.ExpiresAt
+	if expiresAt.IsZero() {
+		expiresAt = time.Now().Add(24 * time.Hour)
+	}
+
+	query := `
+		INSERT INTO response_cache (
+			cache_key, prompt_hash, model, domain, response, tokens_used,
+			temperature, max_tokens, created_at, expires_at, access_count, last_accessed
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		ON CONFLICT (cache_key)
+		DO UPDATE SET
+			response = EXCLUDED.response,
+			tokens_used = EXCLUDED.tokens_used,
+			temperature = EXCLUDED.temperature,
+			max_tokens = EXCLUDED.max_tokens,
+			expires_at = EXCLUDED.expires_at,
+			last_accessed = NOW()
+	`
+
+	createdAt := entry.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now()
+	}
+
+	_, err := p.db.ExecContext(ctx, query,
+		entry.CacheKey,
+		entry.PromptHash,
+		entry.Model,
+		entry.Domain,
+		entry.Response,
+		entry.TokensUsed,
+		entry.Temperature,
+		entry.MaxTokens,
+		createdAt,
+		expiresAt,
+		entry.AccessCount,
+		time.Now(),
+	)
+
+	return err
+}
+
+// updateAccessStats updates access statistics for a cache entry
+func (p *PostgresCacheStore) updateAccessStats(ctx context.Context, key string) {
+	query := `
+		UPDATE response_cache
+		SET access_count = access_count + 1,
+		    last_accessed = NOW()
+		WHERE cache_key = $1
+	`
+	_, _ = p.db.ExecContext(ctx, query, key)
 }
 

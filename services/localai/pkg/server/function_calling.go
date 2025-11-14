@@ -306,9 +306,16 @@ func (df *DatabaseFunction) Call(ctx context.Context, arguments map[string]inter
 		}
 	}
 
-	// Use the existing HANA pool to execute query
-	if df.server.hanaPool == nil {
-		return nil, fmt.Errorf("database not available - HANA pool not configured")
+	// Database query execution - using postgres if available
+	// Note: HANA was removed, using postgres logger's DB connection if available
+	if df.server.postgresLogger == nil {
+		return nil, fmt.Errorf("database not available - postgres logger not configured")
+	}
+
+	// Get database connection from postgres logger
+	db := df.server.postgresLogger.GetDB()
+	if db == nil {
+		return nil, fmt.Errorf("database connection not available")
 	}
 
 	// Apply limit to query if not already present
@@ -318,7 +325,7 @@ func (df *DatabaseFunction) Call(ctx context.Context, arguments map[string]inter
 	}
 
 	// Execute query
-	rows, err := df.server.hanaPool.Query(ctx, query)
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute query: %w", err)
 	}
@@ -464,9 +471,9 @@ func (s *VaultGemmaServer) HandleFunctionCalling(w http.ResponseWriter, r *http.
 	cacheHit := false
 	semanticHit := false
 
-	if s.hanaCache != nil {
+	if s.postgresCache != nil {
 		cacheKey := fmt.Sprintf("function:%s:%s:%s", modelKey, domain, prompt)
-		if cached, err := s.hanaCache.Get(ctx, cacheKey); err == nil && cached != nil && cached.Response != "" {
+		if cached, err := s.postgresCache.Get(ctx, cacheKey); err == nil && cached != nil && cached.Response != "" {
 			if err := json.Unmarshal([]byte(cached.Response), &cachedResponse); err == nil {
 				cacheHit = true
 				log.Printf("📦 Cache hit for function calling domain: %s", domain)
@@ -516,8 +523,8 @@ func (s *VaultGemmaServer) HandleFunctionCalling(w http.ResponseWriter, r *http.
 	if response != nil {
 		responseJSON, err := json.Marshal(response)
 		if err == nil {
-			// Store in HANA cache
-			if s.hanaCache != nil {
+			// Store in Postgres cache
+			if s.postgresCache != nil {
 				cacheKey := fmt.Sprintf("function:%s:%s:%s", modelKey, domain, prompt)
 				cacheEntry := &storage.CacheEntry{
 					CacheKey:    cacheKey,
@@ -532,7 +539,7 @@ func (s *VaultGemmaServer) HandleFunctionCalling(w http.ResponseWriter, r *http.
 					ExpiresAt:   time.Now().Add(24 * time.Hour),
 				}
 				go func() {
-					if err := s.hanaCache.Set(context.Background(), cacheEntry); err != nil {
+					if err := s.postgresCache.Set(context.Background(), cacheEntry); err != nil {
 						log.Printf("⚠️ Failed to cache function calling response: %v", err)
 					}
 				}()

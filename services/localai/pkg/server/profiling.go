@@ -6,6 +6,7 @@ import (
 	"net/http"
 	_ "net/http/pprof" // Import for pprof endpoints
 	"runtime"
+	"sort"
 	"sync"
 	"time"
 )
@@ -75,16 +76,12 @@ func (p *Profiler) GetStats() map[string]interface{} {
 	var p50, p95, p99 time.Duration
 
 	if len(latencies) > 0 {
-		// Sort latencies for percentile calculation
+		// Sort latencies for percentile calculation using efficient stdlib sort
 		sorted := make([]time.Duration, len(latencies))
 		copy(sorted, latencies)
-		for i := 0; i < len(sorted)-1; i++ {
-			for j := i + 1; j < len(sorted); j++ {
-				if sorted[i] > sorted[j] {
-					sorted[i], sorted[j] = sorted[j], sorted[i]
-				}
-			}
-		}
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i] < sorted[j]
+		})
 
 		minLatency = sorted[0]
 		maxLatency = sorted[len(sorted)-1]

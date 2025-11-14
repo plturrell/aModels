@@ -391,9 +391,9 @@ func (s *VaultGemmaServer) HandleStreamingChat(w http.ResponseWriter, r *http.Re
 	cacheHit := false
 	semanticHit := false
 
-	if s.hanaCache != nil {
+	if s.postgresCache != nil {
 		cacheKey := fmt.Sprintf("streaming:%s:%s:%s", modelKey, domain, prompt)
-		if cached, err := s.hanaCache.Get(ctx, cacheKey); err == nil && cached != nil && cached.Response != "" {
+		if cached, err := s.postgresCache.Get(ctx, cacheKey); err == nil && cached != nil && cached.Response != "" {
 			cachedContent = cached.Response
 			cachedTokens = cached.TokensUsed
 			cacheHit = true
@@ -631,8 +631,8 @@ func (s *VaultGemmaServer) HandleStreamingChat(w http.ResponseWriter, r *http.Re
 
 	// Cache the generated response for future use
 	if fullContent != "" {
-		// Store in HANA cache
-		if s.hanaCache != nil {
+		// Store in Postgres cache
+		if s.postgresCache != nil {
 			cacheKey := fmt.Sprintf("streaming:%s:%s:%s", modelKey, domain, prompt)
 			cacheEntry := &storage.CacheEntry{
 				CacheKey:    cacheKey,
@@ -647,7 +647,7 @@ func (s *VaultGemmaServer) HandleStreamingChat(w http.ResponseWriter, r *http.Re
 				ExpiresAt:   time.Now().Add(24 * time.Hour),
 			}
 			go func() {
-				if err := s.hanaCache.Set(context.Background(), cacheEntry); err != nil {
+				if err := s.postgresCache.Set(context.Background(), cacheEntry); err != nil {
 					log.Printf("⚠️ Failed to cache streaming response: %v", err)
 				}
 			}()

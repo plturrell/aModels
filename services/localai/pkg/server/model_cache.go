@@ -828,10 +828,8 @@ func (mc *ModelCache) allocateGPUForModel(ctx context.Context, domain, modelPath
 
 	// Determine required GPUs and memory
 	requiredGPUs := 1
-	minMemoryMB := int64(4096) // Default 4GB
 	if req != nil {
 		requiredGPUs = req.RequiredGPUs
-		minMemoryMB = req.MinMemoryMB
 	}
 
 	// For hybrid strategy: large models get dedicated, small models can share

@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,11 +16,12 @@ import (
 
 	handlers "github.com/plturrell/aModels/services/extract/internal/handlers"
 	"github.com/plturrell/aModels/services/extract/pkg/git"
+	"gopkg.in/yaml.v3"
 )
 
 // GiteaWebhookPayload represents a Gitea webhook push event payload
 type GiteaWebhookPayload struct {
-	Secret     string `json:"secret"`
+	Secret     string `json:"secret"` // Deprecated: Use X-Gitea-Signature header instead
 	Action     string `json:"action"` // "push", "create", etc.
 	Ref        string `json:"ref"`    // "refs/heads/main"
 	Before     string `json:"before"` // Previous commit SHA
@@ -148,6 +152,22 @@ func extractBranch(ref string) string {
 	return "main" // Default
 }
 
+// verifyWebhookSignature verifies the HMAC signature of a webhook payload
+func verifyWebhookSignature(payload []byte, signature string, secret string) bool {
+	if secret == "" || signature == "" {
+		return false
+	}
+	
+	// Remove "sha256=" prefix if present
+	signature = strings.TrimPrefix(signature, "sha256=")
+	
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(payload)
+	expectedMAC := hex.EncodeToString(mac.Sum(nil))
+	
+	return hmac.Equal([]byte(signature), []byte(expectedMAC))
+}
+
 // handleGiteaWebhook handles incoming Gitea webhook events
 func (s *extractServer) handleGiteaWebhook(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -166,6 +186,19 @@ func (s *extractServer) handleGiteaWebhook(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	defer r.Body.Close()
+
+	// Verify webhook signature if secret is configured
+	webhookSecret := os.Getenv("GITEA_WEBHOOK_SECRET")
+	if webhookSecret != "" {
+		signature := r.Header.Get("X-Gitea-Signature")
+		if !verifyWebhookSignature(body, signature, webhookSecret) {
+			s.logger.Printf("Webhook signature verification failed")
+			handlers.WriteJSON(w, http.StatusUnauthorized, map[string]interface{}{
+				"error": "invalid webhook signature",
+			})
+			return
+		}
+	}
 
 	// Parse webhook payload
 	var payload GiteaWebhookPayload
@@ -293,30 +326,23 @@ func (s *extractServer) processRepositoryFromWebhook(
 	var projectID, systemID string
 	if configPath != "" {
 		s.logger.Printf("Found config file: %s", configPath)
-		// Try to extract project_id and system_id from config
-		// For now, we'll use a simple approach - in production, use proper YAML parsing
+		
+		// Parse YAML config properly
 		configData, err := os.ReadFile(configPath)
 		if err == nil {
-			configStr := string(configData)
-			// Simple extraction (could be improved with proper YAML parsing)
-			if strings.Contains(configStr, "project:") {
-				// Try to extract project ID
-				lines := strings.Split(configStr, "\n")
-				for i, line := range lines {
-					if strings.Contains(line, "id:") && i > 0 && strings.Contains(lines[i-1], "project:") {
-						parts := strings.Split(strings.TrimSpace(line), ":")
-						if len(parts) == 2 {
-							projectID = strings.Trim(strings.TrimSpace(parts[1]), "\"")
-							break
-						}
-					}
-					if strings.Contains(line, "system_id:") {
-						parts := strings.Split(strings.TrimSpace(line), ":")
-						if len(parts) == 2 {
-							systemID = strings.Trim(strings.TrimSpace(parts[1]), "\"")
-						}
-					}
-				}
+			var config struct {
+				Project struct {
+					ID string `yaml:"id"`
+				} `yaml:"project"`
+				SystemID string `yaml:"system_id"`
+			}
+			
+			if err := yaml.Unmarshal(configData, &config); err == nil {
+				projectID = config.Project.ID
+				systemID = config.SystemID
+				s.logger.Printf("Parsed config: project_id=%s, system_id=%s", projectID, systemID)
+			} else {
+				s.logger.Printf("Failed to parse YAML config: %v", err)
 			}
 		}
 	}

@@ -10,11 +10,15 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/hanapool"
 )
 
 var errHANANotEnabled = errors.New("hana integration requires build tag 'hana'")
+
+// Stub type for hanapool.Pool when HANA is not enabled
+type hanapoolPool struct{}
+
+// Stub hanapool package type alias
+type hanapoolPoolType = hanapoolPool
 
 // Re-exported structs for non-HANA builds so the package type-checks without the tag.
 type CacheEntry struct {
@@ -42,7 +46,7 @@ type CacheStats struct {
 	ExpiredEntries int64
 }
 
-func NewHANACache(*hanapool.Pool) *HANACache { return &HANACache{} }
+func NewHANACache(*hanapoolPoolType) *HANACache { return &HANACache{} }
 
 type HANACache struct{}
 
@@ -114,7 +118,7 @@ type SemanticCacheStats struct {
 
 type SemanticCache struct{}
 
-func NewSemanticCache(*hanapool.Pool, *SemanticCacheConfig) *SemanticCache { return &SemanticCache{} }
+func NewSemanticCache(*hanapoolPoolType, *SemanticCacheConfig) *SemanticCache { return &SemanticCache{} }
 func (*SemanticCache) CreateTables(context.Context) error                  { return errHANANotEnabled }
 func (*SemanticCache) Get(context.Context, string) (*SemanticCacheEntry, error) {
 	return nil, errHANANotEnabled
@@ -185,7 +189,7 @@ type ModelMetrics struct {
 
 type HANALogger struct{}
 
-func NewHANALogger(*hanapool.Pool) *HANALogger                        { return &HANALogger{} }
+func NewHANALogger(*hanapoolPoolType) *HANALogger                        { return &HANALogger{} }
 func (*HANALogger) CreateTables(context.Context) error                { return errHANANotEnabled }
 func (*HANALogger) LogInference(context.Context, *InferenceLog) error { return errHANANotEnabled }
 func (*HANALogger) GetModelMetrics(context.Context, string) (*ModelMetrics, error) {

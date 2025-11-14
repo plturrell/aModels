@@ -3,7 +3,7 @@ package tensor
 import (
     "math"
 
-    "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/maths/util"
+    "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths/util"
 )
 
 // FlashAttention is a simplified attention computation used to decouple

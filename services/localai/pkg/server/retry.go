@@ -276,18 +276,18 @@ type RetryableCacheOperation struct {
 
 // RetryCacheOperation performs cache operations with retry logic
 func (s *VaultGemmaServer) RetryCacheOperation(ctx context.Context, config *RetryConfig, op *RetryableCacheOperation) error {
-	if s.hanaCache == nil {
+	if s.postgresCache == nil {
 		return fmt.Errorf("cache not available")
 	}
 
 	fn := func(ctx context.Context) (interface{}, error) {
 		switch op.Operation {
 		case "get":
-			_, err := s.hanaCache.Get(ctx, op.Key)
+			_, err := s.postgresCache.Get(ctx, op.Key)
 			return nil, err
 		case "set":
 			if cacheEntry, ok := op.Value.(*storage.CacheEntry); ok {
-				err := s.hanaCache.Set(ctx, cacheEntry)
+				err := s.postgresCache.Set(ctx, cacheEntry)
 				return nil, err
 			}
 			return nil, fmt.Errorf("invalid cache entry type")
@@ -310,7 +310,7 @@ type RetryableLogOperation struct {
 
 // RetryLogOperation performs logging operations with retry logic
 func (s *VaultGemmaServer) RetryLogOperation(ctx context.Context, config *RetryConfig, op *RetryableLogOperation) error {
-	if s.hanaLogger == nil {
+	if s.postgresLogger == nil {
 		return fmt.Errorf("logger not available")
 	}
 

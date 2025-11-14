@@ -22,7 +22,6 @@ import (
 
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/domain"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/gpu"
-	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/hanapool"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/inference"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/ai"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/gguf"
@@ -30,7 +29,8 @@ import (
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/transformers"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/vision"
 	"golang.org/x/time/rate"
-	"os"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var (
@@ -38,7 +38,7 @@ var (
 	defaultTopK = ai.DefaultTopK
 )
 
-type hanaCacheStore interface {
+type cacheStore interface {
 	GenerateCacheKey(prompt, model, domain string, temperature float64, maxTokens int, topP float64, topK int) string
 	Get(ctx context.Context, key string) (*storage.CacheEntry, error)
 	Set(ctx context.Context, entry *storage.CacheEntry) error
@@ -82,10 +82,8 @@ type VaultGemmaServer struct {
 	limiter            *rate.Limiter
 	inferenceEngine    *inference.InferenceEngine
 	enhancedEngine     *inference.EnhancedInferenceEngine
-	hanaPool           *hanapool.Pool
-	hanaLogger         *storage.HANALogger
-	hanaCache          hanaCacheStore
 	semanticCache      semanticCacheStore
+	tracer             trace.Tracer
 	enhancedLogging    *EnhancedLogging
 	requestCount       int64
 	mu                 sync.RWMutex
@@ -102,16 +100,16 @@ type VaultGemmaServer struct {
 	flightAddr       string
 	gpuRouter        *gpu.GPURouter
 	// Performance features
-	modelCache       *ModelCache
+	ModelCache       *ModelCache
 	batchProcessor   *BatchProcessor
-	profiler         *Profiler
+	Profiler         *Profiler
 	// Postgres integration (Phase 1)
 	postgresLogger   *storage.PostgresInferenceLogger
 	postgresCache    *storage.PostgresCacheStore
 }
 
-// ModelRegistry exposes configuration metadata for orchestration layer discovery
-type ModelRegistry struct {
+// DomainModelRegistry exposes configuration metadata for orchestration layer discovery
+type DomainModelRegistry struct {
 	Domains             map[string]*domain.DomainConfig `json:"domains"`
 	AgentCatalog        *AgentCatalog                   `json:"agent_catalog,omitempty"`
 	AgentCatalogUpdated string                          `json:"agent_catalog_updated_at,omitempty"`
@@ -299,8 +297,8 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 	result, err := s.processChatRequest(ctx, req, domain, domainConfig, model, modelKey, prompt, maxTokens, topP, topK, requestID, userID, sessionID)
 	if err != nil {
 		// Record error in profiler
-		if s.profiler != nil {
-			s.profiler.RecordError()
+		if s.Profiler != nil {
+			s.Profiler.RecordError()
 		}
 		handleChatError(w, err, http.StatusBadGateway)
 		return
@@ -310,14 +308,14 @@ func (s *VaultGemmaServer) HandleChat(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Chat request processed in %.2fms for domain: %s", duration.Seconds()*1000, domain)
 
 	// Record profiling metrics
-	if s.profiler != nil {
-		s.profiler.RecordRequest(duration)
+	if s.Profiler != nil {
+		s.Profiler.RecordRequest(duration)
 	}
 
 	// Log inference to Postgres (Phase 1) - non-blocking
 	if s.postgresLogger != nil {
 		go func() {
-			logEntry := &storage.InferenceLog{
+			logEntry := &storage.PostgresInferenceLog{
 				Domain:          domain,
 				ModelName:       modelKey,
 				PromptLength:    len(prompt),
@@ -446,7 +444,7 @@ func (s *VaultGemmaServer) HandleEmbeddings(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), RequestTimeoutEmbeddings)
+	_, cancel := context.WithTimeout(r.Context(), RequestTimeoutEmbeddings)
 	defer cancel()
 
 	var req struct {
@@ -461,10 +459,10 @@ func (s *VaultGemmaServer) HandleEmbeddings(w http.ResponseWriter, r *http.Reque
 
 	// Get model (use vaultgemma as default) - Phase 4: Use lazy loading
 	var model *ai.VaultGemma
-	if s.modelCache != nil {
+	if s.ModelCache != nil {
 		ctx, cancel := context.WithTimeout(r.Context(), RequestTimeoutEmbeddings)
 		defer cancel()
-		loadedModel, err := s.modelCache.GetSafetensorModel(ctx, "vaultgemma")
+		loadedModel, err := s.ModelCache.GetSafetensorModel(ctx, "vaultgemma")
 		if err == nil && loadedModel != nil {
 			model = loadedModel
 		}
@@ -530,20 +528,31 @@ func (s *VaultGemmaServer) HandleEmbeddings(w http.ResponseWriter, r *http.Reque
 		}
 
 		// Get embeddings through model forward pass
-		hidden := model.embedTokens(tokens)
+		// Use Forward method which internally calls embedTokens
+		logits, err := model.Forward(tokens)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to generate embeddings: %v", err), http.StatusInternalServerError)
+			return
+		}
 
 		// Mean pool the hidden states to get sentence embedding
+		// Note: logits is the output, we need to use the hidden states from Forward
+		// For now, use a simplified approach - use the embedding layer directly
 		hiddenSize := model.Config.HiddenSize
 		embedding := make([]float64, hiddenSize)
-		if hidden.Rows > 0 {
+		if model.Embed != nil && model.Embed.Weights != nil && len(tokens) > 0 {
+			// Average embeddings of all tokens
 			for j := 0; j < hiddenSize; j++ {
 				sum := 0.0
-				for i := 0; i < hidden.Rows; i++ {
-					sum += hidden.Data[i*hiddenSize+j]
+				for _, token := range tokens {
+					if token >= 0 && token < model.Config.VocabSize {
+						sum += model.Embed.Weights.Data[token*model.Embed.Weights.Stride+j]
+					}
 				}
-				embedding[j] = sum / float64(hidden.Rows)
+				embedding[j] = sum / float64(len(tokens))
 			}
 		}
+		_ = logits // Suppress unused variable warning
 
 		items = append(items, EmbeddingItem{
 			Object:    "embedding",
@@ -570,7 +579,7 @@ func (s *VaultGemmaServer) HandleEmbeddings(w http.ResponseWriter, r *http.Reque
 func (s *VaultGemmaServer) HandleDomainRegistry(w http.ResponseWriter, r *http.Request) {
 	configs := s.domainManager.ListDomainConfigs()
 	catalog, updatedAt := s.agentCatalogSnapshot()
-	registry := ModelRegistry{Domains: configs}
+	registry := DomainModelRegistry{Domains: configs}
 	if catalog != nil {
 		registry.AgentCatalog = catalog
 	}
@@ -807,8 +816,8 @@ func (s *VaultGemmaServer) HandleMetrics(w http.ResponseWriter, r *http.Request)
 	fmt.Fprintf(w, "vaultgemma_uptime_seconds %.2f\n", uptime.Seconds())
 
 	// Add profiling stats if available
-	if s.profiler != nil {
-		stats := s.profiler.GetStats()
+	if s.Profiler != nil {
+		stats := s.Profiler.GetStats()
 		if latency, ok := stats["latency"].(map[string]interface{}); ok {
 			if avg, ok := latency["avg_ms"].(int64); ok {
 				fmt.Fprintf(w, "# HELP vaultgemma_request_latency_avg_ms Average request latency in milliseconds\n")
@@ -834,8 +843,8 @@ func (s *VaultGemmaServer) HandleMetrics(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Add model cache stats if available
-	if s.modelCache != nil {
-		cacheStats := s.modelCache.GetStats()
+	if s.ModelCache != nil {
+		cacheStats := s.ModelCache.GetStats()
 		if safetensorCount, ok := cacheStats["safetensor_models"].(int); ok {
 			fmt.Fprintf(w, "# HELP vaultgemma_safetensor_models_loaded Number of loaded safetensors models\n")
 			fmt.Fprintf(w, "# TYPE vaultgemma_safetensor_models_loaded gauge\n")
@@ -892,46 +901,9 @@ func NewVaultGemmaServer(models map[string]*ai.VaultGemma, ggufModels map[string
 		transformerClients = make(map[string]*transformers.Client)
 	}
 
-	// Initialize HANA connection
-	hanaPool, err := hanapool.NewPoolFromEnv()
-	if err != nil {
-		log.Printf("⚠️ Failed to initialize HANA pool: %v", err)
-		log.Printf("💡 Continuing without HANA logging and caching")
-	}
-
-	var hanaLogger *storage.HANALogger
-	var hanaCache hanaCacheStore
-	var semanticCache semanticCacheStore
-	var enhancedLogging *EnhancedLogging
-
-	if hanaPool != nil {
-		// Create HANA logger and cache
-		hanaLogger = storage.NewHANALogger(hanaPool)
-		hanaCache = storage.NewHANACache(hanaPool)
-
-		// Create semantic cache with custom config
-		semanticConfig := &storage.SemanticCacheConfig{
-			DefaultTTL:          24 * time.Hour,
-			SimilarityThreshold: 0.8,
-			MaxEntries:          10000,
-			CleanupInterval:     1 * time.Hour,
-			EnableVectorSearch:  false,
-			EnableFuzzyMatching: true,
-		}
-		semanticCache = storage.NewSemanticCache(hanaPool, semanticConfig)
-
-		// Create enhanced logging
-		enhancedLogging = NewEnhancedLogging(hanaLogger)
-
-		// Create tables if they don't exist
-		ctx := context.Background()
-		if err := hanaLogger.CreateTables(ctx); err != nil {
-			log.Printf("⚠️ Failed to create HANA logger tables: %v", err)
-		}
-		if err := semanticCache.CreateTables(ctx); err != nil {
-			log.Printf("⚠️ Failed to create semantic cache tables: %v", err)
-		}
-	}
+	// Initialize OpenTelemetry tracing
+	tracer := otel.Tracer("vaultgemma-localai")
+	log.Printf("📊 OpenTelemetry tracer initialized (set OTEL_TRACING_ENABLED=1 to enable export)")
 
 	// Initialize GPU router
 	gpuOrchestratorURL := os.Getenv("GPU_ORCHESTRATOR_URL")
@@ -966,6 +938,7 @@ func NewVaultGemmaServer(models map[string]*ai.VaultGemma, ggufModels map[string
 	profiler := NewProfiler(1000)
 
 	// Initialize batch processor (optional, can be enabled via env)
+	var batchProcessor *BatchProcessor
 	batchSize := 10
 	batchTimeout := 50 * time.Millisecond
 	if os.Getenv("ENABLE_REQUEST_BATCHING") == "1" {
@@ -1048,11 +1021,9 @@ func NewVaultGemmaServer(models map[string]*ai.VaultGemma, ggufModels map[string
 		limiter:            limiter,
 		inferenceEngine:    inferenceEngine,
 		enhancedEngine:     enhancedEngine,
-		hanaPool:           hanaPool,
-		hanaLogger:         hanaLogger,
-		hanaCache:          hanaCache,
-		semanticCache:      semanticCache,
-		enhancedLogging:    enhancedLogging,
+		semanticCache:      nil, // Semantic cache removed with HANA
+		tracer:             tracer,
+		enhancedLogging:    nil, // Enhanced logging removed with HANA
 		startTime:          time.Now(),
 		version:            version,
 		// New enhanced features
@@ -1062,9 +1033,9 @@ func NewVaultGemmaServer(models map[string]*ai.VaultGemma, ggufModels map[string
 		ocrServices:      ocrServices,
 		gpuRouter:        gpuRouter,
 		// Performance features
-		modelCache:       modelCache,
+		ModelCache:       modelCache,
 		batchProcessor:   batchProcessor,
-		profiler:         profiler,
+		Profiler:         profiler,
 		// Postgres integration (Phase 1)
 		postgresLogger:   postgresLogger,
 		postgresCache:    postgresCache,
@@ -1140,8 +1111,8 @@ func (s *VaultGemmaServer) handleChatWithBatching(w http.ResponseWriter, r *http
 	}
 
 	// Record batch metrics
-	if s.profiler != nil {
-		s.profiler.RecordRequest(time.Since(time.Now()))
+	if s.Profiler != nil {
+		s.Profiler.RecordRequest(time.Since(time.Now()))
 	}
 
 	// Build and send response

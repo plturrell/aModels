@@ -14,7 +14,7 @@ import (
 
     "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/domain"
     "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/ai"
-    "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/maths/util"
+    "github.com/plturrell/agenticAiETH/agenticAiETH_layer4_Models/maths/util"
 )
 
 // EnhancedInferenceEngine provides actual tensor operations for model inference

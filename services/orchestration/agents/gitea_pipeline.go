@@ -92,11 +92,7 @@ type GiteaWorkflowResult struct {
 func (gp *GiteaPipeline) CreateRepository(ctx context.Context, req CreateRepositoryRequest) (*GiteaWorkflowResult, error) {
 	start := time.Now()
 	
-	url := fmt.Sprintf("%s/gitea/repositories?gitea_url=%s&gitea_token=%s",
-		gp.config.ExtractServiceURL,
-		gp.config.GiteaURL,
-		gp.config.GiteaToken,
-	)
+	url := fmt.Sprintf("%s/gitea/repositories", gp.config.ExtractServiceURL)
 
 	jsonData, err := json.Marshal(req)
 	if err != nil {
@@ -109,6 +105,8 @@ func (gp *GiteaPipeline) CreateRepository(ctx context.Context, req CreateReposit
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Gitea-URL", gp.config.GiteaURL)
+	httpReq.Header.Set("X-Gitea-Token", gp.config.GiteaToken)
 
 	resp, err := gp.httpClient.Do(httpReq)
 	if err != nil {
@@ -154,12 +152,10 @@ func (gp *GiteaPipeline) CreateRepository(ctx context.Context, req CreateReposit
 func (gp *GiteaPipeline) CloneRepository(ctx context.Context, req CloneRepositoryRequest) (*GiteaWorkflowResult, error) {
 	start := time.Now()
 
-	url := fmt.Sprintf("%s/gitea/repositories/%s/%s/clone?gitea_url=%s&gitea_token=%s",
+	url := fmt.Sprintf("%s/gitea/repositories/%s/%s/clone",
 		gp.config.ExtractServiceURL,
 		req.Owner,
 		req.Repo,
-		gp.config.GiteaURL,
-		gp.config.GiteaToken,
 	)
 
 	cloneReq := map[string]interface{}{
@@ -180,6 +176,8 @@ func (gp *GiteaPipeline) CloneRepository(ctx context.Context, req CloneRepositor
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Gitea-URL", gp.config.GiteaURL)
+	httpReq.Header.Set("X-Gitea-Token", gp.config.GiteaToken)
 
 	resp, err := gp.httpClient.Do(httpReq)
 	if err != nil {

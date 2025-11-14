@@ -114,7 +114,7 @@ services:
   localai:
     build:
       context: ../../..
-      dockerfile: services/localai/Dockerfile.local
+      dockerfile: services/localai/Dockerfile
       args: []
     image: amodels/localai:vendored
     container_name: localai
@@ -273,7 +273,8 @@ services:
       - "5432:5432"
     volumes:
       - postgresdata:/var/lib/postgresql/data
-      - ../../services/localai/migrations:/docker-entrypoint-initdb.d:ro
+      - ../../services/localai/migrations:/docker-entrypoint-initdb.d/localai:ro
+      - ./init-scripts:/docker-entrypoint-initdb.d/init:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -564,6 +565,47 @@ services:
       retries: 3
       start_period: 10s
 
+  gitea:
+    image: gitea/gitea:1.21
+    container_name: gitea
+    restart: unless-stopped
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=postgres:5432
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=gitea
+      - GITEA__database__PASSWD=gitea_password
+      - GITEA__server__DOMAIN=localhost
+      - GITEA__server__SSH_DOMAIN=localhost
+      - GITEA__server__ROOT_URL=http://localhost:3000/
+      - GITEA__server__HTTP_PORT=3000
+      - GITEA__server__SSH_PORT=2223
+      - GITEA__server__DISABLE_SSH=false
+      - GITEA__security__INSTALL_LOCK=true
+      - GITEA__service__DISABLE_REGISTRATION=false
+      - GITEA__repository__DEFAULT_BRANCH=main
+    ports:
+      - "3000:3000"
+      - "2223:22"
+    volumes:
+      - gitea-data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      - postgres
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    labels:
+      - "description=Gitea Git service for code storage and version control"
+
 networks:
   default:
     driver: bridge
@@ -579,6 +621,7 @@ volumes:
   redisdata:
   localai-config:
   testing-files:
+  gitea-data:
   models-data:
     driver: local
     driver_opts:

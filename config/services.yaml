@@ -36,6 +36,18 @@ infrastructure:
     docker_service: "elasticsearch"
     startup_timeout: 120
     required: false  # Optional for some services
+    
+  gitea:
+    name: "Gitea"
+    ports: [3000, 2222]
+    health_endpoint: "http://localhost:3000/api/healthz"
+    docker_service: "gitea"
+    startup_timeout: 90
+    depends_on: [postgres]
+    required: false  # Optional but recommended for Extract service
+    env:
+      GITEA_URL: "http://localhost:3000"
+      GITEA_WEBHOOK_SECRET: "${GITEA_WEBHOOK_SECRET:-}"
 
 core_services:
   localai:

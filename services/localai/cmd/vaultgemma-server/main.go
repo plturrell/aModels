@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,7 +18,6 @@ import (
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/models/gguf"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/server"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/transformers"
-	llama "github.com/go-skynet/go-llama.cpp"
 	"golang.org/x/time/rate"
 )
 
@@ -175,13 +173,13 @@ func main() {
 	)
 
 	// Phase 4: Register models in cache for lazy loading
-	if enableLazyLoading && vgServer.modelCache != nil {
+	if enableLazyLoading && vgServer.ModelCache != nil {
 		log.Printf("\n📝 Registering models in cache for lazy loading...")
 		
 		// Register default VaultGemma model if not disabled
 		if !disableFallback && *modelPath != "" {
-			vgServer.modelCache.RegisterSafetensorModel("general", *modelPath)
-			vgServer.modelCache.RegisterSafetensorModel("vaultgemma", *modelPath)
+			vgServer.ModelCache.RegisterSafetensorModel("general", *modelPath)
+			vgServer.ModelCache.RegisterSafetensorModel("vaultgemma", *modelPath)
 			log.Printf("✅ Registered default model: %s", *modelPath)
 		}
 
@@ -205,20 +203,20 @@ func main() {
 
 				// Register GGUF models
 				if strings.HasSuffix(lowerPath, ".gguf") {
-					vgServer.modelCache.RegisterGGUFModel(name, cfgModelPath)
+					vgServer.ModelCache.RegisterGGUFModel(name, cfgModelPath)
 					log.Printf("✅ Registered GGUF model for domain %s: %s", name, cfgModelPath)
 					continue
 				}
 
 				// Register safetensors models (skip if it's the default model path)
 				if cfgModelPath != *modelPath && !strings.EqualFold(cfg.BackendType, "hf-transformers") {
-					vgServer.modelCache.RegisterSafetensorModel(name, cfgModelPath)
+					vgServer.ModelCache.RegisterSafetensorModel(name, cfgModelPath)
 					log.Printf("✅ Registered safetensors model for domain %s: %s", name, cfgModelPath)
 				}
 
 				// Register transformers clients
 				if strings.EqualFold(cfg.BackendType, "hf-transformers") && cfg.TransformersConfig != nil {
-					vgServer.modelCache.RegisterTransformerClient(name, cfg.TransformersConfig)
+					vgServer.ModelCache.RegisterTransformerClient(name, cfg.TransformersConfig)
 				}
 			}
 		}
@@ -249,7 +247,7 @@ func main() {
 			log.Printf("\n🚀 Preloading %d models in background: %v", len(preloadDomains), preloadDomains)
 			ctx := context.Background()
 			for _, domain := range preloadDomains {
-				vgServer.modelCache.PreloadModel(ctx, domain)
+				vgServer.ModelCache.PreloadModel(ctx, domain)
 			}
 		}
 	}
@@ -268,13 +266,19 @@ func main() {
 		log.Printf("ℹ️  Catalog watching disabled (AgentSDK not available). AGENTSDK_FLIGHT_ADDR will be ignored.")
 	}
 
-	// Setup routes
+	// Setup v1 API routes (legacy, maintained for backward compatibility)
 	http.HandleFunc("/v1/chat/completions", server.EnableCORS(vgServer.RateLimitMiddleware(vgServer.HandleChat)))
 	http.HandleFunc("/v1/chat/completions/stream", server.EnableCORS(vgServer.RateLimitMiddleware(vgServer.HandleStreamingChat)))
 	http.HandleFunc("/v1/chat/completions/function-calling", server.EnableCORS(vgServer.RateLimitMiddleware(vgServer.HandleFunctionCalling)))
 	http.HandleFunc("/v1/models", server.EnableCORS(vgServer.HandleModels))
 	http.HandleFunc("/v1/embeddings", server.EnableCORS(vgServer.RateLimitMiddleware(vgServer.HandleEmbeddings)))
 	http.HandleFunc("/v1/domains", server.EnableCORS(vgServer.HandleListDomains))
+
+	// Setup v2 API routes (enhanced with tracing, workflow tracking, and structured responses)
+	http.HandleFunc("/v2/chat/completions", server.EnableCORS(vgServer.RateLimitMiddleware(vgServer.HandleV2Chat)))
+	http.HandleFunc("/v2/models", server.EnableCORS(vgServer.HandleV2Models))
+	http.HandleFunc("/v2/health", server.EnableCORS(vgServer.HandleV2Health))
+	log.Printf("✅ v2 API enabled with distributed tracing and enhanced features")
 
 	// Phase 3: Domain lifecycle management API
 	// Initialize PostgreSQL and Redis stores if available
@@ -315,8 +319,8 @@ func main() {
 	http.HandleFunc("/metrics", server.EnableCORS(vgServer.HandleMetrics))
 	
 	// Phase 3: Performance profiling endpoints
-	if vgServer.profiler != nil {
-		http.HandleFunc("/debug/stats", server.EnableCORS(vgServer.profiler.HandleProfilingStats))
+	if vgServer.Profiler != nil {
+		http.HandleFunc("/debug/stats", server.EnableCORS(vgServer.Profiler.HandleProfilingStats))
 	}
 	http.HandleFunc("/debug/pprof", server.EnableCORS(server.HandlePprofRedirect))
 	http.HandleFunc("/debug/pprof/", server.EnableCORS(http.DefaultServeMux.ServeHTTP))
@@ -326,18 +330,23 @@ func main() {
 
 	addr := ":" + *port
 	log.Printf("\n✅ Server ready on http://localhost%s", addr)
-	log.Printf("   🌐 Web UI:  http://localhost%s/", addr)
-	log.Printf("   Health:   http://localhost%s/health", addr)
-	log.Printf("   Metrics:  http://localhost%s/metrics", addr)
-	log.Printf("   Models:   http://localhost%s/v1/models", addr)
-	log.Printf("   Domains:  http://localhost%s/v1/domains", addr)
-	log.Printf("   Registry: http://localhost%s/v1/domain-registry", addr)
-	log.Printf("   Chat:     http://localhost%s/v1/chat/completions", addr)
+	log.Printf("   🌐 Web UI:    http://localhost%s/", addr)
+	log.Printf("   Health:     http://localhost%s/health", addr)
+	log.Printf("   Metrics:    http://localhost%s/metrics", addr)
+	log.Printf("\n📍 v1 API (Legacy):")
+	log.Printf("   Models:     http://localhost%s/v1/models", addr)
+	log.Printf("   Domains:    http://localhost%s/v1/domains", addr)
+	log.Printf("   Registry:   http://localhost%s/v1/domain-registry", addr)
+	log.Printf("   Chat:       http://localhost%s/v1/chat/completions", addr)
+	log.Printf("\n📍 v2 API (Enhanced):")
+	log.Printf("   Chat:       http://localhost%s/v2/chat/completions", addr)
+	log.Printf("   Models:     http://localhost%s/v2/models", addr)
+	log.Printf("   Health:     http://localhost%s/v2/health", addr)
 	log.Printf("\n🎯 Production Features:")
 	// Phase 4: Count registered models (lazy loading)
 	totalRegistered := 0
-	if vgServer.modelCache != nil {
-		stats := vgServer.modelCache.GetStats()
+	if vgServer.ModelCache != nil {
+		stats := vgServer.ModelCache.GetStats()
 		if safetensorCount, ok := stats["safetensor_models"].(int); ok {
 			totalRegistered += safetensorCount
 		}
