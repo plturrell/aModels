@@ -680,7 +680,8 @@ class LocalAITestFramework:
             successful_count = sum(1 for r in self.query_results if r.success)
             report.append(f"Successful Queries: {successful_count}/{len(self.query_results)}")
             if self.query_results:
-                avg_quality = sum(r.quality_score for r in self.query_results if r.quality_score) / len([r for r in self.query_results if r.quality_score])
+                quality_scores = [r.quality_score for r in self.query_results if r.quality_score]
+                avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0.0
                 report.append(f"Average Quality Score: {avg_quality:.2f}")
             report.append("")
         
