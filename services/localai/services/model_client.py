@@ -45,9 +45,23 @@ def get_model_from_server(model_name: str, target_path: Optional[str] = None) ->
             print(f"[MODEL_CLIENT] Cannot list models from server: {response.status_code}")
             return None
         
-        all_models = response.json()
+        response_data = response.json()
         
-        # Handle different response formats - could be list of dicts or list of strings
+        # Handle different response formats
+        # Could be: list of dicts, list of strings, or dict with 'models' key
+        if isinstance(response_data, dict):
+            # If it's a dict, look for 'models' key
+            if 'models' in response_data:
+                all_models = response_data['models']
+            else:
+                # Try to use the dict itself as a single model entry
+                all_models = [response_data]
+        elif isinstance(response_data, list):
+            all_models = response_data
+        else:
+            print(f"[MODEL_CLIENT] Unexpected response format: {type(response_data)}")
+            return None
+        
         if not all_models:
             print(f"[MODEL_CLIENT] No models found on server")
             return None
