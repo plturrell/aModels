@@ -13,6 +13,10 @@ import (
     "time"
     "log"
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/types"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+	"github.com/plturrell/aModels/pkg/observability/llm"
 )
 
 // LocalAIClient provides a client for interacting with LocalAI endpoints
@@ -84,6 +88,25 @@ func (c *LocalAIClient) EmbedText(ctx context.Context, embedModel string, input 
 
 // Generate sends a generation request to LocalAI
 func (c *LocalAIClient) Generate(ctx context.Context, req *types.GenerateRequest) (*types.GenerateResponse, error) {
+	// Start OpenTelemetry span with OpenLLMetry attributes
+	tracer := otel.Tracer("localai-client")
+	ctx, span := tracer.Start(ctx, "llm.completion", trace.WithSpanKind(trace.SpanKindClient))
+	defer span.End()
+
+	// Add OpenLLMetry request attributes
+	llmConfig := llm.LLMRequestConfig{
+		System:          "localai",
+		Model:           c.ModelName,
+		RequestType:     "completion",
+		Temperature:     req.Temperature,
+		TopP:            req.TopP,
+		MaxTokens:       int64(req.MaxTokens),
+		FrequencyPenalty: req.FrequencyPenalty,
+		PresencePenalty:  req.PresencePenalty,
+		IsStreaming:     false,
+	}
+	llm.AddLLMRequestAttributes(span, llmConfig)
+
 	// Construct OpenAI-compatible request
 	requestBody := map[string]interface{}{
 		"model":             c.ModelName,
@@ -135,6 +158,8 @@ func (c *LocalAIClient) Generate(ctx context.Context, req *types.GenerateRequest
 	}
 
 	if lastErr != nil {
+		span.RecordError(lastErr)
+		span.SetStatus(trace.StatusError, "request failed")
 		return nil, fmt.Errorf("request failed after %d attempts: %w", c.MaxRetries, lastErr)
 	}
 
@@ -161,10 +186,21 @@ func (c *LocalAIClient) Generate(ctx context.Context, req *types.GenerateRequest
 	}
 
 	if len(apiResponse.Choices) == 0 {
+		span.RecordError(fmt.Errorf("no choices returned from API"))
+		span.SetStatus(trace.StatusError, "no choices returned")
 		return nil, fmt.Errorf("no choices returned from API")
 	}
 
-    log.Printf("LocalAI generation completed model=%s tokens=%d finish_reason=%s",
+	// Add OpenLLMetry response attributes
+	// Note: OpenAI completion API doesn't provide separate prompt/completion tokens
+	// We'll use total tokens for both if not available
+	llmResponse := llm.LLMResponseInfo{
+		TotalTokens:  int64(apiResponse.Usage.TotalTokens),
+		FinishReason: apiResponse.Choices[0].FinishReason,
+	}
+	llm.AddLLMResponseAttributes(span, llmResponse)
+
+	log.Printf("LocalAI generation completed model=%s tokens=%d finish_reason=%s",
         c.ModelName, apiResponse.Usage.TotalTokens, apiResponse.Choices[0].FinishReason)
 
 	return &types.GenerateResponse{
@@ -180,6 +216,26 @@ func (c *LocalAIClient) Generate(ctx context.Context, req *types.GenerateRequest
 
 // GenerateChat sends a chat completion request to LocalAI
 func (c *LocalAIClient) GenerateChat(ctx context.Context, messages []types.ChatMessage, req *types.GenerateRequest) (*types.GenerateResponse, error) {
+	// Start OpenTelemetry span with OpenLLMetry attributes
+	tracer := otel.Tracer("localai-client")
+	ctx, span := tracer.Start(ctx, "llm.chat", trace.WithSpanKind(trace.SpanKindClient))
+	defer span.End()
+
+	// Add OpenLLMetry request attributes
+	llmConfig := llm.LLMRequestConfig{
+		System:          "localai",
+		Model:           c.ModelName,
+		RequestType:     "chat",
+		Temperature:     req.Temperature,
+		TopP:            req.TopP,
+		MaxTokens:       int64(req.MaxTokens),
+		FrequencyPenalty: req.FrequencyPenalty,
+		PresencePenalty:  req.PresencePenalty,
+		IsStreaming:     false,
+	}
+	llm.AddLLMRequestAttributes(span, llmConfig)
+	span.SetAttributes(attribute.Int("llm.request.message_count", len(messages)))
+
 	// Construct OpenAI-compatible chat request
 	requestBody := map[string]interface{}{
 		"model":             c.ModelName,
@@ -214,13 +270,18 @@ func (c *LocalAIClient) GenerateChat(ctx context.Context, messages []types.ChatM
 	// Execute request
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(trace.StatusError, "request failed")
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		err := fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		span.RecordError(err)
+		span.SetStatus(trace.StatusError, fmt.Sprintf("HTTP %d", resp.StatusCode))
+		return nil, err
 	}
 
 	// Parse response

@@ -14,9 +14,10 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	sdktrace 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"go.opentelemetry.io/otel/trace"
+	"github.com/plturrell/aModels/pkg/observability/llm"
 )
 
 // TracerProvider wraps OpenTelemetry tracer provider
@@ -272,6 +273,30 @@ func AddSpanLink(ctx context.Context, spanContext trace.SpanContext, attrs ...at
 	if span.IsRecording() {
 		// Note: Links can only be added when starting a span, not to existing spans
 		// This is a helper for documentation - actual links should be added via SpanStartOption
+	}
+}
+
+// AddLLMRequestAttributes adds OpenLLMetry request attributes to the current span
+func AddLLMRequestAttributes(ctx context.Context, config llm.LLMRequestConfig) {
+	span := trace.SpanFromContext(ctx)
+	if span.IsRecording() {
+		llm.AddLLMRequestAttributes(span, config)
+	}
+}
+
+// AddLLMResponseAttributes adds OpenLLMetry response attributes to the current span
+func AddLLMResponseAttributes(ctx context.Context, info llm.LLMResponseInfo) {
+	span := trace.SpanFromContext(ctx)
+	if span.IsRecording() {
+		llm.AddLLMResponseAttributes(span, info)
+	}
+}
+
+// AddLLMAttributes adds both OpenLLMetry request and response attributes to the current span
+func AddLLMAttributes(ctx context.Context, config llm.LLMRequestConfig, info llm.LLMResponseInfo) {
+	span := trace.SpanFromContext(ctx)
+	if span.IsRecording() {
+		llm.AddLLMAttributes(span, config, info)
 	}
 }
 

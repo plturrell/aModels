@@ -13,6 +13,19 @@ This service provides a Python-based deep agent built on [deepagents](https://py
 - **AgentFlow Integration**: Run LangFlow flows
 - **Orchestration Integration**: Execute orchestration chains
 
+## OpenLLMetry Integration
+
+This service is instrumented with [OpenLLMetry](https://github.com/traceloop/openllmetry) for comprehensive LLM observability. All LangChain LLM calls automatically emit OpenLLMetry semantic convention attributes, including:
+
+- Token usage (prompt, completion, total)
+- Model information and request parameters
+- Performance metrics (latency, throughput)
+- Cost tracking (if available)
+
+**No code changes required** - LangChain instrumentation is automatically enabled when OpenTelemetry tracing is enabled.
+
+See [Agent Telemetry Integration Guide](../../docs/AGENT_TELEMETRY_INTEGRATION.md) for details.
+
 ## Features
 
 ### Built-in Tools

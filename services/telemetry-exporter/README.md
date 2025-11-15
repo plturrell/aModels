@@ -113,7 +113,14 @@ See [Signavio Integration Guide](./docs/SIGNAVIO_INTEGRATION.md) for detailed co
 
 The service integrates with [OpenLLMetry](https://github.com/traceloop/openllmetry) to provide comprehensive observability for LLM operations. LLM spans are automatically detected and enriched with token usage, cost, and performance metrics.
 
-See [LLM Observability Guide](./docs/LLM_OBSERVABILITY.md) for detailed information.
+**Integration Status:**
+- ✅ Python services (DeepAgents, Browser) - LangChain instrumentation
+- ✅ Go services (LocalAI, Extract, Graph, Regulatory) - LLM attribute helpers
+- ✅ LocalAI client and server - Automatic OpenLLMetry attributes
+- ✅ Telemetry exporter - LLM span recognition and enrichment
+- ✅ Browser UI - LLM Observability dashboard
+
+See [LLM Observability Guide](./docs/LLM_OBSERVABILITY.md) and [Agent Telemetry Integration Guide](../../docs/AGENT_TELEMETRY_INTEGRATION.md) for detailed information.
 
 ## Development
 

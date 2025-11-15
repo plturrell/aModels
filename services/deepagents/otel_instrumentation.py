@@ -13,6 +13,14 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from opentelemetry.semconv.resource import ResourceAttributes
 
+# OpenLLMetry - LLM observability
+try:
+    from opentelemetry.instrumentation.langchain import LangchainInstrumentor
+    OPENLLMETRY_AVAILABLE = True
+except ImportError:
+    OPENLLMETRY_AVAILABLE = False
+    logger.warning("OpenLLMetry LangChain instrumentation not available. Install opentelemetry-instrumentation-langchain")
+
 logger = logging.getLogger(__name__)
 
 _tracer_provider: Optional[TracerProvider] = None
@@ -69,6 +77,16 @@ def init_otel_instrumentation(app=None):
         # Instrument HTTPX client
         HTTPXClientInstrumentor().instrument()
         logger.info("HTTPX client instrumented with OpenTelemetry")
+        
+        # Instrument LangChain with OpenLLMetry for LLM observability
+        if OPENLLMETRY_AVAILABLE:
+            try:
+                LangchainInstrumentor().instrument()
+                logger.info("LangChain instrumented with OpenLLMetry")
+            except Exception as e:
+                logger.warning(f"Failed to instrument LangChain with OpenLLMetry: {e}")
+        else:
+            logger.warning("OpenLLMetry LangChain instrumentation not available")
         
         logger.info(f"OpenTelemetry instrumentation initialized (endpoint: {otlp_endpoint})")
         

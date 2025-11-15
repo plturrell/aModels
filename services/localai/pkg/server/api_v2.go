@@ -11,6 +11,7 @@ import (
 	"github.com/plturrell/agenticAiETH/agenticAiETH_layer4_LocalAI/pkg/storage"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"github.com/plturrell/aModels/pkg/observability/llm"
 )
 
 // V2 API provides enhanced features:
@@ -109,13 +110,26 @@ func (s *VaultGemmaServer) HandleV2Chat(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Add trace attributes
+	// Add OpenLLMetry request attributes
+	llmConfig := llm.LLMRequestConfig{
+		System:      "localai",
+		Model:       req.Model,
+		RequestType: "chat",
+		Temperature: req.Temperature,
+		TopP:        req.TopP,
+		MaxTokens:   int64(req.MaxTokens),
+		IsStreaming: req.Stream,
+	}
+	llm.AddLLMRequestAttributes(span, llmConfig)
+
+	// Add additional trace attributes
 	span.SetAttributes(
 		attribute.String("model", req.Model),
 		attribute.Int("max_tokens", req.MaxTokens),
 		attribute.Float64("temperature", req.Temperature),
 		attribute.Bool("stream", req.Stream),
 		attribute.Bool("async", req.Async),
+		attribute.Int("llm.request.message_count", len(req.Messages)),
 	)
 	if req.WorkflowID != "" {
 		span.SetAttributes(attribute.String("workflow_id", req.WorkflowID))
@@ -279,6 +293,15 @@ func (s *VaultGemmaServer) HandleV2Chat(w http.ResponseWriter, r *http.Request) 
 		},
 		Metadata: metadata,
 	}
+
+	// Add OpenLLMetry response attributes
+	llmResponse := llm.LLMResponseInfo{
+		PromptTokens:     int64(resp.Usage.PromptTokens),
+		CompletionTokens: int64(resp.Usage.CompletionTokens),
+		TotalTokens:      int64(resp.Usage.TotalTokens),
+		FinishReason:     "stop",
+	}
+	llm.AddLLMResponseAttributes(span, llmResponse)
 
 	span.SetStatus(codes.Ok, "Request completed successfully")
 	w.Header().Set(HeaderContentType, ContentTypeJSON)
