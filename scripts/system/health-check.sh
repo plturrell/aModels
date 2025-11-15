@@ -23,7 +23,9 @@ declare -A SERVICES=(
     ["Neo4j HTTP"]="http:http://localhost:7474"
     ["Neo4j Bolt"]="tcp:7687"
     ["Elasticsearch"]="http:http://localhost:9200/_cluster/health"
+    ["Gitea"]="http:http://localhost:3003/api/healthz"
     ["LocalAI"]="http:http://localhost:8081/healthz"
+    ["Transformers"]="http:http://localhost:9090/health"
     ["Catalog"]="http:http://localhost:8084/health"
     ["Extract"]="http:http://localhost:8083/health"
     ["Graph"]="http:http://localhost:8080/health"
@@ -32,8 +34,10 @@ declare -A SERVICES=(
     ["Runtime"]="http:http://localhost:8098/healthz"
     ["Orchestration"]="http:http://localhost:8085/healthz"
     ["Training"]="http:http://localhost:8087/health"
-    ["DMS"]="http:http://localhost:8096/docs"
+    ["Telemetry Exporter"]="http:http://localhost:8085/health"
+    ["Gateway"]="http:http://localhost:8000/healthz"
     ["Regulatory Audit"]="http:http://localhost:8099/healthz"
+    ["PostgreSQL Lang"]="tcp:50051"
 )
 
 ################################################################################
@@ -167,6 +171,80 @@ check_localai_detail() {
         fi
     else
         echo -e "  ${RED}✗${NC} Health endpoint not responding"
+    fi
+}
+
+check_gitea_detail() {
+    echo ""
+    echo "Gitea Detailed Check:"
+    
+    if curl -sf http://localhost:3003/api/healthz >/dev/null 2>&1; then
+        echo -e "  ${GREEN}✓${NC} Health endpoint responding"
+        
+        # Check if Gitea is accessible
+        if curl -sf http://localhost:3003 >/dev/null 2>&1; then
+            echo -e "  ${GREEN}✓${NC} Web interface accessible"
+        else
+            echo -e "  ${YELLOW}!${NC} Web interface not accessible"
+        fi
+    else
+        echo -e "  ${RED}✗${NC} Health endpoint not responding"
+    fi
+}
+
+check_telemetry_exporter_detail() {
+    echo ""
+    echo "Telemetry Exporter Detailed Check:"
+    
+    # Try different ports
+    local ports=(8085 8080 8083)
+    local found=false
+    
+    for port in "${ports[@]}"; do
+        if timeout 2 bash -c "cat < /dev/null > /dev/tcp/localhost/$port" 2>/dev/null; then
+            if curl -sf "http://localhost:$port/health" >/dev/null 2>&1; then
+                echo -e "  ${GREEN}✓${NC} Running on port $port"
+                found=true
+                break
+            fi
+        fi
+    done
+    
+    if [ "$found" = false ]; then
+        echo -e "  ${RED}✗${NC} Not found on any expected port (8085, 8080, 8083)"
+    fi
+}
+
+check_gateway_detail() {
+    echo ""
+    echo "Gateway Detailed Check:"
+    
+    if curl -sf http://localhost:8000/healthz >/dev/null 2>&1; then
+        echo -e "  ${GREEN}✓${NC} Health endpoint responding"
+    else
+        echo -e "  ${RED}✗${NC} Health endpoint not responding"
+    fi
+}
+
+check_postgres_lang_detail() {
+    echo ""
+    echo "PostgreSQL Lang Detailed Check:"
+    
+    if timeout 2 bash -c "cat < /dev/null > /dev/tcp/localhost/50051" 2>/dev/null; then
+        echo -e "  ${GREEN}✓${NC} gRPC port 50051 is open"
+        
+        # Try to check if it's actually a gRPC service
+        if command -v grpc_health_probe &> /dev/null; then
+            if grpc_health_probe -addr=localhost:50051 >/dev/null 2>&1; then
+                echo -e "  ${GREEN}✓${NC} gRPC health check passed"
+            else
+                echo -e "  ${YELLOW}!${NC} gRPC health check failed"
+            fi
+        else
+            echo -e "  ${YELLOW}!${NC} grpc_health_probe not available, skipping detailed check"
+        fi
+    else
+        echo -e "  ${RED}✗${NC} gRPC port not accessible"
     fi
 }
 

@@ -1,0 +1,163 @@
+/**
+ * Mobile-First Responsive Design System
+ * Ensures all aModels UIs work on mobile, tablet, and desktop
+ */
+
+/* CSS Variables from unified theme */
+@import url('../theme/theme-config.css');
+
+/* Base mobile-first styles */
+* {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  line-height: 1.6;
+  color: var(--text-primary);
+  background: var(--bg-default);
+  margin: 0;
+  padding: 0;
+}
+
+/* Container system */
+.container {
+  width: 100%;
+  padding: 0 var(--spacing-medium);
+  margin: 0 auto;
+}
+
+@media (min-width: 640px) {
+  .container { max-width: 640px; }
+}
+
+@media (min-width: 768px) {
+  .container { max-width: 768px; }
+}
+
+@media (min-width: 1024px) {
+  .container { max-width: 1024px; }
+}
+
+@media (min-width: 1280px) {
+  .container { max-width: 1280px; }
+}
+
+/* Responsive grid */
+.grid {
+  display: grid;
+  gap: var(--spacing-medium);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .grid-sm-2 { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (min-width: 768px) {
+  .grid-md-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid-md-3 { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (min-width: 1024px) {
+  .grid-lg-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid-lg-4 { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* Responsive typography */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0 0 var(--spacing-medium) 0;
+}
+
+h1 { font-size: clamp(1.75rem, 5vw, 2.5rem); }
+h2 { font-size: clamp(1.5rem, 4vw, 2rem); }
+h3 { font-size: clamp(1.25rem, 3vw, 1.75rem); }
+
+/* Touch-friendly interactive elements */
+button, a, input, select, textarea {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+button {
+  padding: var(--spacing-small) var(--spacing-medium);
+  font-size: var(--font-size-base);
+  border-radius: var(--radius-medium);
+  border: none;
+  background: var(--color-primary);
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-medium);
+}
+
+/* Mobile navigation */
+.mobile-nav {
+  display: flex;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  box-shadow: var(--shadow-large);
+  z-index: 1000;
+}
+
+@media (min-width: 768px) {
+  .mobile-nav {
+    display: none;
+  }
+}
+
+/* Card responsive */
+.card {
+  background: var(--bg-paper);
+  border-radius: var(--radius-medium);
+  padding: var(--spacing-medium);
+  box-shadow: var(--shadow-small);
+}
+
+@media (min-width: 768px) {
+  .card {
+    padding: var(--spacing-large);
+  }
+}
+
+/* Utilities */
+.hide-mobile {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .hide-mobile {
+    display: block;
+  }
+}
+
+.hide-desktop {
+  display: block;
+}
+
+@media (min-width: 768px) {
+  .hide-desktop {
+    display: none;
+  }
+}
+
+/* Safe areas for mobile devices */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}

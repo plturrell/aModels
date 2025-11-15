@@ -1,0 +1,230 @@
+# Istio Service Mesh Configuration for aModels
+# Provides traffic management, security, and observability
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: amodels
+  labels:
+    istio-injection: enabled
+
+---
+# Gateway - Entry point for all traffic
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: amodels-gateway
+  namespace: amodels
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*"
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: amodels-tls
+    hosts:
+    - "*"
+
+---
+# Virtual Service - Routing rules
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: amodels-routes
+  namespace: amodels
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - amodels-gateway
+  http:
+  # Shell UI
+  - match:
+    - uri:
+        prefix: "/dashboard"
+    route:
+    - destination:
+        host: shell-ui
+        port:
+          number: 4173
+    retries:
+      attempts: 3
+      perTryTimeout: 2s
+  
+  # Open Canvas
+  - match:
+    - uri:
+        prefix: "/canvas"
+    route:
+    - destination:
+        host: opencanvas-web
+        port:
+          number: 3000
+    timeout: 30s
+  
+  # LangFlow
+  - match:
+    - uri:
+        prefix: "/langflow"
+    route:
+    - destination:
+        host: langflow
+        port:
+          number: 7860
+  
+  # Service Portal
+  - match:
+    - uri:
+        prefix: "/portal"
+    route:
+    - destination:
+        host: service-portal
+        port:
+          number: 8888
+  
+  # Monitoring (Grafana)
+  - match:
+    - uri:
+        prefix: "/monitoring"
+    route:
+    - destination:
+        host: grafana
+        port:
+          number: 3001
+  
+  # API Gateway
+  - match:
+    - uri:
+        prefix: "/api"
+    route:
+    - destination:
+        host: gateway
+        port:
+          number: 8000
+    corsPolicy:
+      allowOrigins:
+      - exact: "*"
+      allowMethods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - OPTIONS
+      allowHeaders:
+      - content-type
+      - authorization
+      maxAge: "24h"
+
+---
+# Destination Rule - Load balancing and circuit breaking
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: amodels-services
+  namespace: amodels
+spec:
+  host: "*.amodels.svc.cluster.local"
+  trafficPolicy:
+    loadBalancer:
+      simple: LEAST_REQUEST
+    connectionPool:
+      tcp:
+        maxConnections: 100
+      http:
+        http1MaxPendingRequests: 50
+        http2MaxRequests: 100
+        maxRequestsPerConnection: 2
+    outlierDetection:
+      consecutiveErrors: 5
+      interval: 30s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+      minHealthPercent: 40
+
+---
+# Service Entry - External services
+apiVersion: networking.istio.io/v1beta1
+kind: ServiceEntry
+metadata:
+  name: external-apis
+  namespace: amodels
+spec:
+  hosts:
+  - "*.openai.com"
+  - "*.anthropic.com"
+  - "ec2-50-17-166-162.compute-1.amazonaws.com"
+  ports:
+  - number: 443
+    name: https
+    protocol: HTTPS
+  - number: 8888
+    name: jupyter
+    protocol: HTTP
+  location: MESH_EXTERNAL
+  resolution: DNS
+
+---
+# Peer Authentication - mTLS for service-to-service
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: amodels
+spec:
+  mtls:
+    mode: STRICT
+
+---
+# Authorization Policy - RBAC
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: amodels-authz
+  namespace: amodels
+spec:
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/amodels/sa/*"]
+    to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE"]
+  - from:
+    - source:
+        namespaces: ["istio-system"]
+
+---
+# Telemetry - Distributed tracing
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: amodels-telemetry
+  namespace: amodels
+spec:
+  tracing:
+  - providers:
+    - name: "jaeger"
+    randomSamplingPercentage: 100.0
+    customTags:
+      "service.namespace":
+        literal:
+          value: "amodels"
+  metrics:
+  - providers:
+    - name: prometheus
+    dimensions:
+      service_name:
+        value: "source.service.name"
+      destination_service:
+        value: "destination.service.name"

@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>aModels Service Portal</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .status-bar {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-around;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        .status-item {
+            text-align: center;
+        }
+
+        .status-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .status-label {
+            color: #666;
+            font-size: 0.9rem;
+            margin-top: 5px;
+        }
+
+        .categories {
+            display: grid;
+            gap: 30px;
+        }
+
+        .category {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+
+        .category-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .category-icon {
+            font-size: 2rem;
+            margin-right: 15px;
+        }
+
+        .category-title {
+            font-size: 1.5rem;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .service-card {
+            background: white;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .service-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+            border-color: #667eea;
+        }
+
+        .service-status {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-running {
+            background: #10b981;
+        }
+
+        .status-available {
+            background: #f59e0b;
+        }
+
+        .status-unavailable {
+            background: #ef4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .service-name {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .service-description {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+
+        .service-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #f0f0f0;
+        }
+
+        .service-port {
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .service-link {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+        }
+
+        .service-link:hover {
+            text-decoration: underline;
+        }
+
+        .arrow {
+            margin-left: 5px;
+        }
+
+        footer {
+            text-align: center;
+            color: white;
+            margin-top: 40px;
+            opacity: 0.8;
+        }
+
+        .refresh-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 15px 25px;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transition: all 0.3s ease;
+        }
+
+        .refresh-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+        }
+
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2rem;
+            margin: 50px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 aModels Service Portal</h1>
+            <p class="subtitle">Unified access to all services and UIs</p>
+        </header>
+
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-number" id="total-services">0</div>
+                <div class="status-label">Total Services</div>
+            </div>
+            <div class="status-item">
+                <div class="status-number" id="running-services">0</div>
+                <div class="status-label">Running</div>
+            </div>
+            <div class="status-item">
+                <div class="status-number" id="available-services">0</div>
+                <div class="status-label">Available</div>
+            </div>
+            <div class="status-item">
+                <div class="status-number" id="unavailable-services">0</div>
+                <div class="status-label">Not Deployed</div>
+            </div>
+        </div>
+
+        <div id="categories" class="categories">
+            <!-- Categories will be inserted here by JavaScript -->
+        </div>
+
+        <footer>
+            <p>aModels Infrastructure v1.0 | Last updated: <span id="last-updated"></span></p>
+        </footer>
+    </div>
+
+    <button class="refresh-btn" onclick="loadServices()">🔄 Refresh</button>
+
+    <script>
+        const services = {
+            dashboard: {
+                icon: '📊',
+                title: 'Core Dashboards',
+                services: [
+                    {
+                        name: 'Shell UI',
+                        description: 'Main dashboard with analytics, SGMI explorer, and telemetry',
+                        port: 4173,
+                        url: 'http://localhost:4173',
+                        status: 'running'
+                    },
+                    {
+                        name: 'Open Canvas',
+                        description: 'AI-powered document and code editor with version history',
+                        port: 3000,
+                        url: 'http://localhost:3000',
+                        status: 'running'
+                    },
+                    {
+                        name: 'Service Portal',
+                        description: 'This portal - unified service registry and navigation',
+                        port: 8888,
+                        url: 'http://localhost:8888',
+                        status: 'running'
+                    }
+                ]
+            },
+            builder: {
+                icon: '🔧',
+                title: 'Development Tools',
+                services: [
+                    {
+                        name: 'LangFlow',
+                        description: 'Visual flow builder for LLM chains and agents',
+                        port: 7860,
+                        url: 'http://localhost:7860',
+                        status: 'available'
+                    },
+                    {
+                        name: 'Gitea',
+                        description: 'Git repository hosting with pull requests and CI/CD',
+                        port: 3003,
+                        url: 'http://localhost:3003',
+                        status: 'running'
+                    }
+                ]
+            },
+            database: {
+                icon: '🗄️',
+                title: 'Database Management',
+                services: [
+                    {
+                        name: 'Neo4j Browser',
+                        description: 'Graph database query editor and visualization',
+                        port: 7474,
+                        url: 'http://localhost:7474',
+                        status: 'running'
+                    },
+                    {
+                        name: 'Adminer',
+                        description: 'PostgreSQL database administration interface',
+                        port: 8082,
+                        url: 'http://localhost:8082',
+                        status: 'available'
+                    },
+                    {
+                        name: 'pgweb',
+                        description: 'Lightweight PostgreSQL web viewer',
+                        port: 8083,
+                        url: 'http://localhost:8083',
+                        status: 'available'
+                    }
+                ]
+            },
+            observability: {
+                icon: '📈',
+                title: 'Monitoring & Observability',
+                services: [
+                    {
+                        name: 'Jaeger UI',
+                        description: 'Distributed tracing and performance monitoring',
+                        port: 16686,
+                        url: 'http://localhost:16686',
+                        status: 'available'
+                    },
+                    {
+                        name: 'Grafana',
+                        description: 'Metrics visualization and dashboard builder',
+                        port: 3001,
+                        url: 'http://localhost:3001',
+                        status: 'available'
+                    },
+                    {
+                        name: 'Prometheus',
+                        description: 'Metrics collection and alerting',
+                        port: 9091,
+                        url: 'http://localhost:9091',
+                        status: 'available'
+                    }
+                ]
+            },
+            backend: {
+                icon: '⚙️',
+                title: 'Backend Services',
+                services: [
+                    {
+                        name: 'LocalAI',
+                        description: 'Local AI model serving (OpenAI-compatible)',
+                        port: 8081,
+                        url: 'http://localhost:8081',
+                        status: 'running'
+                    },
+                    {
+                        name: 'Catalog Service',
+                        description: 'Service catalog and metadata management',
+                        port: 8084,
+                        url: 'http://localhost:8084',
+                        status: 'running'
+                    },
+                    {
+                        name: 'Extract Service',
+                        description: 'Document extraction and processing',
+                        port: 8083,
+                        url: 'http://localhost:8083',
+                        status: 'running'
+                    },
+                    {
+                        name: 'Runtime Analytics',
+                        description: 'Runtime monitoring and analytics',
+                        port: 8098,
+                        url: 'http://localhost:8098',
+                        status: 'running'
+                    },
+                    {
+                        name: 'Regulatory Audit',
+                        description: 'BCBS239 compliance and audit system',
+                        port: 8099,
+                        url: 'http://localhost:8099',
+                        status: 'running'
+                    }
+                ]
+            }
+        };
+
+        function renderServices() {
+            const categoriesDiv = document.getElementById('categories');
+            categoriesDiv.innerHTML = '';
+
+            let totalServices = 0;
+            let runningServices = 0;
+            let availableServices = 0;
+            let unavailableServices = 0;
+
+            Object.keys(services).forEach(categoryKey => {
+                const category = services[categoryKey];
+                
+                const categoryDiv = document.createElement('div');
+                categoryDiv.className = 'category';
+                
+                categoryDiv.innerHTML = `
+                    <div class="category-header">
+                        <span class="category-icon">${category.icon}</span>
+                        <h2 class="category-title">${category.title}</h2>
+                    </div>
+                    <div class="services-grid" id="grid-${categoryKey}"></div>
+                `;
+                
+                categoriesDiv.appendChild(categoryDiv);
+                
+                const gridDiv = document.getElementById(`grid-${categoryKey}`);
+                
+                category.services.forEach(service => {
+                    totalServices++;
+                    if (service.status === 'running') runningServices++;
+                    else if (service.status === 'available') availableServices++;
+                    else unavailableServices++;
+
+                    const serviceCard = document.createElement('div');
+                    serviceCard.className = 'service-card';
+                    serviceCard.onclick = () => window.open(service.url, '_blank');
+                    
+                    const statusClass = service.status === 'running' ? 'status-running' : 
+                                       service.status === 'available' ? 'status-available' : 
+                                       'status-unavailable';
+                    
+                    serviceCard.innerHTML = `
+                        <div class="service-status ${statusClass}"></div>
+                        <div class="service-name">${service.name}</div>
+                        <div class="service-description">${service.description}</div>
+                        <div class="service-meta">
+                            <span class="service-port">:${service.port}</span>
+                            <a href="${service.url}" class="service-link" onclick="event.stopPropagation()" target="_blank">
+                                Open <span class="arrow">→</span>
+                            </a>
+                        </div>
+                    `;
+                    
+                    gridDiv.appendChild(serviceCard);
+                });
+            });
+
+            // Update status bar
+            document.getElementById('total-services').textContent = totalServices;
+            document.getElementById('running-services').textContent = runningServices;
+            document.getElementById('available-services').textContent = availableServices;
+            document.getElementById('unavailable-services').textContent = unavailableServices;
+            document.getElementById('last-updated').textContent = new Date().toLocaleString();
+        }
+
+        function loadServices() {
+            renderServices();
+        }
+
+        // Load services on page load
+        window.onload = loadServices;
+    </script>
+</body>
+</html>

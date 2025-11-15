@@ -1,0 +1,68 @@
+# Prometheus Configuration for aModels
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'amodels'
+    environment: 'development'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Rules files
+rule_files: []
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # OTEL Collector metrics
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8888', 'otel-collector:8889']
+
+  # aModels Services
+  - job_name: 'amodels-services'
+    static_configs:
+      - targets:
+          - 'shell-ui:4173'
+          - 'opencanvas-web:3000'
+          - 'opencanvas-agents:2024'
+          - 'langflow:7860'
+        labels:
+          category: 'ui'
+      
+      - targets:
+          - 'localai:8080'
+          - 'catalog:8084'
+          - 'extract:8083'
+          - 'graph:8080'
+          - 'runtime:8098'
+          - 'regulatory_audit:8099'
+        labels:
+          category: 'backend'
+      
+      - targets:
+          - 'postgres:5432'
+          - 'neo4j:7474'
+          - 'redis:6379'
+          - 'elasticsearch:9200'
+        labels:
+          category: 'database'
+
+  # Jaeger metrics
+  - job_name: 'jaeger'
+    static_configs:
+      - targets: ['jaeger:14269']
+
+  # Grafana self-monitoring
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']

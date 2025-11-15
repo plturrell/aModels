@@ -1,0 +1,102 @@
+{
+  "realm": "amodels",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "clients": [
+    {
+      "clientId": "amodels",
+      "name": "aModels Services",
+      "description": "Main OAuth client for all aModels services",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "amodels-secret-change-me",
+      "redirectUris": [
+        "http://localhost:4180/*",
+        "http://localhost:4173/*",
+        "http://localhost:3000/*",
+        "http://localhost:7860/*",
+        "http://localhost:8888/*"
+      ],
+      "webOrigins": [
+        "http://localhost:4180",
+        "http://localhost:4173",
+        "http://localhost:3000",
+        "http://localhost:7860",
+        "http://localhost:8888"
+      ],
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": true
+    },
+    {
+      "clientId": "shell-ui",
+      "name": "Shell UI",
+      "enabled": true,
+      "publicClient": true,
+      "redirectUris": ["http://localhost:4173/*"],
+      "webOrigins": ["http://localhost:4173"]
+    },
+    {
+      "clientId": "opencanvas",
+      "name": "Open Canvas",
+      "enabled": true,
+      "publicClient": true,
+      "redirectUris": ["http://localhost:3000/*"],
+      "webOrigins": ["http://localhost:3000"]
+    },
+    {
+      "clientId": "langflow",
+      "name": "LangFlow",
+      "enabled": true,
+      "publicClient": true,
+      "redirectUris": ["http://localhost:7860/*"],
+      "webOrigins": ["http://localhost:7860"]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Administrator role with full access"
+      },
+      {
+        "name": "developer",
+        "description": "Developer role with service access"
+      },
+      {
+        "name": "viewer",
+        "description": "Read-only access to services"
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "email": "admin@amodels.local",
+      "firstName": "Admin",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["admin"],
+      "clientRoles": {
+        "amodels": ["admin"]
+      }
+    }
+  ]
+}

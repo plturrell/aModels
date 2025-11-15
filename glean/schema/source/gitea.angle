@@ -1,0 +1,187 @@
+# Gitea Integration Schema for Glean
+# Defines predicates for representing Gitea entities in the Glean knowledge graph
+
+schema gitea.1 {
+
+# Core Gitea Entities
+
+predicate GiteaInstance:
+  url: string
+  version: maybe string
+  description: maybe string
+
+predicate GiteaRepository:
+  id: nat
+  name: string
+  fullName: string  # owner/repo
+  owner: string
+  description: maybe string
+  url: string
+  cloneUrl: string
+  htmlUrl: string
+  private: bool
+  defaultBranch: string
+  createdAt: maybe string
+  updatedAt: maybe string
+  instance: GiteaInstance
+
+predicate GiteaBranch:
+  name: string
+  repository: GiteaRepository
+  commit: maybe GiteaCommit
+  protected: maybe bool
+
+predicate GiteaCommit:
+  sha: string
+  message: string
+  author: GiteaUser
+  committer: GiteaUser
+  repository: GiteaRepository
+  timestamp: string
+  url: string
+  parents: [string]  # parent commit SHAs
+
+predicate GiteaFile:
+  path: string
+  name: string
+  repository: GiteaRepository
+  branch: GiteaBranch
+  content: maybe string
+  contentHash: string
+  size: nat
+  type: string  # file, directory, symlink
+  encoding: maybe string
+  downloadUrl: maybe string
+  htmlUrl: maybe string
+
+predicate GiteaUser:
+  id: nat
+  username: string
+  fullName: maybe string
+  email: maybe string
+  avatarUrl: maybe string
+
+predicate GiteaOrganization:
+  id: nat
+  name: string
+  fullName: maybe string
+  description: maybe string
+  website: maybe string
+  location: maybe string
+  avatarUrl: maybe string
+
+predicate GiteaWebhookEvent:
+  eventType: string  # push, create, delete, pull_request
+  repository: GiteaRepository
+  ref: string  # refs/heads/main
+  before: maybe string  # previous commit SHA
+  after: maybe string  # new commit SHA
+  pusher: GiteaUser
+  commits: [GiteaCommit]
+  timestamp: string
+
+predicate GiteaTag:
+  name: string
+  repository: GiteaRepository
+  commit: GiteaCommit
+  message: maybe string
+  tagger: maybe GiteaUser
+
+predicate GiteaPullRequest:
+  id: nat
+  number: nat
+  title: string
+  body: maybe string
+  state: string  # open, closed, merged
+  repository: GiteaRepository
+  sourceBranch: string
+  targetBranch: string
+  author: GiteaUser
+  createdAt: string
+  updatedAt: maybe string
+  mergedAt: maybe string
+  mergedBy: maybe GiteaUser
+
+# Relationships
+
+predicate RepositoryContainsFile:
+  repository: GiteaRepository
+  file: GiteaFile
+
+predicate RepositoryHasBranch:
+  repository: GiteaRepository
+  branch: GiteaBranch
+
+predicate RepositoryHasCommit:
+  repository: GiteaRepository
+  commit: GiteaCommit
+
+predicate UserOwnsRepository:
+  user: GiteaUser
+  repository: GiteaRepository
+
+predicate OrganizationOwnsRepository:
+  organization: GiteaOrganization
+  repository: GiteaRepository
+
+predicate CommitModifiesFile:
+  commit: GiteaCommit
+  file: GiteaFile
+  changeType: string  # added, modified, removed
+
+predicate FileLinkedToProject:
+  file: GiteaFile
+  projectId: string
+  systemId: string
+
+predicate RepositoryLinkedToProject:
+  repository: GiteaRepository
+  projectId: string
+  systemId: string
+
+# Integration with ETL predicates
+
+predicate GiteaFileIsExtractedFile:
+  giteaFile: GiteaFile
+  extractedFile: agenticAiETH.ETL.File
+
+predicate GiteaRepositoryHasKnowledgeGraph:
+  repository: GiteaRepository
+  graphId: string
+  exportedAt: string
+
+# Derived predicates for queries
+
+derive GiteaFilesByExtension:
+  file: GiteaFile
+  extension: string
+  where
+    file.path =~ regex("\\." ++ extension ++ "$")
+
+derive GiteaRecentCommits:
+  commit: GiteaCommit
+  repository: GiteaRepository
+  daysAgo: nat
+  where
+    RepositoryHasCommit { repository, commit },
+    # Note: actual date comparison would need implementation
+
+derive GiteaModifiedFiles:
+  repository: GiteaRepository
+  file: GiteaFile
+  since: string
+  where
+    RepositoryContainsFile { repository, file }
+    # Filter by modification date
+
+derive GiteaRepositoryStatistics:
+  repository: GiteaRepository
+  fileCount: nat
+  branchCount: nat
+  commitCount: nat
+  where
+    fileCount = count (RepositoryContainsFile { repository, _ }),
+    branchCount = count (RepositoryHasBranch { repository, _ }),
+    commitCount = count (RepositoryHasCommit { repository, _ })
+
+}

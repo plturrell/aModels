@@ -1,0 +1,172 @@
+{
+  "services": {
+    "dashboard": {
+      "icon": "📊",
+      "title": "Core Dashboards",
+      "services": [
+        {
+          "name": "Shell UI",
+          "description": "Main dashboard with analytics, SGMI explorer, and telemetry",
+          "port": 4173,
+          "url": "http://localhost:4173",
+          "status": "running",
+          "health_endpoint": "/healthz"
+        },
+        {
+          "name": "Open Canvas",
+          "description": "AI-powered document and code editor with version history",
+          "port": 3000,
+          "url": "http://localhost:3000",
+          "status": "running",
+          "health_endpoint": "/api/health"
+        },
+        {
+          "name": "Service Portal",
+          "description": "This portal - unified service registry and navigation",
+          "port": 8888,
+          "url": "http://localhost:8888",
+          "status": "running",
+          "health_endpoint": "/health"
+        }
+      ]
+    },
+    "builder": {
+      "icon": "🔧",
+      "title": "Development Tools",
+      "services": [
+        {
+          "name": "LangFlow",
+          "description": "Visual flow builder for LLM chains and agents",
+          "port": 7860,
+          "url": "http://localhost:7860",
+          "status": "available",
+          "health_endpoint": "/health"
+        },
+        {
+          "name": "Gitea",
+          "description": "Git repository hosting with pull requests and CI/CD",
+          "port": 3003,
+          "url": "http://localhost:3003",
+          "status": "running",
+          "health_endpoint": "/api/healthz"
+        },
+        {
+          "name": "JupyterLab",
+          "description": "Interactive notebooks for data science and ML",
+          "port": 8888,
+          "url": "http://ec2-50-17-166-162.compute-1.amazonaws.com:8888/lab",
+          "status": "running",
+          "external": true
+        }
+      ]
+    },
+    "database": {
+      "icon": "🗄️",
+      "title": "Database Management",
+      "services": [
+        {
+          "name": "Neo4j Browser",
+          "description": "Graph database query editor and visualization",
+          "port": 7474,
+          "url": "http://localhost:7474",
+          "status": "running"
+        },
+        {
+          "name": "Adminer",
+          "description": "PostgreSQL database administration interface",
+          "port": 8082,
+          "url": "http://localhost:8082",
+          "status": "available"
+        },
+        {
+          "name": "pgweb",
+          "description": "Lightweight PostgreSQL web viewer",
+          "port": 8083,
+          "url": "http://localhost:8083",
+          "status": "available"
+        }
+      ]
+    },
+    "observability": {
+      "icon": "📈",
+      "title": "Monitoring & Observability",
+      "services": [
+        {
+          "name": "Jaeger UI",
+          "description": "Distributed tracing and performance monitoring",
+          "port": 16686,
+          "url": "http://localhost:16686",
+          "status": "available",
+          "health_endpoint": "/"
+        },
+        {
+          "name": "Grafana",
+          "description": "Metrics visualization and dashboard builder",
+          "port": 3001,
+          "url": "http://localhost:3001",
+          "status": "available",
+          "health_endpoint": "/api/health"
+        },
+        {
+          "name": "Prometheus",
+          "description": "Metrics collection and alerting",
+          "port": 9091,
+          "url": "http://localhost:9091",
+          "status": "available",
+          "health_endpoint": "/-/healthy"
+        }
+      ]
+    },
+    "backend": {
+      "icon": "⚙️",
+      "title": "Backend Services",
+      "services": [
+        {
+          "name": "LocalAI",
+          "description": "Local AI model serving (OpenAI-compatible)",
+          "port": 8081,
+          "url": "http://localhost:8081",
+          "status": "running",
+          "health_endpoint": "/healthz"
+        },
+        {
+          "name": "Catalog Service",
+          "description": "Service catalog and metadata management",
+          "port": 8084,
+          "url": "http://localhost:8084",
+          "status": "running",
+          "health_endpoint": "/health"
+        },
+        {
+          "name": "Extract Service",
+          "description": "Document extraction and processing",
+          "port": 8083,
+          "url": "http://localhost:8083",
+          "status": "running",
+          "health_endpoint": "/health"
+        },
+        {
+          "name": "Runtime Analytics",
+          "description": "Runtime monitoring and analytics",
+          "port": 8098,
+          "url": "http://localhost:8098",
+          "status": "running",
+          "health_endpoint": "/healthz"
+        },
+        {
+          "name": "Regulatory Audit",
+          "description": "BCBS239 compliance and audit system",
+          "port": 8099,
+          "url": "http://localhost:8099",
+          "status": "running",
+          "health_endpoint": "/healthz"
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "version": "1.0",
+    "last_updated": "2024-11-15",
+    "total_services": 18
+  }
+}

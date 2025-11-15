@@ -1,0 +1,317 @@
+version: '3.8'
+
+# Complete UI Stack for aModels
+# Integrates all web UIs into unified browser service
+
+services:
+  # ============================================
+  # Existing Browser Services
+  # ============================================
+  
+  shell-ui:
+    extends:
+      file: docker-compose.yml
+      service: shell-ui
+    labels:
+      - "ui.category=dashboard"
+      - "ui.name=Main Dashboard"
+      - "ui.description=Analytics, SGMI Explorer, Telemetry"
+      
+  opencanvas-web:
+    extends:
+      file: docker-compose.yml
+      service: opencanvas-web
+    labels:
+      - "ui.category=editor"
+      - "ui.name=AI Document Editor"
+      - "ui.description=Write documents and code with AI assistance"
+      
+  opencanvas-agents:
+    extends:
+      file: docker-compose.yml
+      service: opencanvas-agents
+    labels:
+      - "ui.category=backend"
+      - "ui.name=Open Canvas Backend"
+      - "ui.description=LangGraph agents for Open Canvas"
+
+  # ============================================
+  # LangFlow - Visual Flow Builder
+  # ============================================
+  
+  langflow:
+    image: langflowai/langflow:latest
+    container_name: amodels-langflow
+    ports:
+      - "7860:7860"
+    environment:
+      - LANGFLOW_DATABASE_URL=postgresql://langflow:langflow@postgres:5432/langflow_db
+      - LANGFLOW_CONFIG_DIR=/app/langflow
+      - LANGFLOW_AUTO_LOGIN=false
+      # LocalAI integration
+      - OPENAI_API_KEY=sk-local-not-needed
+      - OPENAI_API_BASE=http://localai:8080/v1
+    volumes:
+      - langflow-data:/app/langflow
+    networks:
+      - amodels-network
+    depends_on:
+      - postgres
+      - localai
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "ui.category=builder"
+      - "ui.name=Flow Builder"
+      - "ui.description=Visual LLM chain builder"
+      - "ui.url=http://localhost:7860"
+
+  # ============================================
+  # Database Management UIs
+  # ============================================
+  
+  adminer:
+    image: adminer:latest
+    container_name: amodels-adminer
+    ports:
+      - "8082:8080"
+    environment:
+      - ADMINER_DEFAULT_SERVER=postgres
+      - ADMINER_DESIGN=pepa-linha
+    networks:
+      - amodels-network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    labels:
+      - "ui.category=database"
+      - "ui.name=PostgreSQL Admin"
+      - "ui.description=PostgreSQL database management"
+      - "ui.url=http://localhost:8082"
+
+  pgweb:
+    image: sosedoff/pgweb:latest
+    container_name: amodels-pgweb
+    ports:
+      - "8083:8081"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/amodels?sslmode=disable
+    networks:
+      - amodels-network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    command: ["pgweb", "--bind=0.0.0.0", "--listen=8081", "--url=$(DATABASE_URL)"]
+    labels:
+      - "ui.category=database"
+      - "ui.name=pgweb"
+      - "ui.description=PostgreSQL web viewer"
+      - "ui.url=http://localhost:8083"
+
+  # ============================================
+  # Gitea - Code Repository (Port Adjusted)
+  # ============================================
+  
+  gitea:
+    image: gitea/gitea:1.21
+    container_name: amodels-gitea
+    ports:
+      - "3003:3000"  # Changed from 3000 to avoid Open Canvas conflict
+      - "2222:22"
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=postgres:5432
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=gitea
+      - GITEA__database__PASSWD=gitea_password
+      - GITEA__server__ROOT_URL=http://localhost:3003/
+    volumes:
+      - gitea-data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - amodels-network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "ui.category=repository"
+      - "ui.name=Git Repository"
+      - "ui.description=Version control and code hosting"
+      - "ui.url=http://localhost:3003"
+
+  # ============================================
+  # Observability Stack
+  # ============================================
+  
+  # OTEL Collector
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: amodels-otel-collector
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8888:8888"   # Metrics
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    networks:
+      - amodels-network
+    restart: unless-stopped
+    labels:
+      - "ui.category=observability"
+      - "ui.name=OTEL Collector"
+      - "ui.description=Telemetry collection"
+
+  # Jaeger - Tracing UI
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: amodels-jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector
+      - "14250:14250"  # gRPC
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+      - SPAN_STORAGE_TYPE=badger
+      - BADGER_EPHEMERAL=false
+      - BADGER_DIRECTORY_VALUE=/badger/data
+      - BADGER_DIRECTORY_KEY=/badger/key
+    volumes:
+      - jaeger-data:/badger
+    networks:
+      - amodels-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:16686"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "ui.category=observability"
+      - "ui.name=Jaeger Tracing"
+      - "ui.description=Distributed tracing UI"
+      - "ui.url=http://localhost:16686"
+
+  # Prometheus - Metrics
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: amodels-prometheus
+    ports:
+      - "9091:9090"  # Changed from 9090 to avoid conflicts
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - amodels-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "ui.category=observability"
+      - "ui.name=Prometheus"
+      - "ui.description=Metrics collection"
+      - "ui.url=http://localhost:9091"
+
+  # Grafana - Dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: amodels-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - amodels-network
+    depends_on:
+      - prometheus
+      - jaeger
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "ui.category=observability"
+      - "ui.name=Grafana"
+      - "ui.description=Metrics and logs dashboards"
+      - "ui.url=http://localhost:3001"
+
+  # ============================================
+  # Service Registry & Portal
+  # ============================================
+  
+  service-portal:
+    build:
+      context: ./portal
+      dockerfile: Dockerfile
+    container_name: amodels-service-portal
+    ports:
+      - "8888:8080"
+    environment:
+      - SERVICES_CONFIG=/app/services.json
+    volumes:
+      - ./portal/services.json:/app/services.json:ro
+    networks:
+      - amodels-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "ui.category=portal"
+      - "ui.name=Service Portal"
+      - "ui.description=Unified service registry and navigation"
+      - "ui.url=http://localhost:8888"
+
+# ============================================
+# Networks
+# ============================================
+
+networks:
+  amodels-network:
+    external: true
+    name: amodels-network
+
+# ============================================
+# Volumes
+# ============================================
+
+volumes:
+  langflow-data:
+    name: amodels-langflow-data
+  gitea-data:
+    name: amodels-gitea-data
+  jaeger-data:
+    name: amodels-jaeger-data
+  prometheus-data:
+    name: amodels-prometheus-data
+  grafana-data:
+    name: amodels-grafana-data

@@ -25,7 +25,7 @@ readonly NC='\033[0m' # No Color
 readonly BOLD='\033[1m'
 
 # Service groups (in startup order)
-readonly INFRASTRUCTURE="redis postgres neo4j elasticsearch"
+readonly INFRASTRUCTURE="redis postgres neo4j elasticsearch gitea"
 readonly CORE="model-server models-storage transformers localai config-sync localai-compat"
 readonly APP="catalog extract graph search-inference deepagents"
 
@@ -108,7 +108,7 @@ check_build_script() {
 }
 
 check_ports() {
-    local ports=("6379" "5432" "7474" "7687" "9200" "8081" "8088" "9090" "8084" "8083" "8080" "8090")
+    local ports=("6379" "5432" "7474" "7687" "9200" "3000" "2223" "8081" "8088" "9090" "8084" "8083" "8080" "8090")
     local conflicts=()
     
     for port in "${ports[@]}"; do
@@ -267,6 +267,9 @@ start_infrastructure() {
     # Check Elasticsearch
     wait_for_health "elasticsearch" 60 "http://localhost:9200" || log_warn "Elasticsearch may not be fully ready"
     
+    # Check Gitea (depends on postgres, so wait for postgres first)
+    wait_for_health "gitea" 60 "http://localhost:3000/api/healthz" || log_warn "Gitea may not be fully ready"
+    
     log_success "Infrastructure services started"
     return 0
 }
@@ -302,7 +305,10 @@ start_app() {
     fi
     
     log_info "Waiting for application services to be ready..."
-    sleep 10
+    sleep 15
+    
+    # Check catalog (includes glean component)
+    wait_for_health "catalog" 60 "http://localhost:8084/health" || log_warn "catalog may not be fully ready"
     
     log_success "Application services started"
     return 0

@@ -16,6 +16,7 @@ import (
 
 	handlers "github.com/plturrell/aModels/services/extract/internal/handlers"
 	"github.com/plturrell/aModels/services/extract/pkg/git"
+	"github.com/plturrell/aModels/services/extract/pkg/glean"
 	"gopkg.in/yaml.v3"
 )
 
@@ -259,12 +260,22 @@ func (s *extractServer) handleGiteaWebhook(w http.ResponseWriter, r *http.Reques
 	// Process the repository asynchronously
 	go s.processRepositoryFromWebhook(context.Background(), giteaURL, giteaToken, owner, repo, branch, payload)
 
-	// Return immediately
+	// Export webhook event to Glean (if enabled)
+	if s.giteaGleanExporter != nil {
+		go func() {
+			ctx := context.Background()
+			if err := s.giteaGleanExporter.ExportWebhookEvent(ctx, payload); err != nil {
+				s.logger.Printf("Warning: failed to export webhook to Glean: %v", err)
+			}
+		}()
+	}
+
+	// Acknowledge webhook immediately
 	handlers.WriteJSON(w, http.StatusAccepted, map[string]interface{}{
-		"message":    "webhook received, processing repository",
-		"repository": fmt.Sprintf("%s/%s", owner, repo),
-		"branch":     branch,
-		"commit":     payload.After,
+		"message": "Webhook received and queued for processing",
+		"ref":     payload.Ref,
+		"commits": len(payload.Commits),
+		"glean_export": s.giteaGleanExporter != nil,
 	})
 }
 
