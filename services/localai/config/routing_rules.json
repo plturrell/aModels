@@ -535,6 +535,105 @@
         "category": "quality_routing",
         "tags": ["quality", "high_quality", "best_model"]
       }
+    },
+    {
+      "id": "rule_translate_en_ar",
+      "name": "English to Arabic Translation Routing",
+      "description": "Route English to Arabic translation requests to MT domain",
+      "priority": 100,
+      "conditions": [
+        {
+          "type": "path",
+          "field": "path",
+          "operator": "equals",
+          "value": "/v1/translate/en-ar",
+          "negate": false,
+          "description": "Request path is /v1/translate/en-ar"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "mt-en-ar",
+          "parameters": {
+            "reason": "English to Arabic translation request"
+          },
+          "description": "Route to English to Arabic translation domain"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "translation_routing",
+        "tags": ["translation", "english", "arabic", "mt"]
+      }
+    },
+    {
+      "id": "rule_translate_ar_en",
+      "name": "Arabic to English Translation Routing",
+      "description": "Route Arabic to English translation requests to MT domain",
+      "priority": 100,
+      "conditions": [
+        {
+          "type": "path",
+          "field": "path",
+          "operator": "equals",
+          "value": "/v1/translate/ar-en",
+          "negate": false,
+          "description": "Request path is /v1/translate/ar-en"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "mt-ar-en",
+          "parameters": {
+            "reason": "Arabic to English translation request"
+          },
+          "description": "Route to Arabic to English translation domain"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "translation_routing",
+        "tags": ["translation", "arabic", "english", "mt"]
+      }
+    },
+    {
+      "id": "rule_translate_keywords",
+      "name": "Translation Keyword Routing",
+      "description": "Route translation-related queries based on keywords",
+      "priority": 95,
+      "conditions": [
+        {
+          "type": "query_content",
+          "field": "contains_translation",
+          "operator": "equals",
+          "value": true,
+          "negate": false,
+          "description": "Query contains translation keywords"
+        }
+      ],
+      "actions": [
+        {
+          "type": "route_to_domain",
+          "target": "mt-en-ar",
+          "parameters": {
+            "reason": "Translation query detected"
+          },
+          "description": "Route to translation domain based on keywords"
+        }
+      ],
+      "enabled": true,
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z",
+      "metadata": {
+        "category": "translation_routing",
+        "tags": ["translation", "keywords", "mt"]
+      }
     }
   ],
   "default_domain": "general",

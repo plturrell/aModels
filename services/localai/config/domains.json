@@ -1264,6 +1264,134 @@
         "sap",
         "report"
       ]
+    },
+    "mt-en-ar": {
+      "name": "English to Arabic Translation",
+      "layer": "layer4",
+      "team": "TranslationTeam",
+      "backend_type": "hf-transformers",
+      "model_name": "nllb-200-1.3B",
+      "model_path": "/models/arabic_models/nllb-200-1.3B",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/translate",
+        "model_name": "nllb-200-1.3B",
+        "timeout_seconds": 120,
+        "source_lang": "eng_Latn",
+        "target_lang": "arb_Arab"
+      },
+      "fallback_model": "nllb-200-distilled-600M",
+      "agent_id": "mt-en-ar",
+      "attention_weights": {
+        "translation": 0.98,
+        "english_arabic": 0.95,
+        "financial_terms": 0.9
+      },
+      "max_tokens": 2048,
+      "temperature": 0.1,
+      "tags": [
+        "translation",
+        "english",
+        "arabic",
+        "mt",
+        "nllb"
+      ],
+      "keywords": [
+        "translate",
+        "english to arabic",
+        "en to ar",
+        "translation",
+        "arabic",
+        "english"
+      ],
+      "toon_enabled": true,
+      "toon_config": {
+        "use_arbml": true,
+        "use_qadi": false,
+        "use_kuwain": false
+      }
+    },
+    "mt-ar-en": {
+      "name": "Arabic to English Translation",
+      "layer": "layer4",
+      "team": "TranslationTeam",
+      "backend_type": "hf-transformers",
+      "model_name": "nllb-200-1.3B",
+      "model_path": "/models/arabic_models/nllb-200-1.3B",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/translate",
+        "model_name": "nllb-200-1.3B",
+        "timeout_seconds": 120,
+        "source_lang": "arb_Arab",
+        "target_lang": "eng_Latn"
+      },
+      "fallback_model": "nllb-200-distilled-600M",
+      "agent_id": "mt-ar-en",
+      "attention_weights": {
+        "translation": 0.98,
+        "arabic_english": 0.95,
+        "financial_terms": 0.9
+      },
+      "max_tokens": 2048,
+      "temperature": 0.1,
+      "tags": [
+        "translation",
+        "arabic",
+        "english",
+        "mt",
+        "nllb"
+      ],
+      "keywords": [
+        "translate",
+        "arabic to english",
+        "ar to en",
+        "translation",
+        "arabic",
+        "english"
+      ],
+      "toon_enabled": true,
+      "toon_config": {
+        "use_arbml": true,
+        "use_qadi": false,
+        "use_kuwain": false
+      }
+    },
+    "mt-en-ar-light": {
+      "name": "English to Arabic Translation (Light)",
+      "layer": "layer4",
+      "team": "TranslationTeam",
+      "backend_type": "hf-transformers",
+      "model_name": "m2m100-418M",
+      "model_path": "/models/arabic_models/m2m100-418M",
+      "transformers_config": {
+        "endpoint": "http://transformers-service:9090/v1/translate",
+        "model_name": "m2m100-418M",
+        "timeout_seconds": 60
+      },
+      "fallback_model": "nllb-200-distilled-600M",
+      "agent_id": "mt-en-ar-light",
+      "attention_weights": {
+        "translation": 0.9,
+        "english_arabic": 0.85,
+        "fast": 0.8
+      },
+      "max_tokens": 1024,
+      "temperature": 0.1,
+      "tags": [
+        "translation",
+        "english",
+        "arabic",
+        "mt",
+        "light",
+        "m2m100"
+      ],
+      "keywords": [
+        "translate",
+        "english to arabic",
+        "en to ar",
+        "translation",
+        "fast",
+        "light"
+      ]
     }
   },
   "default_domain": "general",
@@ -1315,6 +1443,11 @@
         "0xG7B-Gemma7BAssistant",
         "0xC0DE-CodeWorldModelAgent",
         "0xCALM-ContinuousReasoningAgent"
+      ],
+      "TranslationTeam": [
+        "mt-en-ar",
+        "mt-ar-en",
+        "mt-en-ar-light"
       ]
     }
   }

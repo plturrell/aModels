@@ -4,3 +4,6 @@ transformers==4.46.1
 torch==2.4.1
 accelerate==0.34.2
 bitsandbytes
+sentencepiece
+camel-tools
+huggingface-hub

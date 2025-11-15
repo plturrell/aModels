@@ -48,3 +48,6 @@ models/*/.git/
 models/*/model-*.safetensors
 
 services/search/search-inference/bin/
+models/arabic_models/
+*.msgpack
+*.bin
