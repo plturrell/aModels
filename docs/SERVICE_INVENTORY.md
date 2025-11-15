@@ -53,10 +53,11 @@ The following services exist in `/home/aModels/services/` but are **NOT** regist
 ### Missing from Registry
 
 1. **telemetry-exporter** - Telemetry export service
-   - Port: 8080/8083/8085 (needs clarification - different ports in code/docs)
+   - Port: 8085 (default), 8080 (server mode), 8083 (docker-compose)
    - Health: `/health`
    - Type: Go service
    - Status: Needs to be added to registry
+   - Note: Port ambiguity exists - default is 8085, but server mode uses 8080, docker-compose uses 8083
 
 2. **agentflow** - Agent flow service
    - Type: Go service with frontend

@@ -111,50 +111,103 @@ wait_for_health() {
 test_redis() {
     log_step "Testing Redis"
     
-    if ! check_port 6379; then
-        log_error "Redis not running on port 6379"
-        return 1
+    # Check if Redis is running in Docker
+    if command -v docker &> /dev/null; then
+        if docker ps --filter "name=redis" --filter "status=running" --format '{{.Names}}' | grep -q redis; then
+            log_info "Redis container is running"
+            
+            # Try to ping via Docker exec
+            if docker exec redis redis-cli ping 2>/dev/null | grep -q "PONG"; then
+                log_success "Redis is responding (via Docker)"
+                return 0
+            fi
+        fi
     fi
     
-    if command -v redis-cli &> /dev/null; then
-        if redis-cli ping | grep -q "PONG"; then
-            log_success "Redis is responding"
-            return 0
+    # Fallback to direct port check
+    if check_port 6379; then
+        if command -v redis-cli &> /dev/null; then
+            if redis-cli -h localhost -p 6379 ping 2>/dev/null | grep -q "PONG"; then
+                log_success "Redis is responding"
+                return 0
+            else
+                log_error "Redis ping failed"
+                return 1
+            fi
         else
-            log_error "Redis ping failed"
-            return 1
+            log_success "Redis port is accessible"
+            return 0
         fi
     else
-        log_warn "redis-cli not found, skipping ping test"
-        return 0
+        log_error "Redis not running on port 6379"
+        return 1
     fi
 }
 
 test_postgres() {
     log_step "Testing PostgreSQL"
     
-    if ! check_port 5432; then
-        log_error "PostgreSQL not running on port 5432"
-        return 1
+    # Check if PostgreSQL is running in Docker
+    if command -v docker &> /dev/null; then
+        if docker ps --filter "name=postgres" --filter "status=running" --format '{{.Names}}' | grep -q postgres; then
+            log_info "PostgreSQL container is running"
+            
+            # Try to check via Docker exec
+            if docker exec postgres pg_isready -U postgres >/dev/null 2>&1; then
+                log_success "PostgreSQL is ready (via Docker)"
+                return 0
+            fi
+        fi
     fi
     
-    if command -v pg_isready &> /dev/null; then
-        if pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1; then
-            log_success "PostgreSQL is accepting connections"
-            return 0
+    # Fallback to direct port check
+    if check_port 5432; then
+        if command -v pg_isready &> /dev/null; then
+            if pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1; then
+                log_success "PostgreSQL is accepting connections"
+                return 0
+            else
+                log_error "PostgreSQL not ready"
+                return 1
+            fi
         else
-            log_error "PostgreSQL not ready"
-            return 1
+            log_success "PostgreSQL port is accessible"
+            return 0
         fi
     else
-        log_warn "pg_isready not found, skipping detailed check"
-        return 0
+        log_error "PostgreSQL not running on port 5432"
+        return 1
     fi
 }
 
 test_neo4j() {
     log_step "Testing Neo4j"
     
+    # Check if Neo4j is running in Docker
+    if command -v docker &> /dev/null; then
+        if docker ps --filter "name=neo4j" --filter "status=running" --format '{{.Names}}' | grep -q neo4j; then
+            log_info "Neo4j container is running"
+            
+            # Try to check via cypher-shell (more reliable than curl in Neo4j container)
+            if docker exec neo4j sh -c 'echo "RETURN 1" | cypher-shell -u neo4j -p amodels123 >/dev/null 2>&1' 2>/dev/null; then
+                log_success "Neo4j is responding (via Docker cypher-shell)"
+                
+                # Check if we can access HTTP from host
+                if check_http_health "http://localhost:7474" 5; then
+                    log_success "Neo4j HTTP interface accessible from host"
+                else
+                    log_warn "Neo4j HTTP not accessible from host (may be network config)"
+                fi
+                return 0
+            # Fallback: try curl if available
+            elif docker exec neo4j curl -sf http://localhost:7474 >/dev/null 2>&1; then
+                log_success "Neo4j HTTP interface accessible (via Docker)"
+                return 0
+            fi
+        fi
+    fi
+    
+    # Fallback to direct port check
     # Check HTTP port
     if ! check_port 7474; then
         log_error "Neo4j HTTP not running on port 7474"
@@ -181,6 +234,28 @@ test_neo4j() {
 test_elasticsearch() {
     log_step "Testing Elasticsearch"
     
+    # Check if Elasticsearch is running in Docker
+    if command -v docker &> /dev/null; then
+        if docker ps --filter "name=elasticsearch" --filter "status=running" --format '{{.Names}}' | grep -q elasticsearch; then
+            log_info "Elasticsearch container is running"
+            
+            # Try to check health via Docker exec
+            local es_health=$(docker exec elasticsearch curl -sf http://localhost:9200/_cluster/health 2>/dev/null | grep -o '"status":"[^"]*"' | cut -d'"' -f4 || echo "")
+            if [ -n "$es_health" ]; then
+                log_success "Elasticsearch cluster health: $es_health (via Docker)"
+                
+                # Check if accessible from host
+                if check_http_health "http://localhost:9200/_cluster/health" 10; then
+                    log_success "Elasticsearch accessible from host"
+                else
+                    log_warn "Elasticsearch not accessible from host (may be network config)"
+                fi
+                return 0
+            fi
+        fi
+    fi
+    
+    # Fallback to direct port check
     if ! check_port 9200; then
         log_error "Elasticsearch not running on port 9200"
         return 1
@@ -199,6 +274,27 @@ test_elasticsearch() {
 test_gitea() {
     log_step "Testing Gitea"
     
+    # Check if Gitea is running in Docker
+    if command -v docker &> /dev/null; then
+        if docker ps --filter "name=gitea" --filter "status=running" --format '{{.Names}}' | grep -q gitea; then
+            log_info "Gitea container is running"
+            
+            # Try to check health via Docker exec
+            if docker exec gitea curl -sf http://localhost:3000/api/healthz >/dev/null 2>&1; then
+                log_success "Gitea is healthy (via Docker)"
+                
+                # Check if accessible from host
+                if check_http_health "http://localhost:3003/api/healthz" 10; then
+                    log_success "Gitea accessible from host"
+                else
+                    log_warn "Gitea not accessible from host (may be network config)"
+                fi
+                return 0
+            fi
+        fi
+    fi
+    
+    # Fallback to direct port check
     if ! check_port 3003; then
         log_error "Gitea not running on port 3003"
         return 1

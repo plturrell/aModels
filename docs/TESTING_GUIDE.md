@@ -1,255 +1,321 @@
-# Testing Guide: Error Messages, Health Checks, and Retry Logic
+# aModels Service Testing Guide
 
-## Overview
+Complete guide for testing all aModels services individually and as an integrated system.
 
-This guide covers testing the enhanced error messages, service health checks, and retry logic implemented in the unified search system.
+## Quick Start
 
-## 1. Testing Enhanced Error Messages
-
-### Prerequisites
-- Gateway service running on `http://localhost:8000`
-- Search services (inference, extract, catalog) should be **stopped** to test error handling
-
-### Automated Test Script
-
-Run the test script:
+### Run All Tests
 
 ```bash
-cd services/gateway
-python test_search_errors.py
+# Full system test (starts services and runs all tests)
+./scripts/testing/test_full_system.sh yes
+
+# Test assuming services are already running
+./scripts/testing/test_full_system.sh no
 ```
 
-### Manual Testing
-
-#### Test 1: All Services Unavailable
+### Test Individual Service
 
 ```bash
-curl -X POST http://localhost:8000/search/unified \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "test query",
-    "top_k": 10,
-    "sources": ["inference", "knowledge_graph", "catalog"]
-  }'
+./scripts/testing/test_service_individual.sh <service_name>
 ```
 
-**Expected Response:**
-- Status: 200 (request succeeds, but sources fail)
-- Each source should have an error object with:
-  - `error`: Clear error message (e.g., "Connection refused: http://localhost:8090 - Service may not be running (after retries)")
-  - `url`: Service URL
-  - `type`: Error type ("connection_error", "timeout", or "unknown_error")
-- `metadata.sources_failed` should equal the number of unavailable services
-
-#### Test 2: Partial Service Availability
-
-Start one service (e.g., search-inference) and test:
+### Run Health Checks
 
 ```bash
-# Start search-inference service first
-# Then run:
-curl -X POST http://localhost:8000/search/unified \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "test query",
-    "top_k": 10,
-    "sources": ["inference", "knowledge_graph", "catalog"]
-  }'
+./scripts/system/health-check.sh
 ```
 
-**Expected Response:**
-- `metadata.sources_successful` should be 1
-- `metadata.sources_failed` should be 2
-- `sources.inference` should contain results
-- `sources.knowledge_graph` and `sources.catalog` should contain error objects
+## Test Scripts Overview
 
-### Verification Checklist
+### 1. Individual Service Tests
 
-- [ ] Error messages are clear and actionable
-- [ ] Error messages include service URLs
-- [ ] Error types are properly classified
-- [ ] Error messages indicate retries were attempted ("after retries")
-- [ ] Partial results are returned when some services are available
+**Script**: `scripts/testing/test_service_individual.sh`
 
-## 2. Testing Retry Logic
+Tests a single service to verify:
+- Port is accessible
+- Health endpoint responds
+- Basic connectivity
 
-### Prerequisites
-- Gateway service running
-- Ability to temporarily block/unblock service ports
-
-### Test Scenario: Transient Connection Failure
-
-1. **Start all services**
-2. **Temporarily block a service port** (e.g., using `iptables` or firewall)
-3. **Make a search request**
-4. **Unblock the port during retry attempts**
-5. **Verify the request succeeds after retry**
-
-### Manual Test
-
+**Usage**:
 ```bash
-# In terminal 1: Block port 8090
-sudo iptables -A INPUT -p tcp --dport 8090 -j DROP
-
-# In terminal 2: Make request (will fail initially)
-curl -X POST http://localhost:8000/search/unified \
-  -H "Content-Type: application/json" \
-  -d '{"query": "test", "top_k": 10, "sources": ["inference"]}'
-
-# In terminal 1: Unblock port 8090 (within retry window)
-sudo iptables -D INPUT -p tcp --dport 8090 -j DROP
-
-# Request should succeed after retry
+./scripts/testing/test_service_individual.sh redis
+./scripts/testing/test_service_individual.sh localai
+./scripts/testing/test_service_individual.sh catalog
 ```
 
-### Verification Checklist
+**Available Services**:
+- Infrastructure: `redis`, `postgres`, `neo4j`, `elasticsearch`, `gitea`
+- Core: `localai`, `catalog`
+- Application: `extract`, `graph`, `search`, `deepagents`, `runtime`, `orchestration`, `training`, `regulatory_audit`, `telemetry_exporter`, `gateway`
 
-- [ ] Retry attempts are logged (check gateway logs)
-- [ ] Exponential backoff is used (delays increase: 0.5s, 1s, 2s)
-- [ ] Maximum 3 attempts (initial + 2 retries)
-- [ ] Only transient errors trigger retries (ConnectError, TimeoutException)
-- [ ] HTTP errors (4xx, 5xx) do not trigger retries
+### 2. Test All Services Individually
 
-## 3. Testing Service Health Checks
+**Script**: `scripts/testing/test_all_services_individual.sh`
 
-### Prerequisites
-- Gateway service running
-- UI application running
+Runs individual tests for all services sequentially.
 
-### UI Testing
-
-1. **Navigate to Search Module**
-2. **Click on "Health" tab**
-3. **Verify health panel displays:**
-   - Service status for all services
-   - Health count (e.g., "3/10 healthy")
-   - Refresh button
-   - Last updated timestamp
-   - Expandable service details
-
-### API Testing
-
+**Usage**:
 ```bash
-curl http://localhost:8000/healthz
+./scripts/testing/test_all_services_individual.sh
 ```
 
-**Expected Response:**
-```json
-{
-  "gateway": "ok",
-  "search_inference": "error:Connection refused",
-  "extract": "error:Connection refused",
-  "catalog": "error:Connection refused",
-  ...
-}
+**Output**: 
+- Test results for each service
+- Summary with pass/fail counts
+- Logs in `logs/testing/`
+
+### 3. Functional Tests
+
+**Script**: `scripts/testing/test_service_functionality.sh`
+
+Tests actual functionality of services beyond health checks:
+- API endpoints
+- Data operations
+- Service-specific features
+
+**Usage**:
+```bash
+./scripts/testing/test_service_functionality.sh localai
+./scripts/testing/test_service_functionality.sh catalog
 ```
 
-### Verification Checklist
+**What It Tests**:
+- **LocalAI**: Models endpoint, completions endpoint
+- **Catalog**: Health, API endpoints
+- **Extract**: Health, extraction endpoints
+- **Graph**: Health, graph queries
+- **Search**: Health, search queries
+- **DeepAgents**: Health, agent operations
+- **Runtime**: Health, analytics
+- **Orchestration**: Health, workflows
+- **Training**: Health, training jobs
+- **Regulatory Audit**: Health, audits
+- **Gateway**: Health, routing
+- **Telemetry Exporter**: Health, export operations
 
-- [ ] Health endpoint returns status for all services
-- [ ] UI displays service health correctly
-- [ ] Auto-refresh works (updates every 30 seconds)
-- [ ] Manual refresh works
-- [ ] Service details are expandable
-- [ ] Error messages are shown for failed services
-- [ ] Health status is color-coded (green=ok, red=error, yellow=warning)
+### 4. Integration Tests
 
-## 4. Testing Workbench UI Improvements
+**Script**: `scripts/testing/test_service_integration.sh`
 
-### Canvas Component
+Tests service-to-service communication and workflows.
 
-1. **Start workbench application**
-2. **Create a new session** (Cmd+K or Ctrl+K)
-3. **Verify Canvas displays:**
-   - Rich data rendering for objects/arrays
-   - Color-coded data types
-   - Chip-based key display
-   - Session header with timestamp
-   - Raw JSON view
-   - Empty state with helpful instructions
+**Usage**:
+```bash
+./scripts/testing/test_service_integration.sh
+```
 
-### Agent Log Panel
+**Integration Tests**:
+1. Catalog → Extract
+2. Graph → LocalAI
+3. Search → Elasticsearch → LocalAI
+4. DeepAgents → Extract → LocalAI
+5. Runtime → Catalog
+6. Orchestration → Multiple Services
+7. Extract → Gitea
+8. Telemetry Exporter → Extract
+9. End-to-end: Extract → Catalog → Graph
+10. End-to-end: Search → Elasticsearch → LocalAI
 
-1. **Select an active session**
-2. **Verify Agent Log Panel displays:**
-   - Multiple log entries parsed from session data
-   - Log levels (success, error, warning, info, pending)
-   - Log types (api, agent, system)
-   - Expandable accordion for details
-   - Log entry count badge
-   - Color-coded indicators
+### 5. Full System Test
 
-### Verification Checklist
+**Script**: `scripts/testing/test_full_system.sh`
 
-- [ ] Canvas renders nested data structures correctly
-- [ ] Canvas shows empty state when no session selected
-- [ ] Agent Log Panel parses session data correctly
-- [ ] Log entries are expandable
-- [ ] Log levels are color-coded
-- [ ] Empty states are helpful and informative
+Comprehensive test that:
+- Checks for port conflicts
+- Checks system resources
+- Optionally starts all services
+- Runs health checks
+- Runs individual tests
+- Runs functional tests
+- Runs integration tests
 
-## 5. Integration Testing
+**Usage**:
+```bash
+# Start services and test
+./scripts/testing/test_full_system.sh yes
 
-### Full Workflow Test
+# Test assuming services are running
+./scripts/testing/test_full_system.sh no
+```
 
-1. **Start all services**
-2. **Open workbench UI**
-3. **Create a search session**
-4. **Verify:**
-   - Search executes successfully
-   - Results appear in Canvas
-   - Log entries appear in Agent Log Panel
-   - Health status shows all services as healthy
+## Health Check System
 
-### Error Recovery Test
+### Enhanced Health Check Script
 
-1. **Start all services**
-2. **Make a successful search**
-3. **Stop one service** (e.g., search-inference)
-4. **Make another search**
-5. **Verify:**
-   - Search completes with partial results
-   - Error messages are clear
-   - Health status updates to show service as unavailable
-   - UI handles errors gracefully
+**Script**: `scripts/system/health-check.sh`
 
-## 6. Performance Testing
+Comprehensive health checking for all services.
 
-### Retry Performance
+**Usage**:
+```bash
+./scripts/system/health-check.sh
+```
 
-- **Test**: Measure time for retry attempts
-- **Expected**: Total retry time should be ~1.5s (0.5s + 1s delays)
-- **Verify**: Retries don't significantly impact response time
+**Features**:
+- Checks all registered services
+- Detailed checks for critical services
+- Docker container health
+- System resource monitoring
+- Color-coded output
 
-### Health Check Performance
+**Services Checked**:
+- Infrastructure: Redis, PostgreSQL, Neo4j, Elasticsearch, Gitea
+- Core: LocalAI, Transformers, Catalog
+- Application: Extract, Graph, Search, DeepAgents, Runtime, Orchestration, Training, Regulatory Audit, Telemetry Exporter, Gateway
+- Special: PostgreSQL Lang (gRPC)
 
-- **Test**: Measure time for health check endpoint
-- **Expected**: < 5 seconds for all services
-- **Verify**: Health checks don't block main requests
+## Testing Workflow
+
+### Recommended Testing Order
+
+1. **Pre-flight Checks**
+   ```bash
+   # Check for port conflicts
+   ./scripts/testing/test_full_system.sh no | grep -i conflict
+   
+   # Check system resources
+   free -h
+   df -h
+   ```
+
+2. **Start Services** (if needed)
+   ```bash
+   PROFILE=full ./scripts/system/start-system.sh start
+   ```
+
+3. **Health Checks**
+   ```bash
+   ./scripts/system/health-check.sh
+   ```
+
+4. **Individual Service Tests**
+   ```bash
+   ./scripts/testing/test_all_services_individual.sh
+   ```
+
+5. **Functional Tests**
+   ```bash
+   for service in localai catalog extract graph search; do
+       ./scripts/testing/test_service_functionality.sh $service
+   done
+   ```
+
+6. **Integration Tests**
+   ```bash
+   ./scripts/testing/test_service_integration.sh
+   ```
+
+7. **Full System Test**
+   ```bash
+   ./scripts/testing/test_full_system.sh no
+   ```
+
+## Test Results
+
+### Log Locations
+
+All test logs are written to: `logs/testing/`
+
+**Log Files**:
+- `startup.log` - Service startup output
+- `health_check.log` - Health check results
+- `individual_tests.log` - Individual test results
+- `functional_tests.log` - Functional test results
+- `integration_tests.log` - Integration test results
+- `<service>.log` - Per-service test logs
+
+### Interpreting Results
+
+**Success Indicators**:
+- ✓ Green checkmarks
+- "PASS" status
+- Exit code 0
+
+**Failure Indicators**:
+- ✗ Red X marks
+- "FAIL" status
+- Exit code non-zero
+- Error messages in logs
 
 ## Troubleshooting
 
-### Common Issues
+### Service Not Starting
 
-1. **Services not showing in health check**
-   - Verify services are configured in gateway
-   - Check service URLs in environment variables
-   - Verify services expose `/healthz` endpoint
+1. Check logs: `logs/startup/` or `logs/testing/startup.log`
+2. Check port conflicts: `lsof -i :<port>` or `netstat -tlnp | grep <port>`
+3. Check dependencies: Ensure required services are running
+4. Check resources: `free -h`, `df -h`
 
-2. **Retry logic not working**
-   - Check gateway logs for retry attempts
-   - Verify `retry_utils.py` is imported correctly
-   - Check that exceptions are retryable types
+### Health Check Failing
 
-3. **UI not updating**
-   - Check browser console for errors
-   - Verify API endpoints are accessible
-   - Check CORS configuration
+1. Verify service is running: `./scripts/testing/test_service_individual.sh <service>`
+2. Check health endpoint manually: `curl http://localhost:<port>/health`
+3. Check service logs for errors
+4. Verify dependencies are healthy
 
-## Next Steps
+### Integration Test Failing
 
-- [ ] Add automated integration tests
-- [ ] Add performance benchmarks
-- [ ] Add monitoring/alerting for service health
-- [ ] Add retry metrics to telemetry
+1. Verify all services in the workflow are running
+2. Check service-to-service connectivity
+3. Verify network configuration
+4. Check service logs for connection errors
 
+### Port Conflicts
+
+1. Identify conflicting services: `lsof -i :<port>`
+2. Check service configuration for port settings
+3. Update service registry with correct ports
+4. Restart services with correct configuration
+
+## Best Practices
+
+1. **Run tests in order**: Individual → Functional → Integration → Full System
+2. **Check logs**: Always review test logs for detailed error information
+3. **Start fresh**: Stop all services before running full system test
+4. **Verify dependencies**: Ensure infrastructure services are running first
+5. **Monitor resources**: Check system resources before running full test suite
+
+## Continuous Integration
+
+### CI/CD Integration
+
+The test scripts can be integrated into CI/CD pipelines:
+
+```yaml
+# Example GitHub Actions
+- name: Run Service Tests
+  run: |
+    ./scripts/testing/test_full_system.sh no
+    
+- name: Check Test Results
+  run: |
+    if [ $? -ne 0 ]; then
+      echo "Tests failed"
+      exit 1
+    fi
+```
+
+### Scheduled Health Checks
+
+Set up cron job for regular health checks:
+
+```bash
+# Add to crontab
+0 */6 * * * /path/to/scripts/system/health-check.sh >> /path/to/logs/health-cron.log 2>&1
+```
+
+## Additional Resources
+
+- **Service Inventory**: `docs/SERVICE_INVENTORY.md`
+- **Testing Report**: `docs/SERVICE_TESTING_REPORT.md`
+- **Service Startup Guide**: `docs/SERVICES_STARTUP.md`
+- **Service Configuration**: `config/services.yaml`
+
+## Support
+
+For issues or questions:
+1. Check test logs in `logs/testing/`
+2. Review service-specific documentation
+3. Check service startup logs
+4. Review health check output
