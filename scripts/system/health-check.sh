@@ -298,11 +298,20 @@ check_docker_services() {
         "postgres"
         "neo4j"
         "elasticsearch"
+        "gitea"
         "localai"
         "catalog"
         "extract-service"
+        "extract"
         "graph-server"
+        "graph"
         "deepagents-service"
+        "deepagents"
+        "telemetry-exporter"
+        "gateway"
+        "training-service"
+        "orchestration"
+        "regulatory"
     )
     
     for service in "${services[@]}"; do
@@ -354,6 +363,10 @@ main() {
     check_neo4j_detail
     check_elasticsearch_detail
     check_localai_detail
+    check_gitea_detail
+    check_telemetry_exporter_detail
+    check_gateway_detail
+    check_postgres_lang_detail
     
     # Docker services check
     check_docker_services
